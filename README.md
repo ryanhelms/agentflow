@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Built and tested; first release `v0.1.0` (beta). Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. No team uses it yet. |
+| **Status** | Built and tested; released as `v0.x` (see [CHANGELOG.md](CHANGELOG.md)). Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. No team uses it yet. |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -72,7 +72,7 @@ flowchart LR
   bin --> conf[Confluence Cloud]
   bin --> gh
   gh -->|GitHub for Jira app| jira
-  gh -->|reusable workflows @v1| actions["devflow Actions<br/>transitions · releases · notes"]
+  gh -->|reusable workflows @v0| actions["devflow Actions<br/>transitions · releases · notes"]
   actions -->|flow-map.yml| jira
   actions --> conf
   actions --> rel["GitHub Releases<br/>binaries · images · charts"]
@@ -84,7 +84,7 @@ devflow has two halves that share one status map and one set of rules:
 
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
    every opted-in repo: Jira key checks, ticket transitions, semantic releases, release
-   guard, Confluence publishing, Slack and hygiene. Repos call them at `@v1` from a single
+   guard, Confluence publishing, Slack and hygiene. Repos call them at `@v0` from a single
    caller workflow.
 2. **The `devflow` binary**, one Go program that is a CLI, an MCP server and a set of git
    and AI-client hooks. Each repo commits a small launcher that installs the latest
@@ -213,7 +213,7 @@ through `.claude/settings.json`.
   branches, PR merges, remote branch deletes and acting as another user.
 - **Audit.** Every local and remote action is logged to `~/.devflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
-  ([CODEOWNERS](CODEOWNERS)); reusable workflows are versioned at `@v1`.
+  ([CODEOWNERS](CODEOWNERS)); reusable workflows are versioned at `@v0`.
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
@@ -223,7 +223,7 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 | --- | --- |
 | Org secrets, GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
 | Rollout phases and checklists | [docs/rollout.md](docs/rollout.md) |
-| Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json) and open a `release-blocker` issue |
+| Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
 | Pause devflow in one repo | Repository variable `DEVFLOW_ENABLED=false` |
 | Roll back the binary on a machine | `devflow update --rollback` |
 
@@ -240,8 +240,9 @@ devflow offers other repos.
 - **Same commit convention as devflow-managed repos.** Enforced locally by
   `.githooks/commit-msg` and in CI on every PR title and commit. `CHANGELOG.md` is never
   edited by hand.
-- **Channels.** Releases start as **beta** and become **stable** after 24 hours unless an
-  issue labelled `release-blocker` is open; promotion also moves the floating `v1` tag.
+- **Stable immediately.** Every release is a normal GitHub Release marked "Latest", and the
+  floating major tag (`v0` while devflow is 0.x) moves to it. Safety comes from
+  `policy/versions.json` (block a version everywhere) and `devflow update --rollback`.
 - **Updates.** Installs check at most every 6 hours without blocking, verify each build,
   swap it in atomically, and keep the previous version for rollback.
 - **Merging.** PRs are squash-merged, so the PR title decides the version bump.

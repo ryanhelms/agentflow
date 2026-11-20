@@ -9,7 +9,6 @@
 # Version policy and release automation: changes affect every install.
 /policy/                        @nscaledev/eng-enablement
 /.github/workflows/release.yml  @nscaledev/eng-enablement
-/.github/workflows/promote.yml  @nscaledev/eng-enablement
 /internal/update/               @nscaledev/eng-enablement
 
 # Agent instructions. CLAUDE.md only points at AGENTS.md (checked in CI).

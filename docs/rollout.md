@@ -26,7 +26,7 @@ Ready before the gate (no team impact):
 - [ ] Pilot lead fills in the pilot project's block in `flow-map.yml`
 - [ ] Eng managers publish the shared Confluence templates in the Engineering space
 - [ ] Capture baseline metrics (key coverage, manual transitions, release-notes lead time)
-- [ ] First devflow release published and promoted; `v1` tag points at it
+- [x] First devflow releases published (`v0.1.0`, `v0.2.0`); floating `v0` tag points at the latest
 - **Exit:** pilot named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed
 
 ## P1 · Commit convention
@@ -51,11 +51,11 @@ Ready before the gate (no team impact):
 ## P4 · Releases & deployment tracking
 - [ ] `devflow release init` on pilot repos; review `.devflow/releases.yml` units and strategy ([releases](releases.md))
 - [ ] First fully automatic SemVer GitHub Release published per pilot deployable (artifacts + attestations attached)
-- [ ] `nscaledev/devflow/actions/release-guard@v1` first in every production deploy job
+- [ ] `nscaledev/devflow/actions/release-guard@v0` first in every production deploy job
 - [ ] `production-hotfix` environment with required reviewers
-- [ ] Staging builds tagged with `nscaledev/devflow/actions/version@v1`
+- [ ] Staging builds tagged with `nscaledev/devflow/actions/version@v0`
 - [ ] `.jira/config.yml` committed; deploy jobs use GitHub Environments
-- [ ] `nscaledev/devflow/actions/ship@v1` added after production deploys (with `fix-version`)
+- [ ] `nscaledev/devflow/actions/ship@v0` added after production deploys (with `fix-version`)
 - [ ] devflow ship status
 - **Exit:** every pilot deployable has published a release; production deploys only
   releases or approved hotfixes; every production deploy shows on its tickets and moves them

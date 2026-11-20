@@ -29,7 +29,7 @@ Claude Code is denied edits to it by `.claude/settings.json`, and CI fails if an
 - CI must pass: `go vet`, `go test -race`, golangci-lint, shellcheck, actionlint and a
   GoReleaser snapshot build.
 - Changes to `flow-map.yml` need the owning team lead's approval (see `CODEOWNERS`).
-- Changes to the reusable workflows are used by every repo on `@v1`. Keep them backwards
+- Changes to the reusable workflows are used by every repo on `@v0`. Keep them backwards
   compatible within a major version.
 
 ## How releases happen
@@ -45,9 +45,9 @@ devflow releases from a single branch. There is no Release PR and no version-bum
    commits it as `chore(release): vX.Y.Z` and tags that commit.
 4. GoReleaser builds five platforms and `checksums.txt`, and publishes the GitHub Release
    with the same notes. Build provenance is attested.
-5. The release starts as a pre-release (beta). `.github/workflows/promote.yml` marks it
-   stable and latest after 24 hours unless an open issue has the `release-blocker` label,
-   and moves the floating `v1` tag used by reusable workflows.
+5. The release is published as a normal, stable release and becomes "Latest". The
+   floating major tag (`v0` while devflow is 0.x) moves to it, so repos using
+   `nscaledev/devflow/...@v0` get it straight away.
 
 Use squash merges with a convention PR title: the title becomes the commit on `main`,
 decides the bump and is the changelog entry. Never edit `CHANGELOG.md` by hand; CI fails

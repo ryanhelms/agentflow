@@ -161,7 +161,7 @@ type Ref struct {
 	Repo, Ref, Path string
 }
 
-// ParseRef parses config flow_map values such as "nscaledev/devflow@v1:flow-map.yml".
+// ParseRef parses config flow_map values such as "nscaledev/devflow@v0:flow-map.yml".
 // A value without "@" or ":" is treated as a local path.
 func ParseRef(s string) (Ref, bool) {
 	repoRef, p, ok := strings.Cut(s, ":")

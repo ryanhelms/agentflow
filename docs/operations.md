@@ -66,25 +66,26 @@ This is not implemented in the binary yet; `internal/auth` already supports bear
 
 ## Releases
 
-Releases are automatic (see CONTRIBUTING.md). Each stable promotion also moves the
-floating `v1` tag that consuming repos use (`nscaledev/devflow@v1` for reusable
-workflows, actions and `flow-map.yml`). To move it by hand:
+Releases are automatic and published as stable (see CONTRIBUTING.md). Each release also
+moves the floating major tag that consuming repos use: `v0` while devflow is 0.x, `v1`
+from 1.0.0 (`nscaledev/devflow/...@v0` for reusable workflows and actions, and
+`nscaledev/devflow@v0:flow-map.yml`). To move it by hand:
 
 ```bash
-git fetch --tags && git tag -f v1 vX.Y.Z && git push -f origin v1
+git fetch --tags && git tag -f v0 vX.Y.Z && git push -f origin v0
 ```
 
 ### Block a release
 
-1. Open an issue with the `release-blocker` label. This stops the pending beta from being promoted.
-2. Add the bad version to `blocked` in `policy/versions.json` and raise `min_version` to
+1. Add the bad version to `blocked` in `policy/versions.json` and raise `min_version` to
    the fixed version (or the last good one). Merge.
-3. Every install reads the policy on start. A blocked install updates before it runs again,
+2. Every install reads the policy on start. A blocked install updates before it runs again,
    or stops with the policy `message` if it can't.
-4. If no fixed version exists yet, mark the bad release as pre-release so `latest` points at
+3. If no fixed version exists yet, mark the bad release as pre-release so `latest` points at
    the previous one: `gh release edit vX.Y.Z --prerelease --latest=false` and set
-   `gh release edit vPREV --latest`.
-5. Repos needing an immediate workaround can set `update.pin` in `.devflow/config.yml`.
+   `gh release edit vPREV --latest`, and move the floating tag back:
+   `git tag -f v0 vPREV && git push -f origin v0`.
+4. Repos needing an immediate workaround can set `update.pin` in `.devflow/config.yml`.
 
 ## Troubleshooting
 

@@ -68,8 +68,8 @@ release:
   github:
     owner: nscaledev
     name: devflow
-  # Every release starts on the beta channel; promote.yml marks it stable after 24h.
-  prerelease: "true"
-  make_latest: "false"
+  # Every release is a normal, stable release and becomes "Latest" immediately.
+  prerelease: "false"
+  make_latest: "true"
   footer: |
     Install or update: `devflow update`. Verify: `gh attestation verify <archive> --repo nscaledev/devflow`.

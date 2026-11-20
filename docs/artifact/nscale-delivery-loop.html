@@ -558,7 +558,7 @@ units:
     if: >-
       vars.DEVFLOW_ENABLED != 'false' &amp;&amp; github.event_name == 'push' &amp;&amp;
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    uses: nscaledev/devflow/.github/workflows/semver-release.yml@v1
+    uses: nscaledev/devflow/.github/workflows/semver-release.yml@v0
     permissions:
       contents: write
       pull-requests: write
@@ -574,7 +574,7 @@ units:
   environment: production          <span class="c"># production-hotfix for an approved hotfix</span>
   runs-on: ubuntu-latest
   steps:
-    - uses: nscaledev/devflow/actions/release-guard@v1
+    - uses: nscaledev/devflow/actions/release-guard@v0
       with:
         environment: production
         ref: ${{ github.ref_name }}  <span class="c"># e.g. api-v1.4.0</span>
@@ -582,7 +582,7 @@ units:
 
 <span class="c"># staging: version the build after the release it leads to</span>
 - id: version
-  uses: nscaledev/devflow/actions/version@v1
+  uses: nscaledev/devflow/actions/version@v0
   with: { unit: api }
 - run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api</pre>
           <button class="copy" type="button">Copy</button>
@@ -697,17 +697,17 @@ concurrency:
 jobs:
   key-check:
     if: github.event_name == 'pull_request' &amp;&amp; github.event.action != 'closed'
-    uses: nscaledev/devflow/.github/workflows/jira-key.yml@v1
+    uses: nscaledev/devflow/.github/workflows/jira-key.yml@v0
     secrets: inherit
 
   transitions:
     if: vars.DEVFLOW_ENABLED != 'false'
-    uses: nscaledev/devflow/.github/workflows/transitions.yml@v1
+    uses: nscaledev/devflow/.github/workflows/transitions.yml@v0
     secrets: inherit
 
   release-notes:
     if: github.event_name == 'release'
-    uses: nscaledev/devflow/.github/workflows/release-notes.yml@v1
+    uses: nscaledev/devflow/.github/workflows/release-notes.yml@v0
     secrets: inherit</pre>
           <button class="copy" type="button">Copy</button>
         </div>
@@ -836,7 +836,7 @@ echo "$key: $current → $target ($event)"</pre>
         with: { fetch-depth: 0 }
       - run: ./scripts/deploy.sh production
       - name: Move shipped tickets
-        uses: nscaledev/devflow/actions/ship@v1
+        uses: nscaledev/devflow/actions/ship@v0
         with:
           event: deploy.production
           since-tag: ${{ steps.prev.outputs.tag }}   <span class="c"># keys parsed from git log prev..HEAD</span>
@@ -1041,8 +1041,8 @@ jobs:
         <div><div class="ev">next-version</div><div class="lbl">Bump from commit types</div><div class="src">changelog commit tagged vX.Y.Z</div></div>
         <div><div class="ev">GoReleaser</div><div class="lbl">Build + publish</div><div class="src">5 platforms, changelog by type</div></div>
         <div><div class="ev">attest</div><div class="lbl">Build provenance</div><div class="src">Sigstore, GitHub OIDC</div></div>
-        <div><div class="ev">beta</div><div class="lbl">Pre-release</div><div class="src">pilot repos install it</div></div>
-        <div><div class="ev">promote</div><div class="lbl">Stable · latest</div><div class="src">after 24h, no release-blocker</div></div>
+        <div><div class="ev">publish</div><div class="lbl">Stable · latest</div><div class="src">immediately</div></div>
+        <div><div class="ev">v0 tag</div><div class="lbl">Floating major tag</div><div class="src">repos on @v0 get it</div></div>
       </div>
 
       <h4 style="margin-top:24px">How a running install updates</h4>
@@ -1068,11 +1068,9 @@ jobs:
             <tr><td>Developer</td><td class="mono">devflow update</td><td>Check and install now</td></tr>
             <tr><td>Developer</td><td class="mono">devflow update --rollback</td><td>Switch <code>current</code> back to the previous kept version</td></tr>
             <tr><td>Developer</td><td class="mono">DEVFLOW_NO_UPDATE=1</td><td>Turn off background updates, for example on a plane. <code>min_version</code> and the blocked list still apply.</td></tr>
-            <tr><td>Repo</td><td class="mono">update.channel: beta</td><td>Pilot repos get pre-releases before everyone else</td></tr>
             <tr><td>Repo</td><td class="mono">update.track: 0</td><td>Follow the latest release within one major version, so a breaking <code>2.0</code> never arrives unannounced</td></tr>
             <tr><td>Repo</td><td class="mono">update.pin: 0.5.2</td><td>Emergency pin for an incident. The binary warns on every run until it is removed.</td></tr>
             <tr><td>Eng Enablement</td><td class="mono">policy/versions.json</td><td>Raise <code>min_version</code> or block a bad release for every install at once</td></tr>
-            <tr><td>Eng Enablement</td><td>Add the <code>release-blocker</code> label to an issue</td><td>Stops the pending beta from being promoted to stable</td></tr>
           </tbody>
         </table>
       </div>
@@ -1156,7 +1154,6 @@ jobs:
           <div class="path">.devflow/config.yml</div>
 <pre class="code">devflow: 1
 update:
-  channel: stable                <span class="c"># stable | beta (pilot repos)</span>
   track: 0                       <span class="c"># latest release within this major version</span>
   check_every: 6h
   <span class="c"># pin: 0.5.2                   # incident use only; warns on every run</span>
@@ -1164,7 +1161,7 @@ update:
 jira:
   site: https://nscale.atlassian.net
   projects: [PLAT]               <span class="c"># pilot project only (decision 01)</span>
-flow_map: nscaledev/devflow@v1:flow-map.yml
+flow_map: nscaledev/devflow@v0:flow-map.yml
 
 commit:
   types: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
@@ -1285,6 +1282,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Move the floating major tag
+        if: steps.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          major="v${VERSION%%.*}"
+          git tag -f "$major" "v$VERSION^{}"
+          git push -f origin "refs/tags/$major"
+          echo "::notice::$major now points at v$VERSION"
+
       - if: steps.version.outputs.release == 'true'
         uses: actions/attest-build-provenance@v2
         with:
@@ -1300,11 +1307,6 @@ jobs:
         run: |
           gh release delete "$TAG" --yes --cleanup-tag 2&gt;/dev/null \
             || git push --delete origin "$TAG" || true</pre>
-          <div class="path">nscaledev/devflow/.github/workflows/promote.yml (excerpt)</div>
-<pre class="code"><span class="c"># hourly: betas older than 24h with no open release-blocker become stable,</span>
-<span class="c"># and the floating v1 tag moves to the newest stable release</span>
-gh release edit "$tag" --prerelease=false --latest
-gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$sha" -F force=true</pre>
           <button class="copy" type="button">Copy</button>
         </div>
 
@@ -1387,7 +1389,8 @@ func (u *Updater) install(ctx context.Context, rel Release) error {
   filters:
     exclude: ['^(docs|test|ci|chore|style)(\([^)]*\))?:']
 release:
-  prerelease: "true"     <span class="c"># beta channel first; promote.yml makes it stable</span></pre>
+  prerelease: "false"    <span class="c"># stable and "Latest" immediately</span>
+  make_latest: "true"</pre>
           <button class="copy" type="button">Copy</button>
         </div>
 
@@ -1603,7 +1606,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
       <div class="gov">
         <div><h4>Access</h4><ul><li>One Atlassian service account with a scoped token, limited to opted-in projects and spaces</li><li>Rotate tokens every 90 days; rotation runbook lives in devflow</li><li>Workflows request least-privilege <code>permissions:</code> and pin third-party actions to a SHA</li><li>No secrets ever appear in commit messages, PR bodies or Jira comments</li></ul></div>
         <div><h4>Failure handling</h4><ul><li>Automation never fails a merge because Jira or Confluence is down; it warns and retries</li><li>Every action leaves a Jira comment or Actions log line saying what changed and why</li><li>Respect Atlassian rate limits: back off on HTTP 429 and batch JQL lookups</li></ul></div>
-        <div><h4>Ownership</h4><ul><li>Engineering Enablement owns <code>nscaledev/devflow</code> and the Jira Automation rules</li><li>Team leads own their <code>flow-map.yml</code> block</li><li>Eng managers jointly own the shared Confluence templates</li><li>Changes ship as tagged releases; repos stay on <code>@v1</code></li></ul></div>
+        <div><h4>Ownership</h4><ul><li>Engineering Enablement owns <code>nscaledev/devflow</code> and the Jira Automation rules</li><li>Team leads own their <code>flow-map.yml</code> block</li><li>Eng managers jointly own the shared Confluence templates</li><li>Changes ship as tagged releases; repos stay on <code>@v0</code></li></ul></div>
       </div>
       <h3>Success measures</h3>
       <div class="metrics">

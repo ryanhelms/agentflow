@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: ${{ inputs.warn-only }}
     steps:
-      - uses: nscaledev/devflow/actions/setup@v1
+      - uses: nscaledev/devflow/actions/setup@v0
       - name: PR title and every commit carry a real Jira key
         env:
           GH_TOKEN: ${{ github.token }}

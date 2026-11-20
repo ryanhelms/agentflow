@@ -54,8 +54,8 @@ func TestResolve(t *testing.T) {
 }
 
 func TestParseRef(t *testing.T) {
-	r, remote := ParseRef("nscaledev/devflow@v1:flow-map.yml")
-	if !remote || r.Repo != "nscaledev/devflow" || r.Ref != "v1" || r.Path != "flow-map.yml" {
+	r, remote := ParseRef("nscaledev/devflow@v0:flow-map.yml")
+	if !remote || r.Repo != "nscaledev/devflow" || r.Ref != "v0" || r.Path != "flow-map.yml" {
 		t.Errorf("got %+v", r)
 	}
 	if _, remote := ParseRef("flow-map.yml"); remote {
