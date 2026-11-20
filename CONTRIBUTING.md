@@ -14,6 +14,12 @@ fix(PLAT-130)!: rename commit_context output fields
 - Every commit needs a Jira key. Run `make install-hooks` once to get the local check.
 - No AI attribution trailers.
 
+## AI agents
+
+Agents follow [AGENTS.md](AGENTS.md). `CLAUDE.md` contains only `@AGENTS.md`: never edit it.
+Claude Code is denied edits to it by `.claude/settings.json`, and CI fails if any
+`CLAUDE.md` contains anything else (`make agent-docs`).
+
 ## Pull requests
 
 - CI must pass: `go vet`, `go test -race`, golangci-lint, shellcheck, actionlint and a
