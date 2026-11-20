@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.5.2](https://github.com/nscaledev/devflow/compare/v0.5.1...v0.5.2) - 2026-11-20
+
+### Fixes
+
+- **release:** push protected release tags with a deploy key (#13) ([9ae335c](https://github.com/nscaledev/devflow/commit/9ae335cd74192020017a1d5acdca62b61f8302e2))
+
 ## [0.5.1](https://github.com/nscaledev/devflow/compare/v0.5.0...v0.5.1) - 2026-11-20
 
 ### Fixes
