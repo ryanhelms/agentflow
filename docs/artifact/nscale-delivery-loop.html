@@ -253,7 +253,7 @@ footer .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:1
       <p class="lede">One commit message moves the ticket, updates the docs, and tells the team. This is how GitHub, Jira and Confluence work as one system at Nscale, what we automate, and the order we roll it out.</p>
     </div>
     <div class="meta">
-      <div>Status <b>Awaiting approval · v0.6</b></div>
+      <div>Status <b>Awaiting approval · v0.7</b></div>
       <div>Approvers <b>Kyle Redelinghuys · Vishal Srini</b></div>
       <div>Owner <b>Ryan Helms</b></div>
       <div>Updated <b>20 Nov 2026</b></div>
@@ -270,12 +270,13 @@ footer .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:1
       <li><a href="#architecture"><span class="n">02</span>Architecture</a></li>
       <li><a href="#convention"><span class="n">03</span>Commit convention</a></li>
       <li><a href="#flowmap"><span class="n">04</span>Status flow map</a></li>
-      <li><a href="#automations"><span class="n">05</span>Automations</a></li>
-      <li><a href="#implementation"><span class="n">06</span>Implementation</a></li>
-      <li><a href="#plugin"><span class="n">07</span>Developer plugin</a></li>
-      <li><a href="#rollout"><span class="n">08</span>Rollout</a></li>
-      <li><a href="#governance"><span class="n">09</span>Governance</a></li>
-      <li><a href="#questions"><span class="n">10</span>Decisions</a></li>
+      <li><a href="#releases"><span class="n">05</span>Versioning &amp; releases</a></li>
+      <li><a href="#automations"><span class="n">06</span>Automations</a></li>
+      <li><a href="#implementation"><span class="n">07</span>Implementation</a></li>
+      <li><a href="#plugin"><span class="n">08</span>Developer plugin</a></li>
+      <li><a href="#rollout"><span class="n">09</span>Rollout</a></li>
+      <li><a href="#governance"><span class="n">10</span>Governance</a></li>
+      <li><a href="#questions"><span class="n">11</span>Decisions</a></li>
     </ol>
   </nav>
 
@@ -290,6 +291,7 @@ footer .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:1
         <div><span class="k">Jira workflows</span><span class="v">Vary by team</span><span class="w">We will not force one workflow. Canonical events map to each project's own statuses through a reviewed flow map.</span></div>
         <div><span class="k">Engine</span><span class="v">Hybrid</span><span class="w">GitHub for Jira app for linking, Jira Automation for Jira-born events, GitHub Actions for everything code-born.</span></div>
         <div><span class="k">Branching</span><span class="v">Mixed</span><span class="w">Automation keys off events (branch, PR, merge, deploy), not branch names like <code>develop</code>, so trunk-based and GitFlow repos both work.</span></div>
+        <div><span class="k">Versioning</span><span class="v">SemVer + GitHub Releases</span><span class="w">Every deployable gets fully automatic releases, versioned per unit and aware of the branching strategy. Production deploys releases only, plus approved hotfixes.</span></div>
         <div><span class="k">Commit format</span><span class="v">Conventional + Jira key</span><span class="w"><code>feat(PLAT-123): add quota API #review</code>. Machine-readable for changelogs and for Jira.</span></div>
       </div>
       <div class="principles">
@@ -459,13 +461,152 @@ Devflow: skip</span></pre>
       <p>Transitions only go forward. A <code>pr.opened</code> event never drags a ticket back from QA to In Review. The resolver targets a status by name and picks whichever transition reaches it from the current status, so a team can rename transitions without breaking automation.</p>
     </section>
 
-    <!-- 05 -->
+    <!-- 05 releases -->
+    <section id="releases">
+      <p class="eyebrow"><span class="n">05</span>Versioning &amp; releases</p>
+      <h2>Every deployable ships as a versioned release</h2>
+      <p class="sub">Apps, services, CLIs, images, Helm charts and libraries all use Semantic Versioning, and every one of them ships as a GitHub Release. The release is the system of record: production deploys reference it, Jira fix versions name it, and Confluence release notes link to it.</p>
+      <div class="principles">
+        <div><h4>Versions come from commits</h4><p><code>fix</code> bumps the patch, <code>feat</code> the minor, <code>!</code> or <code>BREAKING CHANGE:</code> the major. Nobody types a version number.</p></div>
+        <div><h4>Fully automatic</h4><p>Every merge to the default branch with a <code>feat</code> or <code>fix</code> publishes a release within minutes. release-please writes the changelog.</p></div>
+        <div><h4>One version per deployable</h4><p>Each unit in <code>.devflow/releases.yml</code> has its own version. Monorepo tags carry the unit, for example <code>api-v1.4.0</code>.</p></div>
+        <div><h4>Production takes releases</h4><p>A guard blocks production deploys of anything but a published release, except an approved hotfix that must end in a patch release.</p></div>
+      </div>
+
+      <h3>From merge to release</h3>
+      <div class="lifecycle">
+        <div><div class="ev">merge to main</div><div class="lbl">feat / fix lands</div><div class="src">only units whose path changed</div></div>
+        <div><div class="ev">release-please</div><div class="lbl">Version + changelog</div><div class="src">Release PR auto-merged</div></div>
+        <div><div class="ev">tag + release</div><div class="lbl">GitHub Release</div><div class="src">v1.4.0 or api-v1.4.0</div></div>
+        <div><div class="ev">build</div><div class="lbl">Artifacts attached</div><div class="src">binary · image · chart · package</div></div>
+        <div><div class="ev">attest</div><div class="lbl">Build provenance</div><div class="src">Sigstore via GitHub OIDC</div></div>
+        <div><div class="ev">jira + confluence</div><div class="lbl">Fix version + notes</div><div class="src">"api 1.4.0" on every ticket</div></div>
+      </div>
+
+      <h3>Versions follow the branching strategy</h3>
+      <p>Stable versions only come from the default branch. Other branches build prerelease versions that sort before the release they lead to, so every staging image and binary traces back to a release. <code>devflow release init</code> detects the strategy: a <code>develop</code> branch means GitFlow.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Branch</th><th>Trunk-based</th><th>GitFlow</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">main</td><td>Release</td><td>Release</td><td class="mono">1.5.0</td></tr>
+            <tr><td class="mono">develop</td><td>pr prerelease</td><td>alpha prerelease</td><td class="mono">1.5.0-alpha.7+3f2c1ab</td></tr>
+            <tr><td class="mono">release/*</td><td>rc prerelease</td><td>rc prerelease</td><td class="mono">1.5.0-rc.2+9a1b2c3</td></tr>
+            <tr><td class="mono">hotfix/*</td><td>hotfix prerelease</td><td>hotfix prerelease</td><td class="mono">1.4.1-hotfix.1+c0ffee1</td></tr>
+            <tr><td class="mono">feature, PR</td><td>pr prerelease</td><td>pr prerelease</td><td class="mono">1.5.0-pr.3+abc1234</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="example">The number before <code>+</code> counts the unit's commits since its last release, and <code>+sha</code> is build metadata. Before 1.0.0, a breaking change bumps the minor version. Existing tags seed the starting version, so adopting devflow never restarts a version at zero.</p>
+
+      <h3>What a release produces</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th><code>builds:</code></th><th>Release output</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">binary</td><td>GoReleaser archives for each platform plus <code>checksums.txt</code>, attached to the release with build attestations. devflow's own self-update uses exactly this.</td></tr>
+            <tr><td class="mono">image</td><td>Pushed to <code>ghcr.io/nscaledev/&lt;unit&gt;</code> and tagged <code>1.4.0</code>, <code>1.4</code>, <code>1</code> and the short SHA, with the attestation stored in the registry.</td></tr>
+            <tr><td class="mono">helm</td><td><code>version</code> and <code>appVersion</code> set to the release, pushed to <code>oci://ghcr.io/nscaledev/charts</code> and attached. The Release PR also updates <code>Chart.yaml</code>.</td></tr>
+            <tr><td class="mono">library</td><td>Go submodules get the <code>path/v1.4.0</code> tag Go needs. npm packages publish to GitHub Packages, Python packages to PyPI through trusted publishing, and Terraform modules are tag-only.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Production deploys and the hotfix path</h3>
+      <p>Each production deploy job runs <code>nscaledev/devflow/actions/release-guard</code> first. It passes for a published, non-draft, non-prerelease release tag. The only other way through is a hotfix.</p>
+      <div class="lifecycle">
+        <div><div class="ev">hotfix/*</div><div class="lbl">Fix branch</div><div class="src">builds 1.4.1-hotfix.1</div></div>
+        <div><div class="ev">production-hotfix</div><div class="lbl">Approved deploy</div><div class="src">environment reviewers approve</div></div>
+        <div><div class="ev">guard</div><div class="lbl">Tracking issue</div><div class="src">patch release required</div></div>
+        <div><div class="ev">merge fix(KEY)</div><div class="lbl">To main</div><div class="src">normal PR, key check</div></div>
+        <div><div class="ev">release</div><div class="lbl">1.4.1 published</div><div class="src">automatic</div></div>
+        <div><div class="ev">redeploy</div><div class="lbl">Release replaces hotfix</div><div class="src">guard passes normally</div></div>
+      </div>
+
+      <div class="tabs" data-tabs="releases">
+        <div class="tablist" role="tablist" aria-label="Release files">
+          <button role="tab" aria-selected="true" aria-controls="r-units" id="rb-units">releases.yml</button>
+          <button role="tab" aria-selected="false" aria-controls="r-caller" id="rb-caller" tabindex="-1">Caller workflow</button>
+          <button role="tab" aria-selected="false" aria-controls="r-guard" id="rb-guard" tabindex="-1">Deploy guard</button>
+          <button role="tab" aria-selected="false" aria-controls="r-cli" id="rb-cli" tabindex="-1">CLI</button>
+        </div>
+        <div class="panel" role="tabpanel" id="r-units" aria-labelledby="rb-units">
+          <p class="note">Written by <code>devflow release init</code>, which finds Dockerfiles, <code>Chart.yaml</code>, GoReleaser configs, Go main packages, <code>package.json</code>, <code>pyproject.toml</code> and Terraform modules. Edit it, then run <code>devflow release sync</code> to regenerate the release-please files.</p>
+          <div class="path">.devflow/releases.yml</div>
+<pre class="code">strategy: trunk                <span class="c"># or gitflow</span>
+units:
+  - name: api
+    path: services/api
+    release_type: go           <span class="c"># go, node, python, helm, terraform-module, simple</span>
+    builds: [image, helm]
+    chart: chart
+  - name: cli
+    path: cli
+    release_type: go
+    builds: [binary]
+  - name: quota
+    path: libs/quota
+    release_type: go
+    builds: [library]
+    publish: go</pre>
+          <button class="copy" type="button">Copy</button>
+        </div>
+        <div class="panel" role="tabpanel" id="r-caller" aria-labelledby="rb-caller" hidden>
+          <p class="note">Added to the caller workflow by <code>devflow init</code>. It needs the devflow GitHub App so the Release PR merge and the release can trigger other workflows, such as the Confluence release notes.</p>
+          <div class="path">.github/workflows/devflow.yml (excerpt)</div>
+<pre class="code">  release:
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &amp;&amp; github.event_name == 'push' &amp;&amp;
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: nscaledev/devflow/.github/workflows/semver-release.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      attestations: write
+    secrets: inherit</pre>
+          <button class="copy" type="button">Copy</button>
+        </div>
+        <div class="panel" role="tabpanel" id="r-guard" aria-labelledby="rb-guard" hidden>
+          <p class="note">Put this first in every production deploy job. Give the <code>production-hotfix</code> environment required reviewers; their approval is the hotfix sign-off. Use <code>actions/version</code> to tag staging builds with the branch's prerelease version.</p>
+<pre class="code">deploy-production:
+  environment: production          <span class="c"># production-hotfix for an approved hotfix</span>
+  runs-on: ubuntu-latest
+  steps:
+    - uses: nscaledev/devflow/actions/release-guard@v1
+      with:
+        environment: production
+        ref: ${{ github.ref_name }}  <span class="c"># e.g. api-v1.4.0</span>
+    - run: ./scripts/deploy.sh production
+
+<span class="c"># staging: version the build after the release it leads to</span>
+- id: version
+  uses: nscaledev/devflow/actions/version@v1
+  with: { unit: api }
+- run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api</pre>
+          <button class="copy" type="button">Copy</button>
+        </div>
+        <div class="panel" role="tabpanel" id="r-cli" aria-labelledby="rb-cli" hidden>
+          <p class="note">The same calculation runs locally (<code>devflow release plan</code>), in the agent (<code>devflow_release_plan</code>) and in CI (<code>actions/version</code>), so a version never differs between them.</p>
+<pre class="code">$ devflow release plan
+↑ api      1.2.0    → 1.2.1    (patch, 1 commits) build version 1.2.1-alpha.1+316a6c1
+  cli      0.3.1    → 0.3.1    (none, 0 commits)  build version 0.3.1-alpha.0+316a6c1
+
+$ devflow release version --unit api
+1.2.1-alpha.1+316a6c1</pre>
+          <button class="copy" type="button">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 -->
     <section id="automations">
-      <p class="eyebrow"><span class="n">05</span>Automations</p>
+      <p class="eyebrow"><span class="n">06</span>Automations</p>
       <h2>The automation catalogue</h2>
-      <p class="sub">Every automation selected in discovery: twelve in total, grouped by where the value lands.</p>
+      <p class="sub">Every automation selected in discovery plus the release work: fourteen in total, grouped by where the value lands.</p>
       <div class="filters" role="group" aria-label="Filter automations">
-        <button class="chip" type="button" data-f="all" aria-pressed="true">All 12</button>
+        <button class="chip" type="button" data-f="all" aria-pressed="true">All 14</button>
         <button class="chip" type="button" data-f="flow" aria-pressed="false">GitHub ↔ Jira</button>
         <button class="chip" type="button" data-f="conf" aria-pressed="false">Confluence</button>
         <button class="chip" type="button" data-f="signal" aria-pressed="false">Signals &amp; AI</button>
@@ -477,6 +618,8 @@ Devflow: skip</span></pre>
             <tr data-a="flow"><td><span class="name">Branch, PR and merge transitions</span><span class="area">GitHub ↔ Jira</span></td><td>Branch created, PR opened or merged, commit <code>#verb</code></td><td>Resolve key and project, look up <code>flow-map.yml</code>, transition forward only, comment with link.</td><td><span class="eng gha">Actions</span></td><td class="ph">P3</td></tr>
             <tr data-a="flow"><td><span class="name">Jira key enforcement</span><span class="area">GitHub ↔ Jira</span></td><td>Local commit; PR opened or edited</td><td><code>commit-msg</code> hook blocks bad subjects. Required PR check validates title, every commit and that the key exists in Jira.</td><td><span class="eng gha">Actions</span><span class="eng">git hook</span></td><td class="ph">P2</td></tr>
             <tr data-a="flow"><td><span class="name">Auto-create issues</span><span class="area">GitHub ↔ Jira</span></td><td>High or critical Dependabot/CodeQL alert; failed default-branch build; GitHub issue labelled <code>jira</code></td><td>Create a Jira Bug or Security task, de-duplicated by label, link back, and close it when the alert closes.</td><td><span class="eng gha">Actions</span></td><td class="ph">P7</td></tr>
+            <tr data-a="flow"><td><span class="name">Semantic versioning &amp; releases</span><span class="area">GitHub ↔ Jira</span></td><td>Merge to the default branch with <code>feat</code>, <code>fix</code> or <code>!</code></td><td>release-please bumps each changed unit, the Release PR auto-merges, and a GitHub Release is published with its changelog, artifacts and attestations. Tickets get the Jira fix version <em>unit X.Y.Z</em>.</td><td><span class="eng gha">Actions</span></td><td class="ph">P4</td></tr>
+            <tr data-a="flow"><td><span class="name">Production release guard</span><span class="area">GitHub ↔ Jira</span></td><td>Production deploy job starts</td><td>Fails unless the ref is a published release. An approved hotfix through <code>production-hotfix</code> passes and opens a "patch release required" issue.</td><td><span class="eng gha">Actions</span></td><td class="ph">P4</td></tr>
             <tr data-a="flow"><td><span class="name">Deployment tracking</span><span class="area">GitHub ↔ Jira</span></td><td>Deployment to a GitHub Environment</td><td>App shows deployments on each ticket. On production success, devflow moves shipped keys to <code>deploy.production</code> and sets Fix Version.</td><td><span class="eng">GitHub for Jira</span><span class="eng gha">Actions</span></td><td class="ph">P4</td></tr>
             <tr data-a="conf"><td><span class="name">Release notes</span><span class="area">Confluence</span></td><td>GitHub release published</td><td>Collect keys between tags, query Jira, group by commit type, publish a page under <em>Release Notes / &lt;repo&gt;</em> and attach it to the GitHub release.</td><td><span class="eng gha">Actions</span></td><td class="ph">P5</td></tr>
             <tr data-a="conf"><td><span class="name">Docs-as-code sync</span><span class="area">Confluence</span></td><td>Merge to default branch touching <code>docs/</code> or <code>adr/</code></td><td>Convert Markdown to storage format and upsert pages listed in <code>docs/confluence.yml</code>. Pages get a "generated from repo" banner.</td><td><span class="eng gha">Actions</span></td><td class="ph">P5</td></tr>
@@ -493,7 +636,7 @@ Devflow: skip</span></pre>
 
     <!-- 06 -->
     <section id="implementation">
-      <p class="eyebrow"><span class="n">06</span>Implementation</p>
+      <p class="eyebrow"><span class="n">07</span>Implementation</p>
       <h2>Reference implementation</h2>
       <p class="sub">Everything lives in <code>nscaledev/devflow</code> and is tagged <code>v1</code>. Each product repo adds one small caller workflow and a hooks folder. Snippets are starting points to review, not drop-in production code.</p>
 
@@ -811,7 +954,7 @@ jobs:
 
     <!-- 07 plugin -->
     <section id="plugin">
-      <p class="eyebrow"><span class="n">07</span>Developer plugin</p>
+      <p class="eyebrow"><span class="n">08</span>Developer plugin</p>
       <h2>devflow in every AI terminal</h2>
       <p class="sub">The Actions above react after code is pushed. <code>devflow</code> works earlier, inside the developer's AI client, so the agent knows the ticket, writes the commit correctly the first time, and shows what will happen in Jira before anything changes. It works the same in Claude Code, Codex CLI, Grok CLI, Cursor, Copilot, Gemini CLI and a plain terminal.</p>
 
@@ -935,9 +1078,9 @@ jobs:
       </div>
 
       <h3>Capabilities</h3>
-      <p>All 16 capabilities chosen in the interview. <em>Class</em> is what the autonomy setting controls: <b>read</b> always runs, while <b>local</b> (git on your machine) and <b>remote</b> (Jira, Confluence, GitHub) follow your suggest, confirm or auto setting.</p>
+      <p>All 16 capabilities chosen in the interview, plus the release plan. <em>Class</em> is what the autonomy setting controls: <b>read</b> always runs, while <b>local</b> (git on your machine) and <b>remote</b> (Jira, Confluence, GitHub) follow your suggest, confirm or auto setting.</p>
       <div class="filters" role="group" aria-label="Filter capabilities">
-        <button class="chip" type="button" data-cf="all" aria-pressed="true">All 16</button>
+        <button class="chip" type="button" data-cf="all" aria-pressed="true">All 17</button>
         <button class="chip" type="button" data-cf="commit" aria-pressed="false">Commit messaging</button>
         <button class="chip" type="button" data-cf="task" aria-pressed="false">Task awareness</button>
         <button class="chip" type="button" data-cf="pr" aria-pressed="false">PR &amp; review</button>
@@ -962,6 +1105,7 @@ jobs:
             <tr data-c="team"><td><span class="name">Standup + end of day</span><span class="area">Team &amp; knowledge</span></td><td>Drafts your standup from commits, PRs, reviews and transitions since the last working day. Optionally posts an end-of-day progress comment on each ticket you touched.</td><td><code>devflow_standup</code><br><code>devflow standup</code></td><td>read · remote to post</td><td class="ph">P6</td></tr>
             <tr data-c="team"><td><span class="name">Confluence context</span><span class="area">Team &amp; knowledge</span></td><td>Searches design docs and ADRs related to the files and epic in play. Drafts new ADRs and doc updates in the repo's <code>docs/</code>, which the docs sync then publishes.</td><td><code>devflow_docs_search</code><br><code>devflow_adr_draft</code></td><td>read · local</td><td class="ph">P5</td></tr>
             <tr data-c="team"><td><span class="name">Collision radar</span><span class="area">Team &amp; knowledge</span></td><td>Warns when someone else has a branch or PR on the same ticket, or an open PR touching the same files, before you start and before you open a PR.</td><td><code>devflow_collisions</code></td><td>read</td><td class="ph">P3</td></tr>
+            <tr data-c="team"><td><span class="name">Release plan</span><span class="area">Team &amp; knowledge</span></td><td>For each deployable unit: the current version, the bump its commits imply, the next release, and the prerelease version this branch builds as. Set up with <code>devflow release init</code>.</td><td><code>devflow_release_plan</code><br><code>devflow release plan</code></td><td>read</td><td class="ph">P4</td></tr>
             <tr data-c="team"><td><span class="name">Release helpers</span><span class="area">Team &amp; knowledge</span></td><td>Previews the changelog and release notes for unreleased commits, grouped by type and ticket. Drafts the plain-language ticket summary posted on merge.</td><td><code>devflow_release_preview</code><br><code>devflow release preview</code></td><td>read</td><td class="ph">P5</td></tr>
           </tbody>
         </table>
@@ -1390,6 +1534,8 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
             <tr><td class="mono">devflow status</td><td>PR, checks, deployments and ticket in one view</td></tr>
             <tr><td class="mono">devflow standup [--post]</td><td>Draft standup; <code>--post</code> adds end-of-day comments</td></tr>
             <tr><td class="mono">devflow docs search &lt;q&gt; · adr new</td><td>Confluence search and ADR drafts in <code>docs/adr/</code></td></tr>
+            <tr><td class="mono">devflow release init · sync</td><td>Detect deployable units and the branching strategy; write <code>.devflow/releases.yml</code> and the release-please files</td></tr>
+            <tr><td class="mono">devflow release plan · version</td><td>Next version of each unit, and the version this branch builds as</td></tr>
             <tr><td class="mono">devflow release preview</td><td>Changelog for unreleased commits</td></tr>
             <tr><td class="mono">devflow update [--rollback]</td><td>Install the latest release now, or switch back to the previous one</td></tr>
             <tr><td class="mono">devflow version</td><td>Installed version, channel, last update check and whether a newer release exists</td></tr>
@@ -1408,7 +1554,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
 
     <!-- 08 -->
     <section id="rollout">
-      <p class="eyebrow"><span class="n">08</span>Rollout</p>
+      <p class="eyebrow"><span class="n">09</span>Rollout</p>
       <h2>Ten phases, one pilot team first</h2>
       <p class="status-note"><span class="pill info">Gate</span> No phase starts until Kyle Redelinghuys and Vishal Srini approve this architecture and plan. The <code>nscaledev/devflow</code> repo is built and tested so P0 can begin as soon as they sign off.</p>
       <p class="sub">Phases are gated by outcomes, not dates. A phase starts only when the previous one has passed its exit check, and we widen the rollout only when the pilot team says the automation saves more time than it costs.</p>
@@ -1417,7 +1563,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
         <div class="phase"><div class="when">P1<b>Commit convention</b></div><ul><li>devflow v0.x on pilot repos: release pipeline and self-update, launcher, session context, commit generate/validate/split, breaking-change detection</li><li>Publish the convention and the commit tester to the pilot team</li><li>Add <code>.githooks/commit-msg</code> to pilot repos</li><li>Set <code>git user.email</code> so Smart Commits match Jira users</li></ul><div class="exit"><b>Exit</b>Every pilot engineer has the hook installed and Smart Commits resolve to their Jira user</div></div>
         <div class="phase"><div class="when">P2<b>PR key enforcement</b></div><ul><li>devflow: PR readiness check and PR opening</li><li>Roll out the PR key check in warn mode</li><li>Fix the common misses it reports, then make it a required check via org ruleset</li></ul><div class="exit"><b>Exit</b>95% of pilot commits and PRs carry a valid key; check switched to required</div></div>
         <div class="phase"><div class="when">P3<b>Ticket transitions</b></div><ul><li>devflow: Jira dry-run preview, pick + start, AC tracking, scope drift, review follow-up, collision radar</li><li>Turn on branch, PR and merge transitions from <code>flow-map.yml</code></li><li>Enable commit verbs (<code>#start</code>, <code>#review</code>, <code>#qa</code>, <code>#done</code>, <code>#block</code>)</li></ul><div class="exit"><b>Exit</b>Pilot team stops moving tickets by hand; no wrong-direction transitions across a full sprint</div></div>
-        <div class="phase"><div class="when">P4<b>Deployment tracking</b></div><ul><li>devflow: ship status</li><li>Add <code>.jira/config.yml</code> environment mapping to pilot repos</li><li>Add the ship step to deploy workflows; set Fix Version on production release</li></ul><div class="exit"><b>Exit</b>Every production deploy shows on its tickets and moves them to the mapped status</div></div>
+        <div class="phase"><div class="when">P4<b>Releases &amp; deployment tracking</b></div><ul><li><code>devflow release init</code> on pilot repos; fully automatic SemVer GitHub Releases from the default branch</li><li>Release guard in production deploy jobs; <code>production-hotfix</code> environment with required reviewers</li><li>devflow: ship status, release plan</li><li>Add <code>.jira/config.yml</code> environment mapping to pilot repos</li><li>Add the ship step to deploy workflows; set Fix Version on production release</li></ul><div class="exit"><b>Exit</b>Every pilot deployable has published a release; production deploys only releases or approved hotfixes; deploys show on their tickets</div></div>
         <div class="phase"><div class="when">P5<b>Release notes &amp; docs-as-code</b></div><ul><li>devflow: Confluence context, ADR drafts, release preview</li><li>Release notes page on each GitHub release</li><li>Sync <code>docs/</code> and ADRs to Confluence on merge</li></ul><div class="exit"><b>Exit</b>Release notes published within 10 minutes of a release with no manual edits needed</div></div>
         <div class="phase"><div class="when">P6<b>Epic pages &amp; sprint reports</b></div><ul><li>devflow: standup and end-of-day drafts</li><li>Jira Automation rule: Epic created → design doc from template</li><li>Sprint report published on sprint close</li></ul><div class="exit"><b>Exit</b>Pilot team uses the generated design docs and reports in planning and retros</div></div>
         <div class="phase"><div class="when">P7<b>Signals</b></div><ul><li>Slack routing, hygiene bots and the incident flow</li><li>Auto-create issues from alerts and failed main builds</li></ul><div class="exit"><b>Exit</b>Alert noise reviewed with the pilot team; nothing muted for being too chatty</div></div>
@@ -1428,7 +1574,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
 
     <!-- 08 -->
     <section id="governance">
-      <p class="eyebrow"><span class="n">09</span>Governance</p>
+      <p class="eyebrow"><span class="n">10</span>Governance</p>
       <h2>Security, ownership and measuring it</h2>
       <div class="gov">
         <div><h4>Access</h4><ul><li>One Atlassian service account with a scoped token, limited to opted-in projects and spaces</li><li>Rotate tokens every 90 days; rotation runbook lives in devflow</li><li>Workflows request least-privilege <code>permissions:</code> and pin third-party actions to a SHA</li><li>No secrets ever appear in commit messages, PR bodies or Jira comments</li></ul></div>
@@ -1447,7 +1593,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
 
     <!-- 09 -->
     <section id="questions">
-      <p class="eyebrow"><span class="n">10</span>Decisions</p>
+      <p class="eyebrow"><span class="n">11</span>Decisions</p>
       <h2>Decisions made</h2>
       <p class="sub">The open questions from v0.1, answered in the follow-up interview on 20 Nov 2026. Two items are still open: the sign-off and the pilot team name.</p>
       <ol class="qs">
@@ -1455,6 +1601,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
         <li><div><b>Jira projects in scope: the pilot team's project only</b>Other projects join one team at a time in P8, each adding its own flow-map row and confirming it against real tickets first.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Confluence: one shared template set</b>Design doc, postmortem and release notes templates live in the Engineering space. Teams publish into their own spaces. Eng managers jointly own the templates.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Claude access: approved under the existing Anthropic agreement</b>No separate P9 review. AI assist is opt-in per repo with the <code>devflow-ai</code> topic, starting with the pilot repos.</div><span class="pill ok">Decided</span></li>
+        <li><div><b>Versioning: SemVer for every deployable, shipped as GitHub Releases</b>release-please with fully automatic releases, one version per deployable unit (<code>api-v1.4.0</code> in monorepos), and prerelease versions that follow the branching strategy. Production deploys releases only, plus approved hotfixes that must end in a patch release.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Merge style: each repo chooses</b>The PR check validates the PR title and every commit, so squash, rebase and merge commits are all covered.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Pilot team: nominated by Engineering leadership</b>The nomination happens in P0 and is the first P0 exit check. A team with a Review + QA workflow gives the flow map the best test.</div><span class="pill info">Name pending</span></li>
       </ol>
@@ -1463,7 +1610,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
 </div>
 
 <footer>
-  <div class="wrap"><span>Nscale · Engineering Enablement</span><span>Delivery Loop blueprint v0.6 · Internal</span></div>
+  <div class="wrap"><span>Nscale · Engineering Enablement</span><span>Delivery Loop blueprint v0.7 · Internal</span></div>
 </footer>
 
 <script>

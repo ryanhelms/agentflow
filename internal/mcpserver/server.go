@@ -209,6 +209,9 @@ type adrIn struct {
 	Consequences string `json:"consequences,omitempty"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
 }
+type unitIn struct {
+	Unit string `json:"unit,omitempty" jsonschema:"unit name from .devflow/releases.yml; empty for all units"`
+}
 type releaseIn struct {
 	Since string `json:"since,omitempty" jsonschema:"tag or ref; default is the latest tag"`
 }
@@ -309,6 +312,8 @@ func (s *Server) register() {
 			}
 			return a.Collisions(ctx, key)
 		})
+	add(s, "devflow_release_plan", "Each deployable unit's current version, the bump implied by its commits, the next release version and the prerelease version this branch builds as.", readOnly,
+		func(ctx context.Context, in unitIn) (any, error) { return a.ReleasePlan(ctx, in.Unit) })
 	add(s, "devflow_release_preview", "Unreleased commits grouped by type with the implied version bump and Jira keys.", readOnly,
 		func(ctx context.Context, in releaseIn) (any, error) { return a.ReleasePreview(ctx, in.Since) })
 }

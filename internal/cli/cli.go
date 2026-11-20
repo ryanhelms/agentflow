@@ -36,7 +36,8 @@ const usage = `devflow links git work to Jira, Confluence and GitHub.
 Usage: devflow <command> [flags]
 
 Setup
-  init [--force]                 write .devflow/, hooks, workflow and client configs into this repo
+  init [--force]                 write .devflow/, hooks, workflow, client configs and release
+                                 setup (units, release-please files) into this repo
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
@@ -55,6 +56,11 @@ Work
   standup [--since 24h] [--json] activity to draft a standup
   docs search QUERY [--space S]  search Confluence
   adr new TITLE                  draft docs/adr/NNNN-title.md
+  release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
+                                 .devflow/releases.yml and the release-please files
+  release sync                   regenerate release-please files from releases.yml
+  release plan [--unit U] [--json]   next version of each unit on this branch
+  release version --unit U       print the version a build of this branch gets
   release preview [--since TAG]  unreleased commits by type
   keys --range A..B              Jira keys in a commit range
   lint-msg FILE                  validate a commit message file
@@ -270,23 +276,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 		return printJSON(out)
 	case "release":
-		if len(args) < 1 || args[0] != "preview" {
-			return errors.New("usage: devflow release preview [--since TAG]")
-		}
-		fs := flag.NewFlagSet("release", flag.ContinueOnError)
-		since := fs.String("since", "", "tag or ref")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
-		}
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		out, err := a.ReleasePreview(ctx, *since)
-		if err != nil {
-			return err
-		}
-		return printJSON(out)
+		return runRelease(ctx, args)
 	case "update":
 		return runUpdate(ctx, args)
 	case "version", "--version", "-v":
@@ -361,7 +351,25 @@ func runInit(ctx context.Context, args []string) error {
 	}
 	res, err := setup.Init(ctx, repo.Dir, *force)
 	printResult(res)
-	return err
+	if err != nil {
+		return err
+	}
+	a, err := open(ctx)
+	if err != nil {
+		return err
+	}
+	rel, err := a.ReleaseInit(ctx, "", false)
+	if err != nil {
+		return fmt.Errorf("release setup: %w (fix it, then run devflow release init)", err)
+	}
+	fmt.Printf("Release units (%s strategy):\n", rel.Strategy)
+	for _, u := range rel.Units {
+		fmt.Printf("  %-16s %-22s %s\n", u.Name, u.Path, strings.Join(u.Builds, ","))
+	}
+	for _, f := range rel.Written {
+		fmt.Println("  wrote   ", f)
+	}
+	return nil
 }
 
 func runInstall(ctx context.Context, args []string) error {
@@ -935,4 +943,81 @@ func runDoctor(ctx context.Context, args []string) error {
 		return &hooks.ExitError{Code: 1, Msg: "doctor found problems"}
 	}
 	return nil
+}
+
+func runRelease(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: devflow release init|sync|plan|version|preview")
+	}
+	sub, rest := args[0], args[1:]
+	fs := flag.NewFlagSet("release "+sub, flag.ContinueOnError)
+	strategy := fs.String("strategy", "", "branching strategy: trunk or gitflow (default: detect)")
+	force := fs.Bool("force", false, "re-detect units even if releases.yml exists")
+	unit := fs.String("unit", "", "unit name from .devflow/releases.yml")
+	asJSON := fs.Bool("json", false, "print JSON")
+	since := fs.String("since", "", "tag or ref (preview)")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	a, err := open(ctx)
+	if err != nil {
+		return err
+	}
+	switch sub {
+	case "init":
+		res, err := a.ReleaseInit(ctx, *strategy, *force)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("strategy: %s\n", res.Strategy)
+		for _, u := range res.Units {
+			fmt.Printf("  %-16s %-22s %-17s %s\n", u.Name, u.Path, u.ReleaseType, strings.Join(u.Builds, ","))
+		}
+		for _, f := range res.Written {
+			fmt.Println("  wrote   ", f)
+		}
+		for _, n := range res.Notes {
+			fmt.Println("•", n)
+		}
+		return nil
+	case "sync":
+		written, err := a.ReleaseSync(ctx, nil)
+		for _, f := range written {
+			fmt.Println("  wrote   ", f)
+		}
+		return err
+	case "plan":
+		plans, err := a.ReleasePlan(ctx, *unit)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(plans)
+		}
+		for _, p := range plans {
+			mark := " "
+			if p.WillRelease {
+				mark = "↑"
+			}
+			fmt.Printf("%s %-16s %-8s → %-8s (%s, %d commits) build version %s\n", mark, p.Unit.Name, p.Current, p.Next, p.Bump, p.Commits, p.Version)
+		}
+		return nil
+	case "version":
+		if *unit == "" {
+			return errors.New("--unit is required")
+		}
+		plans, err := a.ReleasePlan(ctx, *unit)
+		if err != nil {
+			return err
+		}
+		fmt.Println(plans[0].Version)
+		return nil
+	case "preview":
+		out, err := a.ReleasePreview(ctx, *since)
+		if err != nil {
+			return err
+		}
+		return printJSON(out)
+	}
+	return fmt.Errorf("unknown release command %q", sub)
 }

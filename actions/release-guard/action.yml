@@ -1,0 +1,85 @@
+name: devflow release guard
+description: >
+  Run before a production deploy. Passes only when the ref being deployed is a
+  published, non-draft, non-prerelease GitHub Release tag, or, for an approved hotfix,
+  a hotfix/* branch (or a hotfix prerelease) deployed through the hotfix environment,
+  whose required reviewers are the approval. Hotfix deploys open a tracking issue so the
+  fix merges to the default branch and ships as a patch release.
+inputs:
+  ref:
+    description: Tag or branch being deployed (default github.ref_name)
+    required: false
+    default: ""
+  environment:
+    description: Target environment name
+    required: true
+  production-environments:
+    description: Space-separated environments that require a release
+    required: false
+    default: production prod
+  hotfix-environment:
+    description: Environment whose protection rules approve hotfix deploys
+    required: false
+    default: production-hotfix
+  token:
+    description: Token that can read releases and open issues
+    required: false
+    default: ${{ github.token }}
+outputs:
+  release-url:
+    description: URL of the release being deployed (empty for hotfix deploys)
+    value: ${{ steps.guard.outputs.url }}
+runs:
+  using: composite
+  steps:
+    - id: guard
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REF: ${{ inputs.ref || github.ref_name }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        PROD_ENVS: ${{ inputs.production-environments }}
+        HOTFIX_ENV: ${{ inputs.hotfix-environment }}
+        REPO: ${{ github.repository }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        is_prod=false
+        for e in $PROD_ENVS $HOTFIX_ENV; do [ "$e" = "$ENVIRONMENT" ] && is_prod=true; done
+        if ! $is_prod; then
+          echo "Non-production environment $ENVIRONMENT: any build may deploy."
+          exit 0
+        fi
+
+        if rel=$(gh release view "$REF" --repo "$REPO" --json tagName,isDraft,isPrerelease,url 2>/dev/null); then
+          draft=$(jq -r .isDraft <<<"$rel"); pre=$(jq -r .isPrerelease <<<"$rel"); url=$(jq -r .url <<<"$rel")
+          if [ "$draft" = false ] && [ "$pre" = false ]; then
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploying release $REF to $ENVIRONMENT ($url)"
+            exit 0
+          fi
+          if [ "$pre" = true ] && [[ "$REF" == *-hotfix.* ]] && [ "$ENVIRONMENT" = "$HOTFIX_ENV" ]; then
+            hotfix=true
+          else
+            echo "::error::$REF is a draft or prerelease. Production takes published releases only; hotfixes go through the $HOTFIX_ENV environment."
+            exit 1
+          fi
+        fi
+
+        if [[ "$REF" == hotfix/* ]] || [ "${hotfix:-false}" = true ]; then
+          if [ "$ENVIRONMENT" != "$HOTFIX_ENV" ]; then
+            echo "::error::Hotfix $REF must deploy through the $HOTFIX_ENV environment, whose reviewers approve it."
+            exit 1
+          fi
+          title="Patch release required for hotfix $REF"
+          if [ -z "$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number -q '.[0].number')" ]; then
+            gh issue create --repo "$REPO" --title "$title" --label hotfix --body \
+              "A hotfix from \`$REF\` was deployed to production without a release ($RUN_URL). Merge it to the default branch with a \`fix(KEY): ...\` commit so devflow publishes the patch release, then redeploy that release." \
+              >/dev/null 2>&1 || gh issue create --repo "$REPO" --title "$title" --body "Hotfix $REF deployed without a release ($RUN_URL); merge it so a patch release is published." >/dev/null
+          fi
+          echo "::warning::Approved hotfix deploy of $REF. A patch release must follow; a tracking issue is open."
+          exit 0
+        fi
+
+        echo "::error::$REF is not a published GitHub Release. Production deploys must use a release tag (e.g. v1.4.0 or api-v1.4.0) or the approved hotfix path."
+        exit 1
