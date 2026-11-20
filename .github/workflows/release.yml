@@ -75,7 +75,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           scripts/changelog.sh --version "$VERSION" --from "$LAST_TAG" --to HEAD \
             --repo "$GITHUB_REPOSITORY" --notes "$RUNNER_TEMP/release-notes.md" --update CHANGELOG.md
-          git add CHANGELOG.md
+          # Keep the README status area on the current release.
+          sed -i -E "s#(<!-- devflow:version -->)[^<]*(<!-- /devflow:version -->)#\1\`v$VERSION\`\2#" README.md
+          git add CHANGELOG.md README.md
           git commit -m "chore(release): v$VERSION"
           git tag -a "v$VERSION" -m "devflow v$VERSION"
           git push origin "HEAD:${GITHUB_REF_NAME}" "v$VERSION"

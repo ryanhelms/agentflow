@@ -24,7 +24,11 @@ contains `@AGENTS.md` so Claude Code loads this file.
 - **Keep README.md current.** Any change a README reader would notice updates README.md in
   the same PR: commands, MCP tools, workflows, actions, setup or install steps, config
   options, supported clients, release or versioning behaviour, security guarantees,
-  status and doc links. Before finishing, re-read the README sections your change touches
+  status and doc links. The **status area** at the top of the README (the table with
+  Status, Current release, Owner, Architecture, Support) must always be true: the release
+  workflow updates the version between the `devflow:version` markers (never edit it by
+  hand), and you update the Status row whenever approval, rollout phase or adoption
+  changes. Before finishing, re-read the README sections your change touches
   and fix anything now wrong or missing. If nothing reader-visible changed, say so in the
   PR description. CI warns when user-facing code changes without a README change. The
   same rule is loaded for Claude Code from `.claude/rules/readme-up-to-date.md`.

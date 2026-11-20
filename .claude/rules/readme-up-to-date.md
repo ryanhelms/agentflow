@@ -7,6 +7,11 @@ PR. That includes new or removed commands, MCP tools, workflows or actions, chan
 setup or install steps, config options, supported clients, release or versioning
 behaviour, security guarantees, status (current version, approval), and links to docs.
 
+The status area at the top of README.md (Status, Current release, Owner, Architecture,
+Support) must always be true. The release workflow writes the current version between the
+`<!-- devflow:version -->` markers; never edit that by hand. Update the Status row yourself
+whenever approval, the rollout phase or adoption changes.
+
 Before you finish a task:
 
 1. Read the README sections that cover what you changed.
