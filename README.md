@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. No team uses it yet. |
-| **Current release** | <!-- devflow:version -->`v0.4.1`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.4.2`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |

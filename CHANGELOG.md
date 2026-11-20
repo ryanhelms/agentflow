@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.4.2](https://github.com/nscaledev/devflow/compare/v0.4.1...v0.4.2) - 2026-11-20
+
+### Fixes
+
+- pin attestation signer, scope secrets, honour require_key (#10) ([f474655](https://github.com/nscaledev/devflow/commit/f474655951ab7beef4c864ebfcecd1b74b6972c5))
+
 ## [0.4.1](https://github.com/nscaledev/devflow/compare/v0.4.0...v0.4.1) - 2026-11-20
 
 ### Fixes
