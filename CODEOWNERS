@@ -12,5 +12,10 @@
 /.github/workflows/promote.yml  @nscaledev/eng-enablement
 /internal/update/               @nscaledev/eng-enablement
 
+# Agent instructions. CLAUDE.md only points at AGENTS.md (checked in CI).
+/AGENTS.md                      @nscaledev/eng-enablement
+/CLAUDE.md                      @nscaledev/eng-enablement
+/.claude/                       @nscaledev/eng-enablement
+
 # Shared Confluence templates are owned jointly by engineering managers.
 /confluence-templates/          @nscaledev/eng-managers

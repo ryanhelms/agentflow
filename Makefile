@@ -12,7 +12,7 @@ SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) \
 	templates/repo/.githooks/commit-msg \
 	adapters/claude-code/bin/launch
 
-.PHONY: e2e build test vet lint shellcheck actionlint check snapshot install-hooks clean
+.PHONY: agent-docs e2e build test vet lint shellcheck actionlint check snapshot install-hooks clean
 
 build: ## Build ./devflow for this machine
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o devflow ./cmd/devflow
@@ -32,7 +32,10 @@ shellcheck:
 actionlint:
 	actionlint
 
-check: vet test lint shellcheck actionlint ## Everything CI runs
+agent-docs: ## CLAUDE.md files must only contain @AGENTS.md
+	scripts/check-agent-docs.sh
+
+check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs
 
 snapshot: ## Local multi-platform build, no publish
 	goreleaser release --snapshot --clean
