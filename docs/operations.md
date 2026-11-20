@@ -2,8 +2,8 @@
 
 ## Org secrets and variables
 
-Set at the `nscaledev` org level, visible to repos that use devflow. Reusable workflows
-receive them through `secrets: inherit`.
+Set at the `nscaledev` org level, visible to repos that use devflow. The caller
+workflow passes each reusable workflow only the secrets it uses (no `secrets: inherit`).
 
 | Name | Kind | Purpose |
 |---|---|---|

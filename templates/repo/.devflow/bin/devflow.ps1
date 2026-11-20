@@ -28,7 +28,7 @@ try {
   $got = (Get-FileHash -Algorithm SHA256 (Join-Path $tmp $pkg)).Hash.ToLower()
   if ($want -ne $got) { throw "devflow: checksum mismatch for $pkg, not installing" }
 
-  gh attestation verify (Join-Path $tmp $pkg) --repo nscaledev/devflow 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+  gh attestation verify (Join-Path $tmp $pkg) --repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
   if ($LASTEXITCODE -ne 0) { throw 'devflow: build attestation did not verify, not installing' }
 
   $dest = Join-Path $cacheRoot $ver

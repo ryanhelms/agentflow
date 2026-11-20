@@ -498,12 +498,16 @@ func VerifyChecksum(file, sumsFile string) error {
 	return nil
 }
 
-// VerifyAttestation runs `gh attestation verify` against the devflow repo.
+// SignerWorkflow is the only workflow allowed to have built a release devflow installs.
+const SignerWorkflow = Repo + "/.github/workflows/release.yml"
+
+// VerifyAttestation runs `gh attestation verify` against the devflow repo, requiring the
+// provenance to come from devflow's release workflow (not any workflow in the repo).
 func VerifyAttestation(ctx context.Context, file string) error {
 	if os.Getenv("DEVFLOW_INSECURE_SKIP_ATTESTATION") == "1" {
 		return nil // tests and air-gapped mirrors only
 	}
-	cmd := exec.CommandContext(ctx, "gh", "attestation", "verify", file, "--repo", Repo)
+	cmd := exec.CommandContext(ctx, "gh", "attestation", "verify", file, "--repo", Repo, "--signer-workflow", SignerWorkflow)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {

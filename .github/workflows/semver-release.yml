@@ -28,6 +28,15 @@ on:
       releases:
         description: JSON array of released units {name, path, tag, version, url}
         value: ${{ jobs.release.outputs.matrix }}
+    secrets:
+      DEVFLOW_APP_PRIVATE_KEY:
+        required: false
+      NPM_TOKEN:
+        required: false
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
 
 permissions:
   contents: read

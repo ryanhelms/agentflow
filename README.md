@@ -236,7 +236,9 @@ through `.claude/settings.json`.
 - **Identity.** Writes use each developer's own Atlassian and GitHub credentials from the
   OS keychain, so history shows the real person. CI uses a scoped service account.
 - **Release integrity.** devflow installs only builds whose SHA-256 and GitHub build
-  attestation (`gh attestation verify --repo nscaledev/devflow`) both verify.
+  attestation both verify, and the attestation must come from devflow's release workflow
+  (`gh attestation verify --repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml`).
+  The caller workflow gives each job only the secrets and permissions it uses.
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.
 - **Never list.** At every autonomy level devflow refuses force-pushes, pushes to protected
