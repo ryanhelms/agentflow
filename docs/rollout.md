@@ -3,6 +3,20 @@
 Phases are gated by outcomes, not dates. Start a phase only when the previous one has
 passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollout).
 
+## Gate · Architecture approval
+
+Nothing below starts until both approvers sign off on [the blueprint](blueprint.html).
+
+- [ ] Kyle Redelinghuys approves the architecture and plan
+- [ ] Vishal Srini approves the architecture and plan
+
+Ready before the gate (no team impact):
+- [x] `nscaledev/devflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
+- [x] CI green (tests with race detector, golangci-lint, shellcheck, actionlint, GoReleaser check)
+- [x] Claude Code plugin tested end to end with `scripts/e2e-claude.sh` (12/12) and installed
+      from the `nscaledev/devflow` marketplace
+- [ ] Test with a real Jira ticket once a pilot developer runs `devflow login` (read-only tools first)
+
 ## P0 · Foundations
 - [ ] Engineering leadership nominates the pilot team and two pilot repos
 - [ ] Install the GitHub for Jira app on the `nscaledev` org (all repos)
@@ -34,11 +48,17 @@ passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollo
 - [ ] devflow dry-run preview, pick + start, AC tracking, scope drift, review follow-up, collision radar
 - **Exit:** no manual ticket moves by the pilot team; no wrong-direction transitions across a full sprint
 
-## P4 · Deployment tracking
+## P4 · Releases & deployment tracking
+- [ ] `devflow release init` on pilot repos; review `.devflow/releases.yml` units and strategy ([releases](releases.md))
+- [ ] First fully automatic SemVer GitHub Release published per pilot deployable (artifacts + attestations attached)
+- [ ] `nscaledev/devflow/actions/release-guard@v1` first in every production deploy job
+- [ ] `production-hotfix` environment with required reviewers
+- [ ] Staging builds tagged with `nscaledev/devflow/actions/version@v1`
 - [ ] `.jira/config.yml` committed; deploy jobs use GitHub Environments
 - [ ] `nscaledev/devflow/actions/ship@v1` added after production deploys (with `fix-version`)
 - [ ] devflow ship status
-- **Exit:** every production deploy shows on its tickets and moves them
+- **Exit:** every pilot deployable has published a release; production deploys only
+  releases or approved hotfixes; every production deploy shows on its tickets and moves them
 
 ## P5 · Release notes & docs-as-code
 - [ ] `release-notes` job with the pilot's Confluence space and parent page id

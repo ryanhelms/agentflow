@@ -209,7 +209,7 @@ func (a *App) Commit(ctx context.Context, msg string, paths []string, token stri
 
 // LintBranch validates every commit on the branch since it left the default branch.
 func (a *App) LintBranch(ctx context.Context) (map[string][]commit.Issue, error) {
-	base := "origin/" + a.Repo.DefaultBranch(ctx)
+	base := a.Repo.BaseRef(ctx)
 	out, err := a.Repo.Git(ctx, "log", "--format=%h%x00%B%x01", base+"..HEAD")
 	if err != nil {
 		return nil, err

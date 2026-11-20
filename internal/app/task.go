@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -284,7 +285,7 @@ func (a *App) Checklist(ctx context.Context, key string) (*contextx.Checklist, e
 	}
 	cl, err := store.Load(key)
 	if cl == nil && err == nil {
-		cl = &contextx.Checklist{Key: key}
+		cl = &contextx.Checklist{Key: key, Items: []contextx.Item{}}
 	}
 	return cl, err
 }
@@ -321,12 +322,22 @@ func (a *App) ScopeCheck(ctx context.Context) (*contextx.Drift, error) {
 	for _, c := range changes {
 		files = append(files, c.Path)
 	}
-	base := "origin/" + a.Repo.DefaultBranch(ctx)
 	var anchors []string
-	if out, err := a.Repo.Git(ctx, "diff", "--name-only", base+"...HEAD"); err == nil {
+	if out, err := a.Repo.Git(ctx, "diff", "--name-only", a.Repo.BaseRef(ctx)+"...HEAD"); err == nil {
 		anchors = contextx.Areas(strings.Fields(out))
 	}
 	diff, _ := a.Repo.Git(ctx, "diff", "--no-color", "HEAD")
+	// Untracked files are not in `git diff`; scan them as added lines too.
+	for _, c := range changes {
+		if c.Status != "?" {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(a.Repo.Dir, c.Path)); err == nil && len(b) < 1<<20 {
+			for _, l := range strings.Split(string(b), "\n") {
+				diff += "\n+" + l
+			}
+		}
+	}
 	d := contextx.ScopeCheck(files, anchors, diff)
 	return &d, nil
 }

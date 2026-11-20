@@ -1,0 +1,309 @@
+# Fully automatic semantic versioning and GitHub Releases for every deployable unit.
+#
+# Call it on push to the default branch. release-please reads Conventional Commits
+# since each unit's last tag and opens a Release PR; this workflow auto-merges it, which
+# tags each changed unit (v1.4.0, or api-v1.4.0 in monorepos) and publishes a GitHub
+# Release with the changelog. Then it builds and attaches the unit's artifacts:
+#   binary  - GoReleaser archives + checksums.txt, with build attestations
+#   image   - container image tagged X.Y.Z, X.Y, X (from 1.0) and sha, with attestation
+#   helm    - chart packaged at the release version, pushed to OCI and attached
+#   library - Go submodule tag (path/vX.Y.Z), npm or PyPI publish, Terraform tag
+# and finally sets the Jira Fix Version "<unit> X.Y.Z" on every ticket in the release.
+#
+# Units come from .devflow/releases.yml (devflow release init). Needs the devflow GitHub
+# App (vars.DEVFLOW_APP_ID, secrets.DEVFLOW_APP_PRIVATE_KEY) so the Release PR merge and
+# the release itself trigger other workflows; without it, releases still publish but
+# release-triggered workflows (Confluence notes) won't run.
+name: semver-release
+
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: Image and chart registry (default ghcr.io/<owner>)
+        type: string
+        required: false
+        default: ""
+    outputs:
+      releases:
+        description: JSON array of released units {name, path, tag, version, url}
+        value: ${{ jobs.release.outputs.matrix }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semver-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.rp.outputs.releases_created }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: app
+        if: vars.DEVFLOW_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEVFLOW_APP_ID }}
+          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@v4
+
+      - name: Check release configuration
+        run: |
+          for f in .devflow/releases.yml release-please-config.json .release-please-manifest.json; do
+            [ -f "$f" ] || { echo "::error::$f is missing. Run: devflow release init"; exit 1; }
+          done
+
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ steps.app.outputs.token || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Auto-merge the Release PR
+        if: steps.rp.outputs.pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          PR_JSON: ${{ steps.rp.outputs.pr }}
+        run: |
+          number=$(jq -r '.number' <<<"$PR_JSON")
+          # --auto waits for required checks; without branch protection merge directly.
+          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash \
+            || gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --squash
+
+      - id: matrix
+        name: Released units
+        if: steps.rp.outputs.releases_created == 'true'
+        env:
+          OUTPUTS: ${{ toJSON(steps.rp.outputs) }}
+          REGISTRY: ${{ inputs.registry || format('ghcr.io/{0}', github.repository_owner) }}
+        run: |
+          set -euo pipefail
+          paths=$(jq -c '.paths_released | fromjson' <<<"$OUTPUTS")
+          registry=$(tr '[:upper:]' '[:lower:]' <<<"$REGISTRY")
+          matrix=$(jq -c -n --argjson paths "$paths" --argjson out "$OUTPUTS" \
+                     --argjson units "$(yq -o=json '.units' .devflow/releases.yml)" \
+                     --arg registry "$registry" '
+            [ $paths[] as $p
+              | ($units[] | select(.path == $p)) as $u
+              | {
+                  name: $u.name, path: $p,
+                  tag: ($out[$p + "--tag_name"] // (if $p == "." then $out.tag_name else null end)),
+                  version: ($out[$p + "--version"] // (if $p == "." then $out.version else null end)),
+                  major: ($out[$p + "--major"] // (if $p == "." then $out.major else null end)),
+                  minor: ($out[$p + "--minor"] // (if $p == "." then $out.minor else null end)),
+                  url: ($out[$p + "--html_url"] // (if $p == "." then $out.html_url else null end)),
+                  builds: (($u.builds // []) | join(",")),
+                  image: ($u.image // ($registry + "/" + $u.name)),
+                  dockerfile: ($u.dockerfile // "Dockerfile"),
+                  chart: ($u.chart // ""), publish: ($u.publish // ""),
+                  registry: $registry
+                } ]')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          jq -r '.[] | "Released \(.name) \(.tag): \(.url)"' <<<"$matrix"
+
+  build:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: ${{ fromJSON(needs.release.outputs.matrix) }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ matrix.unit.tag }}
+      VERSION: ${{ matrix.unit.version }}
+      UNIT_PATH: ${{ matrix.unit.path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.unit.tag }}
+          fetch-depth: 0
+
+      # ---- binaries ----
+      - if: contains(matrix.unit.builds, 'binary') && hashFiles(format('{0}/go.mod', matrix.unit.path)) != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.unit.path }}/go.mod
+      - name: Build binaries
+        if: contains(matrix.unit.builds, 'binary')
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          workdir: ${{ matrix.unit.path }}
+          args: release --clean --skip=publish,validate,announce
+        env:
+          GORELEASER_CURRENT_TAG: v${{ matrix.unit.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Attach binaries to the release
+        if: contains(matrix.unit.builds, 'binary')
+        run: |
+          shopt -s nullglob
+          files=("$UNIT_PATH"/dist/*.tar.gz "$UNIT_PATH"/dist/*.zip "$UNIT_PATH"/dist/checksums.txt)
+          [ ${#files[@]} -gt 0 ] || { echo "::error::GoReleaser produced no archives in $UNIT_PATH/dist"; exit 1; }
+          gh release upload "$TAG" "${files[@]}" --clobber
+      - if: contains(matrix.unit.builds, 'binary')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            ${{ matrix.unit.path }}/dist/*.tar.gz
+            ${{ matrix.unit.path }}/dist/*.zip
+
+      # ---- container image ----
+      - if: contains(matrix.unit.builds, 'image')
+        uses: docker/setup-buildx-action@v3
+      - if: contains(matrix.unit.builds, 'image')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        if: contains(matrix.unit.builds, 'image')
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.unit.image }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ matrix.unit.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ matrix.unit.version }}
+            type=semver,pattern={{major}},value=${{ matrix.unit.version }},enable=${{ matrix.unit.major != '0' }}
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.version=${{ matrix.unit.version }}
+      - id: push
+        if: contains(matrix.unit.builds, 'image')
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.unit.path }}
+          file: ${{ matrix.unit.path }}/${{ matrix.unit.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ matrix.unit.version }}
+      - if: contains(matrix.unit.builds, 'image')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ matrix.unit.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      # ---- helm chart ----
+      - if: contains(matrix.unit.builds, 'helm')
+        uses: azure/setup-helm@v4
+      - name: Package and push chart
+        if: contains(matrix.unit.builds, 'helm')
+        env:
+          CHART: ${{ matrix.unit.chart }}
+          REGISTRY: ${{ matrix.unit.registry }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          dir="$UNIT_PATH/${CHART:-.}"
+          mkdir -p dist-chart
+          helm dependency build "$dir" >/dev/null 2>&1 || true
+          helm package "$dir" --version "$VERSION" --app-version "$VERSION" --destination dist-chart
+          echo "$GH_TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
+          helm push dist-chart/*.tgz "oci://$REGISTRY/charts"
+          gh release upload "$TAG" dist-chart/*.tgz --clobber
+      - if: contains(matrix.unit.builds, 'helm')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist-chart/*.tgz
+
+      # ---- libraries ----
+      - name: Go module tag
+        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'go' && matrix.unit.path != '.'
+        run: |
+          # Go resolves submodule versions from <path>/vX.Y.Z tags.
+          git tag "$UNIT_PATH/v$VERSION" "$TAG"
+          git push origin "$UNIT_PATH/v$VERSION"
+      - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          registry-url: https://npm.pkg.github.com
+      - name: Publish npm package
+        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
+        working-directory: ${{ matrix.unit.path }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || github.token }}
+        run: npm publish --provenance --access restricted
+      - name: Build Python package
+        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi'
+        working-directory: ${{ matrix.unit.path }}
+        run: pipx run build
+      - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi' && vars.PYPI_PUBLISH == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ matrix.unit.path }}/dist
+
+      # ---- release notes: artifacts ----
+      - name: List artifacts on the release
+        env:
+          BUILDS: ${{ matrix.unit.builds }}
+          IMAGE: ${{ matrix.unit.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          REGISTRY: ${{ matrix.unit.registry }}
+          PUBLISH: ${{ matrix.unit.publish }}
+        run: |
+          set -euo pipefail
+          {
+            gh release view "$TAG" --json body -q .body
+            echo
+            echo "### Artifacts"
+            [[ ",$BUILDS," == *,binary,* ]] && echo "- Binaries and \`checksums.txt\` attached below, with build provenance attestations"
+            [[ ",$BUILDS," == *,image,* ]] && echo "- Image: \`$IMAGE:$VERSION\` (\`${DIGEST}\`)"
+            [[ ",$BUILDS," == *,helm,* ]] && echo "- Chart: \`oci://$REGISTRY/charts\` version \`$VERSION\`"
+            [[ ",$BUILDS," == *,library,* ]] && echo "- Library: ${PUBLISH:-tag} \`$VERSION\`"
+            echo
+            echo "Production deploys must reference this release (devflow release guard)."
+          } > notes.md
+          gh release edit "$TAG" --notes-file notes.md
+
+  jira:
+    needs: [release, build]
+    if: always() && needs.release.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    env:
+      JIRA_BASE: ${{ vars.JIRA_BASE }}
+      JIRA_USER: ${{ secrets.JIRA_USER }}
+      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      MATRIX: ${{ needs.release.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: Set Jira fix versions
+        run: |
+          set -euo pipefail
+          if [ -z "$JIRA_TOKEN" ]; then echo "::notice::No Jira credentials; skipping fix versions"; exit 0; fi
+          jq -c '.[]' <<<"$MATRIX" | while read -r unit; do
+            name=$(jq -r .name <<<"$unit"); tag=$(jq -r .tag <<<"$unit")
+            version=$(jq -r .version <<<"$unit"); path=$(jq -r .path <<<"$unit")
+            prefix=${tag%"$version"}
+            prev=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*" "$tag^" 2>/dev/null || true)
+            range=${prev:+$prev..}$tag
+            pathspec=()
+            [ "$path" != "." ] && pathspec=(-- "$path")
+            keys=$(git log --format='%B' "$range" "${pathspec[@]}" | grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' | sort -u || true)
+            for key in $keys; do
+              jira-fix-version.sh "$key" "$name $version" || echo "::warning::$key: could not set fix version"
+            done
+          done

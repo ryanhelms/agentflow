@@ -42,3 +42,13 @@ make test          # unit tests
 make check         # everything CI runs (needs golangci-lint, shellcheck, actionlint)
 make snapshot      # goreleaser --snapshot --clean
 ```
+
+## Testing the Claude Code plugin
+
+`make e2e` (or `scripts/e2e-claude.sh`) builds devflow, creates a throwaway repo with
+`devflow init`, and drives `claude -p` with the plugin loaded from `adapters/claude-code`.
+It checks that the MCP server connects with every tool, the slash commands and
+SessionStart context load, `/devflow:commit` makes a convention commit through the
+confirmation flow, and the PreToolUse hook blocks invalid commits, pushes to `main`,
+force-pushes and `gh pr merge`. It needs a logged-in `claude` CLI and `gh auth`, and it
+uses your Claude account. `KEEP=1` keeps the temp directory.

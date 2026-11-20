@@ -1,0 +1,52 @@
+name: devflow version
+description: >
+  The semantic version a build of this commit gets for one deployable unit from
+  .devflow/releases.yml. On the default branch it is the next release (X.Y.Z); on other
+  branches a prerelease that follows the repo's branching strategy
+  (X.Y.Z-alpha|rc|hotfix|pr.N+sha). Use it to tag staging images and binaries.
+inputs:
+  unit:
+    description: Unit name from .devflow/releases.yml (optional when the repo has one unit)
+    required: false
+    default: ""
+outputs:
+  version:
+    description: Version for this build
+    value: ${{ steps.v.outputs.version }}
+  next:
+    description: The release version this work leads to
+    value: ${{ steps.v.outputs.next }}
+  current:
+    description: Latest released version of the unit
+    value: ${{ steps.v.outputs.current }}
+  bump:
+    description: none, patch, minor or major
+    value: ${{ steps.v.outputs.bump }}
+  kind:
+    description: default, develop, release, hotfix or feature
+    value: ${{ steps.v.outputs.kind }}
+runs:
+  using: composite
+  steps:
+    - id: v
+      shell: bash
+      env:
+        UNIT: ${{ inputs.unit }}
+        ACTION_PATH: ${{ github.action_path }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: |
+        set -euo pipefail
+        cfg=.devflow/releases.yml
+        [ -f "$cfg" ] || { echo "::error::$cfg not found; run devflow release init"; exit 1; }
+        if [ -z "$UNIT" ]; then
+          [ "$(yq '.units | length' "$cfg")" = 1 ] || { echo "::error::set unit: this repo has several units"; exit 1; }
+          UNIT=$(yq -r '.units[0].name' "$cfg")
+        fi
+        path=$(yq -r ".units[] | select(.name == \"$UNIT\") | .path" "$cfg")
+        [ -n "$path" ] || { echo "::error::no unit named $UNIT in $cfg"; exit 1; }
+        strategy=$(yq -r '.strategy // "trunk"' "$cfg")
+        prefix=v
+        [ "$(yq '.units | length' "$cfg")" -gt 1 ] && prefix="$UNIT-v"
+        git fetch --quiet --tags --unshallow 2>/dev/null || git fetch --quiet --tags || true
+        "$ACTION_PATH/../../bin/next-version.sh" --path "$path" --prefix "$prefix" \
+          --strategy "$strategy" --default-branch "${DEFAULT_BRANCH:-main}" --env >> "$GITHUB_OUTPUT"

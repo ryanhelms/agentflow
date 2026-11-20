@@ -70,7 +70,18 @@ Enforcement is the same everywhere: the `commit-msg` hook locally and the PR key
 in CI. Client config paths change between versions; `devflow doctor` reports any client it
 cannot configure.
 
-## Releases and updates
+## Semantic versioning for your repos
+
+Every deployable asset is versioned with SemVer and shipped as a GitHub Release. `devflow
+init` (or `devflow release init`) detects the repo's deployable units and branching
+strategy and writes `.devflow/releases.yml` plus the release-please files. Each merge to
+the default branch with `feat`/`fix`/`!` commits publishes a release per changed unit
+(`v1.4.0`, or `api-v1.4.0` in monorepos) and attaches its binaries, image, Helm chart or
+package. Other branches build prerelease versions (`1.5.0-rc.2+sha`). Production deploys
+pass `actions/release-guard` only for published releases or an approved hotfix. Details:
+[docs/releases.md](docs/releases.md).
+
+## devflow's own releases and updates
 
 Releases are automatic. Every merge to `main` containing a `feat` or `fix` commit makes
 release-please open a Release PR, which is auto-merged once checks pass. GoReleaser

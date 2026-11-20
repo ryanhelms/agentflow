@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/launch hook session-start --client claude",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/launch\" hook session-start --client claude",
             "timeout": 60
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/launch hook pre-bash --client claude",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/launch\" hook pre-bash --client claude",
             "timeout": 15
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/launch hook stop --client claude",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/launch\" hook stop --client claude",
             "timeout": 15
           }
         ]

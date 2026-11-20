@@ -44,6 +44,22 @@ jobs:
       contents: read
     secrets: inherit
 
+  # Semantic versioning: every merge to the default branch with feat/fix/! commits
+  # publishes a GitHub Release per changed unit in .devflow/releases.yml, with its
+  # binaries, image, chart or package, and sets Jira fix versions.
+  release:
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' && github.event_name == 'push' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: nscaledev/devflow/.github/workflows/semver-release.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      id-token: write
+      attestations: write
+    secrets: inherit
+
   release-notes:
     if: github.event_name == 'release'
     uses: nscaledev/devflow/.github/workflows/release-notes.yml@v1

@@ -7,9 +7,15 @@ A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 - Commands `/devflow:start`, `/devflow:commit`, `/devflow:pr`, `/devflow:review`,
   `/devflow:status`, `/devflow:standup`
 - Hooks: `SessionStart` (ticket context), `PreToolUse` on Bash (blocks raw `git commit`
-  with an invalid message), `Stop` (reminds about uncommitted work and open criteria)
+  with an invalid message, force-push, pushes to protected branches and `gh pr merge`), `Stop` (reminds about uncommitted work and open criteria)
 
-Repos turn it on in `.claude/settings.json` (written by `devflow init`):
+To install it for yourself (Claude Code 2.1.275 or later):
+
+```
+/plugin install devflow --marketplace nscaledev/devflow
+```
+
+Repos turn it on for everyone in `.claude/settings.json` (written by `devflow init`):
 
 ```json
 {

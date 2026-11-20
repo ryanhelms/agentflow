@@ -7,12 +7,12 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG     := github.com/nscaledev/devflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
-SHELL_SCRIPTS := $(wildcard bin/*.sh) \
+SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) \
 	templates/repo/.devflow/bin/devflow \
 	templates/repo/.githooks/commit-msg \
 	adapters/claude-code/bin/launch
 
-.PHONY: build test vet lint shellcheck actionlint check snapshot install-hooks clean
+.PHONY: e2e build test vet lint shellcheck actionlint check snapshot install-hooks clean
 
 build: ## Build ./devflow for this machine
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o devflow ./cmd/devflow
@@ -36,6 +36,9 @@ check: vet test lint shellcheck actionlint ## Everything CI runs
 
 snapshot: ## Local multi-platform build, no publish
 	goreleaser release --snapshot --clean
+
+e2e: ## Drive the Claude Code plugin end to end with claude -p (uses your Claude account)
+	scripts/e2e-claude.sh
 
 install-hooks: build ## Use devflow's own commit-msg hook in this repo
 	git config core.hooksPath templates/repo/.githooks
