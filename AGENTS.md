@@ -21,6 +21,17 @@ contains `@AGENTS.md` so Claude Code loads this file.
   `scripts/changelog.sh` and committed by the release workflow. CI fails a PR that changes
   it, and Claude Code is denied edits. To change what appears in it, write a better
   commit message or PR title.
+- **Keep README.md current.** Any change a README reader would notice updates README.md in
+  the same PR: commands, MCP tools, workflows, actions, setup or install steps, config
+  options, supported clients, release or versioning behaviour, security guarantees,
+  status and doc links. The **status area** at the top of the README (the table with
+  Status, Current release, Owner, Architecture, Support) must always be true: the release
+  workflow updates the version between the `devflow:version` markers (never edit it by
+  hand), and you update the Status row whenever approval, rollout phase or adoption
+  changes. Before finishing, re-read the README sections your change touches
+  and fix anything now wrong or missing. If nothing reader-visible changed, say so in the
+  PR description. CI warns when user-facing code changes without a README change. The
+  same rule is loaded for Claude Code from `.claude/rules/readme-up-to-date.md`.
 - **Follow the commit convention** (below). It is enforced by `.githooks/commit-msg`
   (`make install-hooks`) and by the `convention` CI job on every PR title and commit.
 - **No AI attribution trailers** (`Co-authored-by` an AI, "Generated with ...") in commit
@@ -138,4 +149,5 @@ These are used by other repos and clients. Changing them is a breaking change:
 - New MCP tools need an entry in `internal/mcpserver`, the plugin skill
   (`adapters/claude-code/skills/devflow/SKILL.md`) when agents should use them, and the
   blueprint's capability table.
-- User-facing behaviour changes need README and `docs/` updates in the same PR.
+- User-facing behaviour changes need README and `docs/` updates in the same PR (see
+  "Keep README.md current" above).

@@ -2,6 +2,8 @@ name: ci
 
 on:
   pull_request:
+    # edited: re-check when the PR title changes (it becomes the squash commit).
+    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
 
@@ -59,6 +61,32 @@ jobs:
             fi
           done
           exit "$status"
+      - name: README.md kept current (warning only)
+        run: |
+          # 1. Code, templates, adapters, workflows, actions, scripts or config that people
+          #    using devflow interact with changed, but README.md did not.
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          reader_visible=$(grep -E '^(cmd/|internal/|templates/|adapters/|actions/|bin/|flow-map\.yml|policy/|\.github/workflows/)' <<<"$changed" \
+            | grep -vE '^\.github/workflows/(ci|release)\.yml$|_test\.go$' || true)
+          if [ -n "$reader_visible" ] && ! grep -qx README.md <<<"$changed"; then
+            echo "::warning title=README.md not updated::This PR changes commands, workflows, templates or config but not README.md. Update the README if a reader would notice, or say in the PR description why not (AGENTS.md: Keep README.md current)."
+            printf '%s\n' "$reader_visible" | sed 's/^/  /'
+          fi
+
+          # 2. The status area at the top of the README names the latest release. The
+          #    release workflow updates it; a mismatch means it was edited or a release failed.
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          # shellcheck disable=SC2016 # backticks are literal in the sed pattern
+          shown=$(sed -nE 's#.*<!-- devflow:version -->`?([^`<]*)`?<!-- /devflow:version -->.*#\1#p' README.md | head -n1)
+          if [ -z "$shown" ]; then
+            echo "::warning title=README status area::README.md has no devflow:version marker in its status table; the release workflow can't keep the current release up to date."
+          elif [ -n "$latest" ] && [ "$shown" != "$latest" ]; then
+            echo "::warning title=README status area::README.md shows $shown as the current release, but the latest release is $latest."
+          fi
+          if git diff --name-only "$BASE...$HEAD" | grep -qE '^(docs/rollout\.md|docs/artifact/)' && ! grep -qx README.md <<<"$changed"; then
+            echo "::warning title=README status area::Rollout or blueprint changed. Check the README Status row (approval, rollout phase, who uses devflow) is still true."
+          fi
+
       - name: CHANGELOG.md is generated on release, never edited in a PR
         run: |
           # Creating the file once (bootstrap) is allowed; changing it afterwards is not.
