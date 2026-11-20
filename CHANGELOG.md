@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.5.1](https://github.com/nscaledev/devflow/compare/v0.5.0...v0.5.1) - 2026-11-20
+
+### Fixes
+
+- kill switch gates every job; atomic launcher install (#12) ([708b2d6](https://github.com/nscaledev/devflow/commit/708b2d67019302df5fd86ce9008326486ef33d0d))
+
 ## [0.5.0](https://github.com/nscaledev/devflow/compare/v0.4.2...v0.5.0) - 2026-11-20
 
 ### Features
