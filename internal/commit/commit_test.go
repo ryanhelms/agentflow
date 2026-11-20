@@ -99,3 +99,26 @@ func TestFormat(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestKeyOptional(t *testing.T) {
+	off := false
+	loose := config.Commit{Types: config.DefaultTypes, SubjectMax: 72, RequireKey: &off}
+	for _, ok := range []string{"docs: add enterprise readme", "feat(cli): add release plan", "fix(PLAT-9): handle nil", "ci!: drop release-please"} {
+		if iss := Validate(ok, loose, ""); len(iss) != 0 {
+			t.Errorf("%q should pass without a key: %+v", ok, iss)
+		}
+	}
+	if iss := Validate("updated stuff", loose, ""); len(iss) != 1 || iss[0].Code != "format" {
+		t.Errorf("non-conventional subject must still fail: %+v", iss)
+	}
+	if iss := Validate("feature: add x", loose, ""); len(iss) != 1 || iss[0].Code != "type" {
+		t.Errorf("unknown type must still fail: %+v", iss)
+	}
+	if iss := Validate("docs: add readme", rules, ""); len(iss) != 1 {
+		t.Errorf("keys are required by default: %+v", iss)
+	}
+	m := Parse("feat(cli)!: drop flag")
+	if !m.Conventional || m.Valid || m.Type != "feat" || m.Scope != "cli" || !m.Breaking {
+		t.Errorf("parse = %+v", m)
+	}
+}
