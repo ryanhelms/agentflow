@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.4.0](https://github.com/nscaledev/devflow/compare/v0.3.1...v0.4.0) - 2026-11-20
+
+### Features
+
+- auto-init from the plugin, devflow remove, skill per command (#8) ([5aa3c03](https://github.com/nscaledev/devflow/commit/5aa3c0346b5aea1a374364a25ee0b4fa1ec77a8f))
+
 ## [0.3.1](https://github.com/nscaledev/devflow/compare/v0.3.0...v0.3.1) - 2026-11-20
 
 ### Fixes
