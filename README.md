@@ -56,7 +56,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 
 | Area | Capabilities |
 | --- | --- |
-| **Commit and PR hygiene** | Commit convention with Jira keys, enforced locally (`commit-msg`) and in CI (PR key check) · generated, validated and split commits · PR readiness checks and PR creation from templates |
+| **Commit and PR hygiene** | Commit convention with Jira keys, enforced locally (`commit-msg`) and in CI (`key-check` runs the same rules from `.devflow/config.yml` on the PR title and every commit, then checks the keys exist; `commit.require_key: false` makes keys optional) · generated, validated and split commits · PR readiness checks and PR creation from templates |
 | **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions |
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
@@ -218,7 +218,7 @@ Full rules and examples: [docs/releases.md](docs/releases.md).
 | Commands | `/devflow:*` skills | Custom prompts | Where supported | Where supported | Subcommands |
 | Hooks | SessionStart, PreToolUse, Stop | git hooks | git hooks | git hooks | git hooks |
 
-Enforcement is identical everywhere: the `commit-msg` hook locally and the PR key check in
+Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `key-check` (same rules, same `.devflow/config.yml`) in
 CI.
 
 The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,

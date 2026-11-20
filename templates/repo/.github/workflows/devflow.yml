@@ -32,7 +32,7 @@ jobs:
       contents: read
       pull-requests: read
     with:
-      warn-only: false        # set true for the first weeks of rollout phase P2
+      warn-only: false        # true reports problems as warnings (first weeks of rollout phase P2)
     secrets: inherit
 
   transitions:

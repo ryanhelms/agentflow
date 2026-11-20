@@ -1,4 +1,7 @@
-# Reusable: require a Jira key in the PR title and every commit, and check the keys exist.
+# Reusable: check the PR title and every commit against the repo's commit convention
+# (.devflow/config.yml, the same rules as the local commit-msg hook), then check that
+# the Jira keys in the title exist. Keys are required unless the repo sets
+# commit.require_key: false.
 name: jira-key
 
 on:
@@ -21,47 +24,53 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    continue-on-error: ${{ inputs.warn-only }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: nscaledev/devflow/actions/setup@v0
-      - name: PR title and every commit carry a real Jira key
+        with:
+          binary: true
+      - name: PR title, every commit and Jira keys
         env:
-          GH_TOKEN: ${{ github.token }}
           TITLE: ${{ github.event.pull_request.title }}
           PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          WARN_ONLY: ${{ inputs.warn-only }}
           JIRA_BASE: ${{ vars.JIRA_BASE }}
           JIRA_USER: ${{ secrets.JIRA_USER }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: |
           set -euo pipefail
-          key='[A-Z][A-Z0-9]+-[0-9]+'
+          level=error
+          [ "$WARN_ONLY" = true ] && level=warning
+          status=0
+          problem() { echo "::$level::$1"; status=1; }
 
-          if ! grep -Eq "$key" <<<"$TITLE"; then
-            echo "::error::PR title needs a Jira key, e.g. 'feat(PLAT-123): add quota API'"
-            exit 1
-          fi
+          # The title becomes the squash commit "<title> (#<number>)": check exactly that.
+          printf '%s (#%s)\n' "$TITLE" "$PR" > "$RUNNER_TEMP/title.txt"
+          devflow lint-msg "$RUNNER_TEMP/title.txt" || problem "PR title does not follow the commit convention"
 
-          missing=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate \
-                      --jq '.[].commit.message | split("\n")[0]' \
-                    | grep -Ev '^(Merge|Revert|fixup!|squash!|amend!)' \
-                    | grep -Ev "$key" || true)
-          if [ -n "$missing" ]; then
-            echo "::error::Commits without a Jira key:"
-            printf '%s\n' "$missing"
-            exit 1
-          fi
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg.txt"
+            devflow lint-msg "$RUNNER_TEMP/msg.txt" || problem "commit ${sha:0:7} does not follow the commit convention"
+          done
 
-          if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
+          keys=$(grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' <<<"$TITLE" | sort -u || true)
+          if [ -n "$keys" ] && { [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; }; then
             echo "::notice::JIRA_BASE or JIRA_TOKEN not set; skipping key existence check"
+          elif [ -n "$keys" ]; then
+            while read -r k; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -u "$JIRA_USER:$JIRA_TOKEN" \
+                     "$JIRA_BASE/rest/api/3/issue/$k?fields=status")
+              [ "$code" = 200 ] || problem "$k not found in Jira (HTTP $code)"
+            done <<<"$keys"
+          fi
+
+          if [ "$status" -ne 0 ] && [ "$level" = warning ]; then
+            echo "warn-only: problems reported as warnings, not failing"
             exit 0
           fi
-          grep -Eo "$key" <<<"$TITLE" | sort -u | while read -r k; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' -u "$JIRA_USER:$JIRA_TOKEN" \
-                   "$JIRA_BASE/rest/api/3/issue/$k?fields=status")
-            if [ "$code" != 200 ]; then
-              echo "::error::$k not found in Jira (HTTP $code)"
-              exit 1
-            fi
-          done
-          echo "Jira keys OK"
+          [ "$status" -eq 0 ] && echo "Convention and Jira keys OK"
+          exit "$status"
