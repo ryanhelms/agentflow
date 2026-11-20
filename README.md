@@ -251,8 +251,8 @@ through `.claude/settings.json`.
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin devflow to a release
   commit SHA, and each new devflow release reaches a repo only through a reviewed
   Dependabot PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
-  devflow's release workflow should move; protect `v*` tags in nscaledev/devflow with a
-  tag ruleset.
+  devflow's release workflow and repo admins can move: the "Protect release tags"
+  ruleset guards every `v*` tag ([docs/operations.md](docs/operations.md#releases)).
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 

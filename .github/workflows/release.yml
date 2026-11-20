@@ -9,6 +9,11 @@
 # pushed with GITHUB_TOKEN, so it doesn't trigger another run; if main gets branch
 # protection, allow github-actions to push or this step fails.
 #
+# v* tags are protected by the "Protect release tags" ruleset: only repo admins and the
+# release deploy key (secret RELEASE_DEPLOY_KEY) may create, move or delete them, and
+# GitHub Actions can't be a ruleset bypass actor. So every tag push below goes to the
+# `release` remote over SSH with that key.
+#
 # Releases are published as normal, stable releases. The floating major tag (v0 while
 # devflow is 0.x, v1 from 1.0.0) then moves to the release so consuming repos that use
 # nscaledev/devflow/...@v0 get it. A bad release is stopped with policy/versions.json
@@ -64,6 +69,22 @@ jobs:
       - if: steps.version.outputs.release == 'true'
         run: go test -race -count=1 ./...
 
+      - name: Tag remote with the release deploy key
+        if: steps.version.outputs.release == 'true'
+        env:
+          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ -n "$RELEASE_DEPLOY_KEY" ] || { echo "::error::RELEASE_DEPLOY_KEY is not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$RELEASE_DEPLOY_KEY" > ~/.ssh/release_key
+          chmod 600 ~/.ssh/release_key
+          # GitHub's published host keys, not trust-on-first-use.
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > ~/.ssh/known_hosts
+          git remote add release "git@github.com:${GITHUB_REPOSITORY}.git"
+          git config core.sshCommand "ssh -i ~/.ssh/release_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
       - name: Commit the changelog and tag the release
         if: steps.version.outputs.release == 'true'
         env:
@@ -80,7 +101,8 @@ jobs:
           git add CHANGELOG.md README.md
           git commit -m "chore(release): v$VERSION"
           git tag -a "v$VERSION" -m "devflow v$VERSION"
-          git push origin "HEAD:${GITHUB_REF_NAME}" "v$VERSION"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push release "refs/tags/v$VERSION"
 
       - name: Build and publish the GitHub Release
         if: steps.version.outputs.release == 'true'
@@ -97,7 +119,7 @@ jobs:
         run: |
           major="v${VERSION%%.*}"
           git tag -f "$major" "v$VERSION^{}"
-          git push -f origin "refs/tags/$major"
+          git push -f release "refs/tags/$major"
           echo "::notice::$major now points at v$VERSION"
 
       - if: steps.version.outputs.release == 'true'
@@ -113,5 +135,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ steps.version.outputs.next }}
         run: |
-          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null \
-            || git push --delete origin "$TAG" || true
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git push --delete release "refs/tags/$TAG" || true
