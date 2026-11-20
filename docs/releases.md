@@ -85,7 +85,7 @@ Tag staging builds with the branch version:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
 - id: version
-  uses: nscaledev/devflow/actions/version@v1
+  uses: nscaledev/devflow/actions/version@v0
   with: { unit: api }
 - run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api
 ```
@@ -97,7 +97,7 @@ deploy-production:
   environment: production          # or production-hotfix for an approved hotfix
   runs-on: ubuntu-latest
   steps:
-    - uses: nscaledev/devflow/actions/release-guard@v1
+    - uses: nscaledev/devflow/actions/release-guard@v0
       with:
         environment: production
         ref: ${{ github.ref_name }}  # the release tag being deployed, e.g. api-v1.4.0

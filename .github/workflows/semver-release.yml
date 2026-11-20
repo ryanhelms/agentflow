@@ -289,7 +289,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: nscaledev/devflow/actions/setup@v1
+      - uses: nscaledev/devflow/actions/setup@v0
       - name: Set Jira fix versions
         run: |
           set -euo pipefail

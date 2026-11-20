@@ -26,7 +26,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: nscaledev/devflow/actions/setup@v1
+      - uses: nscaledev/devflow/actions/setup@v0
       - name: Install pandoc
         run: sudo apt-get install -y -qq pandoc >/dev/null
       - name: Publish pages

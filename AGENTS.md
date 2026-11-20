@@ -33,8 +33,8 @@ This repo both **is** a product and **is released as** a product. Keep them apar
 
 | | What it is | Where it lives |
 | --- | --- | --- |
-| **What devflow offers other repos** | The CLI/MCP binary, git and client hooks, reusable workflows (`jira-key`, `transitions`, `semver-release`, ...), composite actions (`setup`, `ship`, `version`, `release-guard`), client adapters, and the files `devflow init` writes into a consuming repo. Consuming repos version their deployables with **release-please** via `semver-release.yml`. | `cmd/`, `internal/`, `.github/workflows/*` except `ci.yml`, `release.yml`, `promote.yml`; `actions/`, `bin/`, `adapters/`, `templates/repo/`, `flow-map.yml` |
-| **How devflow itself is built and released** | Single-branch releases: every push to `main` derives the next version from commit types with `bin/next-version.sh`, generates the `CHANGELOG.md` section with `scripts/changelog.sh`, commits it as `chore(release): vX.Y.Z`, tags that commit, and GoReleaser publishes the GitHub Release (same notes) as a beta. `promote.yml` makes it stable after 24 h and moves the floating `v1` tag. No Release PR, no release-please in this repo. Its own commit rules live in `.devflow/config.yml` (keys optional). | `.github/workflows/ci.yml`, `release.yml`, `promote.yml`, `.goreleaser.yaml`, `.devflow/config.yml`, `.githooks/`, `scripts/changelog.sh`, `CHANGELOG.md`, `policy/versions.json` |
+| **What devflow offers other repos** | The CLI/MCP binary, git and client hooks, reusable workflows (`jira-key`, `transitions`, `semver-release`, ...), composite actions (`setup`, `ship`, `version`, `release-guard`), client adapters, and the files `devflow init` writes into a consuming repo. Consuming repos version their deployables with **release-please** via `semver-release.yml`. | `cmd/`, `internal/`, `.github/workflows/*` except `ci.yml` and `release.yml`; `actions/`, `bin/`, `adapters/`, `templates/repo/`, `flow-map.yml` |
+| **How devflow itself is built and released** | Single-branch releases: every push to `main` derives the next version from commit types with `bin/next-version.sh`, generates the `CHANGELOG.md` section with `scripts/changelog.sh`, commits it as `chore(release): vX.Y.Z`, tags that commit, and GoReleaser publishes it as a stable GitHub Release (same notes), and the workflow moves the floating major tag (`v0` while 0.x). No Release PR, no release-please in this repo. Its own commit rules live in `.devflow/config.yml` (keys optional). | `.github/workflows/ci.yml`, `release.yml`, `.goreleaser.yaml`, `.devflow/config.yml`, `.githooks/`, `scripts/changelog.sh`, `CHANGELOG.md`, `policy/versions.json` |
 
 When the user asks about "how devflow is released", they mean the second row. Don't
 change consumer-facing behaviour (first row) unless that is the request, and call out
@@ -114,8 +114,9 @@ third-party actions pinned to a major tag, and secrets only through `env:`.
 
 These are used by other repos and clients. Changing them is a breaking change:
 
-- Reusable workflows and actions are consumed at `nscaledev/devflow/...@v1`. Keep inputs,
-  outputs and secrets backwards compatible within `v1`.
+- Reusable workflows and actions are consumed at `nscaledev/devflow/...@v0`, a floating tag
+  moved to every release. Keep inputs, outputs and secrets backwards compatible within a
+  major version; a breaking change means a new major and a new floating tag.
 - CLI surface used by adapters and templates: `devflow mcp --client NAME`,
   `devflow hook commit-msg FILE | session-start | pre-bash | stop --client NAME`,
   `devflow lint-msg FILE`, `devflow keys --range A..B`, `devflow release version --unit U`.

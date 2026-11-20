@@ -9,8 +9,10 @@
 # pushed with GITHUB_TOKEN, so it doesn't trigger another run; if main gets branch
 # protection, allow github-actions to push or this step fails.
 #
-# Releases start as pre-releases (the beta channel) and promote.yml marks them stable
-# after 24h unless an issue labelled release-blocker is open.
+# Releases are published as normal, stable releases. The floating major tag (v0 while
+# devflow is 0.x, v1 from 1.0.0) then moves to the release so consuming repos that use
+# nscaledev/devflow/...@v0 get it. A bad release is stopped with policy/versions.json
+# (blocked/min_version) and devflow update --rollback.
 name: release
 
 on:
@@ -85,6 +87,16 @@ jobs:
           args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Move the floating major tag
+        if: steps.version.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.next }}
+        run: |
+          major="v${VERSION%%.*}"
+          git tag -f "$major" "v$VERSION^{}"
+          git push -f origin "refs/tags/$major"
+          echo "::notice::$major now points at v$VERSION"
 
       - if: steps.version.outputs.release == 'true'
         uses: actions/attest-build-provenance@v2

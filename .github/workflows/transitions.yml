@@ -25,7 +25,7 @@ jobs:
       group: devflow-transitions-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - uses: nscaledev/devflow/actions/setup@v1
+      - uses: nscaledev/devflow/actions/setup@v0
       - name: Apply flow-map transitions
         env:
           JIRA_BASE: ${{ vars.JIRA_BASE }}

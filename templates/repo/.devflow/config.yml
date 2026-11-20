@@ -3,7 +3,6 @@
 devflow: 1
 
 update:
-  channel: stable                # stable | beta (pilot repos get pre-releases first)
   track: 0                       # follow the latest release within this major version
   check_every: 6h
   # pin: 0.5.2                   # incident use only; devflow warns on every run while set
@@ -11,7 +10,7 @@ update:
 jira:
   site: https://nscale.atlassian.net   # confirm your Atlassian site URL
   projects: [PLAT]                     # projects this repo works in (pilot only for now)
-flow_map: nscaledev/devflow@v1:flow-map.yml
+flow_map: nscaledev/devflow@v0:flow-map.yml
 
 commit:
   types: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
