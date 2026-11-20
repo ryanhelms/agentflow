@@ -57,7 +57,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 		add(Check{Name: "commit messages", OK: len(bad) == 0, Detail: strings.Join(detail, "; ")})
 	}
 	add(Check{Name: "working tree clean", OK: !a.Repo.HasUncommitted(ctx), Detail: "commit or stash before opening a PR"})
-	base := "origin/" + a.Repo.DefaultBranch(ctx)
+	base := a.Repo.BaseRef(ctx)
 	if diff, err := a.Repo.Git(ctx, "diff", "--no-color", "--unified=0", base+"...HEAD"); err == nil {
 		hits := scanDiff(diff)
 		d := ""
@@ -204,7 +204,7 @@ func (a *App) prBody(ctx context.Context, key string) string {
 		b.WriteString(tmpl + "\n\n")
 	} else {
 		b.WriteString("## Why\n\n_Fill in: the problem this solves._\n\n## What changed\n\n")
-		if msgs, err := a.Repo.Messages(ctx, "origin/"+a.Repo.DefaultBranch(ctx)+"..HEAD"); err == nil {
+		if msgs, err := a.Repo.Messages(ctx, a.Repo.BaseRef(ctx)+"..HEAD"); err == nil {
 			for _, m := range msgs {
 				b.WriteString("- " + strings.SplitN(m, "\n", 2)[0] + "\n")
 			}

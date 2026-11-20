@@ -48,7 +48,7 @@ func (a *App) Collisions(ctx context.Context, key string) (*Collisions, error) {
 		}
 	}
 	mine := map[string]bool{}
-	if out, err := a.Repo.Git(ctx, "diff", "--name-only", "origin/"+a.Repo.DefaultBranch(ctx)+"...HEAD"); err == nil {
+	if out, err := a.Repo.Git(ctx, "diff", "--name-only", a.Repo.BaseRef(ctx)+"...HEAD"); err == nil {
 		for _, f := range strings.Fields(out) {
 			mine[f] = true
 		}

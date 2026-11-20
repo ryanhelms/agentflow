@@ -61,6 +61,18 @@ func (r *Repo) DefaultBranch(ctx context.Context) string {
 	return "main"
 }
 
+// BaseRef returns the ref feature work is compared against: origin/<default>
+// when it exists, otherwise the local default branch, otherwise HEAD.
+func (r *Repo) BaseRef(ctx context.Context) string {
+	def := r.DefaultBranch(ctx)
+	for _, ref := range []string{"origin/" + def, def} {
+		if _, err := r.Git(ctx, "rev-parse", "--verify", "--quiet", ref); err == nil {
+			return ref
+		}
+	}
+	return "HEAD"
+}
+
 // KeyFromBranch extracts the first Jira key from a branch name.
 func KeyFromBranch(branch string) string {
 	return KeyRe.FindString(strings.ToUpper(branch))

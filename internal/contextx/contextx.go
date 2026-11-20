@@ -128,6 +128,9 @@ func (s Store) Sync(key string, parsed []Item) (*Checklist, error) {
 	if err != nil {
 		return nil, err
 	}
+	if parsed == nil {
+		parsed = []Item{}
+	}
 	c := &Checklist{Key: key, Items: parsed}
 	if old != nil {
 		prev := map[string]Item{}
