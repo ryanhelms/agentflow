@@ -300,6 +300,7 @@ func runHook(ctx context.Context, args []string) error {
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	client := fs.String("client", "", "calling client")
+	conventionOnly := fs.Bool("convention-only", false, "pre-bash: check messages and titles only, not the never-list")
 	rest := args[1:]
 	var positional []string
 	for len(rest) > 0 {
@@ -331,7 +332,7 @@ func runHook(ctx context.Context, args []string) error {
 		}
 		return hooks.SessionStart(ctx, *client, notice, os.Stdout)
 	case "pre-bash":
-		return hooks.PreBash(ctx, os.Stdin, os.Stderr)
+		return hooks.PreBash(ctx, os.Stdin, os.Stderr, *conventionOnly)
 	case "stop":
 		return hooks.Stop(ctx, *client, os.Stdin, os.Stdout)
 	}

@@ -4,7 +4,9 @@
 
 This repo follows the same commit convention devflow enforces in the repos that use it,
 checked by `.githooks/commit-msg` (`make install-hooks`) and by the `convention` CI job on
-every PR title and commit. Jira keys are optional here until devflow has a Jira project
+every PR title and commit (`make install-hooks` also adds a `pre-push` check). PR titles
+are checked as the squash commit they become, `<title> (#123)`, so keep them to 64
+characters. Jira keys are optional here until devflow has a Jira project
 (`commit.require_key: false` in `.devflow/config.yml`). The version and the changelog come
 straight from the commit types:
 

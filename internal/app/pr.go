@@ -145,7 +145,7 @@ func (a *App) PROpen(ctx context.Context, in PROpenInput, token string) (any, er
 	if in.Title == "" {
 		return nil, errors.New("title is required")
 	}
-	if issues := commit.Validate(in.Title, a.Cfg.Commit, key); len(issues) > 0 {
+	if issues := commit.ValidatePRTitle(in.Title, a.Cfg.Commit, key); len(issues) > 0 {
 		return map[string]any{"status": "invalid_title", "issues": issues}, nil
 	}
 	if in.Body == "" {

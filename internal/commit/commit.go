@@ -232,6 +232,28 @@ func suggestHeader(subject string, rules config.Commit, keyHint string) string {
 	return fmt.Sprintf("%s(%s)%s: %s", typ, strings.Join(keys, ","), bang, summary)
 }
 
+// SquashSuffixReserve is the room left in a PR title for the " (#1234)" GitHub appends
+// when it squash-merges, so the resulting commit on the default branch still fits.
+const SquashSuffixReserve = 8
+
+// ValidatePRTitle validates a PR title as the subject of its future squash commit.
+func ValidatePRTitle(title string, rules config.Commit, keyHint string) []Issue {
+	max := rules.SubjectMax
+	if max == 0 {
+		max = 72
+	}
+	r := rules
+	r.SubjectMax = max - SquashSuffixReserve
+	issues := Validate(title, r, keyHint)
+	for i := range issues {
+		if issues[i].Code == "length" {
+			issues[i].Message = fmt.Sprintf("PR title is %d characters; keep it to %d so the squash commit (title + \" (#123)\") fits in %d",
+				len([]rune(strings.TrimSpace(title))), r.SubjectMax, max)
+		}
+	}
+	return issues
+}
+
 // KeysIn returns unique Jira keys in s, in order of appearance.
 func KeysIn(s string) []string {
 	var keys []string

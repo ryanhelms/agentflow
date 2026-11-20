@@ -7,7 +7,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG     := github.com/nscaledev/devflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
-SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg \
+SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
 	templates/repo/.devflow/bin/devflow \
 	templates/repo/.githooks/commit-msg \
 	adapters/claude-code/bin/launch

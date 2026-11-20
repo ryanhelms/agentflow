@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# devflow repo pre-push hook: every commit being pushed must follow the convention,
+# including commits made with --no-verify. Enable with: make install-hooks
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+export DEVFLOW_NO_UPDATE=1
+lint() {
+  if [ -x "$root/devflow" ]; then "$root/devflow" lint-msg "$1"; else go run "$root/cmd/devflow" lint-msg "$1"; fi
+}
+zero=0000000000000000000000000000000000000000
+status=0
+msg=$(mktemp)
+trap 'rm -f "$msg"' EXIT
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # branch deletion
+  if [ "$remote_sha" = "$zero" ]; then
+    commits=$(git rev-list --no-merges "$local_sha" --not --remotes)
+  else
+    commits=$(git rev-list --no-merges "$remote_sha..$local_sha")
+  fi
+  for sha in $commits; do
+    git log -1 --format=%B "$sha" >"$msg"
+    if ! lint "$msg" 2>/dev/null; then
+      echo "✖ commit $(git log -1 --format='%h %s' "$sha") does not follow the convention" >&2
+      lint "$msg" || true
+      status=1
+    fi
+  done
+done
+[ "$status" = 0 ] || echo "Fix with git rebase -i (reword), then push again." >&2
+exit "$status"
