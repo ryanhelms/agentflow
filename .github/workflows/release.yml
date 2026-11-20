@@ -1,10 +1,13 @@
 # devflow's own releases: single branch, versioned straight from commit types.
 #
 # Every push to main computes the next version from the Conventional Commits since the
-# last v* tag (fix/perf -> patch, feat -> minor, ! or BREAKING CHANGE -> major; before
-# 1.0.0 a breaking change bumps the minor). If there is a bump, the merge commit itself
-# is tagged and GoReleaser publishes the GitHub Release with binaries, checksums and a
-# changelog grouped by type. No Release PR, no version-bump commit, no GitHub App.
+# last vX.Y.Z tag (fix/perf -> patch, feat -> minor, ! or BREAKING CHANGE -> major; before
+# 1.0.0 a breaking change bumps the minor). If there is a bump, the workflow generates the
+# CHANGELOG.md section (scripts/changelog.sh), commits it to main as
+# "chore(release): vX.Y.Z", tags that commit, and GoReleaser publishes the GitHub Release
+# with the same notes, binaries and checksums. No Release PR, no GitHub App. The commit is
+# pushed with GITHUB_TOKEN, so it doesn't trigger another run; if main gets branch
+# protection, allow github-actions to push or this step fails.
 #
 # Releases start as pre-releases (the beta channel) and promote.yml marks them stable
 # after 24h unless an issue labelled release-blocker is open.
@@ -59,21 +62,27 @@ jobs:
       - if: steps.version.outputs.release == 'true'
         run: go test -race -count=1 ./...
 
-      - name: Tag the merge commit
+      - name: Commit the changelog and tag the release
         if: steps.version.outputs.release == 'true'
         env:
-          TAG: v${{ steps.version.outputs.next }}
+          VERSION: ${{ steps.version.outputs.next }}
+          LAST_TAG: ${{ steps.version.outputs.last_tag }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "devflow $TAG"
-          git push origin "$TAG"
+          scripts/changelog.sh --version "$VERSION" --from "$LAST_TAG" --to HEAD \
+            --repo "$GITHUB_REPOSITORY" --notes "$RUNNER_TEMP/release-notes.md" --update CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "chore(release): v$VERSION"
+          git tag -a "v$VERSION" -m "devflow v$VERSION"
+          git push origin "HEAD:${GITHUB_REF_NAME}" "v$VERSION"
 
       - name: Build and publish the GitHub Release
         if: steps.version.outputs.release == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
 

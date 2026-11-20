@@ -5,7 +5,9 @@
       "Edit(/CLAUDE.md)",
       "Edit(/**/CLAUDE.md)",
       "Write(/CLAUDE.md)",
-      "Write(/**/CLAUDE.md)"
+      "Write(/**/CLAUDE.md)",
+      "Edit(/CHANGELOG.md)",
+      "Write(/CHANGELOG.md)"
     ]
   },
   "includeCoAuthoredBy": false

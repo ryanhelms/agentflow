@@ -233,8 +233,13 @@ This section is about the devflow repository's own releases, not the release too
 devflow offers other repos.
 
 - **Single branch.** Every push to `main` derives the next version from the commit types
-  since the last `vX.Y.Z` tag (`bin/next-version.sh`), tags the merge commit and
-  publishes the GitHub Release with GoReleaser. No Release PR, no version-bump commit.
+  since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the
+  [CHANGELOG.md](CHANGELOG.md) section from those commits, commits it as
+  `chore(release): vX.Y.Z`, tags it and publishes the GitHub Release with the same notes.
+  No Release PR.
+- **Same commit convention as devflow-managed repos.** Enforced locally by
+  `.githooks/commit-msg` and in CI on every PR title and commit. `CHANGELOG.md` is never
+  edited by hand.
 - **Channels.** Releases start as **beta** and become **stable** after 24 hours unless an
   issue labelled `release-blocker` is open; promotion also moves the floating `v1` tag.
 - **Updates.** Installs check at most every 6 hours without blocking, verify each build,
@@ -278,6 +283,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
+| [CHANGELOG.md](CHANGELOG.md) | Generated release history of devflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing and changing devflow |
 | [AGENTS.md](AGENTS.md) | Instructions for AI agents working on this repo |
 | [SECURITY.md](SECURITY.md) | Security model and reporting |
