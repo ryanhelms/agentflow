@@ -109,7 +109,8 @@ jobs:
           shellcheck -x bin/*.sh scripts/*.sh .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
             templates/repo/.devflow/bin/devflow \
             templates/repo/.githooks/commit-msg \
-            adapters/claude-code/bin/launch
+            adapters/claude-code/bin/launch \
+            adapters/claude-code/bin/devflow
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)

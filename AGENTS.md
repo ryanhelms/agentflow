@@ -88,7 +88,7 @@ internal/release/            deployable units, release-please config, version ma
 internal/policy/             autonomy gate, single-use confirm tokens, never-list, audit
 internal/update/             self-update: channel/track, checksum + attestation, rollback
 internal/atlassian, gh/      Jira v3 + Confluence v2 and GitHub REST/GraphQL clients
-internal/setup/              devflow init (templates/repo) and devflow install (adapters/)
+internal/setup/              devflow init/remove (templates/repo), install (adapters/), auto-init
 adapters/                    per-client files; adapters/claude-code is the plugin
 templates/repo/              files written into consuming repos (dotfiles included)
 .github/workflows/           devflow CI + release, and reusable workflows for other repos
@@ -151,6 +151,10 @@ These are used by other repos and clients. Changing them is a breaking change:
   `scripts/build-blueprint.sh` to regenerate `docs/blueprint.html`.
 - Templates and adapters are embedded in the binary (`templates/embed.go`,
   `adapters/embed.go`). After changing them, run `go test ./internal/setup/`.
+- `adapters/claude-code/bin/devflow` is a copy of `templates/repo/.devflow/bin/devflow`
+  below its header (`go test ./internal/setup/` checks). Every user-facing CLI command has
+  a plugin skill in `adapters/claude-code/skills/<command>/SKILL.md`; add one with a new
+  command, and keep `devflow remove` able to undo whatever `devflow init` writes.
 - New MCP tools need an entry in `internal/mcpserver`, the plugin skill
   (`adapters/claude-code/skills/devflow/SKILL.md`) when agents should use them, and the
   blueprint's capability table.

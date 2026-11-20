@@ -1,6 +1,8 @@
 #!/bin/sh
-# Claude Code plugin launcher. Runs the repo's devflow launcher so Claude uses the same
-# verified, self-updating binary as every other client; falls back to devflow on PATH.
+# Claude Code plugin launcher for the MCP server and hooks. Prefers the repo's launcher,
+# then the installed binary, then bootstraps the latest verified release through the
+# plugin's own bin/devflow, so the plugin works (and can run `devflow init`) in repos that
+# devflow has not set up yet.
 set -eu
 
 root=$(git rev-parse --show-toplevel 2>/dev/null || true)
@@ -8,15 +10,21 @@ if [ -n "$root" ] && [ -x "$root/.devflow/bin/devflow" ]; then
   exec "$root/.devflow/bin/devflow" "$@"
 fi
 
-if command -v devflow >/dev/null 2>&1; then
-  exec devflow "$@"
+installed="${XDG_CACHE_HOME:-$HOME/.cache}/devflow/current/devflow"
+if [ -x "$installed" ]; then
+  exec "$installed" "$@"
 fi
 
-# Hooks must not break sessions in repos that don't use devflow.
+# pre-bash and stop run on every tool call and turn: never download there, and never
+# break a session.
+case "${1:-} ${2:-}" in
+  "hook pre-bash" | "hook stop") exit 0 ;;
+esac
+
+here=$(cd "$(dirname "$0")" && pwd)
 if [ "${1:-}" = hook ]; then
+  # session-start may bootstrap, but must not fail the session if that fails
+  "$here/devflow" "$@" || true
   exit 0
 fi
-
-echo "devflow: not set up in this repo. Run 'devflow init' (see https://github.com/nscaledev/devflow)," >&2
-echo "or install devflow on your PATH." >&2
-exit 1
+exec "$here/devflow" "$@"

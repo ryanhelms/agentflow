@@ -23,6 +23,7 @@ import (
 type Result struct {
 	Written []string `json:"written,omitempty"`
 	Merged  []string `json:"merged,omitempty"`
+	Removed []string `json:"removed,omitempty"`
 	Skipped []string `json:"skipped,omitempty"`
 	Notes   []string `json:"notes,omitempty"`
 }
@@ -77,6 +78,8 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 		if _, err := repo.Git(ctx, "config", "core.hooksPath", ".githooks"); err == nil {
 			res.Notes = append(res.Notes, "set core.hooksPath=.githooks for this clone (each developer runs `devflow doctor --fix` or the same git config once)")
 		}
+		// An explicit init undoes the opt-out `devflow remove` leaves behind.
+		_, _ = repo.Git(ctx, "config", "--local", "--unset", AutoInitKey)
 	}
 	res.Notes = append(res.Notes,
 		"edit .devflow/config.yml: jira.site and jira.projects",

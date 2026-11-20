@@ -3,10 +3,11 @@
 #
 # Builds devflow, installs it into a throwaway cache, creates a throwaway repo with
 # `devflow init`, then drives `claude -p` with the plugin loaded from
-# adapters/claude-code and checks: the MCP server connects with all tools, slash
-# commands load, the SessionStart hook injects ticket context, /devflow:commit makes a
-# convention commit through the confirmation flow, and the PreToolUse hook blocks the
-# never-list commands. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
+# adapters/claude-code and checks: the MCP server connects with all tools, the skills
+# load, the SessionStart hook injects ticket context, /devflow:commit makes a
+# convention commit through the confirmation flow, the PreToolUse hook blocks the
+# never-list commands, a new nscaledev repo is set up automatically, and
+# /devflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
 # (for the remote flow map). Nothing touches your real repos, caches or Claude config,
 # apart from the Claude account usage of the runs.
 #
@@ -70,7 +71,7 @@ run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_devflow_devf
 init=$(jq -c 'select(.type=="system" and .subtype=="init")' "$tmp/1.jsonl")
 check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:devflow:devflow" and .status=="connected")' <<<"$init"
 check "25 devflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_devflow_devflow__"))] | length >= 25' <<<"$init"
-check "slash commands" jq -e '[.slash_commands[] | select(startswith("devflow:"))] | length >= 6' <<<"$init"
+check "21 skills" jq -e '[.slash_commands[] | select(startswith("devflow:"))] | length >= 21' <<<"$init"
 check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("devflow · PLAT-123"))' "$tmp/1.jsonl"
 
 echo "2. /devflow:commit"
@@ -90,6 +91,27 @@ check "push to main blocked" grep -q 'protected branch "main"' <<<"$results"
 check "force-push blocked" grep -q "force-push is never allowed" <<<"$results"
 check "gh pr merge blocked" grep -q "merging PRs is a human decision" <<<"$results"
 check "nothing new committed" test "$(git log -1 --format=%s)" = "$subject"
+
+echo "4. automatic init and /devflow:remove"
+fresh="$tmp/fresh"
+mkdir -p "$fresh"
+cd "$fresh"
+git init -q -b main
+git remote add origin https://github.com/nscaledev/e2e-fresh.git
+git config user.email "e2e@nscale.com"
+git config user.name "devflow e2e"
+git commit -q --allow-empty -m "chore(PLAT-1): init"
+run_claude "$tmp/4.jsonl" "Reply with the word ready." "mcp__plugin_devflow_devflow"
+check "repo set up on session start" test -f .devflow/config.yml
+check "developer told about it" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("set this repo up automatically"))' "$tmp/4.jsonl"
+check "nothing committed" test "$(git log -1 --format=%s)" = "chore(PLAT-1): init"
+rm -f .claude/settings.json
+run_claude "$tmp/5.jsonl" "/devflow:remove — I confirm the removal in advance; don't commit anything." \
+  "Bash(devflow remove:*)" "Bash(devflow:*)" "Bash(git status:*)"
+check "devflow removed" test ! -e .devflow
+check "auto init off for this clone" test "$(git config devflow.autoinit)" = false
+run_claude "$tmp/6.jsonl" "Reply with the word ready." "mcp__plugin_devflow_devflow"
+check "not set up again" test ! -e .devflow
 
 echo
 echo "$pass passed, $fail failed"
