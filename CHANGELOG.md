@@ -5,6 +5,16 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.3.0](https://github.com/nscaledev/devflow/compare/v0.2.0...v0.3.0) - 2026-11-20
+
+### Breaking changes
+
+- publish stable releases and use the v0 floating tag (#5) ([bae531b](https://github.com/nscaledev/devflow/commit/bae531b0589477129d8c8818d67725e208b84965))
+
+### Features
+
+- publish stable releases and use the v0 floating tag (#5) ([bae531b](https://github.com/nscaledev/devflow/commit/bae531b0589477129d8c8818d67725e208b84965))
+
 ## [0.2.0](https://github.com/nscaledev/devflow/compare/v0.1.0...v0.2.0) - 2026-11-20
 
 ### Features
