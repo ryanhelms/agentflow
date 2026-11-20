@@ -59,6 +59,15 @@ jobs:
             fi
           done
           exit "$status"
+      - name: README.md kept current (warning only)
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          user_facing=$(grep -E '^(cmd/|internal/|templates/|adapters/|actions/|bin/|flow-map\.yml|policy/|\.github/workflows/)' <<<"$changed" \
+            | grep -vE '^\.github/workflows/(ci|release)\.yml$|_test\.go$' || true)
+          if [ -n "$user_facing" ] && ! grep -qx README.md <<<"$changed"; then
+            echo "::warning title=README.md not updated::This PR changes user-facing files but not README.md. Update the README if a reader would notice the change, or say in the PR description why not (AGENTS.md: Keep README.md current)."
+            printf '%s\n' "$user_facing" | sed 's/^/  /'
+          fi
       - name: CHANGELOG.md is generated on release, never edited in a PR
         run: |
           # Creating the file once (bootstrap) is allowed; changing it afterwards is not.
