@@ -12,10 +12,12 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/nscaledev/devflow/adapters"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/version"
 	"github.com/nscaledev/devflow/templates"
 )
 
@@ -61,6 +63,9 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 			res.Skipped = append(res.Skipped, rel)
 			return nil
 		}
+		if rel == callerWorkflow {
+			data = PinWorkflow(data, version.Commit, version.Version)
+		}
 		mode := os.FileMode(0o644)
 		if executables[rel] {
 			mode = 0o755
@@ -81,11 +86,31 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 		// An explicit init undoes the opt-out `devflow remove` leaves behind.
 		_, _ = repo.Git(ctx, "config", "--local", "--unset", AutoInitKey)
 	}
+	for _, k := range res.Skipped {
+		if k == ".github/dependabot.yml" {
+			res.Notes = append(res.Notes, "your .github/dependabot.yml was kept: add the github-actions entry from templates/repo/.github/dependabot.yml so devflow's pinned workflows get update PRs")
+		}
+	}
 	res.Notes = append(res.Notes,
 		"edit .devflow/config.yml: jira.site and jira.projects",
 		"add your project's block to flow-map.yml in nscaledev/devflow (or point flow_map at a local file)",
 		"commit the new files; enabling the Claude Code plugin happens through .claude/settings.json")
 	return res, nil
+}
+
+const callerWorkflow = ".github/workflows/devflow.yml"
+
+var devflowRefRe = regexp.MustCompile(`(uses: nscaledev/devflow/[^@\s]+)@v0\b`)
+
+// PinWorkflow pins every nscaledev/devflow reference in a caller workflow to the commit
+// of this release (`@<sha> # v<version>`), so a moved tag can't change what runs with the
+// repo's secrets. Dependabot (.github/dependabot.yml) proposes each new release as a PR.
+// Non-release builds leave the floating @v0 references.
+func PinWorkflow(data []byte, sha, ver string) []byte {
+	if !version.ReleaseCommit(sha, ver) {
+		return data
+	}
+	return devflowRefRe.ReplaceAll(data, []byte("${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
 }
 
 func writeFile(dest string, data []byte, mode os.FileMode) error {
