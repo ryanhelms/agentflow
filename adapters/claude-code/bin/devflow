@@ -46,7 +46,13 @@ gh attestation verify "$tmp/$pkg" --repo nscaledev/devflow \
   exit 1
 }
 
+# Install atomically: extract into a private staging dir, then rename the binary into
+# place, so concurrent first runs (several AI clients starting at once) never see a
+# partial binary.
 mkdir -p "$home/$ver"
-tar -xzf "$tmp/$pkg" -C "$home/$ver" devflow
+stage=$(mktemp -d "$home/$ver/.install.XXXXXX")
+tar -xzf "$tmp/$pkg" -C "$stage" devflow
+mv -f "$stage/devflow" "$home/$ver/devflow" # rename(2): atomic, last writer wins
+rmdir "$stage"
 ln -sfn "$home/$ver" "$home/current"
 exec "$home/current/devflow" "$@"
