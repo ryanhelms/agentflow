@@ -37,7 +37,7 @@ Ready before the gate (no team impact):
 - **Exit:** every pilot engineer has the hook; Smart Commits resolve to their Jira user
 
 ## P2 · PR key enforcement
-- [ ] Caller workflow `key-check` with `warn-only: true`
+- [ ] Caller workflow `key-check` with `warn-only: true` (it applies the repo's `.devflow/config.yml` rules, so repos without a Jira project can set `commit.require_key: false`)
 - [ ] Fix common misses; switch to `warn-only: false` and require `key-check / validate` in an org ruleset
 - [ ] devflow PR readiness check and PR opening
 - **Exit:** 95% of pilot commits and PRs carry a valid key; check required
