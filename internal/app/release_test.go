@@ -32,6 +32,7 @@ func TestReleaseInitAndPlan(t *testing.T) {
 	git("commit", "-q", "-m", "feat(PLAT-1): add api and cli")
 	git("tag", "api-v1.2.0")
 	git("tag", "cli-v0.3.1")
+	git("tag", "api-v1") // floating major tag: must never count as a release
 	write("services/api/handler.go", "package main\n")
 	git("add", ".")
 	git("commit", "-q", "-m", "fix(PLAT-2): handle empty quota")

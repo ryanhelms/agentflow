@@ -298,11 +298,11 @@ jobs:
             name=$(jq -r .name <<<"$unit"); tag=$(jq -r .tag <<<"$unit")
             version=$(jq -r .version <<<"$unit"); path=$(jq -r .path <<<"$unit")
             prefix=${tag%"$version"}
-            prev=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*" "$tag^" 2>/dev/null || true)
+            prev=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*.[0-9]*.[0-9]*" "$tag^" 2>/dev/null || true)
             range=${prev:+$prev..}$tag
             pathspec=()
             [ "$path" != "." ] && pathspec=(-- "$path")
-            keys=$(git log --format='%B' "$range" "${pathspec[@]}" | grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' | sort -u || true)
+            keys=$(git log --format='%B' "$range" ${pathspec[@]+"${pathspec[@]}"} | grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' | sort -u || true)
             for key in $keys; do
               jira-fix-version.sh "$key" "$name $version" || echo "::warning::$key: could not set fix version"
             done

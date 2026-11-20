@@ -33,9 +33,10 @@ Create an org-owned GitHub App named **devflow** (no webhook):
 - Install it on `nscaledev/devflow` and on repos that use `auto-issues`.
 - Store the app id in `DEVFLOW_APP_ID` and a private key in `DEVFLOW_APP_PRIVATE_KEY`.
 
-devflow's release workflow uses it to create and auto-merge the Release PR, because PRs
-merged with `GITHUB_TOKEN` don't trigger the build. Allow the app to bypass branch
-protection on `main` only if your ruleset requires reviews; otherwise auto-merge waits for checks.
+Consuming repos' `semver-release` workflow uses it to create and auto-merge their
+release-please Release PR, because PRs merged with `GITHUB_TOKEN` don't trigger other
+workflows. devflow's own releases don't need it: they tag the merge commit directly with
+`GITHUB_TOKEN`.
 
 ## Atlassian service account
 

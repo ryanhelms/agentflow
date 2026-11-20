@@ -1,8 +1,19 @@
+# devflow's own releases: single branch, versioned straight from commit types.
+#
+# Every push to main computes the next version from the Conventional Commits since the
+# last v* tag (fix/perf -> patch, feat -> minor, ! or BREAKING CHANGE -> major; before
+# 1.0.0 a breaking change bumps the minor). If there is a bump, the merge commit itself
+# is tagged and GoReleaser publishes the GitHub Release with binaries, checksums and a
+# changelog grouped by type. No Release PR, no version-bump commit, no GitHub App.
+#
+# Releases start as pre-releases (the beta channel) and promote.yml marks them stable
+# after 24h unless an issue labelled release-blocker is open.
 name: release
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,51 +23,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  setup-check:
-    if: vars.DEVFLOW_APP_ID == ''
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "::warning::Releases are paused until the devflow GitHub App is configured (vars.DEVFLOW_APP_ID and secrets.DEVFLOW_APP_PRIVATE_KEY). See docs/operations.md."
-
-  release-please:
-    if: vars.DEVFLOW_APP_ID != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      created: ${{ steps.rp.outputs.release_created }}
-      tag: ${{ steps.rp.outputs.tag_name }}
-    steps:
-      # PRs merged with the default GITHUB_TOKEN don't trigger other workflows, so the
-      # Release PR must be created and merged by the devflow GitHub App.
-      - id: app
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.DEVFLOW_APP_ID }}
-          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
-
-      - id: rp
-        uses: googleapis/release-please-action@v4
-        with:
-          token: ${{ steps.app.outputs.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      - name: Auto-merge the Release PR when checks pass
-        if: steps.rp.outputs.pr
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          PR_JSON: ${{ steps.rp.outputs.pr }}
-        run: |
-          number=$(jq -r '.number' <<<"$PR_JSON")
-          # --auto waits for required checks; without branch protection merge directly.
-          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash \
-            || gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --squash
-
-  build:
-    needs: release-please
-    if: needs.release-please.outputs.created == 'true'
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,17 +33,62 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+
+      - id: version
+        name: Next version from commit types
+        run: |
+          set -euo pipefail
+          out=$(bin/next-version.sh --path . --prefix v --branch main --default-branch main --env)
+          echo "$out"
+          echo "$out" >> "$GITHUB_OUTPUT"
+          next=$(sed -n 's/^next=//p' <<<"$out"); current=$(sed -n 's/^current=//p' <<<"$out")
+          bump=$(sed -n 's/^bump=//p' <<<"$out"); last_tag=$(sed -n 's/^last_tag=//p' <<<"$out")
+          if [ "$next" != "$current" ] || { [ -z "$last_tag" ] && [ "$next" != 0.0.0 ]; }; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Releasing v$next ($bump bump from ${last_tag:-no previous tag})"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No feat, fix or breaking commits since $last_tag; nothing to release"
+          fi
+
+      - if: steps.version.outputs.release == 'true'
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go test -race -count=1 ./...
-      - uses: goreleaser/goreleaser-action@v6
+
+      - if: steps.version.outputs.release == 'true'
+        run: go test -race -count=1 ./...
+
+      - name: Tag the merge commit
+        if: steps.version.outputs.release == 'true'
+        env:
+          TAG: v${{ steps.version.outputs.next }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "devflow $TAG"
+          git push origin "$TAG"
+
+      - name: Build and publish the GitHub Release
+        if: steps.version.outputs.release == 'true'
+        uses: goreleaser/goreleaser-action@v6
         with:
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/attest-build-provenance@v2
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - if: steps.version.outputs.release == 'true'
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
+
+      - name: Remove the tag if the release failed
+        if: failure() && steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.version.outputs.next }}
+        run: |
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null \
+            || git push --delete origin "$TAG" || true

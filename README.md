@@ -83,9 +83,10 @@ pass `actions/release-guard` only for published releases or an approved hotfix. 
 
 ## devflow's own releases and updates
 
-Releases are automatic. Every merge to `main` containing a `feat` or `fix` commit makes
-release-please open a Release PR, which is auto-merged once checks pass. GoReleaser
-then builds five platforms, `checksums.txt` and build provenance attestations.
+Releases are automatic and single-branch. Every merge to `main` with a `feat`, `fix` or
+breaking commit tags that merge commit with the next version (derived from the commit
+types) and GoReleaser publishes the GitHub Release: five platforms, `checksums.txt`,
+build provenance attestations and a changelog grouped by type. No Release PR.
 
 New releases ship as **beta** (pre-release) for pilot repos and are promoted to
 **stable** after 24 hours unless an issue labelled `release-blocker` is open.
