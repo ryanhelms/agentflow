@@ -69,7 +69,17 @@ This is not implemented in the binary yet; `internal/auth` already supports bear
 Releases are automatic and published as stable (see CONTRIBUTING.md). Each release also
 moves the floating major tag that consuming repos use: `v0` while devflow is 0.x, `v1`
 from 1.0.0 (`nscaledev/devflow/...@v0` for reusable workflows and actions, and
-`nscaledev/devflow@v0:flow-map.yml`). To move it by hand:
+`nscaledev/devflow@v0:flow-map.yml`).
+
+`v*` tags are protected by the repository ruleset **Protect release tags**: nobody can
+create, move or delete them except repository admins and the release workflow, which
+pushes tags with a write deploy key ("release workflow: tags (ruleset bypass)", private
+key in the `RELEASE_DEPLOY_KEY` secret). GitHub Actions itself can't be a ruleset bypass
+actor. To rotate the key: generate a new ed25519 key pair, replace the deploy key and the
+secret, and delete the old key. Once the devflow GitHub App exists, it can replace the
+deploy key as the bypass actor.
+
+To move the floating tag by hand (repository admins only):
 
 ```bash
 git fetch --tags && git tag -f v0 vX.Y.Z && git push -f origin v0
