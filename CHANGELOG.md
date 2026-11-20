@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.5.0](https://github.com/nscaledev/devflow/compare/v0.4.2...v0.5.0) - 2026-11-20
+
+### Features
+
+- pin caller workflows to the release commit with Dependabot (#11) ([e6da822](https://github.com/nscaledev/devflow/commit/e6da822a8b2cdd49e4b20d630c8c2947b22da5ca))
+
 ## [0.4.2](https://github.com/nscaledev/devflow/compare/v0.4.1...v0.4.2) - 2026-11-20
 
 ### Fixes
