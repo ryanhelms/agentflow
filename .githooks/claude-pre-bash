@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Claude Code PreToolUse hook for the devflow repo (see .claude/settings.json). Runs
+# devflow's own pre-bash check from this checkout in convention-only mode: commit
+# messages, PR titles (as the future squash commit) and squash subjects must follow
+# the convention. The never-list is skipped here because maintainers ask agents to
+# merge explicitly; AGENTS.md still forbids pushes to main and force-pushes.
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+export DEVFLOW_NO_UPDATE=1
+if [ -x "$root/devflow" ]; then
+  exec "$root/devflow" hook pre-bash --convention-only --client claude
+fi
+exec go run "$root/cmd/devflow" hook pre-bash --convention-only --client claude

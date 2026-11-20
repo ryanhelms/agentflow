@@ -100,12 +100,18 @@ type claudeHookInput struct {
 
 var (
 	gitCommitRe = regexp.MustCompile(`\bgit\s+(?:-C\s+\S+\s+)?commit\b`)
+	ghPRTitleRe = regexp.MustCompile(`\bgh\s+pr\s+(?:create|edit)\b`)
+	ghMergeRe   = regexp.MustCompile(`\bgh\s+pr\s+merge\b`)
+	titleFlagRe = regexp.MustCompile(`(?:--title|-t)(?:\s+|=)("(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+)`)
+	subjFlagRe  = regexp.MustCompile(`--subject(?:\s+|=)("(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+)`)
 	msgFlagRe   = regexp.MustCompile(`(?s)(?:-m|--message)(?:\s+|=)("(?:[^"\\]|\\.)*"|'[^']*'|\$\(cat <<'?EOF'?\n.*?\nEOF\n?\s*\))`)
 )
 
-// PreBash blocks never-list commands and invalid `git commit -m` messages.
-// Claude Code treats exit code 2 as "block" and shows stderr to the model.
-func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
+// PreBash blocks never-list commands and invalid commit messages, PR titles and squash
+// subjects. Claude Code treats exit code 2 as "block" and shows stderr to the model.
+// conventionOnly skips the never-list: devflow's own repo uses it, because maintainers
+// there ask agents to merge PRs explicitly.
+func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) error {
 	var in claudeHookInput
 	if err := json.NewDecoder(stdin).Decode(&in); err != nil {
 		return nil
@@ -126,9 +132,23 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
 		branch = repo.Branch(ctx)
 		keyHint = gitx.KeyFromBranch(branch)
 	}
-	if reason := policy.Forbidden(cmd, protected, branch); reason != "" {
+	if reason := policy.Forbidden(cmd, protected, branch); reason != "" && !conventionOnly {
 		fmt.Fprintln(stderr, "devflow blocked this command: "+reason)
 		return &ExitError{Code: 2, Msg: reason}
+	}
+	// PR titles become the squash commit on the default branch: check them before the
+	// PR exists, leaving room for the " (#123)" GitHub appends.
+	if ghPRTitleRe.MatchString(cmd) {
+		if m := titleFlagRe.FindStringSubmatch(cmd); m != nil {
+			return report(stderr, "PR title", commit.ValidatePRTitle(unquote(m[1]), rules, keyHint))
+		}
+		return nil
+	}
+	if ghMergeRe.MatchString(cmd) {
+		if m := subjFlagRe.FindStringSubmatch(cmd); m != nil {
+			return report(stderr, "squash commit subject", commit.Validate(unquote(m[1]), rules, keyHint))
+		}
+		return nil
 	}
 	if !gitCommitRe.MatchString(cmd) {
 		return nil
@@ -141,11 +161,19 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
 		return nil // -F/editor: the commit-msg hook validates
 	}
 	msg := strings.Join(parts, "\n\n")
-	issues := commit.Validate(msg, rules, keyHint)
+	return report(stderr, "commit message", commit.Validate(msg, rules, keyHint))
+}
+
+// report blocks the command (exit 2) when there are issues.
+func report(stderr io.Writer, what string, issues []commit.Issue) error {
 	if len(issues) == 0 {
 		return nil
 	}
-	fmt.Fprintln(stderr, "devflow: this commit message does not follow the convention. Use the devflow_commit tool instead of raw git commit.")
+	hint := ""
+	if what == "commit message" {
+		hint = " Use the devflow_commit tool instead of raw git commit."
+	}
+	fmt.Fprintf(stderr, "devflow: this %s does not follow the convention.%s\n", what, hint)
 	for _, i := range issues {
 		fmt.Fprintf(stderr, "- %s", i.Message)
 		if i.Fix != "" {
@@ -153,7 +181,7 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stderr)
 	}
-	return &ExitError{Code: 2, Msg: "invalid commit message"}
+	return &ExitError{Code: 2, Msg: "invalid " + what}
 }
 
 func unquote(s string) string {

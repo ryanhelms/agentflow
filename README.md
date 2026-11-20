@@ -168,6 +168,8 @@ default is `confirm`: the agent shows what it will do and waits.
   Commits still handle `#comment` and `#time`
 - `feat` → minor, `fix`/`perf` → patch, `!` or `BREAKING CHANGE:` → major
 - No AI attribution trailers; devflow strips known ones
+- PR titles follow the same format and are checked as the squash commit they become
+  (`<title> (#123)` ≤ 72 characters), before the PR is created and again in CI
 
 ## Versioning and releases
 
