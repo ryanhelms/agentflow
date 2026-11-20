@@ -38,6 +38,9 @@ Usage: devflow <command> [flags]
 Setup
   init [--force]                 write .devflow/, hooks, workflow, client configs and release
                                  setup (units, release-please files) into this repo
+  remove [--dry-run] [--force] [--keep-releases]
+                                 undo init: delete devflow's files, strip its entries from
+                                 AGENTS.md and client configs, stop automatic init here
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
@@ -141,6 +144,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return err
 	case "init":
 		return runInit(ctx, args)
+	case "remove":
+		return runRemove(ctx, args)
 	case "install":
 		return runInstall(ctx, args)
 	case "login":
@@ -346,23 +351,14 @@ func runInit(ctx context.Context, args []string) error {
 		return err
 	}
 	dir, _ := os.Getwd()
-	repo, err := gitx.Open(ctx, dir)
+	res, err := app.InitRepo(ctx, dir, "cli", *force)
+	if res != nil {
+		printResult(res.Files)
+	}
 	if err != nil {
 		return err
 	}
-	res, err := setup.Init(ctx, repo.Dir, *force)
-	printResult(res)
-	if err != nil {
-		return err
-	}
-	a, err := open(ctx)
-	if err != nil {
-		return err
-	}
-	rel, err := a.ReleaseInit(ctx, "", false)
-	if err != nil {
-		return fmt.Errorf("release setup: %w (fix it, then run devflow release init)", err)
-	}
+	rel := res.Release
 	fmt.Printf("Release units (%s strategy):\n", rel.Strategy)
 	for _, u := range rel.Units {
 		fmt.Printf("  %-16s %-22s %s\n", u.Name, u.Path, strings.Join(u.Builds, ","))
@@ -371,6 +367,24 @@ func runInit(ctx context.Context, args []string) error {
 		fmt.Println("  wrote   ", f)
 	}
 	return nil
+}
+
+func runRemove(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
+	var opt setup.RemoveOptions
+	fs.BoolVar(&opt.Force, "force", false, "also delete template files changed since devflow init")
+	fs.BoolVar(&opt.DryRun, "dry-run", false, "list what would change without changing anything")
+	fs.BoolVar(&opt.KeepReleases, "keep-releases", false, "keep release-please-config.json and .release-please-manifest.json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	dir, _ := os.Getwd()
+	res, err := app.RemoveRepo(ctx, dir, opt)
+	if opt.DryRun {
+		fmt.Println("Dry run: nothing changed.")
+	}
+	printResult(res)
+	return err
 }
 
 func runInstall(ctx context.Context, args []string) error {
@@ -404,6 +418,9 @@ func printResult(res *setup.Result) {
 	}
 	for _, f := range res.Merged {
 		fmt.Println("  updated ", f)
+	}
+	for _, f := range res.Removed {
+		fmt.Println("  removed ", f)
 	}
 	for _, f := range res.Skipped {
 		fmt.Println("  kept    ", f, "(exists; --force to overwrite)")

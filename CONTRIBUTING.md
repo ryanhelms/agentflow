@@ -68,7 +68,7 @@ make snapshot      # goreleaser --snapshot --clean
 
 `make e2e` (or `scripts/e2e-claude.sh`) builds devflow, creates a throwaway repo with
 `devflow init`, and drives `claude -p` with the plugin loaded from `adapters/claude-code`.
-It checks that the MCP server connects with every tool, the slash commands and
+It checks that the MCP server connects with every tool, the skills and
 SessionStart context load, `/devflow:commit` makes a convention commit through the
 confirmation flow, and the PreToolUse hook blocks invalid commits, pushes to `main`,
 force-pushes and `gh pr merge`. It needs a logged-in `claude` CLI and `gh auth`, and it

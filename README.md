@@ -124,6 +124,25 @@ releases:
 
 Disable devflow in a repo at any time with the repository variable `DEVFLOW_ENABLED=false`.
 
+**Automatic setup with the Claude Code plugin.** When a Claude Code session starts in a
+repo with no `.devflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
+(default `nscaledev`), the plugin runs `devflow init` for you. It writes the files above
+and commits nothing; Claude tells you what was written and offers a branch and PR. Choose
+the behaviour in `~/.devflow/config.yml`:
+
+```yaml
+init:
+  auto: auto        # auto (default) | ask (only suggest /devflow:init) | off
+  orgs: [nscaledev]
+```
+
+**Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
+`.devflow/`, the caller workflow, the release-please files (`--keep-releases` keeps them)
+and unchanged template files (`--force` deletes changed ones too), strips devflow's block
+from `AGENTS.md` and its entries from client configs, unsets `core.hooksPath` and turns
+automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
+in a PR; repo variables, secrets, tags and releases are not touched.
+
 ### Set up your machine (engineers)
 
 Nothing to install by hand: opening the repo in any supported client runs the launcher.
@@ -196,11 +215,19 @@ Full rules and examples: [docs/releases.md](docs/releases.md).
 | --- | --- | --- | --- | --- | --- |
 | Tools | Plugin MCP | MCP | MCP | MCP | CLI |
 | Instructions | Plugin skill | `AGENTS.md` | Instructions file | `AGENTS.md` / rules | – |
-| Commands | `/devflow:*` | Custom prompts | Where supported | Where supported | Subcommands |
+| Commands | `/devflow:*` skills | Custom prompts | Where supported | Where supported | Subcommands |
 | Hooks | SessionStart, PreToolUse, Stop | git hooks | git hooks | git hooks | git hooks |
 
 Enforcement is identical everywhere: the `commit-msg` hook locally and the PR key check in
-CI. Install the Claude Code plugin for yourself with
+CI.
+
+The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
+`install`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`,
+`transition`, `pr`, `review`, `status`, `standup`, `docs`, `adr`, `release`, `update` and
+`version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
+release on first use, so the skills work in repos devflow has not set up yet. Skills that
+change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
+`update`) run only when you invoke them. Install the Claude Code plugin for yourself with
 `/plugin install devflow --marketplace nscaledev/devflow`; repos enable it for everyone
 through `.claude/settings.json`.
 

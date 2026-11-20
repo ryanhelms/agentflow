@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/setup"
 )
 
 // ExitError carries a process exit code.
@@ -75,19 +76,48 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 	if err != nil {
 		return nil // not a repo: say nothing
 	}
-	tc, err := a.Context(ctx, "")
-	if err != nil {
-		fmt.Fprintf(stdout, "devflow: could not load ticket context: %v\n", err)
-		return nil
-	}
-	fmt.Fprint(stdout, tc.Text)
 	if !a.HasCfg {
-		fmt.Fprintln(stdout, "devflow: this repo has no .devflow/config.yml; run `devflow init` to enable it.")
+		autoInit(ctx, a, client, stdout)
+	} else if tc, err := a.Context(ctx, ""); err != nil {
+		fmt.Fprintf(stdout, "devflow: could not load ticket context: %v\n", err)
+	} else {
+		fmt.Fprint(stdout, tc.Text)
 	}
 	if notice != "" {
 		fmt.Fprintln(stdout, notice)
 	}
 	return nil
+}
+
+// autoInit handles a session in a repo without .devflow/config.yml, following the
+// developer's init.auto setting (see setup.AutoInitDecision). Files are written but never
+// committed: the agent is told to show them and offer a branch and PR.
+func autoInit(ctx context.Context, a *app.App, client string, stdout io.Writer) {
+	switch setup.AutoInitDecision(ctx, a.Repo, a.User.Init.Auto, a.User.Init.Orgs) {
+	case setup.AutoAsk:
+		fmt.Fprintln(stdout, "devflow: this repo is not set up for devflow yet. Offer the developer `/devflow:init` (or `devflow init`); `devflow remove` undoes it.")
+	case setup.AutoInit:
+		res, err := app.InitRepo(ctx, a.Repo.Dir, client, false)
+		if err != nil {
+			fmt.Fprintf(stdout, "devflow: automatic init failed: %v. The developer can run `devflow init` and `devflow doctor`.\n", err)
+			return
+		}
+		var files []string
+		if res.Files != nil {
+			files = append(files, res.Files.Written...)
+			files = append(files, res.Files.Merged...)
+		}
+		if res.Release != nil {
+			files = append(files, res.Release.Written...)
+		}
+		fmt.Fprintf(stdout, "devflow set this repo up automatically (init.auto in ~/.devflow/config.yml). "+
+			"It wrote %d files and committed nothing: %s.\n"+
+			"At the start of your first reply, tell the developer in one or two lines, then offer to: review .devflow/config.yml "+
+			"(jira.projects, policy.test_cmd) and .devflow/releases.yml, commit the files on a new branch as "+
+			"`chore(KEY): set up devflow` (ask for the Jira key; commits need one unless commit.require_key is false) and open a PR. If they don't want devflow here, offer `/devflow:remove`, "+
+			"which deletes the files and stops automatic init in this clone.\n",
+			len(files), strings.Join(files, ", "))
+	}
 }
 
 type claudeHookInput struct {

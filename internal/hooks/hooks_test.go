@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -75,5 +76,43 @@ func TestPreBashConventionOnly(t *testing.T) {
 		if got != want {
 			t.Errorf("%s: exit %d want %d (%s)", in, got, want, errBuf.String())
 		}
+	}
+}
+
+func TestSessionStartAutoInit(t *testing.T) {
+	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/nscaledev/demo.git"}} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, out)
+		}
+	}
+	t.Chdir(dir)
+	var out bytes.Buffer
+	if err := SessionStart(context.Background(), "claude", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".devflow", "config.yml")); err != nil {
+		t.Fatalf("auto init did not run: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "set this repo up automatically") || !strings.Contains(out.String(), "/devflow:remove") {
+		t.Errorf("context = %s", out.String())
+	}
+
+	// after devflow remove the clone is opted out and the hook stays silent
+	if out, err := exec.Command("git", "-C", dir, "config", "devflow.autoinit", "false").CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	_ = os.RemoveAll(filepath.Join(dir, ".devflow"))
+	out.Reset()
+	if err := SessionStart(context.Background(), "claude", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("opted-out clone got context: %s", out.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".devflow", "config.yml")); err == nil {
+		t.Error("auto init ran in an opted-out clone")
 	}
 }

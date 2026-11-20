@@ -101,6 +101,12 @@ type User struct {
 	Atlassian struct {
 		Email string `yaml:"email"`
 	} `yaml:"atlassian"`
+	// Init controls automatic `devflow init` by the AI-client plugins in repos without
+	// .devflow/config.yml: auto (default), ask or off, for repos owned by Orgs.
+	Init struct {
+		Auto string   `yaml:"auto"`
+		Orgs []string `yaml:"orgs"`
+	} `yaml:"init"`
 }
 
 // Defaults applied when fields are missing.
@@ -108,6 +114,7 @@ var (
 	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
 	DefaultSite       = "https://nscale.atlassian.net"
 	DefaultFlowMap    = "nscaledev/devflow@v0:flow-map.yml"
+	DefaultInitOrgs   = []string{"nscaledev"}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
 	DefaultCheckEvery = 6 * time.Hour
 )
@@ -200,6 +207,12 @@ func LoadUser() (*User, error) {
 	}
 	if u.Autonomy.Remote == "" {
 		u.Autonomy.Remote = Confirm
+	}
+	if u.Init.Auto == "" {
+		u.Init.Auto = "auto"
+	}
+	if len(u.Init.Orgs) == 0 {
+		u.Init.Orgs = DefaultInitOrgs
 	}
 	return u, nil
 }
