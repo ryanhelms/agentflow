@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.4.1](https://github.com/nscaledev/devflow/compare/v0.4.0...v0.4.1) - 2026-11-20
+
+### Fixes
+
+- key-check applies the repo's commit rules and require_key (#9) ([236d876](https://github.com/nscaledev/devflow/commit/236d876a638217bd6f8f8aaf215cfe33692eca9a))
+
 ## [0.4.0](https://github.com/nscaledev/devflow/compare/v0.3.1...v0.4.0) - 2026-11-20
 
 ### Features
