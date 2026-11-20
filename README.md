@@ -85,8 +85,9 @@ devflow has two halves that share one status map and one set of rules:
 
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
    every opted-in repo: Jira key checks, ticket transitions, semantic releases, release
-   guard, Confluence publishing, Slack and hygiene. Repos call them at `@v0` from a single
-   caller workflow.
+   guard, Confluence publishing, Slack and hygiene. Repos call them from a single
+   caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that Dependabot bumps
+   by PR.
 2. **The `devflow` binary**, one Go program that is a CLI, an MCP server and a set of git
    and AI-client hooks. Each repo commits a small launcher that installs the latest
    verified release on first use; the binary then keeps itself updated.
@@ -118,7 +119,8 @@ releases:
 | `.devflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
 | `.devflow/bin/devflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
-| `.github/workflows/devflow.yml` | The one caller workflow for every devflow Action |
+| `.github/workflows/devflow.yml` | The one caller workflow for every devflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
+| `.github/dependabot.yml` | Opens a PR for each new devflow release to bump those pins (org admins: grant Dependabot access to `nscaledev/devflow`) |
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
 | `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/`, `AGENTS.md` | AI client configuration |
 
@@ -245,7 +247,11 @@ through `.claude/settings.json`.
   branches, PR merges, remote branch deletes and acting as another user.
 - **Audit.** Every local and remote action is logged to `~/.devflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
-  ([CODEOWNERS](CODEOWNERS)); reusable workflows are versioned at `@v0`.
+  ([CODEOWNERS](CODEOWNERS)); caller workflows pin devflow to a release
+  commit SHA, and each new devflow release reaches a repo only through a reviewed
+  Dependabot PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
+  devflow's release workflow should move; protect `v*` tags in nscaledev/devflow with a
+  tag ruleset.
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 

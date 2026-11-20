@@ -11,6 +11,7 @@ import (
 
 	"github.com/nscaledev/devflow/adapters"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/version"
 )
 
 func TestInitAndInstall(t *testing.T) {
@@ -173,5 +174,37 @@ func TestPluginLauncherMatchesTemplate(t *testing.T) {
 	}
 	if body(plugin) != body(mustTemplate(".devflow/bin/devflow")) {
 		t.Error("adapters/claude-code/bin/devflow drifted from templates/repo/.devflow/bin/devflow")
+	}
+}
+
+func TestPinWorkflow(t *testing.T) {
+	sha := strings.Repeat("ab12", 10)
+	src := []byte("    uses: nscaledev/devflow/.github/workflows/jira-key.yml@v0\n    uses: actions/checkout@v4\n")
+	got := string(PinWorkflow(src, sha, "0.4.3"))
+	if !strings.Contains(got, "jira-key.yml@"+sha+" # v0.4.3\n") || !strings.Contains(got, "actions/checkout@v4") {
+		t.Errorf("pinned = %q", got)
+	}
+	for _, c := range []struct{ sha, ver string }{{"none", "0.4.3"}, {sha, "dev"}, {"abc1234", "0.4.3"}} {
+		if string(PinWorkflow(src, c.sha, c.ver)) != string(src) {
+			t.Errorf("%q %q must not pin", c.sha, c.ver)
+		}
+	}
+}
+
+func TestInitPinsCallerWorkflow(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	oldC, oldV := version.Commit, version.Version
+	version.Commit, version.Version = strings.Repeat("0123456789", 4), "0.4.3"
+	t.Cleanup(func() { version.Commit, version.Version = oldC, oldV })
+	dir := gitRepo(t)
+	if _, err := Init(context.Background(), dir, false); err != nil {
+		t.Fatal(err)
+	}
+	wf, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml"))
+	if strings.Contains(string(wf), "@v0\n") || strings.Count(string(wf), "@"+version.Commit+" # v0.4.3") < 9 {
+		t.Errorf("caller workflow not pinned:\n%s", wf)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".github", "dependabot.yml")); err != nil {
+		t.Error("dependabot.yml not written")
 	}
 }

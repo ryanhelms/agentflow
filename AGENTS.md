@@ -130,8 +130,10 @@ third-party actions pinned to a major tag, and secrets only through `env:`.
 
 These are used by other repos and clients. Changing them is a breaking change:
 
-- Reusable workflows and actions are consumed at `nscaledev/devflow/...@v0`, a floating tag
-  moved to every release. Keep inputs, outputs and secrets backwards compatible within a
+- Caller workflows pin reusable workflows to a release commit (`@<sha> # vX.Y.Z`, written
+  by `devflow init` from the binary's embedded full commit, bumped by Dependabot). The
+  floating tag `v0` is still moved to every release: the reusable workflows load
+  `actions/setup@v0`, and repos may use it directly. Keep inputs, outputs and secrets backwards compatible within a
   major version; a breaking change means a new major and a new floating tag.
 - CLI surface used by adapters and templates: `devflow mcp --client NAME`,
   `devflow hook commit-msg FILE | session-start | pre-bash | stop --client NAME`,
