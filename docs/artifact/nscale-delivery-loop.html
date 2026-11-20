@@ -1035,10 +1035,10 @@ jobs:
       <p class="example">In Claude Code, enabling the plugin for the repo in <code>.claude/settings.json</code> is the switch. The plugin's SessionStart hook runs the same launcher, so the binary is ready before the first prompt.</p>
 
       <h3>Releases and auto-update</h3>
-      <p>devflow releases from a single branch. No one picks version numbers, and there is no Release PR or version-bump commit. Every merge to <code>main</code> is checked against the commit types since the last <code>vX.Y.Z</code> tag: <code>fix</code> bumps the patch, <code>feat</code> the minor and <code>!</code> the major. If there is a bump, that merge commit is tagged and published as a signed GitHub Release within minutes, and running installs pick it up on their next check.</p>
+      <p>devflow releases from a single branch. No one picks version numbers, and there is no Release PR. Every merge to <code>main</code> is checked against the commit types since the last <code>vX.Y.Z</code> tag: <code>fix</code> bumps the patch, <code>feat</code> the minor and <code>!</code> the major. If there is a bump, the release workflow generates that version's <code>CHANGELOG.md</code> section from the commits, commits it as <code>chore(release): vX.Y.Z</code>, tags it and publishes a signed GitHub Release with the same notes within minutes. Running installs pick it up on their next check. The repo enforces the same commit convention as the repos devflow manages, locally and in CI, and <code>CHANGELOG.md</code> is never edited by hand.</p>
       <div class="lifecycle">
         <div><div class="ev">merge to main</div><div class="lbl">feat / fix lands</div><div class="src">normal PR flow</div></div>
-        <div><div class="ev">next-version</div><div class="lbl">Bump from commit types</div><div class="src">merge commit tagged vX.Y.Z</div></div>
+        <div><div class="ev">next-version</div><div class="lbl">Bump from commit types</div><div class="src">changelog commit tagged vX.Y.Z</div></div>
         <div><div class="ev">GoReleaser</div><div class="lbl">Build + publish</div><div class="src">5 platforms, changelog by type</div></div>
         <div><div class="ev">attest</div><div class="lbl">Build provenance</div><div class="src">Sigstore, GitHub OIDC</div></div>
         <div><div class="ev">beta</div><div class="lbl">Pre-release</div><div class="src">pilot repos install it</div></div>
@@ -1208,7 +1208,7 @@ exec "$home/current/devflow" "$@"</pre>
         </div>
 
         <div class="panel" role="tabpanel" id="p-rel" aria-labelledby="pb-rel" hidden>
-          <p class="note">Lives in <code>nscaledev/devflow</code>. Single-branch: the version comes from the commit types since the last <code>vX.Y.Z</code> tag (floating tags such as <code>v1</code> are ignored). The merge commit is tagged and GoReleaser publishes the release with its changelog grouped by type. It needs no GitHub App. If the build fails, the tag is removed so the next merge retries.</p>
+          <p class="note">Lives in <code>nscaledev/devflow</code>. Single-branch: the version comes from the commit types since the last <code>vX.Y.Z</code> tag (floating tags such as <code>v1</code> are ignored). The workflow commits the generated <code>CHANGELOG.md</code> section, tags that commit and GoReleaser publishes the release with the same notes. It needs no GitHub App. If the build fails, the tag is removed so the next merge retries.</p>
           <div class="path">nscaledev/devflow/.github/workflows/release.yml</div>
 <pre class="code">name: release
 
@@ -1261,21 +1261,27 @@ jobs:
       - if: steps.version.outputs.release == 'true'
         run: go test -race -count=1 ./...
 
-      - name: Tag the merge commit
+      - name: Commit the changelog and tag the release
         if: steps.version.outputs.release == 'true'
         env:
-          TAG: v${{ steps.version.outputs.next }}
+          VERSION: ${{ steps.version.outputs.next }}
+          LAST_TAG: ${{ steps.version.outputs.last_tag }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "devflow $TAG"
-          git push origin "$TAG"
+          scripts/changelog.sh --version "$VERSION" --from "$LAST_TAG" --to HEAD \
+            --repo "$GITHUB_REPOSITORY" --notes "$RUNNER_TEMP/release-notes.md" --update CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "chore(release): v$VERSION"
+          git tag -a "v$VERSION" -m "devflow v$VERSION"
+          git push origin "HEAD:${GITHUB_REF_NAME}" "v$VERSION"
 
       - name: Build and publish the GitHub Release
         if: steps.version.outputs.release == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
-          args: release --clean
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
 

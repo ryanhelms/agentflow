@@ -82,8 +82,14 @@ type Repo struct {
 type Commit struct {
 	Types         []string `yaml:"types"`
 	SubjectMax    int      `yaml:"subject_max"`
+	RequireKey    *bool    `yaml:"require_key"` // default true; false allows type(scope): or type: without a Jira key
 	AITrailer     bool     `yaml:"ai_trailer"`
 	BreakingPaths []string `yaml:"breaking_paths"`
+}
+
+// KeyRequired reports whether subjects must carry a Jira key (the default).
+func (c Commit) KeyRequired() bool {
+	return c.RequireKey == nil || *c.RequireKey
 }
 
 // User is ~/.devflow/config.yml.

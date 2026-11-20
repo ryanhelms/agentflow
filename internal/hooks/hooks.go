@@ -60,7 +60,11 @@ func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
 			fmt.Fprintf(stderr, "    try: %s\n", i.Fix)
 		}
 	}
-	fmt.Fprintln(stderr, "  format: type(KEY-123): imperative summary   e.g. feat(PLAT-123): add quota API")
+	if rules.KeyRequired() {
+		fmt.Fprintln(stderr, "  format: type(KEY-123): imperative summary   e.g. feat(PLAT-123): add quota API")
+	} else {
+		fmt.Fprintln(stderr, "  format: type[(scope)][!]: imperative summary   e.g. feat(cli): add release plan")
+	}
 	return &ExitError{Code: 1, Msg: "invalid commit message"}
 }
 

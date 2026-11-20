@@ -2,7 +2,11 @@
 
 ## Commits
 
-devflow uses its own convention, and its version comes straight from the commit types:
+This repo follows the same commit convention devflow enforces in the repos that use it,
+checked by `.githooks/commit-msg` (`make install-hooks`) and by the `convention` CI job on
+every PR title and commit. Jira keys are optional here until devflow has a Jira project
+(`commit.require_key: false` in `.devflow/config.yml`). The version and the changelog come
+straight from the commit types:
 
 ```
 feat(PLAT-123): add per-tenant quota preview
@@ -36,14 +40,18 @@ devflow releases from a single branch. There is no Release PR and no version-bum
 2. `bin/next-version.sh` reads the commits since the last `vX.Y.Z` tag. If any is a
    `feat`, `fix`/`perf` or breaking change, the merge commit itself is tagged with the
    next version. Otherwise nothing is released.
-3. GoReleaser builds five platforms and `checksums.txt`, and publishes the GitHub
-   Release with a changelog grouped by type. Build provenance is attested.
-4. The release starts as a pre-release (beta). `.github/workflows/promote.yml` marks it
+3. `scripts/changelog.sh` generates the release's `CHANGELOG.md` section from those
+   commits (features, fixes, performance, reverts and breaking changes), the workflow
+   commits it as `chore(release): vX.Y.Z` and tags that commit.
+4. GoReleaser builds five platforms and `checksums.txt`, and publishes the GitHub Release
+   with the same notes. Build provenance is attested.
+5. The release starts as a pre-release (beta). `.github/workflows/promote.yml` marks it
    stable and latest after 24 hours unless an open issue has the `release-blocker` label,
    and moves the floating `v1` tag used by reusable workflows.
 
-Use squash merges with a convention PR title: the title becomes the commit on `main`
-and decides the bump.
+Use squash merges with a convention PR title: the title becomes the commit on `main`,
+decides the bump and is the changelog entry. Never edit `CHANGELOG.md` by hand; CI fails
+PRs that change it.
 
 ## Local development
 

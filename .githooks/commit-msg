@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# devflow repo's own commit-msg hook: checks the message with the devflow built from this
+# checkout, using the rules in .devflow/config.yml. Enable with: make install-hooks
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+export DEVFLOW_NO_UPDATE=1
+if [ -x "$root/devflow" ]; then
+  exec "$root/devflow" hook commit-msg "$1"
+fi
+exec go run "$root/cmd/devflow" hook commit-msg "$1"

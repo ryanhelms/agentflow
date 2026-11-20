@@ -7,7 +7,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG     := github.com/nscaledev/devflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
-SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) \
+SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg \
 	templates/repo/.devflow/bin/devflow \
 	templates/repo/.githooks/commit-msg \
 	adapters/claude-code/bin/launch
@@ -43,8 +43,8 @@ snapshot: ## Local multi-platform build, no publish
 e2e: ## Drive the Claude Code plugin end to end with claude -p (uses your Claude account)
 	scripts/e2e-claude.sh
 
-install-hooks: build ## Use devflow's own commit-msg hook in this repo
-	git config core.hooksPath templates/repo/.githooks
+install-hooks: build ## Check this repo's commits with the devflow built from this checkout
+	git config core.hooksPath .githooks
 
 clean:
 	rm -rf dist devflow devflow.exe coverage.out

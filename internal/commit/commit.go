@@ -21,6 +21,7 @@ var Verbs = []string{"start", "review", "qa", "done", "block"}
 
 var (
 	headerRe  = regexp.MustCompile(`^([a-z]+)\(([A-Z][A-Z0-9]+-[0-9]+(?:,\s*[A-Z][A-Z0-9]+-[0-9]+)*)\)(!?): (.+)$`)
+	scopeRe   = regexp.MustCompile(`^([a-z]+)(?:\(([^()]*)\))?(!?): (.+)$`)
 	verbRe    = regexp.MustCompile(`(?:^|\s)#([a-z]+)\b`)
 	commentRe = regexp.MustCompile(`#comment\s+([^#\n]+)`)
 	timeRe    = regexp.MustCompile(`#time\s+((?:\d+[wdhm]\s*)+)`)
@@ -33,19 +34,21 @@ var exemptPrefixes = []string{"Merge ", "Revert \"", "fixup! ", "squash! ", "ame
 
 // Message is a parsed commit message.
 type Message struct {
-	Raw      string
-	Subject  string
-	Type     string
-	Keys     []string
-	Breaking bool
-	Summary  string // subject summary without trailing #commands
-	Body     string
-	Verbs    []string // canonical flow verbs found anywhere in the message
-	Comment  string   // Smart Commit #comment text
-	Time     string   // Smart Commit #time value
-	Skip     bool     // [devflow skip] or Devflow: skip trailer
-	Exempt   bool     // merge/revert/fixup subjects
-	Valid    bool     // header matched the convention
+	Raw          string
+	Subject      string
+	Type         string
+	Keys         []string
+	Breaking     bool
+	Summary      string // subject summary without trailing #commands
+	Body         string
+	Verbs        []string // canonical flow verbs found anywhere in the message
+	Comment      string   // Smart Commit #comment text
+	Time         string   // Smart Commit #time value
+	Skip         bool     // [devflow skip] or Devflow: skip trailer
+	Exempt       bool     // merge/revert/fixup subjects
+	Valid        bool     // header matched the convention with Jira keys
+	Conventional bool     // header matched type(scope)?!?: summary, keys or not
+	Scope        string   // scope text when it is not a list of keys
 }
 
 // Parse parses a full commit message. It never fails; check Valid and Validate.
@@ -73,6 +76,13 @@ func Parse(raw string) Message {
 		for _, k := range strings.Split(h[2], ",") {
 			m.Keys = append(m.Keys, strings.TrimSpace(k))
 		}
+		m.Breaking = h[3] == "!"
+		m.Summary = strings.TrimSpace(trimCommands(h[4]))
+		m.Conventional = true
+	} else if h := scopeRe.FindStringSubmatch(m.Subject); h != nil {
+		m.Conventional = true
+		m.Type, m.Scope = h[1], h[2]
+		m.Keys = KeysIn(h[2])
 		m.Breaking = h[3] == "!"
 		m.Summary = strings.TrimSpace(trimCommands(h[4]))
 	}
@@ -138,8 +148,12 @@ func Validate(raw string, rules config.Commit, keyHint string) []Issue {
 	if m.Subject == "" {
 		return []Issue{{Code: "empty", Message: "commit message is empty"}}
 	}
-	if !m.Valid {
+	keylessOK := m.Conventional && !rules.KeyRequired()
+	if !m.Valid && !keylessOK {
 		iss := Issue{Code: "format", Message: "subject must look like: feat(PLAT-123): add quota API"}
+		if !rules.KeyRequired() {
+			iss.Message = "subject must look like: feat(scope): add quota API, or feat(PLAT-123): ..."
+		}
 		if fix := suggestHeader(m.Subject, rules, keyHint); fix != "" {
 			iss.Fix = fix
 		}

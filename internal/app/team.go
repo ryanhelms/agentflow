@@ -268,10 +268,13 @@ func (a *App) ReleasePreview(ctx context.Context, since string) (map[string]any,
 	var keys []string
 	for _, raw := range msgs {
 		m := commit.Parse(raw)
-		if !m.Valid || m.Skip {
+		if !m.Conventional || m.Skip {
 			continue
 		}
-		line := fmt.Sprintf("%s (%s)", m.Summary, strings.Join(m.Keys, ", "))
+		line := m.Summary
+		if len(m.Keys) > 0 {
+			line = fmt.Sprintf("%s (%s)", m.Summary, strings.Join(m.Keys, ", "))
+		}
 		sections[m.Type] = append(sections[m.Type], line)
 		if m.Breaking {
 			breaking = append(breaking, line)
