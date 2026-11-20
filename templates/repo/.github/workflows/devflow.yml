@@ -2,7 +2,7 @@
 # Behaviour lives in nscaledev/devflow. `devflow init` pins every reference below to the
 # commit of a release (@<sha> # vX.Y.Z); Dependabot (.github/dependabot.yml) opens a PR
 # for each new devflow release, so updates are reviewed before they run here.
-# Kill switch: set the repo variable DEVFLOW_ENABLED=false.
+# Kill switch: set the repo variable DEVFLOW_ENABLED=false to skip every job.
 # Each job gets only the secrets it uses (never `secrets: inherit`) and only the
 # permissions it needs.
 name: devflow
@@ -31,6 +31,7 @@ permissions:
 jobs:
   key-check:
     if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
       github.event_name == 'pull_request' && github.event.action != 'closed' &&
       github.event.pull_request.user.login != 'dependabot[bot]'
     uses: nscaledev/devflow/.github/workflows/jira-key.yml@v0
@@ -75,7 +76,9 @@ jobs:
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
 
   release-notes:
-    if: github.event_name == 'release'
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      github.event_name == 'release'
     uses: nscaledev/devflow/.github/workflows/release-notes.yml@v0
     permissions:
       contents: write
@@ -87,7 +90,9 @@ jobs:
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
 
   docs-sync:
-    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     uses: nscaledev/devflow/.github/workflows/docs-sync.yml@v0
     permissions:
       contents: read
@@ -96,7 +101,9 @@ jobs:
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
 
   ai-pr-draft:
-    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      github.event_name == 'pull_request' && github.event.action == 'opened'
     uses: nscaledev/devflow/.github/workflows/ai-pr-draft.yml@v0
     permissions:
       contents: read
@@ -109,6 +116,7 @@ jobs:
 
   auto-issues:
     if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
       github.event_name == 'issues' || github.event_name == 'workflow_run' ||
       (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5')
     uses: nscaledev/devflow/.github/workflows/auto-issues.yml@v0
@@ -125,7 +133,9 @@ jobs:
       DEVFLOW_APP_PRIVATE_KEY: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
 
   hygiene:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5'
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5'
     uses: nscaledev/devflow/.github/workflows/hygiene.yml@v0
     permissions:
       contents: read
@@ -134,7 +144,9 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   sprint-report:
-    if: github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1'
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      github.event_name == 'schedule' && github.event.schedule == '0 7 * * 1'
     uses: nscaledev/devflow/.github/workflows/sprint-report.yml@v0
     permissions:
       contents: read

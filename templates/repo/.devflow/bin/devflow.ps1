@@ -31,10 +31,22 @@ try {
   gh attestation verify (Join-Path $tmp $pkg) --repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
   if ($LASTEXITCODE -ne 0) { throw 'devflow: build attestation did not verify, not installing' }
 
+  # Install atomically: extract into a private staging dir and move it into place, then
+  # replace the pointer file with a rename, so concurrent first runs never see a partial
+  # install or a half-written pointer.
   $dest = Join-Path $cacheRoot $ver
-  New-Item -ItemType Directory -Force -Path $dest | Out-Null
-  Expand-Archive -Path (Join-Path $tmp $pkg) -DestinationPath $dest -Force
-  Set-Content -Path $pointer -Value $dest -NoNewline
+  New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+  $stage = Join-Path $cacheRoot (".install." + [IO.Path]::GetRandomFileName())
+  Expand-Archive -Path (Join-Path $tmp $pkg) -DestinationPath $stage -Force
+  if (Test-Path $dest) {
+    Remove-Item -Recurse -Force $stage
+  } else {
+    try { Move-Item -Path $stage -Destination $dest } catch { Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue }
+  }
+  if (-not (Test-Path (Join-Path $dest 'devflow.exe'))) { throw "devflow: install of $ver failed" }
+  $next = "$pointer." + [IO.Path]::GetRandomFileName()
+  Set-Content -Path $next -Value $dest -NoNewline
+  Move-Item -Path $next -Destination $pointer -Force
 } finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }

@@ -124,7 +124,8 @@ releases:
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
 | `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/`, `AGENTS.md` | AI client configuration |
 
-Disable devflow in a repo at any time with the repository variable `DEVFLOW_ENABLED=false`.
+Disable devflow in a repo at any time with the repository variable `DEVFLOW_ENABLED=false`:
+every job in the caller workflow checks it.
 
 **Automatic setup with the Claude Code plugin.** When a Claude Code session starts in a
 repo with no `.devflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
