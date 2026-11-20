@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.3.1](https://github.com/nscaledev/devflow/compare/v0.3.0...v0.3.1) - 2026-11-20
+
+### Fixes
+
+- check PR titles before they become squash commits (#7) ([c871e27](https://github.com/nscaledev/devflow/commit/c871e2757c4428196c00c28cf516292805a93db8))
+
 ## [0.3.0](https://github.com/nscaledev/devflow/compare/v0.2.0...v0.3.0) - 2026-11-20
 
 ### Breaking changes
