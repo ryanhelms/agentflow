@@ -37,7 +37,8 @@ if [ -z "$branch" ]; then
   branch=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo HEAD)}}
 fi
 
-last_tag=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*" HEAD 2>/dev/null || true)
+# Only full X.Y.Z tags count; floating tags such as v1 are ignored.
+last_tag=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*.[0-9]*.[0-9]*" HEAD 2>/dev/null || true)
 current=0.0.0
 if [ -n "$last_tag" ]; then
   current=${last_tag#"$prefix"}
@@ -64,7 +65,7 @@ while IFS= read -r -d '' msg; do
   elif [[ "$subject" =~ ^(fix|perf)(\([^\)]*\))?: ]]; then
     [ "$bump" = major ] || [ "$bump" = minor ] || bump="patch"
   fi
-done < <(git log --format='%B%x00' "$range" "${pathspec[@]}")
+done < <(git log --format='%B%x00' "$range" ${pathspec[@]+"${pathspec[@]}"})
 
 case "$bump" in
   major)

@@ -1043,11 +1043,11 @@ jobs:
       <p class="example">In Claude Code, enabling the plugin for the repo in <code>.claude/settings.json</code> is the switch. The plugin's SessionStart hook runs the same launcher, so the binary is ready before the first prompt.</p>
 
       <h3>Releases and auto-update</h3>
-      <p>No one picks version numbers or cuts releases by hand. devflow follows its own commit convention, so the version comes from the commits themselves: <code>fix</code> bumps the patch, <code>feat</code> the minor, and <code>!</code> the major. Every merge to <code>main</code> that contains a <code>feat</code> or <code>fix</code> becomes a signed GitHub release within minutes, and running installs pick it up on their next check.</p>
+      <p>devflow releases from a single branch. No one picks version numbers, and there is no Release PR or version-bump commit. Every merge to <code>main</code> is checked against the commit types since the last <code>vX.Y.Z</code> tag: <code>fix</code> bumps the patch, <code>feat</code> the minor and <code>!</code> the major. If there is a bump, that merge commit is tagged and published as a signed GitHub Release within minutes, and running installs pick it up on their next check.</p>
       <div class="lifecycle">
         <div><div class="ev">merge to main</div><div class="lbl">feat / fix lands</div><div class="src">normal PR flow</div></div>
-        <div><div class="ev">release-please</div><div class="lbl">Version + changelog</div><div class="src">Release PR auto-merged</div></div>
-        <div><div class="ev">GoReleaser</div><div class="lbl">Build 5 platforms</div><div class="src">archives + checksums.txt</div></div>
+        <div><div class="ev">next-version</div><div class="lbl">Bump from commit types</div><div class="src">merge commit tagged vX.Y.Z</div></div>
+        <div><div class="ev">GoReleaser</div><div class="lbl">Build + publish</div><div class="src">5 platforms, changelog by type</div></div>
         <div><div class="ev">attest</div><div class="lbl">Build provenance</div><div class="src">Sigstore, GitHub OIDC</div></div>
         <div><div class="ev">beta</div><div class="lbl">Pre-release</div><div class="src">pilot repos install it</div></div>
         <div><div class="ev">promote</div><div class="lbl">Stable · latest</div><div class="src">after 24h, no release-blocker</div></div>
@@ -1216,75 +1216,97 @@ exec "$home/current/devflow" "$@"</pre>
         </div>
 
         <div class="panel" role="tabpanel" id="p-rel" aria-labelledby="pb-rel" hidden>
-          <p class="note">Lives in <code>nscaledev/devflow</code>. release-please reads the Conventional Commits since the last tag, opens a Release PR with the version bump and changelog, and the workflow auto-merges it once checks pass. The merge creates the tag, and GoReleaser adds signed builds to that release.</p>
+          <p class="note">Lives in <code>nscaledev/devflow</code>. Single-branch: the version comes from the commit types since the last <code>vX.Y.Z</code> tag (floating tags such as <code>v1</code> are ignored). The merge commit is tagged and GoReleaser publishes the release with its changelog grouped by type. It needs no GitHub App. If the build fails, the tag is removed so the next merge retries.</p>
           <div class="path">nscaledev/devflow/.github/workflows/release.yml</div>
 <pre class="code">name: release
+
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  id-token: write          <span class="c"># Sigstore signing for attestations</span>
-  attestations: write
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  release-please:
+  release:
     runs-on: ubuntu-latest
-    outputs:
-      created: ${{ steps.rp.outputs.release_created }}
-      tag: ${{ steps.rp.outputs.tag_name }}
-      pr: ${{ steps.rp.outputs.pr &amp;&amp; fromJSON(steps.rp.outputs.pr).number }}
-    steps:
-      - id: rp
-        uses: googleapis/release-please-action@v4
-        with:
-          config-file: release-please-config.json   <span class="c"># release-type go, prerelease: true</span>
-      - name: Auto-merge the Release PR when checks pass
-        if: steps.rp.outputs.pr
-        env: { GH_TOKEN: "${{ secrets.DEVFLOW_BOT_TOKEN }}" }
-        run: gh pr merge ${{ fromJSON(steps.rp.outputs.pr).number }} --repo ${{ github.repository }} --auto --squash
-
-  build:
-    needs: release-please
-    if: needs.release-please.outputs.created == 'true'
-    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-go@v5
-        with: { go-version-file: go.mod }
-      - run: go test ./...
-      - uses: goreleaser/goreleaser-action@v6
-        with: { args: release --clean }               <span class="c"># .goreleaser.yaml: release.mode append</span>
-        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: actions/attest-build-provenance@v2
+        with:
+          fetch-depth: 0
+
+      - id: version
+        name: Next version from commit types
+        run: |
+          set -euo pipefail
+          out=$(bin/next-version.sh --path . --prefix v --branch main --default-branch main --env)
+          echo "$out"
+          echo "$out" &gt;&gt; "$GITHUB_OUTPUT"
+          next=$(sed -n 's/^next=//p' &lt;&lt;&lt;"$out"); current=$(sed -n 's/^current=//p' &lt;&lt;&lt;"$out")
+          bump=$(sed -n 's/^bump=//p' &lt;&lt;&lt;"$out"); last_tag=$(sed -n 's/^last_tag=//p' &lt;&lt;&lt;"$out")
+          if [ "$next" != "$current" ] || { [ -z "$last_tag" ] &amp;&amp; [ "$next" != 0.0.0 ]; }; then
+            echo "release=true" &gt;&gt; "$GITHUB_OUTPUT"
+            echo "::notice::Releasing v$next ($bump bump from ${last_tag:-no previous tag})"
+          else
+            echo "release=false" &gt;&gt; "$GITHUB_OUTPUT"
+            echo "::notice::No feat, fix or breaking commits since $last_tag; nothing to release"
+          fi
+
+      - if: steps.version.outputs.release == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - if: steps.version.outputs.release == 'true'
+        run: go test -race -count=1 ./...
+
+      - name: Tag the merge commit
+        if: steps.version.outputs.release == 'true'
+        env:
+          TAG: v${{ steps.version.outputs.next }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "devflow $TAG"
+          git push origin "$TAG"
+
+      - name: Build and publish the GitHub Release
+        if: steps.version.outputs.release == 'true'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - if: steps.version.outputs.release == 'true'
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/*.tar.gz
-            dist/*.zip</pre>
-          <div class="path">nscaledev/devflow/.github/workflows/promote.yml</div>
-<pre class="code">name: promote
-on:
-  schedule: [{ cron: "0 * * * *" }]     <span class="c"># hourly</span>
-  workflow_dispatch:
-permissions: { contents: write }
-jobs:
-  promote:
-    runs-on: ubuntu-latest
-    env: { GH_TOKEN: "${{ github.token }}", REPO: "${{ github.repository }}" }
-    steps:
-      - name: Promote betas older than 24h with no open release-blocker
+            dist/*.zip
+
+      - name: Remove the tag if the release failed
+        if: failure() &amp;&amp; steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.version.outputs.next }}
         run: |
-          blockers=$(gh issue list --repo "$REPO" --label release-blocker --state open --json number -q length)
-          [ "$blockers" = 0 ] || { echo "release-blocker open, not promoting"; exit 0; }
-          gh release list --repo "$REPO" --json tagName,isPrerelease,publishedAt \
-            -q '.[] | select(.isPrerelease) | select((now - (.publishedAt | fromdateiso8601)) &gt; 86400) | .tagName' \
-          | while read -r tag; do
-              gh release edit "$tag" --repo "$REPO" --prerelease=false --latest
-            done</pre>
-          <p class="note">The bot token is needed because PRs merged with the default <code>GITHUB_TOKEN</code> don't trigger other workflows, so the release would never be built. Use a GitHub App token with contents and pull-request write access on this one repo.</p>
+          gh release delete "$TAG" --yes --cleanup-tag 2&gt;/dev/null \
+            || git push --delete origin "$TAG" || true</pre>
+          <div class="path">nscaledev/devflow/.github/workflows/promote.yml (excerpt)</div>
+<pre class="code"><span class="c"># hourly: betas older than 24h with no open release-blocker become stable,</span>
+<span class="c"># and the floating v1 tag moves to the newest stable release</span>
+gh release edit "$tag" --prerelease=false --latest
+gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$sha" -F force=true</pre>
           <button class="copy" type="button">Copy</button>
         </div>
 
@@ -1356,21 +1378,18 @@ func (u *Updater) install(ctx context.Context, rel Release) error {
   "blocked": ["0.5.0"],
   "message": "0.5.0 could transition PLAT tickets twice on pr.merged. Updating automatically."
 }</pre>
-          <div class="path">nscaledev/devflow/release-please-config.json</div>
-<pre class="code">{
-  "packages": {
-    ".": {
-      "release-type": "go",
-      "package-name": "devflow",
-      "prerelease": true,
-      "changelog-sections": [
-        { "type": "feat", "section": "Features" },
-        { "type": "fix", "section": "Fixes" },
-        { "type": "perf", "section": "Performance" }
-      ]
-    }
-  }
-}</pre>
+          <div class="path">nscaledev/devflow/.goreleaser.yaml (changelog and channel)</div>
+<pre class="code">changelog:
+  use: github
+  groups:
+    - { title: Breaking changes, regexp: '^[a-z]+(\([^)]*\))?!:', order: 0 }
+    - { title: Features, regexp: '^feat(\([^)]*\))?:', order: 1 }
+    - { title: Fixes, regexp: '^(fix|perf)(\([^)]*\))?:', order: 2 }
+    - { title: Other changes, order: 999 }
+  filters:
+    exclude: ['^(docs|test|ci|chore|style)(\([^)]*\))?:']
+release:
+  prerelease: "true"     <span class="c"># beta channel first; promote.yml makes it stable</span></pre>
           <button class="copy" type="button">Copy</button>
         </div>
 
@@ -1519,7 +1538,6 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
 ├── .github/workflows/           <span class="c"># reusable devflow workflows from section 06</span>
 ├── policy/versions.json         <span class="c"># min_version + blocked releases</span>
 ├── flow-map.yml
-├── release-please-config.json
 └── .goreleaser.yaml             <span class="c"># archives + checksums.txt per platform</span></pre>
           <button class="copy" type="button">Copy</button>
         </div>

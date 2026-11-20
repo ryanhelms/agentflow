@@ -50,7 +50,7 @@ func (a *App) ReleasePlan(ctx context.Context, unit string) ([]UnitPlan, error) 
 		p := UnitPlan{Unit: u, Branch: branch, BranchKind: kind, Current: "0.0.0"}
 		prefix := cfg.TagPrefix(u)
 		cur := release.Version{}
-		if out, err := a.Repo.Git(ctx, "describe", "--tags", "--abbrev=0", "--match", prefix+"[0-9]*", "HEAD"); err == nil {
+		if out, err := a.Repo.Git(ctx, "describe", "--tags", "--abbrev=0", "--match", prefix+"[0-9]*.[0-9]*.[0-9]*", "HEAD"); err == nil {
 			p.LastTag = strings.TrimSpace(out)
 			if v, ok := release.ParseTagVersion(p.LastTag, prefix); ok {
 				cur = v
@@ -172,7 +172,7 @@ func (a *App) ReleaseSync(ctx context.Context, cfg *release.Config) ([]string, e
 			continue
 		}
 		prefix := cfg.TagPrefix(u)
-		if out, err := a.Repo.Git(ctx, "describe", "--tags", "--abbrev=0", "--match", prefix+"[0-9]*"); err == nil {
+		if out, err := a.Repo.Git(ctx, "describe", "--tags", "--abbrev=0", "--match", prefix+"[0-9]*.[0-9]*.[0-9]*"); err == nil {
 			if v, ok := release.ParseTagVersion(strings.TrimSpace(out), prefix); ok {
 				existing[u.Path] = v.String()
 			}

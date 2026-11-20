@@ -42,13 +42,34 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
-# release-please creates the GitHub release and owns the changelog.
+# The GitHub Release is the changelog: commits since the previous tag, grouped by
+# Conventional Commit type. docs/test/ci/chore commits are left out.
 changelog:
-  disable: true
+  use: github
+  sort: asc
+  groups:
+    - title: Breaking changes
+      regexp: '^[a-z]+(\([^)]*\))?!:'
+      order: 0
+    - title: Features
+      regexp: '^feat(\([^)]*\))?:'
+      order: 1
+    - title: Fixes
+      regexp: '^(fix|perf)(\([^)]*\))?:'
+      order: 2
+    - title: Other changes
+      order: 999
+  filters:
+    exclude:
+      - '^(docs|test|ci|chore|style)(\([^)]*\))?:'
+      - '^Merge '
 
 release:
   github:
     owner: nscaledev
     name: devflow
-  mode: append
-  prerelease: auto
+  # Every release starts on the beta channel; promote.yml marks it stable after 24h.
+  prerelease: "true"
+  make_latest: "false"
+  footer: |
+    Install or update: `devflow update`. Verify: `gh attestation verify <archive> --repo nscaledev/devflow`.
