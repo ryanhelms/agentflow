@@ -16,7 +16,9 @@ To stop a bad release from running anywhere, follow
 - **Release integrity.** Releases are built only by `.github/workflows/release.yml` in
   `nscaledev/devflow`. Each archive is listed in `checksums.txt` and has a GitHub build
   provenance attestation. The launcher and the self-updater install a build only when
-  both the SHA-256 and `gh attestation verify --repo nscaledev/devflow` pass.
+  both the SHA-256 and `gh attestation verify --repo nscaledev/devflow --signer-workflow
+  nscaledev/devflow/.github/workflows/release.yml` pass, so a build from any other workflow
+  in the repo is rejected.
 - **Credentials.** Developer tokens are stored in the OS keychain (macOS Keychain, Secret
   Service, Windows Credential Manager). They are never written to config files, logs or
   MCP responses.
