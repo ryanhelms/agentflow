@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "devflow": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/launch",
+      "args": ["mcp", "--client", "claude"]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+# Build output
+/dist/
+/devflow
+/devflow.exe
+/bin/devflow
+
+# Test and coverage
+coverage.out
+coverage.html
+*.test
+
+# Editors and OS
+.idea/
+/.vscode/*
+!/.vscode/extensions.json
+.DS_Store

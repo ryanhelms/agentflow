@@ -1,0 +1,9 @@
+{
+  "contextFileName": ["AGENTS.md", "GEMINI.md"],
+  "mcpServers": {
+    "devflow": {
+      "command": "sh",
+      "args": ["-c", "exec \"$(git rev-parse --show-toplevel)/.devflow/bin/devflow\" mcp --client gemini"]
+    }
+  }
+}

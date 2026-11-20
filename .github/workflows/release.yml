@@ -1,0 +1,82 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  setup-check:
+    if: vars.DEVFLOW_APP_ID == ''
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "::warning::Releases are paused until the devflow GitHub App is configured (vars.DEVFLOW_APP_ID and secrets.DEVFLOW_APP_PRIVATE_KEY). See docs/operations.md."
+
+  release-please:
+    if: vars.DEVFLOW_APP_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.rp.outputs.release_created }}
+      tag: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      # PRs merged with the default GITHUB_TOKEN don't trigger other workflows, so the
+      # Release PR must be created and merged by the devflow GitHub App.
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEVFLOW_APP_ID }}
+          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+
+      - id: rp
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ steps.app.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Auto-merge the Release PR when checks pass
+        if: steps.rp.outputs.pr
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_JSON: ${{ steps.rp.outputs.pr }}
+        run: |
+          number=$(jq -r '.number' <<<"$PR_JSON")
+          # --auto waits for required checks; without branch protection merge directly.
+          gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --auto --squash \
+            || gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --squash
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -race -count=1 ./...
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip

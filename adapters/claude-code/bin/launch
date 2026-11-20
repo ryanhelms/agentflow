@@ -1,0 +1,22 @@
+#!/bin/sh
+# Claude Code plugin launcher. Runs the repo's devflow launcher so Claude uses the same
+# verified, self-updating binary as every other client; falls back to devflow on PATH.
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$root" ] && [ -x "$root/.devflow/bin/devflow" ]; then
+  exec "$root/.devflow/bin/devflow" "$@"
+fi
+
+if command -v devflow >/dev/null 2>&1; then
+  exec devflow "$@"
+fi
+
+# Hooks must not break sessions in repos that don't use devflow.
+if [ "${1:-}" = hook ]; then
+  exit 0
+fi
+
+echo "devflow: not set up in this repo. Run 'devflow init' (see https://github.com/nscaledev/devflow)," >&2
+echo "or install devflow on your PATH." >&2
+exit 1

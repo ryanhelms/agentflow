@@ -1,0 +1,40 @@
+# Reusable: move Jira tickets for branch, PR, merge and commit-verb events via flow-map.yml.
+name: transitions
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Log what would change without writing to Jira
+        type: boolean
+        default: false
+    secrets:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  transition:
+    if: vars.DEVFLOW_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: devflow-transitions-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: Apply flow-map transitions
+        env:
+          JIRA_BASE: ${{ vars.JIRA_BASE }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run && '1' || '0' }}
+        run: |
+          if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
+            echo "::warning::JIRA_BASE or JIRA_TOKEN not set; devflow transitions skipped"
+            exit 0
+          fi
+          handle-event.sh

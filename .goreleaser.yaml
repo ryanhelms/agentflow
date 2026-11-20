@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: devflow
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: devflow
+    main: ./cmd/devflow
+    binary: devflow
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/nscaledev/devflow/internal/version.Version={{ .Version }}
+      - -X github.com/nscaledev/devflow/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/nscaledev/devflow/internal/version.Date={{ .Date }}
+
+archives:
+  - id: devflow
+    ids: [devflow]
+    name_template: "devflow_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# release-please creates the GitHub release and owns the changelog.
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: nscaledev
+    name: devflow
+  mode: append
+  prerelease: auto

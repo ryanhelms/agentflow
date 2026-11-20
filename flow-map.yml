@@ -1,0 +1,58 @@
+# devflow flow map — canonical events -> each Jira project's own statuses.
+#
+# Values are target STATUS names (not transition names). devflow picks whichever
+# transition reaches that status from the current one, so teams can rename transitions
+# freely. An explicit null means "do nothing for this event". Projects that are not
+# listed under `projects:` are ignored entirely.
+#
+# Transitions only go forward: never out of a Done-category status, never to an earlier
+# status category, and never to an earlier entry in the project's optional `order:` list.
+#
+# Owners: Engineering Enablement owns this file; each project block also needs approval
+# from that team's lead (see CODEOWNERS). Scope today: the pilot project only.
+version: 1
+
+defaults:
+  branch.created: In Progress
+  pr.opened: In Review
+  pr.merged: Done
+  deploy.staging: null
+  deploy.production: null
+  verbs:
+    start: In Progress
+    review: In Review
+    done: Done
+    qa: null
+    block: null
+
+projects:
+  # Pilot project (Review + QA workflow). Replace statuses with the pilot team's real ones in P0.
+  PLAT:
+    order: [To Do, In Progress, In Review, QA, Done]
+    pr.merged: QA
+    deploy.production: Done
+    verbs:
+      qa: QA
+      block: Blocked
+    slack: "#plat-eng"
+    confluence:
+      space: PLAT
+      release_notes_parent: "Release Notes"
+      design_doc_template: "Design Doc"          # shared template in the ENG space
+
+  # --- Examples for P8 (uncomment when the team joins) -------------------------------
+  # INFRA:                       # simple To Do -> In Progress -> Done
+  #   order: [To Do, In Progress, Done]
+  #   pr.opened: null            # no review status: leave the ticket where it is
+  #   slack: "#infra-eng"
+  #   confluence: { space: INFRA }
+  #
+  # CLOUD:                       # review + release
+  #   order: [Backlog, Doing, Code Review, Ready to Release, Released]
+  #   branch.created: Doing
+  #   pr.opened: Code Review
+  #   pr.merged: Ready to Release
+  #   deploy.production: Released
+  #   verbs: { start: Doing, review: Code Review }
+  #   slack: "#cloud-eng"
+  #   confluence: { space: CLOUD }

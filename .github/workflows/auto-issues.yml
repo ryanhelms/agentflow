@@ -1,0 +1,116 @@
+# Reusable: create Jira issues from GitHub signals, de-duplicated by label.
+#   schedule / workflow_dispatch  -> open high/critical Dependabot and code scanning alerts
+#   workflow_run (failure on the default branch) -> CI failure bug
+#   issues labeled "jira"         -> mirror the GitHub issue into Jira and comment the key back
+name: auto-issues
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Jira project key for created issues
+        type: string
+        required: true
+      issue-type:
+        description: Jira issue type for bugs
+        type: string
+        default: Bug
+      security-issue-type:
+        description: Jira issue type for security alerts
+        type: string
+        default: Bug
+    secrets:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+      DEVFLOW_APP_PRIVATE_KEY:
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+  security-events: read
+
+jobs:
+  issues:
+    if: vars.DEVFLOW_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    env:
+      JIRA_BASE: ${{ vars.JIRA_BASE }}
+      JIRA_USER: ${{ secrets.JIRA_USER }}
+      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      PROJECT: ${{ inputs.project }}
+      REPO_SLUG: ${{ github.event.repository.name }}
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+
+      # Dependabot alerts need a GitHub App token with "Dependabot alerts: read".
+      - id: app
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.DEVFLOW_APP_ID != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.DEVFLOW_APP_ID }}
+          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Security alerts
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          SEC_TYPE: ${{ inputs.security-issue-type }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APP_TOKEN" ]; then
+            GH_TOKEN="$APP_TOKEN" gh api "repos/$GITHUB_REPOSITORY/dependabot/alerts?state=open&severity=critical,high&per_page=100" \
+              --jq '.[] | [.number, .security_advisory.severity, .security_advisory.summary, .html_url] | @tsv' \
+            | while IFS=$'\t' read -r n sev summary url; do
+                jira-create.sh "$PROJECT" "$SEC_TYPE" "gh-dependabot-$REPO_SLUG-$n" \
+                  "[$sev] $REPO_SLUG: $summary" "Dependabot alert: $url" security
+              done
+          else
+            echo "::notice::DEVFLOW_APP_ID not set; skipping Dependabot alerts"
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" \
+            --jq '.[] | select(.rule.security_severity_level == "critical" or .rule.security_severity_level == "high")
+                  | [.number, .rule.security_severity_level, .rule.description, .html_url] | @tsv' 2>/dev/null \
+          | while IFS=$'\t' read -r n sev summary url; do
+              jira-create.sh "$PROJECT" "$SEC_TYPE" "gh-codescan-$REPO_SLUG-$n" \
+                "[$sev] $REPO_SLUG: $summary" "Code scanning alert: $url" security
+            done || echo "::notice::code scanning not enabled or not readable"
+
+      - name: Failed default-branch workflow
+        if: github.event_name == 'workflow_run'
+        env:
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+          WF: ${{ github.event.workflow_run.name }}
+          WF_ID: ${{ github.event.workflow_run.workflow_id }}
+          URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          TYPE: ${{ inputs.issue-type }}
+        run: |
+          set -euo pipefail
+          if [ "$CONCLUSION" != failure ] || [ "$BRANCH" != "$DEFAULT" ]; then
+            echo "not a default-branch failure"; exit 0
+          fi
+          jira-create.sh "$PROJECT" "$TYPE" "gh-ci-$REPO_SLUG-$WF_ID" \
+            "$REPO_SLUG: '$WF' failing on $DEFAULT" "Run: $URL"$'\n'"Commit: $SHA" ci-failure
+
+      - name: Mirror labelled GitHub issue
+        if: github.event_name == 'issues' && github.event.label.name == 'jira'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
+          TYPE: ${{ inputs.issue-type }}
+        run: |
+          set -euo pipefail
+          key=$(jira-create.sh "$PROJECT" "$TYPE" "gh-issue-$REPO_SLUG-$NUMBER" "$TITLE" "GitHub issue: $URL")
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "Tracked in Jira as [$key]($JIRA_BASE/browse/$key)."

@@ -1,0 +1,74 @@
+name: devflow ship
+description: >
+  After a deployment, move every Jira ticket referenced by the shipped commits to the
+  status mapped for the deploy event in flow-map.yml, and optionally set a Fix Version.
+inputs:
+  event:
+    description: deploy.staging or deploy.production
+    required: true
+  range:
+    description: Git range of shipped commits (e.g. v1.4.0..HEAD). Overrides since-tag.
+    required: false
+    default: ""
+  since-tag:
+    description: Previous release tag; the range becomes <since-tag>..HEAD
+    required: false
+    default: ""
+  fix-version:
+    description: Jira version name to add to each ticket (created in the project if missing)
+    required: false
+    default: ""
+  dry-run:
+    description: Report what would change without writing to Jira
+    required: false
+    default: "false"
+outputs:
+  keys:
+    description: Space-separated Jira keys that were shipped
+    value: ${{ steps.keys.outputs.keys }}
+runs:
+  using: composite
+  steps:
+    - name: Collect shipped keys
+      id: keys
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        RANGE: ${{ inputs.range }}
+        SINCE: ${{ inputs.since-tag }}
+      run: |
+        set -euo pipefail
+        bin=$(cd "$ACTION_PATH/../../bin" && pwd)
+        if [ -z "$RANGE" ]; then
+          if [ -n "$SINCE" ]; then RANGE="$SINCE..HEAD"
+          else
+            prev=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+            RANGE="${prev:+$prev..}HEAD"
+          fi
+        fi
+        keys=$("$bin/jira-keys.sh" "$RANGE" | paste -sd' ' -)
+        echo "Shipped keys in $RANGE: ${keys:-none}"
+        echo "keys=$keys" >> "$GITHUB_OUTPUT"
+
+    - name: Move tickets
+      if: steps.keys.outputs.keys != ''
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        KEYS: ${{ steps.keys.outputs.keys }}
+        EVENT: ${{ inputs.event }}
+        FIX_VERSION: ${{ inputs.fix-version }}
+        DRY: ${{ inputs.dry-run }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        root=$(cd "$ACTION_PATH/../.." && pwd)
+        export FLOW_MAP="${FLOW_MAP:-$root/flow-map.yml}"
+        [ "$DRY" = "true" ] && export DRY_RUN=1
+        export TRANSITION_COMMENT="Shipped ($EVENT) by $GITHUB_REPOSITORY: $RUN_URL"
+        for key in $KEYS; do
+          "$root/bin/transition.sh" "$key" "$EVENT" || echo "::warning::$key: transition failed"
+          if [ -n "$FIX_VERSION" ] && [ "$DRY" != "true" ]; then
+            "$root/bin/jira-fix-version.sh" "$key" "$FIX_VERSION" || echo "::warning::$key: fix version failed"
+          fi
+        done

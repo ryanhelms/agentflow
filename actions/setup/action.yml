@@ -1,0 +1,17 @@
+name: devflow setup
+description: >
+  Put devflow's workflow scripts on PATH and point FLOW_MAP at the shared flow map.
+  The runner downloads this whole repository at the referenced tag to run the action,
+  so no extra token is needed to read bin/ or flow-map.yml.
+runs:
+  using: composite
+  steps:
+    - name: Expose devflow scripts
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        root=$(cd "$ACTION_PATH/../.." && pwd)
+        echo "$root/bin" >> "$GITHUB_PATH"
+        echo "DEVFLOW_ROOT=$root" >> "$GITHUB_ENV"
+        echo "FLOW_MAP=$root/flow-map.yml" >> "$GITHUB_ENV"

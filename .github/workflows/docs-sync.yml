@@ -1,0 +1,63 @@
+# Reusable: publish Markdown docs and ADRs listed in docs/confluence.yml to Confluence.
+name: docs-sync
+
+on:
+  workflow_call:
+    inputs:
+      mapping:
+        description: Path to the docs mapping file
+        type: string
+        default: docs/confluence.yml
+    secrets:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: vars.DEVFLOW_ENABLED != 'false' && vars.CONFLUENCE_BASE != ''
+    runs-on: ubuntu-latest
+    concurrency:
+      group: devflow-docs-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: Install pandoc
+        run: sudo apt-get install -y -qq pandoc >/dev/null
+      - name: Publish pages
+        env:
+          MAPPING: ${{ inputs.mapping }}
+          CONFLUENCE_BASE: ${{ vars.CONFLUENCE_BASE }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$MAPPING" ]; then
+            echo "::notice::$MAPPING not found; nothing to sync"
+            exit 0
+          fi
+          space=$(yq -r '.space' "$MAPPING")
+          parent=$(yq -r '.parent_id // "-"' "$MAPPING")
+          prefix=$(yq -r '.title_prefix // ""' "$MAPPING")
+          count=$(yq -r '.pages | length' "$MAPPING")
+          for i in $(seq 0 $((count - 1))); do
+            pattern=$(yq -r ".pages[$i].file" "$MAPPING")
+            fixed_title=$(yq -r ".pages[$i].title // \"\"" "$MAPPING")
+            page_parent=$(yq -r ".pages[$i].parent_id // \"$parent\"" "$MAPPING")
+            shopt -s nullglob
+            # shellcheck disable=SC2206
+            files=( $pattern )
+            for f in "${files[@]}"; do
+              title=$fixed_title
+              if [ -z "$title" ] || [ "${#files[@]}" -gt 1 ]; then
+                title=$(grep -m1 '^# ' "$f" | sed 's/^# //' || true)
+                title=${title:-$(basename "$f" .md)}
+              fi
+              confluence-upsert.sh "$space" "$page_parent" "$prefix$title" "$f"
+            done
+          done

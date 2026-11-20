@@ -1,0 +1,28 @@
+# Reusable: post a message to a team Slack channel. Use from deploy or CI workflows,
+# e.g. `if: failure()` after a production deploy.
+name: slack-notify
+
+on:
+  workflow_call:
+    inputs:
+      message:
+        description: Message text (Slack mrkdwn). The run link is appended.
+        type: string
+        required: true
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+      - env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          MESSAGE: ${{ inputs.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: slack.sh "$MESSAGE <$RUN_URL|run>"

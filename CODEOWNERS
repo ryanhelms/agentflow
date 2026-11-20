@@ -1,0 +1,16 @@
+# Default owner: Engineering Enablement owns devflow, its Actions and Jira Automation exports.
+*                               @nscaledev/eng-enablement
+
+# Status mapping. Each project block in flow-map.yml must also be approved by
+# that team's lead. Add one line per team as they join (rollout phase P8), e.g.
+#   /flow-map.yml               @nscaledev/eng-enablement @nscaledev/platform-leads
+/flow-map.yml                   @nscaledev/eng-enablement
+
+# Version policy and release automation: changes affect every install.
+/policy/                        @nscaledev/eng-enablement
+/.github/workflows/release.yml  @nscaledev/eng-enablement
+/.github/workflows/promote.yml  @nscaledev/eng-enablement
+/internal/update/               @nscaledev/eng-enablement
+
+# Shared Confluence templates are owned jointly by engineering managers.
+/confluence-templates/          @nscaledev/eng-managers

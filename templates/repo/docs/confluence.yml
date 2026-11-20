@@ -1,0 +1,9 @@
+# docs-sync: which repo docs are published to Confluence on merge to the default branch.
+space: PLAT                    # Confluence space key
+parent_id: "-"                 # default parent page id ("-" = space root)
+title_prefix: ""               # e.g. "quota-service · "
+pages:
+  - file: docs/architecture.md
+    title: Quota service architecture
+  - file: docs/adr/*.md        # globs publish one page per file, titled from the first "# " heading
+    parent_id: "-"             # page id of the ADR index page

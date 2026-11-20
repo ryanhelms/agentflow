@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "devflow": {
+      "type": "stdio",
+      "command": "sh",
+      "args": ["-c", "exec \"$(git rev-parse --show-toplevel)/.devflow/bin/devflow\" mcp --client vscode"]
+    }
+  }
+}

@@ -1,0 +1,62 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          shellcheck -x bin/*.sh \
+            templates/repo/.devflow/bin/devflow \
+            templates/repo/.githooks/commit-msg \
+            adapters/claude-code/bin/launch
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+      - name: Validate JSON and YAML
+        run: |
+          find . -name '*.json' -not -path './.git/*' -print0 | xargs -0 -n1 jq empty
+          find . \( -name '*.yml' -o -name '*.yaml' \) -not -path './.git/*' -print0 | xargs -0 -n1 yq eval 'true' > /dev/null
+
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: check
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --snapshot --clean

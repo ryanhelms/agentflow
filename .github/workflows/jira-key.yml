@@ -1,0 +1,67 @@
+# Reusable: require a Jira key in the PR title and every commit, and check the keys exist.
+name: jira-key
+
+on:
+  workflow_call:
+    inputs:
+      warn-only:
+        description: Report problems as warnings instead of failing (rollout phase P2 start)
+        type: boolean
+        default: false
+    secrets:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ inputs.warn-only }}
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: PR title and every commit carry a real Jira key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          JIRA_BASE: ${{ vars.JIRA_BASE }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          set -euo pipefail
+          key='[A-Z][A-Z0-9]+-[0-9]+'
+
+          if ! grep -Eq "$key" <<<"$TITLE"; then
+            echo "::error::PR title needs a Jira key, e.g. 'feat(PLAT-123): add quota API'"
+            exit 1
+          fi
+
+          missing=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate \
+                      --jq '.[].commit.message | split("\n")[0]' \
+                    | grep -Ev '^(Merge|Revert|fixup!|squash!|amend!)' \
+                    | grep -Ev "$key" || true)
+          if [ -n "$missing" ]; then
+            echo "::error::Commits without a Jira key:"
+            printf '%s\n' "$missing"
+            exit 1
+          fi
+
+          if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
+            echo "::notice::JIRA_BASE or JIRA_TOKEN not set; skipping key existence check"
+            exit 0
+          fi
+          grep -Eo "$key" <<<"$TITLE" | sort -u | while read -r k; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -u "$JIRA_USER:$JIRA_TOKEN" \
+                   "$JIRA_BASE/rest/api/3/issue/$k?fields=status")
+            if [ "$code" != 200 ]; then
+              echo "::error::$k not found in Jira (HTTP $code)"
+              exit 1
+            fi
+          done
+          echo "Jira keys OK"

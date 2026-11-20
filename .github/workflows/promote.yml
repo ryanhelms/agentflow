@@ -1,0 +1,63 @@
+name: promote
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Promote this tag now, skipping the 24h soak
+        required: false
+
+permissions:
+  contents: write
+  issues: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Promote betas older than 24h with no open release-blocker
+        run: |
+          set -euo pipefail
+          blockers=$(gh issue list --repo "$REPO" --label release-blocker --state open --json number -q length)
+          if [ "$blockers" != 0 ]; then
+            echo "::notice::$blockers open release-blocker issue(s); not promoting"
+            exit 0
+          fi
+
+          if [ -n "$TAG" ]; then
+            tags=$TAG
+          else
+            tags=$(gh release list --repo "$REPO" --limit 20 --json tagName,isPrerelease,publishedAt \
+              -q '.[] | select(.isPrerelease) | select((now - (.publishedAt | fromdateiso8601)) > 86400) | .tagName')
+          fi
+
+          # Promote oldest first so the newest ends up marked latest.
+          last=""
+          for tag in $(printf '%s\n' "$tags" | sort -V); do
+            [ -n "$tag" ] || continue
+            echo "Promoting $tag to stable"
+            gh release edit "$tag" --repo "$REPO" --prerelease=false --latest
+            last=$tag
+          done
+
+          # Move the floating v1 tag that consuming repos use for reusable workflows,
+          # actions and flow-map.yml (nscaledev/devflow@v1).
+          if [ -n "$last" ]; then
+            sha=$(gh api "repos/$REPO/commits/$last" -q .sha)
+            if gh api "repos/$REPO/git/ref/tags/v1" >/dev/null 2>&1; then
+              gh api -X PATCH "repos/$REPO/git/refs/tags/v1" -f sha="$sha" -F force=true >/dev/null
+            else
+              gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/v1 -f sha="$sha" >/dev/null
+            fi
+            echo "v1 now points at $last ($sha)"
+          fi

@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "nscale": {
+      "source": {
+        "source": "github",
+        "repo": "nscaledev/devflow"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "devflow@nscale": true
+  },
+  "includeCoAuthoredBy": false
+}

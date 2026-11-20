@@ -1,0 +1,6 @@
+# Codex CLI: project config (.codex/config.toml) for trusted projects. Where Codex only
+# reads ~/.codex/config.toml, `devflow install --client codex` writes this block there.
+[mcp_servers.devflow]
+command = "sh"
+args = ["-c", "exec \"$(git rev-parse --show-toplevel)/.devflow/bin/devflow\" mcp --client codex"]
+startup_timeout_sec = 60

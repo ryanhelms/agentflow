@@ -1,0 +1,31 @@
+# devflow repo config. Written by `devflow init`; commit it.
+# There is no pinned version: devflow installs the latest release and updates itself.
+devflow: 1
+
+update:
+  channel: stable                # stable | beta (pilot repos get pre-releases first)
+  track: 0                       # follow the latest release within this major version
+  check_every: 6h
+  # pin: 0.5.2                   # incident use only; devflow warns on every run while set
+
+jira:
+  site: https://nscale.atlassian.net   # confirm your Atlassian site URL
+  projects: [PLAT]                     # projects this repo works in (pilot only for now)
+flow_map: nscaledev/devflow@v1:flow-map.yml
+
+commit:
+  types: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
+  subject_max: 72
+  ai_trailer: false              # strip known AI co-author / assisted-by trailers
+  breaking_paths:                # changes here suggest `!` and a BREAKING CHANGE footer
+    - "api/**/*.proto"
+    - "openapi/*.yaml"
+    - "migrations/**"
+
+policy:
+  max_autonomy:                  # ceiling for each developer's suggest | confirm | auto
+    local: auto
+    remote: confirm
+  protected_branches: [main, master, develop, "release/*"]
+  test_cmd: make test
+  lint_cmd: make lint

@@ -1,0 +1,7 @@
+# GitHub for Jira app: map GitHub Environment names to Jira environment types.
+deployments:
+  environmentMapping:
+    development: ["dev*", "Dev*", "sandbox*"]
+    testing: ["qa*", "test*"]
+    staging: ["stg*", "staging*", "Staging*"]
+    production: ["prod*", "production*", "Production*"]

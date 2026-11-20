@@ -1,0 +1,55 @@
+# Reusable: weekday hygiene report. Flags idle PRs and merged branches that still exist,
+# writes a job summary and optionally posts a Slack digest. Never deletes anything.
+name: hygiene
+
+on:
+  workflow_call:
+    inputs:
+      idle-days:
+        description: Flag open PRs with no activity for this many days
+        type: number
+        default: 5
+    secrets:
+      SLACK_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  hygiene:
+    if: vars.DEVFLOW_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: Build report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IDLE: ${{ inputs.idle-days }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d "-$IDLE days" +%s)
+          idle=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 200 \
+                   --json number,title,url,updatedAt,author,isDraft \
+                 | jq -r --argjson c "$cutoff" '.[] | select(.isDraft | not)
+                     | select((.updatedAt | fromdateiso8601) < $c)
+                     | "- <\(.url)|#\(.number)> \(.title) (@\(.author.login), idle since \(.updatedAt[:10]))"')
+
+          merged_heads=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --limit 200 \
+                           --json headRefName,headRepositoryOwner \
+                         | jq -r --arg o "${GITHUB_REPOSITORY%%/*}" '.[] | select(.headRepositoryOwner.login == $o) | .headRefName' | sort -u)
+          branches=$(gh api "repos/$GITHUB_REPOSITORY/branches" --paginate --jq '.[].name' | sort -u)
+          stale=$(comm -12 <(printf '%s\n' "$merged_heads") <(printf '%s\n' "$branches") | sed 's/^/- /')
+
+          report="*Hygiene for ${GITHUB_REPOSITORY}*"
+          [ -n "$idle" ] && report+=$'\n'"PRs idle for ${IDLE}+ days:"$'\n'"$idle"
+          [ -n "$stale" ] && report+=$'\n'"Merged branches not deleted (turn on auto-delete head branches):"$'\n'"$stale"
+
+          printf '%s\n' "$report" | sed 's/<\([^|]*\)|\([^>]*\)>/[\2](\1)/g' >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$idle$stale" ]; then
+            slack.sh "$report"
+          else
+            echo "Nothing to report"
+          fi

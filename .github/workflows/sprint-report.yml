@@ -1,0 +1,97 @@
+# Reusable: publish a sprint or weekly report (Jira throughput and cycle time, GitHub PR
+# lead time and review latency) as a Confluence page.
+name: sprint-report
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Jira project key
+        type: string
+        required: true
+      confluence-space:
+        description: Confluence space key
+        type: string
+        required: true
+      confluence-parent-id:
+        description: Page id of the team's report index
+        type: string
+        default: "-"
+      days:
+        description: Reporting window in days
+        type: number
+        default: 14
+    secrets:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: nscaledev/devflow/actions/setup@v1
+      - name: Collect metrics
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT: ${{ inputs.project }}
+          DAYS: ${{ inputs.days }}
+          JIRA_BASE: ${{ vars.JIRA_BASE }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          source "$DEVFLOW_ROOT/bin/lib.sh"
+          since=$(date -u -d "-$DAYS days" +%Y-%m-%d)
+
+          body=$(jq -cn --arg jql "project = \"$PROJECT\" AND statusCategory = Done AND resolved >= -${DAYS}d" \
+            '{jql:$jql, fields:["summary","created","resolutiondate","issuetype"], maxResults:200}')
+          issues=$(atl POST "$JIRA_BASE/rest/api/3/search/jql" -d "$body")
+          done_count=$(jq '.issues | length' <<<"$issues")
+          cycle=$(jq -r '[.issues[] | select(.fields.resolutiondate)
+              | ((.fields.resolutiondate[:19] + "Z" | fromdateiso8601) - (.fields.created[:19] + "Z" | fromdateiso8601)) / 86400]
+              | sort | if length == 0 then "n/a" else (.[(length/2|floor)] * 10 | round / 10 | tostring) + " days" end' <<<"$issues")
+
+          prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state merged --search "merged:>=$since" --limit 200 \
+                --json number,createdAt,mergedAt,reviews)
+          pr_count=$(jq 'length' <<<"$prs")
+          lead=$(jq -r '[.[] | ((.mergedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)) / 3600]
+              | sort | if length == 0 then "n/a" else (.[(length/2|floor)] | round | tostring) + " h" end' <<<"$prs")
+          first_review=$(jq -r '[.[] | select(.reviews | length > 0)
+              | (([.reviews[].submittedAt | fromdateiso8601] | min) - (.createdAt | fromdateiso8601)) / 3600]
+              | sort | if length == 0 then "n/a" else (.[(length/2|floor)] | round | tostring) + " h" end' <<<"$prs")
+
+          {
+            echo "# $PROJECT report, $since to $(date -u +%Y-%m-%d)"
+            echo
+            echo "| Measure | Value |"
+            echo "|---|---|"
+            echo "| Tickets done | $done_count |"
+            echo "| Median cycle time (created → resolved) | $cycle |"
+            echo "| PRs merged in ${GITHUB_REPOSITORY#*/} | $pr_count |"
+            echo "| Median PR lead time | $lead |"
+            echo "| Median time to first review | $first_review |"
+            echo
+            echo "## Done"
+            echo
+            jq -r --arg b "$JIRA_BASE" '.issues[] | "- [\(.key)](\($b)/browse/\(.key)) \(.fields.summary)"' <<<"$issues"
+          } > "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish to Confluence
+        if: vars.CONFLUENCE_BASE != ''
+        env:
+          CONFLUENCE_BASE: ${{ vars.CONFLUENCE_BASE }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          SPACE: ${{ inputs.confluence-space }}
+          PARENT: ${{ inputs.confluence-parent-id }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          sudo apt-get install -y -qq pandoc >/dev/null
+          confluence-upsert.sh "$SPACE" "$PARENT" "$PROJECT report $(date -u +%Y-%m-%d)" "$RUNNER_TEMP/report.md"
