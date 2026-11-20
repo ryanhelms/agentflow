@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: shellcheck
         run: |
-          shellcheck -x bin/*.sh \
+          shellcheck -x bin/*.sh scripts/*.sh \
             templates/repo/.devflow/bin/devflow \
             templates/repo/.githooks/commit-msg \
             adapters/claude-code/bin/launch

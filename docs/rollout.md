@@ -3,6 +3,20 @@
 Phases are gated by outcomes, not dates. Start a phase only when the previous one has
 passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollout).
 
+## Gate · Architecture approval
+
+Nothing below starts until both approvers sign off on [the blueprint](blueprint.html).
+
+- [ ] Kyle Redelinghuys approves the architecture and plan
+- [ ] Vishal Srini approves the architecture and plan
+
+Ready before the gate (no team impact):
+- [x] `nscaledev/devflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
+- [x] CI green (tests with race detector, golangci-lint, shellcheck, actionlint, GoReleaser check)
+- [x] Claude Code plugin tested end to end with `scripts/e2e-claude.sh` (12/12) and installed
+      from the `nscaledev/devflow` marketplace
+- [ ] Test with a real Jira ticket once a pilot developer runs `devflow login` (read-only tools first)
+
 ## P0 · Foundations
 - [ ] Engineering leadership nominates the pilot team and two pilot repos
 - [ ] Install the GitHub for Jira app on the `nscaledev` org (all repos)
