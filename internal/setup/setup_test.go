@@ -204,7 +204,53 @@ func TestInitPinsCallerWorkflow(t *testing.T) {
 	if strings.Contains(string(wf), "@v0\n") || strings.Count(string(wf), "@"+version.Commit+" # v0.4.3") < 9 {
 		t.Errorf("caller workflow not pinned:\n%s", wf)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".github", "dependabot.yml")); err != nil {
-		t.Error("dependabot.yml not written")
+	if _, err := os.Stat(filepath.Join(dir, ".github", "dependabot.yml")); err == nil {
+		t.Error("dependabot.yml must not be written: devflow pin replaces it")
+	}
+
+	// A newer release re-pins every reference and reports where it came from.
+	if got := PinBehind(dir); got != "" {
+		t.Errorf("PinBehind at the same release = %q", got)
+	}
+	version.Commit, version.Version = strings.Repeat("abcdef1234", 4), "0.5.0"
+	if got := PinBehind(dir); got != "v0.4.3" {
+		t.Errorf("PinBehind = %q, want v0.4.3", got)
+	}
+	res, err := Pin(dir, true)
+	if err != nil || !res.Changed || res.From != "v0.4.3" || res.To != "v0.5.0" {
+		t.Fatalf("Pin --check = %+v, %v", res, err)
+	}
+	if again, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml")); string(again) != string(wf) {
+		t.Error("Pin with check wrote the file")
+	}
+	if _, err := Pin(dir, false); err != nil {
+		t.Fatal(err)
+	}
+	wf, _ = os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml"))
+	if strings.Contains(string(wf), "0123456789") || strings.Count(string(wf), "@"+version.Commit+" # v0.5.0") < 9 {
+		t.Errorf("caller workflow not re-pinned:\n%s", wf)
+	}
+	if PinBehind(dir) != "" {
+		t.Error("PinBehind after pin")
+	}
+}
+
+func TestRepinWorkflow(t *testing.T) {
+	sha := strings.Repeat("cd34", 10)
+	src := []byte("uses: nscaledev/devflow/a.yml@v0\nuses: nscaledev/devflow/b.yml@" + strings.Repeat("1", 40) + " # v0.5.1\nuses: nscaledev/devflow/c.yml@main\n")
+	got := string(RepinWorkflow(src, sha, "v0.6.0"))
+	if strings.Count(got, "@"+sha+" # v0.6.0\n") != 3 {
+		t.Errorf("repinned = %q", got)
+	}
+	if v := PinnedVersion(src); v != "v0.5.1" {
+		t.Errorf("PinnedVersion = %q", v)
+	}
+	for _, c := range []struct {
+		a, b string
+		less bool
+	}{{"v0.5.1", "v0.5.2", true}, {"v0.10.0", "v0.9.9", false}, {"v1.0.0", "v1.0.0", false}, {"v0.9.0", "v1.0.0", true}} {
+		if VersionLess(c.a, c.b) != c.less {
+			t.Errorf("VersionLess(%s, %s) != %v", c.a, c.b, c.less)
+		}
 	}
 }

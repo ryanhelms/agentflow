@@ -13,8 +13,8 @@ workflow passes each reusable workflow only the secrets it uses (no `secrets: in
 | `JIRA_TOKEN` | secret | Its scoped API token (Jira + Confluence) |
 | `SLACK_WEBHOOK_URL` | secret | Default webhook; override per repo for team channels |
 | `ANTHROPIC_API_KEY` | secret | AI assist (P9), limited to opted-in repos |
-| `DEVFLOW_APP_ID` | variable | devflow GitHub App id |
-| `DEVFLOW_APP_PRIVATE_KEY` | secret | devflow GitHub App private key |
+| `DEVFLOW_APP_ID` | variable (optional) | devflow GitHub App id |
+| `DEVFLOW_APP_PRIVATE_KEY` | secret (optional) | devflow GitHub App private key |
 | `JIRA_AC_FIELD` | variable (optional) | Custom field id for acceptance criteria, e.g. `customfield_10050` |
 | `DEVFLOW_ENABLED` | repo variable | `true` to enable transitions; `false` is the kill switch |
 
@@ -24,19 +24,23 @@ workflow passes each reusable workflow only the secrets it uses (no `secrets: in
 Access**, choose *Accessible from repositories in the nscaledev organization* so other repos
 can call its reusable workflows and actions.
 
-## GitHub App
+Without org-level secrets and variables, a repo admin can set the same names on one
+repo (Settings › Secrets and variables › Actions) for a pilot.
 
-Create an org-owned GitHub App named **devflow** (no webhook):
+## GitHub App (optional)
+
+Nothing requires the App. Without it: Dependabot alerts are not copied to Jira (code
+scanning alerts still are), and in repos whose branch rules require checks, someone
+closes and reopens each Release PR so its checks run. To remove those two gaps, create an org-owned GitHub App named **devflow** (no webhook):
 
 - Repository permissions: Contents read & write, Pull requests read & write,
   Dependabot alerts read, Metadata read.
 - Install it on `nscaledev/devflow` and on repos that use `auto-issues`.
 - Store the app id in `DEVFLOW_APP_ID` and a private key in `DEVFLOW_APP_PRIVATE_KEY`.
 
-Consuming repos' `semver-release` workflow uses it to create and auto-merge their
-release-please Release PR, because PRs merged with `GITHUB_TOKEN` don't trigger other
-workflows. devflow's own releases don't need it: they tag the merge commit directly with
-`GITHUB_TOKEN`.
+Consuming repos' `semver-release` workflow then opens their release-please Release PR
+with the App, so its checks run (GitHub runs none for PRs opened with `GITHUB_TOKEN`).
+devflow's own releases never use it: they tag with the release deploy key.
 
 ## Atlassian service account
 

@@ -41,6 +41,8 @@ Setup
   remove [--dry-run] [--force] [--keep-releases]
                                  undo init: delete devflow's files, strip its entries from
                                  AGENTS.md and client configs, stop automatic init here
+  pin [--check]                  pin .github/workflows/devflow.yml to this devflow release
+                                 (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
@@ -146,6 +148,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runInit(ctx, args)
 	case "remove":
 		return runRemove(ctx, args)
+	case "pin":
+		return runPin(ctx, args)
 	case "install":
 		return runInstall(ctx, args)
 	case "login":
@@ -385,6 +389,37 @@ func runRemove(ctx context.Context, args []string) error {
 	}
 	printResult(res)
 	return err
+}
+
+func runPin(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("pin", flag.ContinueOnError)
+	check := fs.Bool("check", false, "report only; exit 1 when the workflow is behind this release")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	dir, _ := os.Getwd()
+	repo, err := gitx.Open(ctx, dir)
+	if err != nil {
+		return err
+	}
+	res, err := setup.Pin(repo.Dir, *check)
+	if err != nil {
+		return err
+	}
+	from := res.From
+	if from == "" {
+		from = "floating refs"
+	}
+	switch {
+	case !res.Changed:
+		fmt.Printf("%s is pinned to %s already.\n", res.File, res.To)
+	case *check:
+		fmt.Printf("%s: %s, devflow %s is installed. Run devflow pin.\n", res.File, from, res.To)
+		return &hooks.ExitError{Code: 1}
+	default:
+		fmt.Printf("%s: %s -> %s. Commit it on a branch as `chore: pin devflow workflows to %s` and open a PR.\n", res.File, from, res.To, res.To)
+	}
+	return nil
 }
 
 func runInstall(ctx context.Context, args []string) error {
@@ -925,6 +960,11 @@ func runDoctor(ctx context.Context, args []string) error {
 		hooksOK = err == nil
 	}
 	report(hooksOK, "commit-msg hook", "core.hooksPath="+strings.TrimSpace(hp)+map[bool]string{true: "", false: " (run devflow doctor --fix)"}[hooksOK])
+	if from := setup.PinBehind(a.Repo.Dir); from != "" {
+		report(false, "workflow pin", setup.CallerWorkflow+" is pinned to "+from+": run devflow pin")
+	} else if _, err := os.Stat(a.Repo.Dir + "/" + setup.CallerWorkflow); err == nil {
+		report(true, "workflow pin", "up to date")
+	}
 	_, lerr := os.Stat(a.Repo.Dir + "/.devflow/bin/devflow")
 	report(lerr == nil, "repo launcher", ".devflow/bin/devflow")
 	if _, err := exec.LookPath("gh"); err != nil {

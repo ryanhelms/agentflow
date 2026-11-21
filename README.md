@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. No team uses it yet. |
+| **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). |
 | **Current release** | <!-- devflow:version -->`v0.5.2`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
@@ -86,8 +86,8 @@ devflow has two halves that share one status map and one set of rules:
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
    every opted-in repo: Jira key checks, ticket transitions, semantic releases, release
    guard, Confluence publishing, Slack and hygiene. Repos call them from a single
-   caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that Dependabot bumps
-   by PR.
+   caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that `devflow pin`
+   moves forward in a reviewed PR.
 2. **The `devflow` binary**, one Go program that is a CLI, an MCP server and a set of git
    and AI-client hooks. Each repo commits a small launcher that installs the latest
    verified release on first use; the binary then keeps itself updated.
@@ -120,7 +120,6 @@ releases:
 | `.devflow/bin/devflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
 | `.github/workflows/devflow.yml` | The one caller workflow for every devflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
-| `.github/dependabot.yml` | Opens a PR for each new devflow release to bump those pins (org admins: grant Dependabot access to `nscaledev/devflow`) |
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
 | `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/`, `AGENTS.md` | AI client configuration |
 
@@ -138,6 +137,12 @@ init:
   auto: auto        # auto (default) | ask (only suggest /devflow:init) | off
   orgs: [nscaledev]
 ```
+
+**Updating the pinned workflows.** `devflow pin` (or `/devflow:pin`) moves every
+`nscaledev/devflow` reference in `.github/workflows/devflow.yml` to the release you have
+installed; commit it in a PR. `devflow pin --check` and `devflow doctor` report a pin
+that is behind, and the Claude Code session hook offers `/devflow:pin` when it is. No
+Dependabot or GitHub App access is needed.
 
 **Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
 `.devflow/`, the caller workflow, the release-please files (`--keep-releases` keeps them)
@@ -250,7 +255,7 @@ through `.claude/settings.json`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin devflow to a release
   commit SHA, and each new devflow release reaches a repo only through a reviewed
-  Dependabot PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
+  `devflow pin` PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
   devflow's release workflow and repo admins can move: the "Protect release tags"
   ruleset guards every `v*` tag ([docs/operations.md](docs/operations.md#releases)).
 
@@ -260,7 +265,7 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 | Task | How |
 | --- | --- |
-| Org secrets, GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
+| Org secrets, optional GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
 | Rollout phases and checklists | [docs/rollout.md](docs/rollout.md) |
 | Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
 | Pause devflow in one repo | Repository variable `DEVFLOW_ENABLED=false` |

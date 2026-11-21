@@ -10,10 +10,12 @@
 #   library - Go submodule tag (path/vX.Y.Z), npm or PyPI publish, Terraform tag
 # and finally sets the Jira Fix Version "<unit> X.Y.Z" on every ticket in the release.
 #
-# Units come from .devflow/releases.yml (devflow release init). Needs the devflow GitHub
-# App (vars.DEVFLOW_APP_ID, secrets.DEVFLOW_APP_PRIVATE_KEY) so the Release PR merge and
-# the release itself trigger other workflows; without it, releases still publish but
-# release-triggered workflows (Confluence notes) won't run.
+# Units come from .devflow/releases.yml (devflow release init). Works with the
+# workflow's own token: the `releases` output feeds the caller's release-notes job, so
+# nothing depends on release events. GitHub doesn't run checks on a PR opened with that
+# token, so where branch rules require checks the Release PR waits until someone closes
+# and reopens it (or clicks "Update branch"); it then merges itself. An optional devflow
+# GitHub App (vars.DEVFLOW_APP_ID, secrets.DEVFLOW_APP_PRIVATE_KEY) removes that step.
 name: semver-release
 
 on:
