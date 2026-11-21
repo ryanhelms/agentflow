@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.6.0](https://github.com/nscaledev/devflow/compare/v0.5.2...v0.6.0) - 2026-11-21
+
+### Features
+
+- add devflow pin and make the github app optional (#14) ([4152877](https://github.com/nscaledev/devflow/commit/41528774899692577d57ede57746c93bba6972f9))
+
 ## [0.5.2](https://github.com/nscaledev/devflow/compare/v0.5.1...v0.5.2) - 2026-11-20
 
 ### Fixes
