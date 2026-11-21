@@ -21,7 +21,7 @@ Ready before the gate (no team impact):
 - [ ] Engineering leadership nominates the pilot team and two pilot repos
 - [ ] Install the GitHub for Jira app on the `nscaledev` org (all repos)
 - [ ] Create the `svc-devflow` Atlassian account and scoped API token ([operations](operations.md#atlassian-service-account))
-- [ ] Create the devflow GitHub App and org secrets/variables ([operations](operations.md#github-app))
+- [ ] Org secrets/variables, or repo-level ones in pilot repos ([operations](operations.md)); the devflow GitHub App is optional ([operations](operations.md#github-app-optional))
 - [ ] Pilot developers run `devflow login` with their own Atlassian API token ([operations](operations.md#developer-atlassian-login))
 - [ ] Pilot lead fills in the pilot project's block in `flow-map.yml`
 - [ ] Eng managers publish the shared Confluence templates in the Engineering space
@@ -30,6 +30,7 @@ Ready before the gate (no team impact):
 - **Exit:** pilot named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed
 
 ## P1 · Commit convention
+- [x] Run `devflow init` in the first pilot repo (`nscaledev/mcp-gateway`)
 - [ ] Run `devflow init` in pilot repos; commit `.devflow/`, `.githooks/`, client configs
 - [ ] Pilot engineers run `git config core.hooksPath .githooks` and `devflow login`
 - [ ] `git config user.email` set to @nscale.com addresses (Smart Commits)

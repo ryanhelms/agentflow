@@ -4,8 +4,8 @@ A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 
 - MCP server `devflow` (all `devflow_*` tools)
 - Skill `devflow` with the commit, PR, confirmation and untrusted-content rules
-- A skill per CLI command, run as `/devflow:<name>`: `init`, `remove`, `install`, `login`,
-  `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`, `transition`, `pr`,
+- A skill per CLI command, run as `/devflow:<name>`: `init`, `remove`, `pin`, `install`,
+  `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`, `transition`, `pr`,
   `review`, `status`, `standup`, `docs`, `adr`, `release`, `update`, `version`. `init`,
   `remove`, `install`, `login`, `logout` and `update` run only when you invoke them.
 - `bin/devflow`, on Claude's Bash PATH: runs the installed devflow or installs the latest

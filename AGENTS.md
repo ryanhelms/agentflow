@@ -131,7 +131,7 @@ third-party actions pinned to a major tag, and secrets only through `env:`.
 These are used by other repos and clients. Changing them is a breaking change:
 
 - Caller workflows pin reusable workflows to a release commit (`@<sha> # vX.Y.Z`, written
-  by `devflow init` from the binary's embedded full commit, bumped by Dependabot). The
+  by `devflow init` from the binary's embedded full commit, moved forward by `devflow pin`). The
   floating tag `v0` is still moved to every release: the reusable workflows load
   `actions/setup@v0`, and repos may use it directly. Keep inputs, outputs and secrets backwards compatible within a
   major version; a breaking change means a new major and a new floating tag.

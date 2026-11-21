@@ -109,8 +109,11 @@ review is the hotfix approval.
 
 ## Requirements
 
-- The devflow GitHub App (`vars.DEVFLOW_APP_ID`, `secrets.DEVFLOW_APP_PRIVATE_KEY`) so the
-  Release PR merge and the release trigger other workflows. Without it, releases still
-  publish, but release-triggered workflows such as Confluence notes won't run.
+- Nothing beyond the workflow's own token. Release notes run as a job after the release
+  job, so they don't depend on release events. GitHub runs no checks on a Release PR
+  opened with that token: if branch rules require checks, close and reopen the Release PR
+  (or click "Update branch") once per release, and it merges itself when they pass. The
+  optional devflow GitHub App (`vars.DEVFLOW_APP_ID`, `secrets.DEVFLOW_APP_PRIVATE_KEY`)
+  removes that step.
 - Repo setting "Allow auto-merge", or no required checks on the default branch.
 - `packages: write` for images, charts and npm packages (granted by the caller workflow).

@@ -83,6 +83,12 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 	} else {
 		fmt.Fprint(stdout, tc.Text)
 	}
+	if a.HasCfg {
+		if from := setup.PinBehind(a.Repo.Dir); from != "" {
+			fmt.Fprintf(stdout, "devflow: %s is pinned to devflow %s, older than the installed devflow. "+
+				"Offer the developer `/devflow:pin`, which re-pins it and opens a PR for review.\n", setup.CallerWorkflow, from)
+		}
+	}
 	if notice != "" {
 		fmt.Fprintln(stdout, notice)
 	}

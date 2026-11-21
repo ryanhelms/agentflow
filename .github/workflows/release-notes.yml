@@ -1,10 +1,16 @@
-# Reusable: on a GitHub release, render Jira-linked notes, append them to the release
-# and publish them to Confluence under the project's release notes page.
+# Reusable: render Jira-linked notes for a GitHub release, append them to the release
+# and publish them to Confluence under the project's release notes page. The caller runs
+# it after semver-release with each released tag (no GitHub App needed), or on a
+# `release` event for releases made by hand.
 name: release-notes
 
 on:
   workflow_call:
     inputs:
+      tag:
+        description: Release tag (default the tag of the triggering release event)
+        type: string
+        default: ""
       confluence-space:
         description: Confluence space key (empty = skip Confluence)
         type: string
@@ -32,7 +38,7 @@ jobs:
       - uses: nscaledev/devflow/actions/setup@v0
       - name: Render notes
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
           JIRA_BASE: ${{ vars.JIRA_BASE }}
           JIRA_USER: ${{ secrets.JIRA_USER }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
@@ -45,7 +51,7 @@ jobs:
       - name: Append to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           set -euo pipefail
           gh release view "$TAG" --json body -q .body > "$RUNNER_TEMP/body.md"
@@ -61,7 +67,7 @@ jobs:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           SPACE: ${{ inputs.confluence-space }}
           PARENT: ${{ inputs.confluence-parent-id }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           sudo apt-get install -y -qq pandoc >/dev/null
           confluence-upsert.sh "$SPACE" "$PARENT" "${GITHUB_REPOSITORY#*/} $TAG" "$RUNNER_TEMP/notes.md"
