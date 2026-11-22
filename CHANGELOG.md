@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.13.0](https://github.com/nscaledev/devflow/compare/v0.12.0...v0.13.0) - 2026-11-22
+
+### Features
+
+- apply task templates to github issues ([9224024](https://github.com/nscaledev/devflow/commit/92240243e715c369363d270e85a677282c6a7554))
+
 ## [0.12.0](https://github.com/nscaledev/devflow/compare/v0.11.0...v0.12.0) - 2026-11-22
 
 ### Features
