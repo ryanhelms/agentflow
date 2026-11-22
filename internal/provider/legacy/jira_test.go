@@ -88,7 +88,7 @@ func TestJiraTaskMapping(t *testing.T) {
 	want := provider.Task{
 		Ref: jiraTestRef, Key: jiraTestRef.ID, URL: jiraSite + "/browse/PLAT-17", Title: "Build the adapter",
 		Description: "Use the legacy client", Type: "Story", Priority: "High", Assignee: "A Developer", Revision: "revision",
-		State: provider.TaskState{ID: "Done", Name: "Done", Terminal: true},
+		State: provider.TaskState{ID: "Done", Name: "Done", Category: "done", Terminal: true},
 		Links: []provider.Link{
 			{Title: "Move to providers", URL: jiraSite + "/browse/CORE-2", Ref: &parent},
 			{Title: "Design", URL: jiraSite + "/wiki/design"},

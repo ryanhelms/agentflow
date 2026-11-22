@@ -9,6 +9,9 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
+// ErrNoTransition identifies the legacy workflow no-op when no transition is available.
+var ErrNoTransition = errors.New("no Jira transition available")
+
 // Transition matches the destination status name exposed by Jira and validates
 // the available transition against the issue's observed status and project order.
 func (j *Jira) Transition(ctx context.Context, ref provider.Ref, target provider.TaskState, options provider.WriteOptions) (provider.WriteResult, error) {
@@ -70,7 +73,7 @@ func (j *Jira) Transition(ctx context.Context, ref provider.Ref, target provider
 		}
 		return j.result(actual, provider.Applied, ""), nil
 	}
-	return provider.WriteResult{}, fmt.Errorf("jira has no transition from %q to %q: %w", from.Name, name, provider.ErrConflict)
+	return provider.WriteResult{}, fmt.Errorf("jira has no transition from %q to %q: %w: %w", from.Name, name, ErrNoTransition, provider.ErrConflict)
 }
 
 func categoryRank(category string) int {

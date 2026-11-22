@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/asana"
 	"github.com/nscaledev/devflow/internal/provider/githubissues"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
@@ -90,6 +91,9 @@ func (a *App) validateTaskTemplate(task provider.Task) (*TaskTemplateSnapshot, e
 		Scope: task.Ref.Scope, Title: task.Title, Description: task.Description, Labels: slices.Clone(task.Labels),
 	}
 	fields := githubissues.SupportedFields()
+	if a.usesAsana() {
+		fields, d.Links = asana.SupportedFields(), task.Links
+	}
 	if a.usesFileTasks() {
 		fields = fileTaskFields
 		d.Type, d.Priority, d.Links = task.Type, task.Priority, task.Links

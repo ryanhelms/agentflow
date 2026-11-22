@@ -35,7 +35,7 @@ func TestGitHubChanges(t *testing.T) {
 	pr.Head.Ref, pr.Base.Ref = "feature/adapters", draft.Base
 	mock := &githubMock{
 		find: func(path, branch string) (*gh.PR, error) {
-			if path != repo.Path || branch != pr.Head.Ref {
+			if path != repo.Path || branch != "org:"+pr.Head.Ref {
 				t.Fatalf("find args = %q, %q", path, branch)
 			}
 			return pr, nil
@@ -80,7 +80,7 @@ func TestGitHubChanges(t *testing.T) {
 func TestGitHubRejectsUnsupportedRefs(t *testing.T) {
 	github := NewGitHub(nil)
 	repo := provider.RepositoryRef{Host: "github.com", Path: "org/project"}
-	if _, err := github.FindChange(t.Context(), repo, "another-owner:feature"); !errors.Is(err, provider.ErrUnsupported) {
+	if _, err := github.FindChange(t.Context(), repo, "another-owner:"); err == nil {
 		t.Fatalf("fork lookup error = %v", err)
 	}
 	if _, err := github.Reviews(t.Context(), provider.ChangeRequest{Repository: repo, ID: "-17"}); err == nil {

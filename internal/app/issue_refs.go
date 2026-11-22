@@ -85,6 +85,9 @@ func taskKey(ref provider.Ref) string {
 }
 
 func (a *App) validateTaskRef(ref provider.Ref) (provider.Ref, error) {
+	if a.usesAsana() {
+		return a.validateAsanaRef(ref)
+	}
 	if a.usesIssues() {
 		return validatedIssueRef(ref)
 	}
@@ -104,6 +107,9 @@ func (a *App) taskRef(ctx context.Context, input string) (provider.Ref, error) {
 			err = errors.New("pass a qualified task reference or add a Task-Ref trailer to a branch commit")
 		}
 		return ref, err
+	}
+	if a.usesAsana() && !strings.Contains(input, "/") {
+		return a.validateAsanaRef(provider.Ref{Instance: "asana", Scope: a.asanaSettings().Project, ID: input})
 	}
 	ref, err := provider.ParseRef(input)
 	if err != nil {

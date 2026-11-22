@@ -182,6 +182,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 			}
 		},
 	}
+	tasks["asana"] = func() any { return &AsanaSettings{} }
 	tasks["jira"] = func() any {
 		return &JiraSettings{Site: repo.Jira.Site, Projects: append([]string{}, repo.Jira.Projects...)}
 	}
@@ -211,6 +212,11 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 	p.TaskManagement, err = (roleSchema{"jira", tasks}).resolve(taskManagement, present, "task_management")
 	if err != nil {
 		return Providers{}, err
+	}
+	if settings, ok := p.TaskManagement.Settings.(*AsanaSettings); ok {
+		if err := settings.validate(); err != nil {
+			return Providers{}, err
+		}
 	}
 	if value, ok := taskManagement["templates"]; ok {
 		p.TaskTemplates, err = parseTaskTemplates(value)

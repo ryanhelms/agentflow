@@ -253,3 +253,25 @@ func TestGitHubIssueTransitions(t *testing.T) {
 		t.Fatalf("invalid state: %v", err)
 	}
 }
+
+func TestAsanaScopeAndTransitions(t *testing.T) {
+	cfg := loadConfig(t, `task_management:
+  provider: asana
+  settings:
+    project: "10"
+    transitions:
+      "10": {"#qa": "12", pr.opened: "12", "#done": completed}
+      "20": {branch.created: "21", pr.merged: none}
+`)
+	settings := cfg.Providers.TaskManagement.Settings.(*AsanaSettings)
+	want := map[string][]string{"10": {"12"}, "20": {"21"}}
+	if !reflect.DeepEqual(settings.AdapterConfig().Sections, want) || settings.HasProject("30") || cfg.Commit.KeyRequired() {
+		t.Fatalf("settings %+v", settings)
+	}
+	for _, bad := range []string{"project: two/projects", "transitions: {'10': {'#qa': '../12'}}", "transitions: {'10': {'#qa': open}}"} {
+		_, _, err := LoadRepo(writeConfig(t, "task_management: {provider: asana, settings: {"+bad+"}}"))
+		if err == nil || !strings.Contains(err.Error(), "task_management.settings") {
+			t.Fatalf("invalid %s: %v", bad, err)
+		}
+	}
+}

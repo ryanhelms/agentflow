@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/provider/asana"
 	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
 	"github.com/nscaledev/devflow/internal/provision"
 )
@@ -133,6 +134,20 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue
+		case *config.AsanaSettings:
+			if settings.Project == "" {
+				p.check(role.name, role.Provider, false, "set task_management.settings.project to the default Asana project GID")
+				continue
+			}
+			adapter, err := asana.FromEnvironment(settings.AdapterConfig())
+			if err == nil {
+				err = adapter.CheckAccess(ctx)
+			}
+			if err != nil {
+				p.check(role.name, role.Provider, false, err.Error())
+			} else {
+				p.check(role.name, role.Provider, true, "can list project tasks and read configured destination sections")
+			}
 		case *config.FileSystemSettings:
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
