@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). |
-| **Current release** | <!-- devflow:version -->`v0.6.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.9.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -169,6 +169,10 @@ service sections, versioned settings, defaults, and their override rules. Use th
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
+Select `github-issues` in `task_management.provider` to work with GitHub issues
+through the existing task commands. Start an issue with `devflow start '#42'`
+when the issue repository is known, or specify `owner/repo#42`. Devflow carries
+the qualified issue reference in the PR body and interactive commit message.
 
 ## Day-to-day use
 

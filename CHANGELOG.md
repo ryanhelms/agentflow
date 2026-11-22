@@ -5,6 +5,24 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.9.0](https://github.com/nscaledev/devflow/compare/v0.8.0...v0.9.0) - 2026-11-22
+
+### Features
+
+- support the github issue task lifecycle ([95501fb](https://github.com/nscaledev/devflow/commit/95501fb58139cf2814d19259bebbbef3a4c2eeee))
+
+## [0.8.0](https://github.com/nscaledev/devflow/compare/v0.7.0...v0.8.0) - 2026-11-22
+
+### Features
+
+- implement the filesystem provider ([a1a82d8](https://github.com/nscaledev/devflow/commit/a1a82d841a9355f25ec18ffbb56e7d68faa720ad))
+
+## [0.7.0](https://github.com/nscaledev/devflow/compare/v0.6.0...v0.7.0) - 2026-11-22
+
+### Features
+
+- define provider contracts and configuration ([b994d5f](https://github.com/nscaledev/devflow/commit/b994d5fc721b3b5b7583ab028814093d5d2cc153))
+
 ## [0.6.0](https://github.com/nscaledev/devflow/compare/v0.5.2...v0.6.0) - 2026-11-21
 
 ### Features
