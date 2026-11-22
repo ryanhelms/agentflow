@@ -1,7 +1,10 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -156,7 +159,7 @@ func TestRepositoryTaskPublication(t *testing.T) {
 	create := func(token string) (any, error) {
 		return a.CreateTicket(ctx, "", "", "Write runbook", "Details", "", token)
 	}
-	if _, err := create(""); !errors.Is(err, provider.ErrUnsupported) || refs() != before {
+	if _, err := create(""); err == nil || !strings.Contains(err.Error(), "hosted GitHub origin") || refs() != before {
 		t.Fatalf("PR publication=%v", err)
 	}
 	s.Publication = "push"
@@ -290,5 +293,147 @@ func TestFileTaskCreateRetryAndLinks(t *testing.T) {
 	}
 	if work, err := a.MyWork(ctx); err != nil || len(work) != 0 {
 		t.Fatalf("work outside default scope: %v, err=%v", work, err)
+	}
+}
+
+func TestRepositoryTaskReview(t *testing.T) {
+	a, bare := repositoryFixture(t, "task_management")
+	ctx := t.Context()
+	t.Setenv("GH_TOKEN", "fixture")
+	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("GITHUB_RUN_ID", "")
+	docsGit(t, bare, "branch", "board", "main")
+	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/board")
+	before := docsGit(t, bare, "show-ref")
+
+	prs := map[string]string{}
+	transport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = transport })
+	http.DefaultTransport = docsPRTransport{http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Host != "api.github.com" || r.URL.Path != "/repos/docs-team/handbook/pulls" {
+			t.Fatalf("wrong publication endpoint %s", r.URL)
+		}
+		switch r.Method {
+		case http.MethodGet:
+			head := strings.TrimPrefix(r.URL.Query().Get("head"), "docs-team:")
+			if r.URL.Query().Get("base") != "board" {
+				t.Fatalf("PR lookup on wrong base %s", r.URL)
+			}
+			if url, ok := prs[head]; ok {
+				fmt.Fprintf(w, `[{"html_url":%q,"state":"open","base":{"ref":"board"},"head":{"ref":%q,"repo":{"full_name":"docs-team/handbook"}}}]`, url, head)
+			} else {
+				fmt.Fprint(w, "[]")
+			}
+		case http.MethodPost:
+			var in struct{ Head, Base, Body string }
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Base != "board" || !strings.Contains(in.Body, "task repository/default/") || prs[in.Head] != "" {
+				t.Fatalf("unexpected publication %+v, err=%v", in, err)
+			}
+			prs[in.Head] = fmt.Sprintf("https://github.com/docs-team/handbook/pull/%d", len(prs)+1)
+			fmt.Fprintf(w, `{"html_url":%q}`, prs[in.Head])
+		default:
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+	})}
+
+	create := func(tok string) (any, error) {
+		return a.CreateTicket(ctx, "", "", "Review quotas", "Details", "", tok)
+	}
+	a.Gate.Autonomy.Remote = config.Auto
+	v, err := create("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := confirmation(t, v)
+	preview := v.(*Pending).Summary.(map[string]any)
+	head := preview["target"].(string)
+	if preview["base"] != "board" || !strings.HasPrefix(head, "devflow/publication/") || docsGit(t, bare, "show-ref") != before || len(prs) != 0 {
+		t.Fatalf("unexpected preview %+v, PRs %v", preview, prs)
+	}
+	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
+	if _, err := create(token); !errors.Is(err, policy.ErrToken) {
+		t.Fatalf("accepted changed base: %v", err)
+	}
+	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/board")
+	// A separate process can redeem the interactive preview.
+	a, err = Open(ctx, a.Repo.Dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err = create(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := v.(map[string]string)
+	key := out["key"]
+	if out["status"] != string(provider.PendingReview) || out["branch"] != head || out["url"] == "" || out["url"] != prs[head] || !strings.HasPrefix(key, "repository/default/") {
+		t.Fatalf("create response %+v", out)
+	}
+	if _, err := create(token); !errors.Is(err, policy.ErrToken) {
+		t.Fatalf("reused approval: %v", err)
+	}
+	refs := docsGit(t, bare, "show-ref")
+	if work, err := a.MyWork(ctx); err != nil || len(work) != 0 {
+		t.Fatalf("unmerged create visible: %v, %v", work, err)
+	}
+	// Retry using the same operation ID and fresh approval.
+	t.Setenv("DEVFLOW_OPERATION_ID", preview["operation_id"].(string))
+	a, err = Open(ctx, a.Repo.Dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	confirm := func(call func(string) (any, error)) any {
+		t.Helper()
+		preview, err := call("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := call(confirmation(t, preview))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	retry := confirm(create).(map[string]string)
+	if retry["branch"] != head || retry["key"] != key || retry["url"] != out["url"] || len(prs) != 1 || docsGit(t, bare, "show-ref") != refs {
+		t.Fatalf("create replay %+v", retry)
+	}
+
+	// Advance the fixture base as if the task creation PR was accepted.
+	docsGit(t, bare, "update-ref", "refs/heads/board", docsGit(t, bare, "rev-parse", head))
+	refs = docsGit(t, bare, "show-ref")
+	a.Gate.Autonomy.Remote, a.Gate.Autonomy.Local = config.Suggest, config.Confirm
+	start := func(token string) (any, error) { return a.Start(ctx, key, true, token) }
+	started := confirm(start).(StartResult)
+	if started.Assigned || started.Transition != nil || started.Key != key || started.Worktree == "" || !strings.HasPrefix(started.Branch, "task-") {
+		t.Fatalf("local start %+v", started)
+	}
+	a.Gate.Autonomy.Local = config.Auto
+	v, err = start("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed := v.(StartResult)
+	if resumed != started || docsGit(t, bare, "show-ref") != refs || len(prs) != 1 {
+		t.Fatalf("resume %+v", resumed)
+	}
+
+	a.Gate.Autonomy.Remote = config.Auto
+	closeTask := func(tok string) (any, error) { return a.Transition(ctx, key, "#done", false, tok) }
+	closed := confirm(closeTask).(TransitionResult)
+	if closed.Applied || closed.Status != provider.PendingReview || closed.Key != key || closed.Branch == head || closed.URL == "" || closed.URL != prs[closed.Branch] || len(prs) != 2 {
+		t.Fatalf("transition response %+v", closed)
+	}
+	if work, err := a.MyWork(ctx); err != nil || len(work) != 1 || work[0].Key != key || work[0].Status != "Open" {
+		t.Fatalf("pending close changed base: %v, %v", work, err)
+	}
+	// A retry from another client reconciles the same review.
+	a, err = Open(ctx, a.Repo.Dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs = docsGit(t, bare, "show-ref")
+	if retry := confirm(closeTask).(TransitionResult); retry != closed || len(prs) != 2 || docsGit(t, bare, "show-ref") != refs {
+		t.Fatalf("transition replay %+v", retry)
 	}
 }

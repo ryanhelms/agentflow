@@ -39,6 +39,7 @@ type WriteResult struct {
 	Status   WriteStatus `json:"status"`
 	Revision string      `json:"revision,omitempty"`
 	URL      string      `json:"url,omitempty"`
+	Branch   string      `json:"branch,omitempty"`
 }
 
 // WriteOptions can carry a stable operation key and expected current revision

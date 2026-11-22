@@ -7,12 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 )
@@ -151,106 +147,4 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 		return nil, err
 	}
 	return map[string]string{"key": taskKey(result.Ref)}, nil
-}
-
-func (a *App) startIssue(ctx context.Context, key string, worktree bool, token string) (any, error) {
-	ref, err := a.taskRef(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := a.issueTasks(ctx)
-	if err != nil {
-		return nil, err
-	}
-	assignment, ok := tasks.(provider.TaskAssignment)
-	if !ok {
-		return nil, provider.Unsupported(ref.Instance, "assignment")
-	}
-	task, err := tasks.Get(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	// A stable, filesystem-safe name also lets retries resume after a local
-	// branch was created but a remote write failed.
-	branch := "issue-" + ref.ID + "-" + ref.StorageKey()[:12]
-	plan, err := a.planTaskTransition(ctx, taskKey(ref), flowmap.BranchCreated, &task)
-	if err != nil {
-		return nil, err
-	}
-	res := StartResult{Key: taskKey(ref), Branch: branch}
-	current := a.Repo.Branch(ctx)
-	if current != branch && (worktree || a.Repo.HasUncommitted(ctx)) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		name := filepath.Base(a.Repo.Dir)
-		if common := a.Repo.GitDir(ctx); filepath.Base(common) == ".git" {
-			name = filepath.Base(filepath.Dir(common))
-		}
-		if raw, err := a.Repo.Git(ctx, "remote", "get-url", "origin"); err == nil {
-			if remote, err := gitx.ParseRemoteURL(raw); err == nil && filepath.IsLocal(remote.Name) && filepath.Base(remote.Name) == remote.Name {
-				name = remote.Name
-			}
-		}
-		res.Worktree = filepath.Join(home, ".worktrees", name, branch)
-	}
-	s := map[string]any{"key": res.Key, "task_ref": ref.String(), "summary": task.Title, "branch": branch, "worktree": res.Worktree != "", "worktree_path": res.Worktree, "repo": a.Repo.Dir, "assign_to_me": true, "transition": plan}
-	level := a.Gate.Autonomy
-	class := policy.Remote
-	if config.Min(level.Local, level.Remote) != level.Remote {
-		class = policy.Local
-	}
-	if p, err := a.gate(class, "start", s, token, false, nil); p != nil || err != nil {
-		return p, err
-	}
-	if err := a.ensureIssueBranch(ctx, ref, res); err != nil {
-		a.audit(policy.Local, "branch", s, err)
-		return nil, err
-	}
-	a.audit(policy.Local, "branch", s, nil)
-	_, err = assignment.AssignToMe(ctx, ref, provider.WriteOptions{OperationID: ref.String() + "/start/assign"})
-	a.audit(policy.Remote, "assign_to_me", s, err)
-	if err != nil {
-		return res, err
-	}
-	res.Assigned = true
-	if plan.To != "" {
-		tr, err := a.ApplyTransition(ctx, plan)
-		res.Transition = &tr
-		if err != nil {
-			return res, err
-		}
-	}
-	return res, nil
-}
-
-func (a *App) ensureIssueBranch(ctx context.Context, ref provider.Ref, res StartResult) error {
-	bound, err := a.boundTask(ctx, res.Branch)
-	if err != nil {
-		return err
-	}
-	if bound.ID != "" {
-		checkout := a.Repo
-		if res.Worktree != "" {
-			checkout = &gitx.Repo{Dir: res.Worktree}
-		}
-		if bound == ref && checkout.Branch(ctx) == res.Branch && checkout.GitDir(ctx) == a.Repo.GitDir(ctx) {
-			return nil
-		}
-		return fmt.Errorf("branch %s already bound; resume start from its worktree", res.Branch)
-	}
-	if res.Worktree != "" {
-		err = a.Repo.AddWorktree(ctx, res.Worktree, res.Branch, a.Repo.BaseRef(ctx))
-	} else {
-		err = a.Repo.CreateBranch(ctx, res.Branch, a.Repo.BaseRef(ctx))
-	}
-	if err != nil {
-		return err
-	}
-	_, err = a.Repo.Git(ctx, "config", "--local", "branch."+res.Branch+".devflowTaskRef", ref.String())
-	if err != nil {
-		return fmt.Errorf("created branch %s but could not save its binding to %s: %w", res.Branch, ref.String(), err)
-	}
-	return nil
 }

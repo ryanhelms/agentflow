@@ -98,16 +98,31 @@ front matter and survives a file rename. A feature branch can recover the
 reference from its commits. The commit subject and ordinary issue mentions
 do not bind a task. The `transitions` setting uses the GitHub Issues event
 mapping above. File tasks start open and a close marks them terminal.
-Start and comments require capabilities these task adapters do not provide.
+Run `devflow start <qualified-key>` to bind a local branch to the task under
+local autonomy. Use `--worktree` for a linked checkout. To share a FileSystem
+task directory across worktrees, configure an absolute root. Start records the
+binding in local Git configuration. The file-backed adapters do not support
+assignment or comments.
 
 For Repository, set `repository` to a Git remote name, URL or local repository
 path. Relative paths resolve from the checkout. The defaults use `origin`
 and the remote HEAD. Set `directory` to the record directory within the
-branch tree. Repository reads use the selected branch. To publish directly,
-choose `publication: push` and an unprotected branch. Devflow shows the
-resolved origin, branch and directory for remote approval. Protected targets
-are rejected. The default `pull-request` mode returns an unsupported-operation
-error for task writes until the PR publisher is integrated (#20).
+branch tree. Reads always use this base branch.
+
+Repository creates and transitions require remote confirmation, including at
+the `auto` level. The preview identifies the origin, directory, base and push
+target. The default `publication: pull-request` requires a GitHub.com origin
+and GitHub authentication. Approval publishes a review branch and opens or
+reuses its PR. The result carries `status: pending_review`, the qualified task
+`key`, PR `url` and review `branch`. A pending transition returns
+`applied: false`. The new task or state becomes visible once the PR is merged.
+
+For create retries, reuse the same `DEVFLOW_OPERATION_ID` and task inputs.
+An interactive PR preview includes a generated `operation_id` when no
+operation ID is supplied. Use that ID to reconcile an interrupted publication
+with fresh approval. For direct publication, set `publication: push` and
+choose an unprotected target branch. Protected push targets are rejected in
+both modes.
 
 ## Search a local knowledge directory
 

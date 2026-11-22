@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/url"
@@ -51,9 +52,6 @@ func (a *App) fileTarget(ctx context.Context, write bool) (fileTaskTarget, error
 			t.root = filepath.Join(a.Repo.Dir, t.root)
 		}
 	case *config.RepositoryTaskSettings:
-		if write && s.Publication != "push" {
-			return t, provider.Unsupported("repository", "task pull-request publication (#20, pending the knowledge PR publisher)")
-		}
 		origin, err := a.taskOrigin(ctx, s.Repository, write)
 		if err != nil {
 			return t, err
@@ -130,7 +128,7 @@ type fileTaskMutation func(provider.Tasks) (provider.WriteResult, error)
 
 // The adapter resolves remote HEAD once per write. Gate inside BeforeWrite so
 // the branch shown for approval is exactly the branch passed to Git.
-func (a *App) writeFileTask(ctx context.Context, action string, summary map[string]any, token string, mutate fileTaskMutation) (provider.WriteResult, *Pending, error) {
+func (a *App) writeFileTask(ctx context.Context, action string, summary map[string]any, token string, ref provider.Ref, mutate fileTaskMutation) (provider.WriteResult, *Pending, error) {
 	var zero provider.WriteResult
 	target, err := a.fileTarget(ctx, true)
 	if err != nil {
@@ -152,6 +150,13 @@ func (a *App) writeFileTask(ctx context.Context, action string, summary map[stri
 		}
 	} else {
 		class = policy.Remote
+		if target.repo.Publication != "push" {
+			target.repo.Publication = "pull-request"
+			target.repo.Publisher, err = a.repositoryPublisher(ctx, target.repo.Origin, "task", ref)
+			if err != nil {
+				return zero, nil, err
+			}
+		}
 		summary["origin"], summary["directory"], summary["publication"] = target.repo.Origin, target.repo.Directory, target.repo.Publication
 		target.repo.BeforeWrite = func(base, branch string) error {
 			if policy.IsProtected(branch, a.Cfg.Policy.ProtectedBranches) {
@@ -207,16 +212,39 @@ func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkT
 	if link.ID != "" {
 		draft.Links = []provider.Link{{Ref: &link}}
 	}
-	summary := map[string]any{"provider": instance, "task": draft, "operation_id": issueOperation()}
+	operationID := issueOperation()
+	// Interactive PR creation needs its operation ID before approval because the
+	// ID determines the review branch. Carry it alongside the gate's signed
+	// token so a new process can reproduce the exact approved destination.
+	repo, repositoryTask := a.Cfg.Providers.TaskManagement.Settings.(*config.RepositoryTaskSettings)
+	interactiveReview := repositoryTask && repo.Publication != "push" && operationID == ""
+	if interactiveReview {
+		if token == "" {
+			operationID = rand.Text()
+		} else {
+			var ok bool
+			token, operationID, ok = strings.Cut(token, ".")
+			if !ok || operationID == "" || token == "" {
+				return nil, policy.ErrToken
+			}
+		}
+	}
+	summary := map[string]any{"provider": instance, "task": draft, "operation_id": operationID}
 	opts, err := issueWriteOptions("ticket_create", summary, token)
 	if err != nil {
 		return nil, err
 	}
-	w, p, err := a.writeFileTask(ctx, "ticket_create", summary, token, func(tasks provider.Tasks) (provider.WriteResult, error) {
+	w, p, err := a.writeFileTask(ctx, "ticket_create", summary, token, provider.Ref{Instance: instance, Scope: scope}, func(tasks provider.Tasks) (provider.WriteResult, error) {
 		return tasks.Create(ctx, draft, opts)
 	})
 	if p != nil || err != nil {
+		if interactiveReview && p != nil && p.ConfirmToken != "" {
+			p.ConfirmToken = p.ConfirmToken + "." + operationID
+		}
 		return p, err
+	}
+	if w.Status == provider.PendingReview {
+		return map[string]string{"key": w.Ref.String(), "status": string(w.Status), "url": w.URL, "branch": w.Branch}, nil
 	}
 	return map[string]string{"key": w.Ref.String()}, nil
 }
@@ -228,13 +256,16 @@ func (a *App) transitionFileTask(ctx context.Context, plan TransitionResult, tok
 	}
 	summary := map[string]any{"task_ref": ref.String(), "transition": plan, "revision": plan.revision}
 	opts := provider.WriteOptions{ExpectedRevision: plan.revision, OperationID: ref.String() + "/" + plan.Event + "/" + plan.revision}
-	result, p, err := a.writeFileTask(ctx, "transition", summary, token, func(tasks provider.Tasks) (provider.WriteResult, error) {
+	result, p, err := a.writeFileTask(ctx, "transition", summary, token, ref, func(tasks provider.Tasks) (provider.WriteResult, error) {
 		return tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, opts)
 	})
 	if p != nil || err != nil {
 		return p, err
 	}
 	plan.Applied = result.Status == provider.Applied
+	if result.Status == provider.PendingReview {
+		plan.Status, plan.URL, plan.Branch = result.Status, result.URL, result.Branch
+	}
 	if result.Status == provider.AlreadyApplied {
 		plan.Note = "already closed"
 	}

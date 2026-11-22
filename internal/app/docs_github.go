@@ -13,14 +13,15 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/repository"
 )
 
-type docsPublisher struct {
+type repositoryPublisher struct {
 	client *gh.Client
 	origin string
 	repo   string
+	kind   string
 	ref    provider.Ref
 }
 
-func (a *App) docsPublisher(ctx context.Context, origin string, ref provider.Ref) (*docsPublisher, error) {
+func (a *App) repositoryPublisher(ctx context.Context, origin, kind string, ref provider.Ref) (*repositoryPublisher, error) {
 	remote, err := gitx.ParseRemoteURL(origin)
 	if err != nil {
 		return nil, fmt.Errorf("GitHub pull-request publication requires a hosted GitHub origin: %w", err)
@@ -48,18 +49,26 @@ func (a *App) docsPublisher(ctx context.Context, origin string, ref provider.Ref
 	if c.Token == "" {
 		return nil, errors.New("GitHub authentication is required for pull-request publication")
 	}
-	return &docsPublisher{c, origin, remote.Path, ref}, nil
+	return &repositoryPublisher{client: c, origin: origin, repo: remote.Path, kind: kind, ref: ref}, nil
 }
 
-func (p *docsPublisher) EnsurePullRequest(ctx context.Context, pub repository.Publication) (string, error) {
-	if pub.Origin != p.origin || pub.Ref != p.ref {
-		return "", errors.New("publication does not match the configured repository and document reference")
+func (p *repositoryPublisher) EnsurePullRequest(ctx context.Context, pub repository.Publication) (string, error) {
+	if err := pub.Ref.Validate(); err != nil {
+		return "", err
+	}
+	// Task creation allocates its ID in the store. All other writes bind the exact reference.
+	if pub.Origin != p.origin || pub.Ref.Instance != p.ref.Instance || pub.Ref.Scope != p.ref.Scope ||
+		(p.ref.ID != "" && pub.Ref.ID != p.ref.ID) {
+		return "", errors.New("publication does not match the configured repository and reference")
 	}
 	if found, err := p.findPullRequest(ctx, pub); err != nil || found != "" {
 		return found, err
 	}
 	title := "docs: publish " + pub.Ref.ID
-	pr, err := p.client.CreatePR(ctx, p.repo, title, "Publish document "+pub.Ref.String()+".", pub.Head, pub.Base, false)
+	if p.kind == "task" {
+		title = "chore: publish task " + pub.Ref.ID
+	}
+	pr, err := p.client.CreatePR(ctx, p.repo, title, "Publish "+p.kind+" "+pub.Ref.String()+".", pub.Head, pub.Base, false)
 	if err == nil && pr.HTMLURL != "" {
 		return pr.HTMLURL, nil
 	}
@@ -74,7 +83,7 @@ func (p *docsPublisher) EnsurePullRequest(ctx context.Context, pub repository.Pu
 	return "", errors.Join(err, lookupErr)
 }
 
-func (p *docsPublisher) findPullRequest(ctx context.Context, pub repository.Publication) (string, error) {
+func (p *repositoryPublisher) findPullRequest(ctx context.Context, pub repository.Publication) (string, error) {
 	owner, _, _ := strings.Cut(p.repo, "/")
 	q := url.Values{"state": {"all"}, "head": {owner + ":" + pub.Head}, "base": {pub.Base}}
 	var prs []struct {

@@ -16,7 +16,6 @@ import (
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
 )
 
 // Untrusted wraps text that came from Jira or Confluence.
@@ -243,11 +242,8 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if key == "" {
 		return nil, errors.New("key is required; call devflow_my_work to choose one")
 	}
-	if a.usesFileTasks() {
-		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "start (automatic assignment)")
-	}
-	if a.usesIssues() {
-		return a.startIssue(ctx, key, worktree, token)
+	if a.UsesTaskRefs() {
+		return a.startProviderTask(ctx, key, worktree, token)
 	}
 	jc, err := a.Jira()
 	if err != nil {

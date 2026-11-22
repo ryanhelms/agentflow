@@ -522,7 +522,7 @@ func runStart(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(items) == 0 {
-			return errors.New("no open tickets assigned to you")
+			return errors.New("no open tasks found")
 		}
 		for i, it := range items {
 			fmt.Printf("%2d) %-12s %-14s %s\n", i+1, it.Key, it.Status, it.Summary)

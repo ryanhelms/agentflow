@@ -190,6 +190,7 @@ func (a adapter) existingReview(ctx context.Context, c checkout, head string, ap
 
 func (a adapter) requestReview(ctx context.Context, c checkout, head, op string, r provider.WriteResult) (provider.WriteResult, error) {
 	r.Status = provider.PendingReview
+	r.Branch = head
 	if a.Publisher == nil {
 		return r, nil
 	}
