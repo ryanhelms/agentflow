@@ -60,5 +60,7 @@ when the tool returns a preview.
 
 ### Configured provider setup
 
-Use `devflow_setup_plan` for provider and client readiness. Request approval
-before applying project client registration with `devflow_setup_apply`.
+Use `devflow_setup_plan` for provider and client readiness. When setup offers
+a user-pinned gh installation, show the artifact and request approval through
+`devflow_setup_apply` with `install_gh: true`. Project client registration
+uses the same tool with `client` and its own confirmation.

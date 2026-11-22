@@ -154,7 +154,7 @@ in a PR. Authored task and knowledge records under `.devflow/` are preserved.
 
 ### Set up your machine (engineers)
 
-Nothing to install by hand: opening the repo in any supported client runs the launcher.
+Opening the repo in a supported client runs the devflow launcher.
 
 ```bash
 devflow login     # your own Atlassian API token, stored in the OS keychain; reuses gh auth
@@ -170,6 +170,11 @@ Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`
 checks provider readiness and returns an error for missing requirements.
+On macOS and Linux, if a selected GitHub provider needs `gh` and the PATH
+copy fails its version check or is missing, you can pin a raw executable in
+`~/.devflow/companions.yml` and approve `devflow setup apply --install-gh`.
+Devflow verifies its SHA256 and uses the cached executable directly. See the
+[manifest format and MCP confirmation flow](docs/providers.md#install-a-pinned-gh-companion).
 
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review

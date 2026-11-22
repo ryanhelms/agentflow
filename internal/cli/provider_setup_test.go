@@ -2,7 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/mcpserver"
 	"github.com/nscaledev/devflow/internal/setup"
 )
@@ -99,6 +103,8 @@ notifications: {provider: none}
 		t.Fatal("preview created developer state")
 	}
 
+	// Setup writes still require explicit consent when local autonomy is auto.
+	write(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), "autonomy: {local: auto}\n", 0o600)
 	ctx := t.Context()
 	server, err := mcpserver.New(ctx, dir, "vscode")
 	if err != nil {
@@ -131,7 +137,8 @@ notifications: {provider: none}
 	}
 	// A newly missing provider dependency blocks registration, even if the
 	// client previously saw a plan with all provider requirements satisfied.
-	write(".devflow/config.yml", strings.Replace(cfg, "filesystem, settings: {root: .devflow/tasks}", "github-issues, settings: {repository: sample/project}", 1), 0o644)
+	githubConfig := strings.Replace(cfg, "filesystem, settings: {root: .devflow/tasks}", "github-issues, settings: {repository: sample/project}", 1)
+	write(".devflow/config.yml", githubConfig, 0o644)
 	call("devflow_setup_apply", input, &mcpPlan)
 	if mcpPlan.Ready || !bytes.Contains(mustJSON(t, mcpPlan), []byte("install gh on PATH")) {
 		t.Fatalf("missing gh did not block apply: %+v", mcpPlan)
@@ -154,6 +161,104 @@ notifications: {provider: none}
 		t.Fatalf("registration not verified: %+v, MCP %+v", plan, mcpPlan)
 	}
 	capture(0, "setup", "apply", "--json", "--client", "vscode", "--yes")
+	t.Run("managed gh", func(t *testing.T) {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+			t.Skip("local installer requires macOS or Linux")
+		}
+		home := os.Getenv("DEVFLOW_HOME")
+		log := filepath.Join(t.TempDir(), "calls")
+		t.Setenv("GH_FIXTURE_LOG", log)
+		t.Setenv("GH_TOKEN", "")
+		t.Setenv("GITHUB_TOKEN", "")
+		source := filepath.Join(t.TempDir(), "raw gh")
+		const raw = `#!/bin/sh
+printf '%s %s\n' "$0" "$*" >> "$GH_FIXTURE_LOG"
+case "$*" in
+  "--version"|"auth status --hostname github.com"|"api --hostname github.com --method GET --silent repos/sample/project/issues?per_page=1") ;;
+  "auth token") printf 'fixture-token\n' ;;
+  *) exit 7 ;;
+esac
+`
+		digest := fmt.Sprintf("%x", sha256.Sum256([]byte(raw)))
+		pin := fmt.Sprintf("gh:\n  - platform: {os: %s, arch: %s}\n    version: 2.3.4\n    source: %s\n    sha256: %s\n", runtime.GOOS, runtime.GOARCH, (&url.URL{Scheme: "file", Path: source}).String(), digest)
+		manifest := filepath.Join(home, "companions.yml")
+		write(manifest, pin, 0o600)
+		if p := capture(0, "setup", "plan", "--json"); p.InstallGH != nil {
+			t.Fatal("offered gh for filesystem provider")
+		}
+		write(".devflow/config.yml", githubConfig, 0o644)
+		plan := capture(0, "setup", "plan", "--json")
+		if plan.Ready || plan.InstallGH == nil || plan.InstallGH.Artifact.SHA256 != digest {
+			t.Fatalf("unexpected offer: %+v", plan)
+		}
+		// Registration-only approval cannot fetch or select the companion.
+		capture(1, "setup", "apply", "--client", "cursor", "--yes", "--json")
+		args := map[string]any{"install_gh": true}
+		call("devflow_setup_apply", args, &pending)
+		if pending.Status != "needs_confirmation" || pending.Token == "" {
+			t.Fatalf("missing installation confirmation: %+v", pending)
+		}
+		if _, err := os.Stat(filepath.Join(home, "companions")); !os.IsNotExist(err) {
+			t.Fatal("preview wrote the cache")
+		}
+		args["confirm_token"] = pending.Token
+		write(manifest, strings.Replace(pin, "2.3.4", "2.3.5", 1), 0o600)
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_setup_apply", Arguments: args})
+		if err != nil || !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "confirmation token") {
+			t.Fatalf("changed pin accepted: %+v, %v", res, err)
+		}
+		write(manifest, pin, 0o600)
+		write(source, raw, 0o600)
+		var installed setup.ProviderSetupPlan
+		call("devflow_setup_apply", args, &installed)
+		if !installed.Ready || installed.InstallGH != nil {
+			t.Fatalf("installed gh failed readiness: %+v", installed)
+		}
+		if err := os.Remove(source); err != nil {
+			t.Fatal(err)
+		}
+		capture(0, "setup", "apply", "--install-gh", "--yes", "--json")
+		a, err := app.Open(ctx, dir, "fixture")
+		if err != nil {
+			t.Fatal(err)
+		}
+		client, err := a.GitHub(ctx)
+		if err != nil || client.Token != "fixture-token" {
+			t.Fatalf("provider authentication failed: %v", err)
+		}
+		calls, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		executable := filepath.Join(plan.InstallGH.Home, "companions", runtime.GOOS+"-"+runtime.GOARCH, "gh", "2.3.4-"+digest)
+		for _, command := range []string{"--version", "auth status --hostname github.com", "api --hostname github.com --method GET", "auth token"} {
+			if !strings.Contains(string(calls), executable+" "+command) {
+				t.Fatalf("missing %q in %s", command, calls)
+			}
+		}
+		if os.Getenv("PATH") != bin {
+			t.Fatal("setup changed PATH")
+		}
+		if _, err := os.Stat(".cursor"); !os.IsNotExist(err) {
+			t.Fatal("installation registered a client")
+		}
+		// Exercise the CLI write path with a new pin and a broken unmanaged gh.
+		write(filepath.Join(bin, "gh"), "#!/bin/sh\nexit 8\n", 0o755)
+		write(source, raw, 0o600)
+		write(manifest, strings.Replace(pin, "2.3.4", "2.3.5", 1), 0o600)
+		capture(0, "setup", "apply", "--install-gh", "--yes", "--json")
+		data, err := os.ReadFile(filepath.Join(bin, "gh"))
+		if err != nil || string(data) != "#!/bin/sh\nexit 8\n" {
+			t.Fatal("unmanaged gh was replaced")
+		}
+		write(filepath.Join(bin, "gh"), raw, 0o755)
+		write(manifest, "malformed: [", 0o600)
+		capture(0, "setup", "verify", "--json")
+		calls, err = os.ReadFile(log)
+		if err != nil || !strings.Contains(string(calls), filepath.Join(bin, "gh")+" auth status") {
+			t.Fatal("working PATH installation lost priority")
+		}
+	})
 }
 
 func mustJSON(t *testing.T, v any) []byte {
