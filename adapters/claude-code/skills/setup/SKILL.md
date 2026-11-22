@@ -1,9 +1,10 @@
 ---
 name: setup
 description: Check provider readiness, verify provider MCP servers, install pinned companions, or register a project client
-argument-hint: "[plan | verify | apply | login] [--provider NAME] [--companion ID] [--client NAME]"
+argument-hint: "[providers | plan | verify | apply | login] [--provider NAME] [--companion ID] [--client NAME]"
 ---
-Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
+To list the providers each role can use, run `devflow setup providers` or call
+`devflow_setup_providers`. Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
 provider requirements. Use the current client or the one requested by the user.
 For a selected provider in `provider_tools`, discover its native MCP in the
 current client and try a small read for the configured site, repository or

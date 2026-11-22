@@ -152,20 +152,39 @@ func githubSettings() any { return &GitHubSettings{} }
 
 func codeHostingSettings() any { return &CodeHostingSettings{Hosts: map[string]string{}} }
 
-func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error) {
-	// Decode only the reserved sections. Unrelated top-level extensions keep
-	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
-	raw := map[string]any{}
-	for _, key := range []string{"code_hosting", "task_management", "knowledge_base", "devops", "secops", "notifications"} {
-		if node, ok := extra[key]; ok {
-			var value any
-			if err := node.Decode(&value); err != nil {
-				return Providers{}, fmt.Errorf("%s: %w", key, err)
-			}
-			raw[key] = value
-		}
-	}
+// ProviderRoles lists every role path in the order setup reports them.
+var ProviderRoles = []string{
+	"code_hosting", "task_management", "knowledge_base", "devops.checks",
+	"devops.deployments", "devops.releases", "secops", "notifications",
+}
 
+// RoleProviders describes the provider ids one role accepts. Providers is
+// sorted and always ends with "none", which disables the role.
+type RoleProviders struct {
+	Role      string   `json:"role"`
+	Default   string   `json:"default"`
+	Providers []string `json:"providers"`
+}
+
+// ProviderCatalog lists the providers each role accepts, from the same
+// registry that validates .devflow/config.yml.
+func ProviderCatalog() []RoleProviders {
+	schemas := providerSchemas(&Repo{})
+	out := make([]RoleProviders, 0, len(ProviderRoles))
+	for _, role := range ProviderRoles {
+		s := schemas[role]
+		out = append(out, RoleProviders{Role: role, Default: s.defaultProvider, Providers: s.choices()})
+	}
+	return out
+}
+
+func (s roleSchema) choices() []string {
+	return append(slices.Sorted(maps.Keys(s.providers)), "none")
+}
+
+// providerSchemas is the provider registry, keyed by role path. Repo supplies
+// defaults that legacy top-level settings still carry.
+func providerSchemas(repo *Repo) map[string]roleSchema {
 	const taskDir = ".devflow/tasks"
 	fileDefaults := func() FileTaskSettings {
 		return FileTaskSettings{Scope: "default", Transitions: defaultTransitions()}
@@ -204,13 +223,49 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 	devOpsFixture := roleSchema{"github", map[string]settingsFactory{
 		"github": githubSettings, "fixture": func() any { return &DevOpsFixtureSettings{} },
 	}}
+	return map[string]roleSchema{
+		"code_hosting": {"auto", map[string]settingsFactory{
+			"auto": codeHostingSettings, "github": codeHostingSettings,
+		}},
+		"task_management":    {"jira", tasks},
+		"knowledge_base":     {"confluence", knowledge},
+		"devops.checks":      github,
+		"devops.deployments": devOpsFixture,
+		"devops.releases":    devOpsFixture,
+		"secops": {"github", map[string]settingsFactory{
+			"github": func() any {
+				return &GitHubSecOpsSettings{Findings: []string{"dependabot", "code-scanning"}, MinSeverity: "high"}
+			},
+		}},
+		"notifications": {"slack", map[string]settingsFactory{
+			"slack":   func() any { return &SlackSettings{} },
+			"webhook": func() any { return &WebhookSettings{} },
+			"router":  func() any { return &NotificationRoutes{} },
+		}},
+	}
+}
+
+func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error) {
+	// Decode only the reserved sections. Unrelated top-level extensions keep
+	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
+	raw := map[string]any{}
+	for _, key := range []string{"code_hosting", "task_management", "knowledge_base", "devops", "secops", "notifications"} {
+		if node, ok := extra[key]; ok {
+			var value any
+			if err := node.Decode(&value); err != nil {
+				return Providers{}, fmt.Errorf("%s: %w", key, err)
+			}
+			raw[key] = value
+		}
+	}
+	schemas := providerSchemas(repo)
 
 	var p Providers
 	taskManagement, present, err := section(raw, "task_management", "task_management", "version", "provider", "settings", "templates")
 	if err != nil {
 		return Providers{}, err
 	}
-	p.TaskManagement, err = (roleSchema{"jira", tasks}).resolve(taskManagement, present, "task_management")
+	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management")
 	if err != nil {
 		return Providers{}, err
 	}
@@ -237,32 +292,21 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		parent map[string]any
 		key    string
 		path   string
-		schema roleSchema
 		out    *Selection
 	}{
-		{raw, "code_hosting", "code_hosting", roleSchema{"auto", map[string]settingsFactory{
-			"auto": codeHostingSettings, "github": codeHostingSettings,
-		}}, &p.CodeHosting},
-		{raw, "knowledge_base", "knowledge_base", roleSchema{"confluence", knowledge}, &p.KnowledgeBase},
-		{devops, "checks", "devops.checks", github, &p.DevOps.Checks},
-		{devops, "deployments", "devops.deployments", devOpsFixture, &p.DevOps.Deployments},
-		{devops, "releases", "devops.releases", devOpsFixture, &p.DevOps.Releases},
-		{raw, "secops", "secops", roleSchema{"github", map[string]settingsFactory{
-			"github": func() any {
-				return &GitHubSecOpsSettings{Findings: []string{"dependabot", "code-scanning"}, MinSeverity: "high"}
-			},
-		}}, &p.SecOps},
-		{raw, "notifications", "notifications", roleSchema{"slack", map[string]settingsFactory{
-			"slack":   func() any { return &SlackSettings{} },
-			"webhook": func() any { return &WebhookSettings{} },
-			"router":  func() any { return &NotificationRoutes{} },
-		}}, &p.Notifications},
+		{raw, "code_hosting", "code_hosting", &p.CodeHosting},
+		{raw, "knowledge_base", "knowledge_base", &p.KnowledgeBase},
+		{devops, "checks", "devops.checks", &p.DevOps.Checks},
+		{devops, "deployments", "devops.deployments", &p.DevOps.Deployments},
+		{devops, "releases", "devops.releases", &p.DevOps.Releases},
+		{raw, "secops", "secops", &p.SecOps},
+		{raw, "notifications", "notifications", &p.Notifications},
 	} {
 		fields, present, err := section(role.parent, role.key, role.path, "version", "provider", "settings")
 		if err != nil {
 			return Providers{}, err
 		}
-		*role.out, err = role.schema.resolve(fields, present, role.path)
+		*role.out, err = schemas[role.path].resolve(fields, present, role.path)
 		if err != nil {
 			return Providers{}, err
 		}
@@ -323,8 +367,7 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string) (S
 	} else if factory, ok := s.providers[id]; ok {
 		settings = factory()
 	} else {
-		choices := append(slices.Sorted(maps.Keys(s.providers)), "none")
-		return Selection{}, fmt.Errorf("%s.provider: expected one of %s", path, strings.Join(choices, ", "))
+		return Selection{}, fmt.Errorf("%s.provider: expected one of %s", path, strings.Join(s.choices(), ", "))
 	}
 	if overrides, ok := fields["settings"]; ok {
 		if err := applySettings(settings, overrides, path+".settings"); err != nil {
