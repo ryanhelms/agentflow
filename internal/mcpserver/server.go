@@ -202,6 +202,10 @@ type docsIn struct {
 	Query string `json:"query"`
 	Space string `json:"space,omitempty"`
 }
+type docsPublishIn struct {
+	app.DocsPublishInput
+	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response after the user agreed"`
+}
 type adrIn struct {
 	Title        string `json:"title"`
 	Context      string `json:"context,omitempty"`
@@ -300,6 +304,10 @@ func (s *Server) register() {
 		func(ctx context.Context, in eodIn) (any, error) { return a.PostEOD(ctx, in.Notes, in.ConfirmToken) })
 	add(s, "devflow_docs_search", "Search design docs and ADRs in the selected knowledge base.", readOnly,
 		func(ctx context.Context, in docsIn) (any, error) { return a.DocsSearch(ctx, in.Query, in.Space) })
+	add(s, "devflow_docs_publish", "Publish a Markdown document to the configured FileSystem, Repository, or GitHub Wiki knowledge base. Use the same operation_id on retry.", remote,
+		func(ctx context.Context, in docsPublishIn) (any, error) {
+			return a.DocsPublish(ctx, in.DocsPublishInput, in.ConfirmToken)
+		})
 	add(s, "devflow_adr_draft", "Write a new ADR under docs/adr from the standard template.", local,
 		func(ctx context.Context, in adrIn) (any, error) {
 			return a.ADRDraft(ctx, in.Title, in.Context, in.Decision, in.Consequences, in.ConfirmToken)
