@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.31.0](https://github.com/nscaledev/devflow/compare/v0.30.0...v0.31.0) - 2026-11-22
+
+### Features
+
+- preview jira comments through desktop rovo (#74) ([55dc663](https://github.com/nscaledev/devflow/commit/55dc663e28e1f6269ff2e2156b52b7d249998950))
+
 ## [0.30.0](https://github.com/nscaledev/devflow/compare/v0.29.0...v0.30.0) - 2026-11-22
 
 ### Features
