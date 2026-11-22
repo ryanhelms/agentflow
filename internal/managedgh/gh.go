@@ -31,6 +31,18 @@ type Selection struct {
 	Detail  string
 }
 
+// Command resolves an installed GitHub CLI for a repository without installing one.
+func Command(ctx context.Context, repo string) (string, error) {
+	selection, err := Inspect(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	if selection.Command == "" {
+		return "", fmt.Errorf("GitHub CLI unavailable: %s", selection.Detail)
+	}
+	return selection.Command, nil
+}
+
 func working(ctx context.Context, dir, path string) bool {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
