@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.23.0](https://github.com/nscaledev/devflow/compare/v0.22.0...v0.23.0) - 2026-11-22
+
+### Features
+
+- start provider sign-in through native tools (#66) ([a282ea4](https://github.com/nscaledev/devflow/commit/a282ea43ea4d545b244160a411c48903635a83d5))
+
 ## [0.22.0](https://github.com/nscaledev/devflow/compare/v0.21.0...v0.22.0) - 2026-11-22
 
 ### Features
