@@ -79,7 +79,7 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 	needsDetection := false
 	for _, role := range roles {
 		switch role.Settings.(type) {
-		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings:
+		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings, *config.GitHubWikiSettings:
 			needsDetection = true
 		}
 	}
@@ -102,7 +102,7 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 			if detection.Forge == gitx.ForgeGitHub {
 				ghRoles = append(ghRoles, r)
 			}
-		case "repository":
+		case "repository", "github-wiki":
 			gitRoles = append(gitRoles, r)
 		}
 	}
@@ -143,6 +143,10 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		case *config.GitHubIssuesSettings:
 			if ghOK {
 				github.check(ctx, p, role, settings.Repository)
+			}
+		case *config.GitHubWikiSettings:
+			if gitOK {
+				p.checkWiki(ctx, role, settings, detection)
 			}
 		default:
 			p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))

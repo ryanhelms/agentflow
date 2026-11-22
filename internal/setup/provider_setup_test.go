@@ -186,3 +186,31 @@ func TestClientMergePreservesUnrelatedSettings(t *testing.T) {
 		}
 	}
 }
+
+func TestWikiReadinessChecksInitializedGitRemote(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a POSIX Git executable")
+	}
+	root, bin := t.TempDir(), t.TempDir()
+	t.Setenv("PATH", bin)
+	cfg := strings.Replace(headlessConfig, "task_management: {provider: github-issues, settings: {repository: sample/project}}", "task_management: {provider: none}", 1)
+	cfg = strings.Replace(cfg, "knowledge_base: {provider: filesystem, settings: {root: records}}", "knowledge_base: {provider: github-wiki, settings: {repository: sample/project}}", 1)
+	setupFile(t, root, ".devflow/config.yml", cfg, 0o644)
+	setupFile(t, bin, "git", `#!/bin/sh
+case "$*" in
+  "--version") exit 0 ;;
+  "-c credential.interactive=never ls-remote --exit-code https://github.com/sample/project.wiki.git HEAD")
+    test "$GIT_TERMINAL_PROMPT" = 0 || exit 8
+    exit "${SETUP_WIKI_EXIT:-0}" ;;
+  *) exit 8 ;;
+esac
+`, 0o755)
+	t.Setenv("SETUP_WIKI_EXIT", "1")
+	planContains(t, planFixture(t, root, ""), "enable the GitHub wiki")
+	t.Setenv("SETUP_WIKI_EXIT", "0")
+	plan := planFixture(t, root, "")
+	if !plan.Ready {
+		t.Fatalf("initialized wiki reported unready: %+v", plan)
+	}
+	planContains(t, plan, "can read the wiki default branch")
+}

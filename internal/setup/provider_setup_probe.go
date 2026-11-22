@@ -23,8 +23,25 @@ func probeCommand(ctx context.Context, dir, command string, args ...string) bool
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = dir
-	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_NO_EXTENSION_UPDATE_NOTIFIER=1", "GH_PAGER=cat")
+	cmd.Env = append(cmd.Environ(), "GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_NO_EXTENSION_UPDATE_NOTIFIER=1", "GH_PAGER=cat", "GIT_TERMINAL_PROMPT=0")
 	return cmd.Run() == nil
+}
+
+func (p *ProviderSetupPlan) checkWiki(ctx context.Context, role selectedRole, settings *config.GitHubWikiSettings, detection gitx.Detection) {
+	slug := value(settings.Repository)
+	if settings.Repository == nil && detection.OK() && detection.Forge == gitx.ForgeGitHub && detection.Target.URL.Host == "github.com" {
+		slug = detection.Target.URL.Path
+	}
+	if err := gitx.ValidateGitHubSlug(slug); err != nil {
+		p.check(role.name, role.Provider, false, "configure knowledge_base.settings.repository with a GitHub.com owner/name or select a GitHub.com default remote")
+		return
+	}
+	url := "https://github.com/" + slug + ".wiki.git"
+	if !probeCommand(ctx, p.Root, "git", "-c", "credential.interactive=never", "ls-remote", "--exit-code", url, "HEAD") {
+		p.check(role.name, role.Provider, false, "enable the GitHub wiki, create its first page, and configure Git access to "+url)
+		return
+	}
+	p.check(role.name, role.Provider, true, "can read the wiki default branch at "+url)
 }
 
 func (p *ProviderSetupPlan) checkDirectory(role selectedRole, path string) {
