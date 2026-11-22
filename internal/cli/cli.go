@@ -60,6 +60,8 @@ Work
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
   docs search QUERY [--space S]  search the selected knowledge base
+  docs publish REF --title T --body TEXT --operation-id ID
+               [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
                                  .devflow/releases.yml and the release-please files
@@ -250,26 +252,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 		printStandup(out)
 		return nil
 	case "docs":
-		if len(args) < 2 || args[0] != "search" {
-			return errors.New("usage: devflow docs search QUERY [--space S]")
-		}
-		fs := flag.NewFlagSet("docs", flag.ContinueOnError)
-		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
-		if err := fs.Parse(args[2:]); err != nil {
-			return err
-		}
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		out, err := a.DocsSearch(ctx, args[1], *space)
-		if err != nil {
-			return err
-		}
-		for _, p := range out["pages"].([]atlassian.Page) {
-			fmt.Printf("%s [%s]\n  %s\n  %s\n", p.Title, p.Space, p.URL, p.Excerpt)
-		}
-		return nil
+		return runDocs(ctx, args)
 	case "adr":
 		if len(args) < 2 || args[0] != "new" {
 			return errors.New("usage: devflow adr new TITLE")
