@@ -298,7 +298,7 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_eod_post", "Post end-of-day progress comments on tickets.", remote,
 		func(ctx context.Context, in eodIn) (any, error) { return a.PostEOD(ctx, in.Notes, in.ConfirmToken) })
-	add(s, "devflow_docs_search", "Search Confluence design docs and ADRs.", readOnly,
+	add(s, "devflow_docs_search", "Search design docs and ADRs in the selected knowledge base.", readOnly,
 		func(ctx context.Context, in docsIn) (any, error) { return a.DocsSearch(ctx, in.Query, in.Space) })
 	add(s, "devflow_adr_draft", "Write a new ADR under docs/adr from the standard template.", local,
 		func(ctx context.Context, in adrIn) (any, error) {
