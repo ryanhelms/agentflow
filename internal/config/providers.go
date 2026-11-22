@@ -20,6 +20,7 @@ const ProviderSchemaVersion = 1
 type Providers struct {
 	CodeHosting    Selection
 	TaskManagement Selection
+	TaskTemplates  *TaskTemplateSettings
 	KnowledgeBase  Selection
 	DevOps         DevOps
 	SecOps         Selection
@@ -176,6 +177,20 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
 
 	var p Providers
+	taskManagement, present, err := section(raw, "task_management", "task_management", "version", "provider", "settings", "templates")
+	if err != nil {
+		return Providers{}, err
+	}
+	p.TaskManagement, err = (roleSchema{"jira", tasks}).resolve(taskManagement, present, "task_management")
+	if err != nil {
+		return Providers{}, err
+	}
+	if value, ok := taskManagement["templates"]; ok {
+		p.TaskTemplates, err = parseTaskTemplates(value)
+		if err != nil {
+			return Providers{}, err
+		}
+	}
 	devops, _, err := section(raw, "devops", "devops", "version", "checks", "deployments", "releases")
 	if err != nil {
 		return Providers{}, err
@@ -194,7 +209,6 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		{raw, "code_hosting", "code_hosting", roleSchema{"auto", map[string]settingsFactory{
 			"auto": codeHostingSettings, "github": codeHostingSettings,
 		}}, &p.CodeHosting},
-		{raw, "task_management", "task_management", roleSchema{"jira", tasks}, &p.TaskManagement},
 		{raw, "knowledge_base", "knowledge_base", roleSchema{"confluence", knowledge}, &p.KnowledgeBase},
 		{devops, "checks", "devops.checks", github, &p.DevOps.Checks},
 		{devops, "deployments", "devops.deployments", github, &p.DevOps.Deployments},
@@ -204,7 +218,11 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 			"slack": func() any { return &SlackSettings{} },
 		}}, &p.Notifications},
 	} {
-		*role.out, err = role.schema.resolve(role.parent, role.key, role.path)
+		fields, present, err := section(role.parent, role.key, role.path, "version", "provider", "settings")
+		if err != nil {
+			return Providers{}, err
+		}
+		*role.out, err = role.schema.resolve(fields, present, role.path)
 		if err != nil {
 			return Providers{}, err
 		}
@@ -236,11 +254,7 @@ func sectionVersion(fields map[string]any, path string) (int, error) {
 	return ProviderSchemaVersion, nil
 }
 
-func (s roleSchema) resolve(parent map[string]any, key, path string) (Selection, error) {
-	fields, present, err := section(parent, key, path, "version", "provider", "settings")
-	if err != nil {
-		return Selection{}, err
-	}
+func (s roleSchema) resolve(fields map[string]any, present bool, path string) (Selection, error) {
 	version, err := sectionVersion(fields, path)
 	if err != nil {
 		return Selection{}, err

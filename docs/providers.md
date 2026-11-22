@@ -59,6 +59,25 @@ values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
 
+## Task templates
+
+Task object templates apply independently of the task provider. Configure a
+JSON catalog file relative to the checkout and an optional default template.
+Use an exact name and revision for a reproducible task definition.
+
+```yaml
+task_management:
+  templates:
+    catalog: .devflow/task-templates.json
+    default:
+      name: engineering-task
+      revision: "1"
+```
+
+The templates section is unset by default. If it is present, `catalog` is
+required and `default` may be omitted. The catalog defines each revision's
+required fields, defaults, body sections, and acceptance checklist. See the
+[task template format](../internal/tasktemplate/README.md).
 ## GitHub Issues task lifecycle
 
 Use the `github-issues` task provider with the detected GitHub repository or set
@@ -123,6 +142,16 @@ operation ID is supplied. Use that ID to reconcile an interrupted publication
 with fresh approval. For direct publication, set `publication: push` and
 choose an unprotected target branch. Protected push targets are rejected in
 both modes.
+
+## Devflow repository pilot
+
+This repository uses GitHub Issues for task management and the Repository
+provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
+enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
+variable. It applies `pr.merged` to that issue after a same-repository PR
+with a qualified `Task-Ref` merges into the default branch.
+
+The pilot uses the repository's existing GoReleaser release process.
 
 ## Search a local knowledge directory
 
