@@ -145,11 +145,12 @@ that is behind, and the Claude Code session hook offers `/devflow:pin` when it i
 Dependabot or GitHub App access is needed.
 
 **Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
-`.devflow/`, the caller workflow, the release-please files (`--keep-releases` keeps them)
-and unchanged template files (`--force` deletes changed ones too), strips devflow's block
+the generated configuration and launchers under `.devflow/`, the caller workflow,
+the release-please files (`--keep-releases` keeps them), and unchanged template files (`--force` deletes changed ones too), strips devflow's block
 from `AGENTS.md` and its entries from client configs, unsets `core.hooksPath` and turns
 automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
-in a PR; repo variables, secrets, tags and releases are not touched.
+in a PR; repo variables, secrets, tags and releases are not touched. Authored task and
+knowledge records under `.devflow/` are preserved.
 
 ### Set up your machine (engineers)
 
