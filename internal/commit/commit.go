@@ -434,7 +434,11 @@ func Format(typ string, keys []string, breaking bool, summary, body string, verb
 	if breaking {
 		bang = "!"
 	}
-	fmt.Fprintf(&b, "%s(%s)%s: %s", typ, strings.Join(keys, ","), bang, summary)
+	b.WriteString(typ)
+	if len(keys) != 0 {
+		fmt.Fprintf(&b, "(%s)", strings.Join(keys, ","))
+	}
+	fmt.Fprintf(&b, "%s: %s", bang, summary)
 	for _, v := range verbs {
 		b.WriteString(" #" + v)
 	}

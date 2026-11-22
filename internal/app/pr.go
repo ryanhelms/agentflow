@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider"
 )
 
 // Check is one readiness check.
@@ -44,8 +45,20 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 	}
 	branch := a.Repo.Branch(ctx)
 	add(Check{Name: "feature branch", OK: branch != "" && !policy.IsProtected(branch, a.Cfg.Policy.ProtectedBranches), Detail: branch})
-	key := a.CurrentKey(ctx)
-	add(Check{Name: "branch has Jira key", OK: key != "", Detail: key})
+	key := ""
+	if a.usesIssues() {
+		ref, err := a.branchIssue(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if ref.ID != "" {
+			key = issueKey(ref)
+		}
+		add(Check{Name: "branch has task reference", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
+	} else {
+		key = a.CurrentKey(ctx)
+		add(Check{Name: "branch has Jira key", OK: key != "", Detail: key})
+	}
 	bad, err := a.LintBranch(ctx)
 	if err != nil {
 		add(Check{Name: "commit messages", OK: false, Detail: err.Error()})
@@ -72,15 +85,31 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 			r.Draft = d < n
 			r.Checks = append(r.Checks, Check{Name: "acceptance criteria", OK: true, Detail: fmt.Sprintf("%d/%d ticked (opens as draft if incomplete)", d, n)})
 		}
-		r.Effects, _, _ = a.Preview(ctx, fmt.Sprintf("chore(%s): preview", key))
-		if jc, err := a.Jira(); err == nil {
-			if iss, err := jc.GetIssue(ctx, key); err == nil {
-				typ := "feat"
-				if msgs, err := a.Repo.Messages(ctx, base+"..HEAD"); err == nil && len(msgs) > 0 {
-					typ = commit.Parse(msgs[0]).Type
-				}
-				r.SuggestTitle = fmt.Sprintf("%s(%s): %s", typ, key, strings.ToLower(iss.Fields.Summary[:1])+iss.Fields.Summary[1:])
+		if a.usesIssues() {
+			ref, err := a.issueRef(ctx, key)
+			if err != nil {
+				return nil, err
 			}
+			r.Effects, _, err = a.Preview(ctx, "chore: preview\n\n"+provider.TaskTrailer+ref.String())
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			r.Effects, _, _ = a.Preview(ctx, fmt.Sprintf("chore(%s): preview", key))
+			if jc, err := a.Jira(); err == nil {
+				if iss, err := jc.GetIssue(ctx, key); err == nil {
+					typ := "feat"
+					if msgs, err := a.Repo.Messages(ctx, base+"..HEAD"); err == nil && len(msgs) > 0 {
+						typ = commit.Parse(msgs[0]).Type
+					}
+					r.SuggestTitle = fmt.Sprintf("%s(%s): %s", typ, key, strings.ToLower(iss.Fields.Summary[:1])+iss.Fields.Summary[1:])
+				}
+			}
+		}
+	}
+	if a.usesIssues() {
+		if msgs, err := a.Repo.Messages(ctx, base+"..HEAD"); err == nil && len(msgs) > 0 {
+			r.SuggestTitle = commit.Parse(msgs[len(msgs)-1]).Subject
 		}
 	}
 	if runCmds {
@@ -151,6 +180,12 @@ func (a *App) PROpen(ctx context.Context, in PROpenInput, token string) (any, er
 	if in.Body == "" {
 		in.Body = a.prBody(ctx, key)
 	}
+	if a.usesIssues() {
+		in.Body, err = a.issuePRBody(ctx, in.Body, key)
+		if err != nil {
+			return nil, err
+		}
+	}
 	draft := ready.Draft
 	if in.Draft != nil {
 		draft = *in.Draft
@@ -197,7 +232,7 @@ func (a *App) prBody(ctx context.Context, key string) string {
 			break
 		}
 	}
-	if key != "" {
+	if key != "" && !a.usesIssues() {
 		fmt.Fprintf(&b, "Jira: [%s](%s/browse/%s)\n\n", key, strings.TrimRight(a.Cfg.Jira.Site, "/"), key)
 	}
 	if tmpl != "" {
@@ -224,6 +259,31 @@ func (a *App) prBody(ctx context.Context, key string) string {
 		}
 	}
 	return b.String()
+}
+
+// Carry the branch binding into a PR even when the caller supplied its body.
+// Reject conflicting trailers before the push or the confirmation prompt.
+func (a *App) issuePRBody(ctx context.Context, body, key string) (string, error) {
+	keys, err := issueKeys(body)
+	if err != nil {
+		return "", err
+	}
+	if key == "" {
+		return body, nil
+	}
+	ref, err := a.issueRef(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	for _, other := range keys {
+		if other != key {
+			return "", fmt.Errorf("PR body references %s but the branch is bound to %s", other, key)
+		}
+	}
+	if len(keys) == 0 {
+		return strings.TrimRight(body, "\r\n") + "\n\n" + provider.TaskTrailer + ref.String() + "\n", nil
+	}
+	return body, nil
 }
 
 // ReviewThreads lists unresolved review threads on the branch's PR.
@@ -269,19 +329,30 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 	key := a.CurrentKey(ctx)
 	if key != "" {
 		out["key"] = key
-		if jc, err := a.Jira(); err == nil {
-			if iss, err := jc.GetIssue(ctx, key); err == nil {
-				out["ticket_status"] = iss.Fields.Status.Name
+		if a.usesIssues() {
+			ref, err := a.issueRef(ctx, key)
+			if err != nil {
+				return out, err
 			}
-		}
-		if fm, err := a.FlowMap(ctx); err == nil {
-			next := map[string]string{}
-			for _, ev := range []string{flowmap.PRMerged, flowmap.DeployStaging, flowmap.DeployProduction} {
-				if s, ok := fm.Resolve(projectOf(key), ev); ok {
-					next[ev] = s
+			if t, err := a.getIssue(ctx, ref); err == nil {
+				out["ticket_status"] = t.State.Name
+				out["flow_next"] = a.nextIssueStates(t)
+			}
+		} else {
+			if jc, err := a.Jira(); err == nil {
+				if iss, err := jc.GetIssue(ctx, key); err == nil {
+					out["ticket_status"] = iss.Fields.Status.Name
 				}
 			}
-			out["flow_next"] = next
+			if fm, err := a.FlowMap(ctx); err == nil {
+				next := map[string]string{}
+				for _, ev := range []string{flowmap.PRMerged, flowmap.DeployStaging, flowmap.DeployProduction} {
+					if s, ok := fm.Resolve(projectOf(key), ev); ok {
+						next[ev] = s
+					}
+				}
+				out["flow_next"] = next
+			}
 		}
 	}
 	repo, err := a.GitHubRepo(ctx)

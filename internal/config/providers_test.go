@@ -217,3 +217,19 @@ func TestInvalidProviderConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestGitHubIssueTransitions(t *testing.T) {
+	cfg := loadConfig(t, `task_management:
+  provider: github-issues
+  settings:
+    transitions: {pr.merged: none, deploy.production: closed, "#start": open}
+`)
+	got := cfg.Providers.TaskManagement.Settings.(*GitHubIssuesSettings).Transitions
+	if got["pr.merged"] != "none" || got["#done"] != "closed" || got["deploy.production"] != "closed" || got["#start"] != "open" {
+		t.Fatalf("transitions = %v", got)
+	}
+	root := writeConfig(t, "task_management: {provider: github-issues, settings: {transitions: {pr.merged: done}}}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "task_management.settings.transitions.pr.merged") {
+		t.Fatalf("invalid state: %v", err)
+	}
+}
