@@ -139,16 +139,6 @@ type SlackSettings struct {
 	CredentialRef *string `yaml:"credential_ref"`
 }
 
-const DefaultSlackWebhookEnv = "SLACK_WEBHOOK_URL"
-
-// WebhookCredentialRef resolves the configured environment variable or its provider default.
-func (s SlackSettings) WebhookCredentialRef(defaultRef string) string {
-	if s.CredentialRef != nil && *s.CredentialRef != "" {
-		return *s.CredentialRef
-	}
-	return defaultRef
-}
-
 // Each entry constructs an independent default settings object. Role registries
 // can reuse constructors or supply their own defaults for a shared provider.
 type settingsFactory func() any

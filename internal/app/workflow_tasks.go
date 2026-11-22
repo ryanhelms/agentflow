@@ -29,7 +29,7 @@ func (a *App) prepareWorkflowTasks() error {
 			}
 		}
 		site := os.Getenv("JIRA_BASE")
-		if err := atlassian.ValidateSite(site); err != nil {
+		if err := validateSite(site); err != nil {
 			return fmt.Errorf("JIRA_BASE: %w", err)
 		}
 		settings := a.jiraSettings()

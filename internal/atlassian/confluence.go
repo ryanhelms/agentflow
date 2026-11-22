@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -48,6 +49,14 @@ func ValidConfluenceID(s string) bool {
 	return err == nil && n > 0 && strconv.FormatInt(n, 10) == s
 }
 
+// Bind page operations to the configured site and endpoint, including on 307/308.
+func (c Client) pageRequest(ctx context.Context, method, path string, in, out any) error {
+	client := *c.http
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c.http = &client
+	return c.do(ctx, method, path, in, out)
+}
+
 func (c *Client) GetConfluencePage(ctx context.Context, id string) (CurrentPage, error) {
 	var zero CurrentPage
 	path, err := pagePath(id)
@@ -55,7 +64,7 @@ func (c *Client) GetConfluencePage(ctx context.Context, id string) (CurrentPage,
 		return zero, err
 	}
 	var page confluencePageResponse
-	if err := c.siteRequest(ctx, "GET", path+"?body-format=atlas_doc_format", nil, &page); err != nil {
+	if err := c.pageRequest(ctx, "GET", path+"?body-format=atlas_doc_format", nil, &page); err != nil {
 		return zero, err
 	}
 	if page.ID != id || page.Status != "current" || page.Version.Number < 1 || strings.TrimSpace(page.Title) == "" {
@@ -75,7 +84,7 @@ func (c *Client) confluenceSpaceKey(ctx context.Context, id string) (string, err
 		return "", errors.New("invalid Confluence space ID")
 	}
 	var space struct{ ID, Key string }
-	if err := c.siteRequest(ctx, "GET", "/wiki/api/v2/spaces/"+id, nil, &space); err != nil {
+	if err := c.pageRequest(ctx, "GET", "/wiki/api/v2/spaces/"+id, nil, &space); err != nil {
 		return "", err
 	}
 	if space.ID != id || space.Key == "" {
@@ -90,7 +99,7 @@ func (c *Client) GetConfluenceVersion(ctx context.Context, id string, number int
 	if err != nil {
 		return version, err
 	}
-	err = c.siteRequest(ctx, "GET", path+"/versions/"+strconv.FormatInt(number, 10), nil, &version)
+	err = c.pageRequest(ctx, "GET", path+"/versions/"+strconv.FormatInt(number, 10), nil, &version)
 	return version, err
 }
 
@@ -107,7 +116,7 @@ func (c *Client) ReplaceConfluencePage(ctx context.Context, page CurrentPage, ti
 		"body": map[string]string{"representation": "storage", "value": storage},
 	}
 	var out confluencePageResponse
-	if err := c.siteRequest(ctx, "PUT", path, in, &out); err != nil {
+	if err := c.pageRequest(ctx, "PUT", path, in, &out); err != nil {
 		return err
 	}
 	if out.ID != page.ID || out.SpaceID != page.SpaceID || out.Status != "current" || out.Title != title || out.Version != version {

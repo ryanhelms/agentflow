@@ -140,7 +140,7 @@ type notificationTarget struct {
 func notificationTargets(selection config.Selection, signal string) []notificationTarget {
 	switch settings := selection.Settings.(type) {
 	case *config.SlackSettings:
-		target := singleNotificationTarget("slack", config.DefaultSlackWebhookEnv, *settings)
+		target := singleNotificationTarget("slack", "SLACK_WEBHOOK_URL", *settings)
 		target.optional = settings.CredentialRef == nil || *settings.CredentialRef == ""
 		return []notificationTarget{target}
 	case *config.WebhookSettings:
@@ -171,7 +171,10 @@ func singleNotificationTarget(kind, env string, settings config.SlackSettings) n
 	if settings.Destination != nil && *settings.Destination != "" {
 		name = *settings.Destination
 	}
-	return notificationTarget{name: name, NotificationDestination: config.NotificationDestination{Provider: kind, CredentialRef: settings.WebhookCredentialRef(env)}}
+	if settings.CredentialRef != nil && *settings.CredentialRef != "" {
+		env = *settings.CredentialRef
+	}
+	return notificationTarget{name: name, NotificationDestination: config.NotificationDestination{Provider: kind, CredentialRef: env}}
 }
 
 func (target notificationTarget) router(store notifications.FileStore, transport http.RoundTripper) (*notifications.Router, NotificationStatus, error) {

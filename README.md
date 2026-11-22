@@ -177,9 +177,7 @@ and the [provider authoring guide](docs/provider-authoring.md). Use the
 Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`
-checks provider readiness and returns an error for missing requirements. Jira
-and Confluence use authenticated reads. Slack checks the configured incoming
-webhook locally without sending a message.
+checks provider readiness and returns an error for missing requirements.
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

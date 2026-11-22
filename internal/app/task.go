@@ -465,7 +465,7 @@ func (a *App) LoginCheck(ctx context.Context) (string, string, error) {
 	// The legacy doctor explicitly checks the developer's Atlassian login,
 	// including in repositories that selected a different task provider.
 	site := a.jiraSettings().Site
-	if err := atlassian.ValidateSite(site); err != nil {
+	if err := validateSite(site); err != nil {
 		return "", "", err
 	}
 	jc, err := a.loadJiraClient(site)

@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -20,12 +22,21 @@ func (a *App) jiraSettings() config.JiraSettings {
 	return config.JiraSettings{Site: a.Cfg.Jira.Site, Projects: a.Cfg.Jira.Projects}
 }
 
+func validateSite(site string) error {
+	u, err := url.Parse(site)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return errors.New("expected an absolute Atlassian site URL without credentials, query or fragment")
+	}
+	return nil
+}
+
 func (a *App) jiraSite() (string, error) {
 	if p := a.Cfg.Providers.TaskManagement.Provider; p != "" && p != "jira" {
 		return "", provider.Unsupported(p, "Jira operations")
 	}
 	site := a.jiraSettings().Site
-	return site, atlassian.ValidateSite(site)
+	return site, validateSite(site)
 }
 
 // Jira returns the authenticated client for the selected Jira site.
@@ -77,7 +88,7 @@ func (a *App) confluenceSite() (string, error) {
 	if s, ok := a.Cfg.Providers.KnowledgeBase.Settings.(*config.ConfluenceSettings); ok {
 		site = s.Site
 	}
-	if err := atlassian.ValidateSite(site); err != nil {
+	if err := validateSite(site); err != nil {
 		return "", fmt.Errorf("knowledge_base.settings.site: %w", err)
 	}
 	return site, nil

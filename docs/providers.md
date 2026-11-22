@@ -139,18 +139,6 @@ as errors. Use provider credentials in the environment where the command runs.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
 
-Jira readiness reads the authenticated identity. Confluence readiness lists
-visible spaces. Both use the configured service site and the same credentials
-as their provider operations. Run `devflow login` for a shared Atlassian site
-or supply `JIRA_USER` and `JIRA_TOKEN` or `CONFLUENCE_USER` and
-`CONFLUENCE_TOKEN` for the provider that needs them. These reads verify site
-access. Permissions for a specific project, space, or write depend on the operation.
-
-Slack readiness validates the local webhook URL and destination. Set
-`SLACK_WEBHOOK_URL` or the variable named by
-`notifications.settings.credential_ref` where devflow runs. Setup sends no
-messages.
-
 ### Claude Code Desktop
 
 The `claude` setup mode configures the Claude Code plugin marketplace. If a
