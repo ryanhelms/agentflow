@@ -286,6 +286,28 @@ registration. Review each summary, then repeat the same request with its
 Omit `companion` from `setup verify` or use `doctor --providers` to check
 all selected providers and their declared MCP prerequisites.
 
+### Companion cleanup and repair
+
+When setup writes a companion entry, it saves the entry name and a SHA256
+digest beside the project config, for example in
+`.vscode/mcp.json.devflow-companions.json`. Keep the receipt with the
+corresponding config. A matching entry already present at setup time keeps
+its existing ownership.
+
+Run `devflow remove --dry-run` to preview removal for the project. Then run
+`devflow remove` to delete recorded entries whose full JSON value still
+matches and discard their project receipts. Both commands work offline.
+Even with `--force`, edited entries and entries without a receipt stay in
+the client config. For registrations made before receipts were introduced,
+review the command or endpoint in the project file listed above and delete
+only the server entry you recognize. The user manifest, cached executables
+and active version selections remain available to other projects.
+
+To repair a registration, run `devflow setup plan --companion ID --client NAME`,
+review the proposed change, then run `devflow setup apply --companion ID --client NAME`.
+This updates the selected entry and its receipt. Use the separate `--install`
+action when the shared executable itself needs repair.
+
 ## GitHub Issues task lifecycle
 
 Use the `github-issues` task provider with the detected GitHub repository or set

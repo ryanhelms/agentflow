@@ -2,8 +2,10 @@ package setup
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -17,7 +19,7 @@ import (
 // The hash binds consent to the previous entry even when it contains inline
 // credentials. Neither its contents nor other settings enter the preview.
 func RegisterCompanion(dir string, r *ClientRegistration, s managedmcp.Status) error {
-	return registerOverlay(dir, func() (*ClientRegistration, []byte, error) {
+	return registerOverlay(dir, companionEntry(r.Client, s), func() (*ClientRegistration, []byte, error) {
 		now, data, err := companionOverlay(dir, r.Client, s)
 		if err == nil && now.State != "configured" && *now != *r {
 			return nil, nil, provision.ErrStalePlan
@@ -73,6 +75,28 @@ func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistrat
 			return r, nil, nil
 		}
 	}
+	wanted := companionEntry(client, s)
+	r.State = "pending"
+	r.Detail = "add " + r.Entry + " to " + r.Path
+	if prev, ok := entries[r.Entry]; ok {
+		if reflect.DeepEqual(prev, wanted) {
+			r.State, r.Detail = "configured", "managed entry matches the verified companion"
+			return r, nil, nil
+		}
+		r.PreviousSHA256, err = entryDigest(prev)
+		if err != nil {
+			return nil, nil, err
+		}
+		r.Detail = "replace the reserved " + r.Entry + " entry in " + r.Path
+	}
+	entries[r.Entry] = wanted
+	doc[format.group] = entries
+	next, err := json.MarshalIndent(doc, "", "  ")
+	return r, append(next, '\n'), err
+}
+
+func companionEntry(client string, s managedmcp.Status) map[string]any {
+	format := companionClients[client]
 	wanted := map[string]any{}
 	env := format.envPrefix + s.AuthEnv + "}"
 	if s.Kind == provision.RemoteMCP {
@@ -99,22 +123,56 @@ func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistrat
 			wanted["env"] = map[string]any{s.AuthEnv: env}
 		}
 	}
-	r.State = "pending"
-	r.Detail = "add " + r.Entry + " to " + r.Path
-	if prev, ok := entries[r.Entry]; ok {
-		if reflect.DeepEqual(prev, wanted) {
-			r.State, r.Detail = "configured", "managed entry matches the verified companion"
-			return r, nil, nil
-		}
-		previous, err := json.Marshal(prev)
-		if err != nil {
-			return nil, nil, err
-		}
-		r.PreviousSHA256 = fmt.Sprintf("%x", sha256.Sum256(previous))
-		r.Detail = "replace the reserved " + r.Entry + " entry in " + r.Path
+	return wanted
+}
+
+func entryDigest(entry any) (string, error) {
+	b, err := json.Marshal(entry)
+	if err != nil {
+		return "", err
 	}
-	entries[r.Entry] = wanted
-	doc[format.group] = entries
-	next, err := json.MarshalIndent(doc, "", "  ")
-	return r, append(next, '\n'), err
+	return fmt.Sprintf("%x", sha256.Sum256(b)), nil
+}
+
+func companionReceiptName(name string) string { return name + ".devflow-companions.json" }
+
+// Each client has a project-local receipt containing only keys and entry digests.
+func readCompanionRecords(dir *os.Root, config string) (map[string]string, error) {
+	name := companionReceiptName(config)
+	data, err := readProjectFile(dir, name)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	var records map[string]string
+	invalid := fmt.Errorf("invalid companion registration receipt %s", name)
+	if err := json.Unmarshal(data, &records); err != nil || len(records) == 0 {
+		return nil, invalid
+	}
+	for key, digest := range records {
+		sum, err := hex.DecodeString(digest)
+		if !strings.HasPrefix(key, "devflow-") || err != nil || len(sum) != sha256.Size {
+			return nil, invalid
+		}
+	}
+	return records, nil
+}
+
+// Stage the receipt first, then publish it only if the project entry was written.
+func recordCompanion(dir *os.Root, name, key string, entry map[string]any, writeConfig func() error) error {
+	records, err := readCompanionRecords(dir, name)
+	if err != nil {
+		return err
+	}
+	if records == nil {
+		records = map[string]string{}
+	}
+	records[key], err = entryDigest(entry)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return err
+	}
+	return publishAfter(dir, companionReceiptName(name), append(data, '\n'), writeConfig)
 }

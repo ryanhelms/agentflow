@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -73,7 +74,7 @@ secops: {provider: none}
 notifications: {provider: none}
 `)
 	write(filepath.Join(home, "config.yml"), "autonomy: {local: auto}\n")
-	const initial = `{"servers":{"devflow":{"command":"existing-launcher"},"another":{"command":"keep"}},"n":9007199254740993}`
+	const initial = `{"servers":{"devflow":{"command":"existing-launcher"},"another":{"command":"keep"},"devflow-legacy":{"command":"team-tool"}},"n":9007199254740993}`
 	write(".vscode/mcp.json", initial)
 	exe, err := os.Executable()
 	if err != nil {
@@ -160,21 +161,9 @@ notifications: {provider: none}
 	})
 	cli := func(want int, args ...string) *setup.ProviderSetupPlan {
 		t.Helper()
-		out, err := os.CreateTemp(t.TempDir(), "result")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer out.Close()
-		prev := os.Stdout
-		os.Stdout = out
-		defer func() { os.Stdout = prev }()
-		exit := Main(append([]string{"setup"}, args...))
-		b, err := os.ReadFile(out.Name())
-		if err != nil || exit != want || bytes.Contains(b, []byte(fixtureAuth)) {
-			t.Fatalf("exit %d, want %d, output redacted, read error %v", exit, want, err)
-		}
+		b := companionFixtureCLI(t, want, append([]string{"setup"}, args...)...)
 		var result setup.ProviderSetupPlan
-		if err = json.Unmarshal(b, &result); err != nil {
+		if err := json.Unmarshal(b, &result); err != nil {
 			t.Fatal(err)
 		}
 		return &result
@@ -225,8 +214,9 @@ notifications: {provider: none}
 	if !installed.Ready || installed.Companions[0].Command == "" {
 		t.Fatalf("bad installed companion: %+v", installed.Companions)
 	}
+	installedCommand := installed.Companions[0].Command
 	if runtime.GOOS == "windows" {
-		p := installed.Companions[0].Command
+		p := installedCommand
 		data, err := os.ReadFile(filepath.Join(filepath.Dir(p), "current.txt"))
 		if err != nil || string(data) != filepath.Base(p) || filepath.Ext(p) != ".exe" {
 			t.Fatal("invalid Windows selection")
@@ -287,12 +277,14 @@ notifications: {provider: none}
 		t.Fatal("failed upgrade modified registration")
 	}
 	cli(0, "apply", "--client", "vscode", "--companion", "hosted", "--yes", "--json")
-	checkConfig("devflow-hosted", "Bearer ${env:DEVFLOW_MCP_TEST_AUTH}", "existing-launcher", "devflow-catalog")
+	beforeRepair := checkConfig("devflow-hosted", "Bearer ${env:DEVFLOW_MCP_TEST_AUTH}", "existing-launcher", "devflow-catalog")
 	// An approved endpoint change updates the reserved entry in place.
 	write(manifest, strings.Replace(pin, "fixture.invalid/mcp", "fixture.invalid/v2", 1))
 	cli(1, "verify", "--client", "vscode", "--companion", "hosted", "--json")
 	cli(0, "apply", "--client", "vscode", "--companion", "hosted", "--yes", "--json")
-	checkConfig("fixture.invalid/v2")
+	if got := checkConfig(); got != strings.Replace(beforeRepair, "fixture.invalid/mcp", "fixture.invalid/v2", 1) {
+		t.Fatal("scoped repair changed more than the reviewed endpoint")
+	}
 	cli(0, "verify", "--companion", "hosted", "--client", "vscode", "--json")
 	if !slices.Contains(methods, "server/discover") || !slices.Contains(methods, "tools/list") {
 		t.Fatal("missing handshake")
@@ -308,4 +300,100 @@ notifications: {provider: none}
 	}
 	t.Setenv("DEVFLOW_MCP_TEST_AUTH", "")
 	cli(1, "verify", "--companion", "hosted", "--json")
+	// Remove must work offline after the declaration or credentials disappear.
+	if err := os.Remove(manifest); err != nil {
+		t.Fatal(err)
+	}
+	preview := companionFixtureCLI(t, 0, "remove", "--dry-run")
+	if !bytes.Contains(preview, []byte(`remove companion .vscode/mcp.json "devflow-hosted"`)) {
+		t.Fatal("repair did not update the hosted entry's receipt")
+	}
+	const config = ".vscode/mcp.json"
+	edited := strings.Replace(checkConfig(), "fixture.invalid/v2", "team.invalid/custom", 1)
+	write(config, edited)
+	const receipt = config + ".devflow-companions.json"
+	read := func(name string) string {
+		t.Helper()
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	ownership := read(receipt)
+	checkShared := func() {
+		t.Helper()
+		binary, err := os.Open(installedCommand)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer binary.Close()
+		sum := sha256.New()
+		if _, err := io.Copy(sum, binary); err != nil || !bytes.Equal(sum.Sum(nil), digest.Sum(nil)) {
+			t.Fatal("shared companion executable changed")
+		}
+		dir := filepath.Dir(installedCommand)
+		var selected string
+		if runtime.GOOS == "windows" {
+			selected = read(filepath.Join(dir, "current.txt"))
+		} else if selected, err = os.Readlink(filepath.Join(dir, "current")); err != nil {
+			t.Fatal(err)
+		}
+		if selected != filepath.Base(installedCommand) {
+			t.Fatal("shared companion selection changed")
+		}
+	}
+	report := string(companionFixtureCLI(t, 0, "remove", "--dry-run"))
+	for _, want := range []string{`remove companion .vscode/mcp.json "devflow-catalog"`, `"devflow-hosted" (changed since registration`, `"devflow-legacy" (untracked`} {
+		if !strings.Contains(report, want) {
+			t.Errorf("dry run missing %q", want)
+		}
+	}
+	if checkConfig() != edited || read(receipt) != ownership {
+		t.Fatal("dry run changed project files")
+	}
+	checkShared()
+	companionFixtureCLI(t, 0, "remove")
+	remaining := checkConfig()
+	decode := func(data string) map[string]any {
+		t.Helper()
+		var doc map[string]any
+		decoder := json.NewDecoder(strings.NewReader(data))
+		decoder.UseNumber()
+		if err := decoder.Decode(&doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	expected := decode(edited)
+	delete(expected["servers"].(map[string]any), "devflow-catalog")
+	if !reflect.DeepEqual(decode(remaining), expected) {
+		t.Fatal("remove changed entries outside the recorded native companion")
+	}
+	if _, err := os.Stat(receipt); !os.IsNotExist(err) {
+		t.Fatalf("receipt after remove: %v", err)
+	}
+	checkShared()
+	companionFixtureCLI(t, 0, "remove", "--force")
+	if checkConfig() != remaining {
+		t.Fatal("repeated removal changed the remaining project entries")
+	}
+}
+
+func companionFixtureCLI(t *testing.T, want int, args ...string) []byte {
+	t.Helper()
+	out, err := os.CreateTemp(t.TempDir(), "result")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+	prev := os.Stdout
+	os.Stdout = out
+	defer func() { os.Stdout = prev }()
+	exit := Main(args)
+	b, err := os.ReadFile(out.Name())
+	if err != nil || exit != want || bytes.Contains(b, []byte(fixtureAuth)) {
+		t.Fatalf("exit %d, want %d, output redacted, read error %v", exit, want, err)
+	}
+	return b
 }
