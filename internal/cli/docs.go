@@ -20,6 +20,7 @@ func runDocs(ctx context.Context, args []string) error {
 	case "search":
 		fs := flag.NewFlagSet("docs search", flag.ContinueOnError)
 		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
+		asJSON := fs.Bool("json", false, "print search results as JSON")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
@@ -30,6 +31,9 @@ func runDocs(ctx context.Context, args []string) error {
 		out, err := a.DocsSearch(ctx, args[1], *space)
 		if err != nil {
 			return err
+		}
+		if *asJSON {
+			return printJSON(out)
 		}
 		switch pages := out["pages"].(type) {
 		case []atlassian.Page:

@@ -105,3 +105,5 @@ devflow docs publish repository/engineering/quota \
 Pass the revision from search when updating an existing document. Reuse the
 operation ID for retries. The CLI and `devflow_docs_publish` present the
 resolved destination and document for approval and record the outcome.
+
+Use `devflow docs search QUERY --json` to check a qualified document in CI.
