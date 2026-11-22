@@ -161,7 +161,8 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules.
+service sections, versioned settings, defaults, and their override rules. The
+status command reads checks using the `devops.checks` selection.
 
 ## Day-to-day use
 

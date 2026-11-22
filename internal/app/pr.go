@@ -295,13 +295,13 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 	}
 	if pr, err := c.PRForBranch(ctx, repo, a.Repo.Branch(ctx)); err == nil && pr != nil {
 		out["pr"] = map[string]any{"number": pr.Number, "url": pr.HTMLURL, "draft": pr.Draft}
-		if checks, err := c.Checks(ctx, repo, pr.Head.SHA); err == nil {
+		if checks, err := a.changeChecks(ctx, c, repo, pr.Head.SHA); err == nil {
 			summary := map[string]int{}
 			var failing []string
 			for _, ch := range checks {
 				state := ch.Conclusion
 				if state == "" {
-					state = ch.Status
+					state = ch.State
 				}
 				summary[state]++
 				if ch.Conclusion == "failure" || ch.Conclusion == "timed_out" {
