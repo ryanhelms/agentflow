@@ -119,7 +119,8 @@ type JiraSettings struct {
 }
 
 type ConfluenceSettings struct {
-	Site string `yaml:"site"`
+	Site          string   `yaml:"site"`
+	PublishSpaces []string `yaml:"publish_spaces"`
 }
 
 type GitHubSettings struct {

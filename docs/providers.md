@@ -29,7 +29,7 @@ settings object. Validation errors identify the property to correct.
 | Code hosting | `hosts` defaults to an empty hostname-to-forge map. `source_remote` and `target_remote` default to unset, so detection can select Git remotes. |
 | Jira | `site` and `projects` inherit the legacy Jira settings and defaults. |
 | Asana | `project` is the default project GID. `transitions` maps each project GID to its events and destination section GIDs. Both start unset. |
-| Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. |
+| Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. Optional `publish_spaces` lists the exact space keys permitted for document publication. |
 | GitHub | An unset `repository` defers to Git remote detection. |
 | DevOps fixture | Set `path` to a repository-relative JSON file for each role. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
@@ -291,10 +291,9 @@ approval to the exact operation, arguments and host. If the provider needs
 sign-in, the setup agent launches its OAuth flow. After consent, request a
 fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
-Code and other clients. Codex App Server binds writes to the provider connection it owns. The
-Jira web-link pilot also supports a separately enrolled Devflow connection
-from Claude Code Desktop. Its preview identifies Devflow as the connection
-owner.
+Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
+Desktop can also use Devflow-owned connections for Jira web links and
+Confluence page replacement. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -331,6 +330,23 @@ target and connected owner before confirming. When no Devflow enrollment
 exists, the Jira link tool can use the signed-in CLI. To disconnect the local
 Devflow Rovo grant, run `devflow setup logout --provider jira --client devflow`.
 Use Atlassian account settings if you also want to revoke the vendor's grant.
+
+Confluence page replacement uses a separate enrollment. From the enrolled
+workspace, run `devflow setup login --provider confluence --client devflow`
+and complete Atlassian consent for Confluence read and write access. To disconnect
+that profile, run `devflow setup logout --provider confluence --client devflow`.
+Each provider has its own OS credential-store entry and approval generation.
+
+Use `devflow_docs_publish` with the page reference, expected revision,
+replacement title and body, and stable operation ID. The Desktop candidate
+uses the authenticated Rovo flat catalog to read the current page, resolve
+its numeric space ID with `getConfluenceSpace`, update the page with its
+snapshot token, and verify the successor version message. The space lookup
+must return the same ID, the requested key and the configured site. A missing grant permits the existing
+pre-dispatch fallback. An enrolled connection with a denied or incompatible
+catalog stops the operation. Offline tests exercise the captured Rovo schemas and page, space and
+history response shapes. Successful publication on a hosted tenant still
+requires a confirmed write and a verified successor.
 
 [Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
 
@@ -807,7 +823,13 @@ and authored records have separate lifecycles during removal.
 
 With `knowledge_base.provider: confluence`, search for the current page ID,
 space key and revision. For example, to replace published version 7 of page
-42 in the ENG space, supply the complete new title and body.
+42 in the ENG space, supply the complete new title and body. To restrict
+publication across all three transports, set `knowledge_base.settings.publish_spaces`
+to a list such as `[ENG]`. An explicit empty list disables publication. If the
+setting is omitted, the qualified reference selects the space and the provider
+verifies page membership. A repository allow-list binds its space keys to the
+repository site. User settings may narrow the list. Each publication must
+satisfy both lists and the release constraints.
 
 ```bash
 devflow docs search quota --space ENG --json
@@ -817,8 +839,9 @@ devflow docs publish confluence/ENG/42 \
 ```
 
 The CLI and `devflow_docs_publish` apply the remote autonomy policy. An
-interactive write can use the configured Codex MCP first and a signed-in
-Teamwork Graph CLI if the native capability is unavailable. Confirmation
+interactive write can use the configured Codex MCP or a separately enrolled
+Claude Code Desktop Confluence connection. The signed-in Teamwork Graph CLI
+is available when native preparation permits fallback. Confirmation
 covers the transport, configured site, qualified reference, expected revision, operation ID
 and complete replacement. Devflow checks the space key immediately before the
 update and verifies the space ID in the response. Confluence uses the page

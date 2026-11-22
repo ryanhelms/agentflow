@@ -142,14 +142,14 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 // owner manages its own login and credential storage.
 func LoginProvider(ctx context.Context, dir, provider, client, server string, input io.Reader, output, diagnostics io.Writer) error {
 	if client == "devflow" {
-		if provider != "jira" || server != "" && server != "atlassian" {
-			return errors.New("use the Devflow-owned MCP sign-in with the Jira web-link pilot")
+		if server != "" && server != "atlassian" {
+			return errors.New("use the atlassian server for Devflow Rovo enrollment")
 		}
-		if err := rovooauth.Login(ctx); err != nil {
+		if err := rovooauth.Login(ctx, provider); err != nil {
 			return err
 		}
 		if output != nil {
-			_, err := fmt.Fprintln(output, "Devflow connected Jira through Atlassian OAuth.")
+			_, err := fmt.Fprintf(output, "Devflow connected %s through Atlassian OAuth.\n", provider)
 			return err
 		}
 		return nil
@@ -177,6 +177,6 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 }
 
 // DisconnectRovo discards the native grant enrolled by Devflow.
-func DisconnectRovo(ctx context.Context) error {
-	return rovooauth.Disconnect(ctx)
+func DisconnectRovo(ctx context.Context, provider string) error {
+	return rovooauth.Disconnect(ctx, provider)
 }

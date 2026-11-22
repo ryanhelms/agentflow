@@ -28,7 +28,9 @@ const (
 	registerEndpoint  = issuer + "/dcr/register"
 	authorizeEndpoint = "https://auth.atlassian.com/authorize"
 	tokenEndpoint     = "https://auth.atlassian.com/oauth/token" //nolint:gosec // Public issuer metadata endpoint.
-	scope             = "read:me read:account offline_access read:jira:agent-interface write:jira:agent-interface"
+	baseScopes        = "read:me read:account offline_access"
+	jiraScope         = baseScopes + " read:jira:agent-interface write:jira:agent-interface"
+	confluenceScope   = baseScopes + " read:confluence:agent-interface write:confluence:agent-interface"
 )
 
 var (
@@ -42,7 +44,10 @@ var (
 	errLock          = errors.New("could not lock Devflow Rovo grant storage")
 )
 
+// Each provider has an independent consent, credential namespace and bearer cache.
 type enrollment struct {
+	service string
+	scope   string
 	listen  func(context.Context) (net.Listener, error)
 	client  *http.Client
 	open    func(context.Context, string) error
@@ -53,34 +58,47 @@ type enrollment struct {
 	cached  atomic.Pointer[accessGrant]
 }
 
-var desktop = &enrollment{
-	client: newClient(), listen: listenCallback, open: openBrowser, get: keyring.Get, set: keyring.Set, remove: keyring.Delete, lockDir: userLockDir,
+func newEnrollment(service, scope string) *enrollment {
+	return &enrollment{service: service, scope: scope, client: newClient(), listen: listenCallback, open: openBrowser,
+		get: keyring.Get, set: keyring.Set, remove: keyring.Delete, lockDir: userLockDir}
 }
 
-// Login opens the system browser for an explicit user-initiated enrollment.
-func Login(ctx context.Context) error { return desktop.login(ctx) }
-
-// Disconnect removes the local Rovo enrollment. It succeeds if already
-// unenrolled. It does not contact the issuer or revoke tokens remotely.
-func Disconnect(ctx context.Context) error { return desktop.disconnect(ctx) }
-
-// Token returns the current grant's access token to the in-process MCP transport.
-func Token(ctx context.Context) (string, error) {
-	token, _, err := BoundToken(ctx)
-	return token, err
+var enrollments = map[string]*enrollment{
+	"jira":       newEnrollment("devflow.rovooauth.v2.jira.1", jiraScope),
+	"confluence": newEnrollment("devflow.rovooauth.v2.confluence.1", confluenceScope),
 }
 
-// BoundToken returns the bearer and its enrollment generation together.
-// Refresh preserves the generation. Each successful Login replaces it.
-func BoundToken(ctx context.Context) (accessToken, generation string, err error) {
-	return desktop.boundToken(ctx)
+var errProvider = errors.New("select jira or confluence for Devflow Rovo enrollment")
+
+// Login starts browser consent only for the selected provider.
+func Login(ctx context.Context, provider string) error {
+	if e := enrollments[provider]; e != nil {
+		return e.login(ctx)
+	}
+	return errProvider
+}
+
+// Disconnect retires only this provider's local grant.
+func Disconnect(ctx context.Context, provider string) error {
+	if e := enrollments[provider]; e != nil {
+		return e.disconnect(ctx)
+	}
+	return errProvider
+}
+
+// BoundToken returns the selected provider's bearer and enrollment generation together.
+func BoundToken(ctx context.Context, provider string) (accessToken, generation string, err error) {
+	if e := enrollments[provider]; e != nil {
+		return e.boundToken(ctx)
+	}
+	return "", "", errProvider
 }
 
 func (e *enrollment) discover(ctx context.Context) (*oauthex.AuthServerMeta, error) {
 	r, err := oauthex.GetProtectedResourceMetadata(ctx, resourceMeta, Resource, e.client)
 	if err != nil || !slices.Equal(r.AuthorizationServers, []string{issuer}) ||
 		!slices.Contains(r.BearerMethodsSupported, "header") || r.DPOPBoundAccessTokensRequired ||
-		!containsScopes(r.ScopesSupported) {
+		!e.containsScopes(r.ScopesSupported) {
 		return nil, errMetadata
 	}
 	a, err := auth.GetAuthServerMetadata(ctx, issuer, e.client)
@@ -96,8 +114,8 @@ func (e *enrollment) discover(ctx context.Context) (*oauthex.AuthServerMeta, err
 	return a, nil
 }
 
-func containsScopes(scopes []string) bool {
-	for _, required := range strings.Fields(scope) {
+func (e *enrollment) containsScopes(scopes []string) bool {
+	for _, required := range strings.Fields(e.scope) {
 		if !slices.Contains(scopes, required) {
 			return false
 		}
@@ -105,9 +123,9 @@ func containsScopes(scopes []string) bool {
 	return true
 }
 
-func sameScopes(s string) bool {
+func (e *enrollment) sameScopes(s string) bool {
 	scopes := strings.Fields(s)
-	return len(scopes) == len(strings.Fields(scope)) && containsScopes(scopes)
+	return len(scopes) == len(strings.Fields(e.scope)) && e.containsScopes(scopes)
 }
 
 func (e *enrollment) login(ctx context.Context) error {
@@ -126,7 +144,7 @@ func (e *enrollment) login(ctx context.Context) error {
 	meta := &oauthex.ClientRegistrationMetadata{
 		ClientName: "Devflow", ApplicationType: "native", TokenEndpointAuthMethod: "none",
 		RedirectURIs: []string{redirect}, GrantTypes: []string{"authorization_code", "refresh_token"},
-		ResponseTypes: []string{"code"}, Scope: scope,
+		ResponseTypes: []string{"code"}, Scope: e.scope,
 	}
 	reg, err := oauthex.RegisterClient(ctx, registerEndpoint, meta, e.client)
 	if err != nil || !opaque(reg.ClientID) || reg.TokenEndpointAuthMethod != "none" ||
@@ -134,12 +152,12 @@ func (e *enrollment) login(ctx context.Context) error {
 		(reg.ApplicationType != "" && reg.ApplicationType != "native") ||
 		(reg.GrantTypes != nil && (!slices.Contains(reg.GrantTypes, "authorization_code") || !slices.Contains(reg.GrantTypes, "refresh_token"))) ||
 		(reg.ResponseTypes != nil && !slices.Contains(reg.ResponseTypes, "code")) ||
-		(reg.Scope != "" && !sameScopes(reg.Scope)) {
+		(reg.Scope != "" && !e.sameScopes(reg.Scope)) {
 		return errRegistration
 	}
 	// Some public registrations also return a client_secret. Only the issued
 	// client ID participates in the negotiated "none" authentication method.
-	cfg := oauth2.Config{ClientID: reg.ClientID, RedirectURL: redirect, Scopes: strings.Fields(scope),
+	cfg := oauth2.Config{ClientID: reg.ClientID, RedirectURL: redirect, Scopes: strings.Fields(e.scope),
 		Endpoint: oauth2.Endpoint{AuthURL: authorizeEndpoint}}
 	state, verifier := rand.Text(), oauth2.GenerateVerifier()
 	browserURL := cfg.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("resource", Resource))

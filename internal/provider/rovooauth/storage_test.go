@@ -27,20 +27,20 @@ func largeLogin(t *testing.T, f *fixture) chunkManifest {
 
 func TestDisconnect(t *testing.T) {
 	f := newFixture(t)
-	old := desktop
-	desktop = f.e
-	t.Cleanup(func() { desktop = old })
+	old := enrollments["jira"]
+	enrollments["jira"] = f.e
+	t.Cleanup(func() { enrollments["jira"] = old })
 	largeLogin(t, f)
-	token, generation, err := BoundToken(t.Context())
+	token, generation, err := BoundToken(t.Context(), "jira")
 	if err != nil || token == "" || generation == "" {
 		t.Fatal("missing initial binding", err)
 	}
 	// Another process can still hold the issued bearer in its own cache.
-	peer := &enrollment{get: f.e.get, lockDir: f.e.lockDir}
+	peer := &enrollment{service: f.e.service, get: f.e.get, lockDir: f.e.lockDir}
 	peer.cached.Store(f.e.cached.Load())
 	requests := len(f.requests)
 	for range 2 {
-		if err := Disconnect(t.Context()); err != nil {
+		if err := Disconnect(t.Context(), "jira"); err != nil {
 			t.Fatal(err)
 		}
 		if f.e.cached.Load() != nil || len(f.records) != 0 {
@@ -53,10 +53,10 @@ func TestDisconnect(t *testing.T) {
 	if len(f.requests) != requests || f.opens.Load() != 1 {
 		t.Fatal("disconnect contacted issuer or opened browser")
 	}
-	if err := Login(t.Context()); err != nil {
+	if err := Login(t.Context(), "jira"); err != nil {
 		t.Fatal(err)
 	}
-	if _, gen, err := BoundToken(t.Context()); err != nil || gen == generation {
+	if _, gen, err := BoundToken(t.Context(), "jira"); err != nil || gen == generation {
 		t.Fatal("re-enrollment reused disconnected generation", err)
 	}
 }
