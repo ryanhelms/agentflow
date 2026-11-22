@@ -122,9 +122,15 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 			continue
 		case *config.FileSystemSettings:
 			p.checkDirectory(role, settings.Root)
+		case *config.FileSystemTaskSettings:
+			p.checkDirectory(role, settings.Root)
 		case *config.RepositorySettings:
 			if gitOK {
 				p.checkRepository(ctx, role, settings, repo)
+			}
+		case *config.RepositoryTaskSettings:
+			if gitOK {
+				p.checkRepository(ctx, role, &settings.RepositorySettings, repo)
 			}
 		case *config.CodeHostingSettings:
 			if !detection.OK() || detection.Forge != gitx.ForgeGitHub {
