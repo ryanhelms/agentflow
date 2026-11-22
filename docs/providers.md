@@ -58,3 +58,44 @@ Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
 values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
+
+## GitHub Issues task lifecycle
+
+Use the `github-issues` task provider with the detected GitHub repository or set
+`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
+GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
+trailers. Existing commit rules still apply, including when the repository
+explicitly requires Jira-style subject scopes.
+
+`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
+Set an event to `none` to disable its effect. Devflow previews transitions and
+only attempts to move open issues forward.
+## Search a local knowledge directory
+
+Choose a dedicated directory for knowledge records. Relative roots resolve from
+the repository checkout. Use `devflow docs search quota --space engineering` to
+search the scope in the following example.
+
+```yaml
+knowledge_base:
+  provider: filesystem
+  settings:
+    root: handbook
+```
+
+Place a Markdown document in `handbook/` with devflow front matter.
+
+```markdown
+---
+version: 1
+kind: document
+instance: filesystem
+scope: engineering
+id: quota
+title: Quota design
+---
+The decision and its rationale.
+```
+
+The document's qualified reference survives a rename. Generated setup files
+and authored records have separate lifecycles during removal.

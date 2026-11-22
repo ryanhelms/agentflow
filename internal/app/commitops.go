@@ -9,6 +9,7 @@ import (
 	"github.com/nscaledev/devflow/internal/commit"
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider"
 )
 
 // CommitPlan groups the working tree into proposed commits.
@@ -36,6 +37,7 @@ func (a *App) CommitPlan(ctx context.Context) ([]commit.Group, error) {
 // CommitContext is what the agent needs to write a message.
 type CommitContext struct {
 	Key           string   `json:"key"`
+	TaskRef       string   `json:"task_ref,omitempty"`
 	Ticket        string   `json:"ticket,omitempty"`
 	Files         []string `json:"files"`
 	SuggestedType string   `json:"suggested_type"`
@@ -66,7 +68,6 @@ func (a *App) CommitContext(ctx context.Context, paths []string) (*CommitContext
 		return nil, err
 	}
 	cc := &CommitContext{
-		Key:           a.CurrentKey(ctx),
 		Files:         files,
 		SuggestedType: commit.TypeFromFiles(files),
 		Breaking:      commit.Breaking(files, a.Cfg.Commit.BreakingPaths),
@@ -75,6 +76,22 @@ func (a *App) CommitContext(ctx context.Context, paths []string) (*CommitContext
 		DiffTruncated: trunc,
 		Rules:         a.rulesText(),
 	}
+	if a.usesIssues() {
+		ref, err := a.branchIssue(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if ref.ID != "" {
+			cc.Key = issueKey(ref)
+			cc.TaskRef = ref.String()
+			cc.Rules += "\nInclude this trailer after a blank line:\n" + provider.TaskTrailer + ref.String()
+			if task, err := a.getIssue(ctx, ref); err == nil {
+				cc.Ticket = task.Title + " (status: " + task.State.Name + ")"
+			}
+		}
+		return cc, nil
+	}
+	cc.Key = a.CurrentKey(ctx)
 	if cc.Key != "" {
 		if jc, err := a.Jira(); err == nil {
 			if iss, err := jc.GetIssue(ctx, cc.Key); err == nil {
@@ -99,6 +116,13 @@ Optional verbs after the summary: #start #review #qa #done #block (moved via the
 Optional Smart Commits: #comment <text>, #time 1h 30m
 Body: blank line, then why the change was needed (not a list of files). Wrap at 72.
 Trailers: "Refs: KEY-2" for related tickets.`, r.SubjectMax, strings.Join(r.Types, ", "))
+	if a.usesIssues() {
+		subject := "type[(scope)][!]: summary"
+		if r.KeyRequired() {
+			subject = "type(KEY[,KEY])[!]: summary"
+		}
+		s = fmt.Sprintf("Subject: %s (≤%d chars). Use one of %s. Use an imperative, lowercase summary without a trailing period. Document breaking changes in a BREAKING CHANGE footer. Use a qualified Task-Ref trailer for the issue.", subject, r.SubjectMax, strings.Join(r.Types, ", "))
+	}
 	if !r.AITrailer {
 		s += "\nDo not add AI attribution trailers (Co-authored-by, Generated with...)."
 	}
@@ -107,10 +131,22 @@ Trailers: "Refs: KEY-2" for related tickets.`, r.SubjectMax, strings.Join(r.Type
 
 // Validate validates a message with the repo rules and branch key hint.
 func (a *App) Validate(ctx context.Context, msg string) []commit.Issue {
+	if a.usesIssues() {
+		return a.validateIssueMessage(msg)
+	}
 	return commit.Validate(msg, a.Cfg.Commit, a.CurrentKey(ctx))
 }
 
-// Effect is one predicted Jira change.
+func (a *App) validateIssueMessage(msg string) []commit.Issue {
+	issues := commit.Validate(msg, a.Cfg.Commit, "")
+	_, body, _ := strings.Cut(msg, "\n")
+	if _, err := issueKeys(body); err != nil {
+		issues = append(issues, commit.Issue{Code: "task_ref", Message: err.Error()})
+	}
+	return issues
+}
+
+// Effect is one predicted task change.
 type Effect struct {
 	Key  string `json:"key"`
 	When string `json:"when"`
@@ -127,12 +163,26 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 	if m.Skip {
 		return nil, []string{"message has [devflow skip]; automation ignores it"}, nil
 	}
+	if a.usesIssues() {
+		var err error
+		m.Keys, err = issueKeys(m.Body)
+		if err != nil {
+			return nil, nil, err
+		}
+		if m.Comment != "" || m.Time != "" {
+			warnings = append(warnings, "GitHub Issues does not apply Jira Smart Commit commands")
+			m.Comment, m.Time = "", ""
+		}
+	}
 	branch := a.Repo.Branch(ctx)
 	onDefault := branch == a.Repo.DefaultBranch(ctx)
 	for _, key := range m.Keys {
 		for _, v := range m.Verbs {
 			if v == "done" && !onDefault {
 				warnings = append(warnings, key+": #done only applies when the commit lands on the default branch")
+				if a.usesIssues() {
+					continue
+				}
 			}
 			plan, err := a.PlanTransition(ctx, key, "#"+v)
 			if err != nil {
@@ -145,6 +195,9 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 		}
 		for _, ev := range []string{flowmap.PROpened, flowmap.PRMerged} {
 			plan, err := a.PlanTransition(ctx, key, ev)
+			if err != nil && a.usesIssues() {
+				return nil, nil, err
+			}
 			if err == nil && plan.To != "" {
 				effects = append(effects, Effect{Key: key, When: "on " + ev, From: plan.From, To: plan.To})
 			}
@@ -220,7 +273,13 @@ func (a *App) LintBranch(ctx context.Context) (map[string][]commit.Issue, error)
 		if !ok {
 			continue
 		}
-		if issues := commit.Validate(msg, a.Cfg.Commit, ""); len(issues) > 0 {
+		var issues []commit.Issue
+		if a.usesIssues() {
+			issues = a.validateIssueMessage(msg)
+		} else {
+			issues = commit.Validate(msg, a.Cfg.Commit, "")
+		}
+		if len(issues) > 0 {
 			bad[sha] = issues
 		}
 	}
