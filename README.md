@@ -162,7 +162,9 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules. Use the
+service sections, versioned settings, defaults, and their override rules.
+See the [migration and rollback rehearsal](docs/rollout.md#provider-migration-rehearsal)
+and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
