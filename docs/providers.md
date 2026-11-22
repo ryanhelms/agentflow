@@ -452,6 +452,16 @@ GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
 trailers. Existing commit rules still apply, including when the repository
 explicitly requires Jira-style subject scopes.
 
+In Claude Code Desktop, call `devflow_ticket_create` with the issue summary and
+description. When the interactive create uses the saved GitHub CLI login, its
+confirmation summary includes `backend: gh`, the GitHub account ID and login,
+the repository, and the proposed issue. After approval, submit the same inputs
+and `confirm_token`. Devflow checks the CLI account again when validating the
+confirmation. Each API command uses the account active in `gh` when it runs.
+For sign-in, run `devflow setup login --provider github-issues` from the
+checkout and complete GitHub’s browser flow. Setup uses the same working PATH
+or verified managed executable as the issue adapter.
+
 `settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
 Set an event to `none` to disable its effect. Devflow previews transitions and
 only attempts to move open issues forward.

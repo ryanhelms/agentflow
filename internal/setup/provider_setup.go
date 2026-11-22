@@ -165,12 +165,14 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		return nil, err
 	}
 	github := githubProbe{dir: root, detection: detection, auth: map[string]bool{}}
+	var ghSelection *managedgh.Selection
 	if len(ghRoles) != 0 {
 		selection, err := managedgh.Inspect(ctx, root)
 		if err != nil {
 			selection.Detail = "cannot use managed gh: " + err.Error()
 		}
 		p.InstallGH = selection.Install
+		ghSelection = &selection
 		github.command = selection.Command
 		for _, role := range ghRoles {
 			p.check(role.name, role.Provider, github.command != "", selection.Detail)
@@ -181,7 +183,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if role.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
 			toolProvider = "github"
 		}
-		p.addProviderTooling(role.name, toolProvider)
+		p.addProviderTooling(role.name, toolProvider, ghSelection)
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue

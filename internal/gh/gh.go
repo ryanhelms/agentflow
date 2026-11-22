@@ -338,11 +338,34 @@ func (c *Client) SearchPRs(ctx context.Context, q string) ([]PR, error) {
 	return prs, nil
 }
 
+type Account struct {
+	ID    int64  `json:"id"`
+	Login string `json:"login"`
+}
+
+func (c *Client) account(ctx context.Context) (Account, error) {
+	var account Account
+	err := c.Do(ctx, "GET", "/user", nil, &account)
+	return account, err
+}
+
+// SignedInCLIAccount returns the account observed by gh, or nil for direct API clients.
+func (c *Client) SignedInCLIAccount(ctx context.Context) (*Account, error) {
+	if c.cli == nil {
+		return nil, nil
+	}
+	account, err := c.account(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("verify signed-in gh account: %w", err)
+	}
+	if account.ID <= 0 || strings.TrimSpace(account.Login) == "" {
+		return nil, fmt.Errorf("github did not identify the signed-in gh account")
+	}
+	return &account, nil
+}
+
 // Viewer returns the authenticated login.
 func (c *Client) Viewer(ctx context.Context) (string, error) {
-	var u struct {
-		Login string `json:"login"`
-	}
-	err := c.Do(ctx, "GET", "/user", nil, &u)
-	return u.Login, err
+	account, err := c.account(ctx)
+	return account.Login, err
 }
