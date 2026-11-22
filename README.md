@@ -203,6 +203,12 @@ The job reads trusted base-branch configuration and uses an explicit qualified
 task reference in the PR body. Apply a previewed transition with the usual
 confirmation flow in `devflow transition`.
 
+Use `devflow secops triage` to preview tasks from configured GitHub findings
+and fixture incidents. Apply a source reference to create a linked task using
+the selected task provider's template and approval policy. The reusable
+`secops-triage.yml` workflow calls the same command.
+[SecOps configuration and replay](docs/secops.md)
+
 Select `filesystem` or `repository` to manage Markdown tasks. Start work with
 `devflow start <qualified-key>` to bind a local branch or worktree to the task.
 With a default task template, both providers store its exact name and revision

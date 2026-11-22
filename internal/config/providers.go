@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -67,6 +68,19 @@ type GitHubSettings struct {
 	// An unset repository uses the repository selected by code-host detection.
 	Repository *string `yaml:"repository"`
 }
+
+type GitHubSecOpsSettings struct {
+	GitHubSettings `yaml:",inline"`
+	Findings       []string               `yaml:"findings" allowed:"dependabot,code-scanning"`
+	Incidents      *SecOpsIncidentFixture `yaml:"incidents"`
+	MinSeverity    string                 `yaml:"min_severity" allowed:"low,medium,high,critical"`
+}
+
+type SecOpsIncidentFixture struct {
+	Fixture string `yaml:"fixture"`
+	Scope   string `yaml:"scope"`
+}
+
 type GitHubWikiSettings struct {
 	// An unset repository uses the GitHub.com target selected by forge detection.
 	Repository *string `yaml:"repository"`
@@ -219,7 +233,11 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		{devops, "checks", "devops.checks", github, &p.DevOps.Checks},
 		{devops, "deployments", "devops.deployments", github, &p.DevOps.Deployments},
 		{devops, "releases", "devops.releases", github, &p.DevOps.Releases},
-		{raw, "secops", "secops", github, &p.SecOps},
+		{raw, "secops", "secops", roleSchema{"github", map[string]settingsFactory{
+			"github": func() any {
+				return &GitHubSecOpsSettings{Findings: []string{"dependabot", "code-scanning"}, MinSeverity: "high"}
+			},
+		}}, &p.SecOps},
 		{raw, "notifications", "notifications", roleSchema{"slack", map[string]settingsFactory{
 			"slack": func() any { return &SlackSettings{} },
 		}}, &p.Notifications},
@@ -236,6 +254,15 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 	if wiki, ok := p.KnowledgeBase.Settings.(*GitHubWikiSettings); ok && wiki.Repository != nil {
 		if err := gitx.ValidateGitHubSlug(*wiki.Repository); err != nil {
 			return Providers{}, fmt.Errorf("knowledge_base.settings.repository: %w", err)
+		}
+	}
+	if settings, ok := p.SecOps.Settings.(*GitHubSecOpsSettings); ok && settings.Incidents != nil {
+		fixture := settings.Incidents
+		if !filepath.IsLocal(fixture.Fixture) || filepath.Clean(fixture.Fixture) == "." {
+			return Providers{}, fmt.Errorf("secops.settings.incidents.fixture: expected a path within the checkout")
+		}
+		if strings.TrimSpace(fixture.Scope) == "" {
+			return Providers{}, fmt.Errorf("secops.settings.incidents.scope: expected a stable source scope")
 		}
 	}
 	return p, nil

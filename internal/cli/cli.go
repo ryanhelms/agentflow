@@ -59,6 +59,8 @@ Work
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
   preview [MSG]                  Jira effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
+  secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
+                                 preview or create tasks from configured security events
   pr [--check] [--run] [--title T] [--draft] [--yes]   readiness check, then open the PR
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
@@ -115,7 +117,7 @@ func Main(args []string) int {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "setup", "update", "version", "help":
+	case "hook", "lint-msg", "keys", "mcp", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -209,6 +211,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runPreview(ctx, args)
 	case "transition":
 		return runTransition(ctx, args)
+	case "secops":
+		return runSecOps(ctx, args)
 	case "pr":
 		return runPR(ctx, args)
 	case "review":

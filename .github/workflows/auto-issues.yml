@@ -19,12 +19,22 @@ on:
         description: Jira issue type for security alerts
         type: string
         default: Bug
+      provider-secops:
+        description: Route security triage through the configured SecOps and task providers
+        type: boolean
+        default: false
+      secops-source:
+        description: Qualified source reference to approve on manual dispatch in provider SecOps mode
+        type: string
+        default: ""
     secrets:
       JIRA_USER:
         required: false
       JIRA_TOKEN:
         required: false
       DEVFLOW_APP_PRIVATE_KEY:
+        required: false
+      SECOPS_READ_TOKEN:
         required: false
 
 permissions:
@@ -34,8 +44,22 @@ permissions:
   security-events: read
 
 jobs:
+  provider-secops:
+    if: inputs.provider-secops
+    uses: ./.github/workflows/secops-triage.yml
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    with:
+      apply-source: ${{ inputs.secops-source }}
+    secrets:
+      SECOPS_READ_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
+
   issues:
-    if: vars.DEVFLOW_ENABLED != 'false'
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' &&
+      (!inputs.provider-secops || (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'))
     runs-on: ubuntu-latest
     env:
       JIRA_BASE: ${{ vars.JIRA_BASE }}
