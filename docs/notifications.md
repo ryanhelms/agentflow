@@ -29,16 +29,21 @@ through the same authenticated connection. It verifies a configured actor ID
 and rejects a different workspace ID when Slack reports one. Confirmation binds
 the connection, the exact rendered Markdown, the scoped IDs and the verified
 actor when available. A successful Slack acknowledgement includes the message
-permalink. A repeat of the same delivery returns the existing receipt ID.
+permalink, which must identify the approved conversation and the returned message
+timestamp. A repeat of the same delivery returns the existing receipt ID.
+If the connection drops after dispatch or the acknowledgement cannot be verified,
+the operation stays unconfirmed and blocks replay. A proven failure before
+dispatch releases the claim for a fresh approval.
 
-The client manages Slack OAuth. See [Slack's connector setup](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/).
-The Slack CLI's saved login is separate from the authenticated MCP connection.
-
-Use `devflow_notify` in a supported MCP client, or select Codex's configured
-connection from the CLI.
+Codex uses its connected Slack MCP. Claude Code Desktop supports a separate
+Devflow enrollment for an approved Slack app. Use `devflow_notify` in either
+client. The CLI accepts the same connection choices. The Slack CLI's saved
+login is separate from these connections. [Slack connector setup](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/) ·
+[Devflow Slack enrollment](providers.md#devflow-slack-enrollment).
 
 ```sh
 devflow --native-client codex notify delivery --operation-id deployment-42 --body 'Production deployment failed'
+devflow --native-client claude-desktop notify delivery --operation-id deployment-42 --body 'Production deployment failed'
 ```
 
 ## Route notifications to multiple destinations

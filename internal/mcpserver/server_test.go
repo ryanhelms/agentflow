@@ -128,7 +128,14 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 
 func TestDesktopWriteEntryPoints(t *testing.T) {
 	for _, client := range []string{"claude", "claude-desktop", "codex"} {
-		s := &Server{app: &app.App{Client: client}, writer: &native.SessionWriter{}}
+		s := &Server{app: &app.App{Client: client}, writer: &native.SessionWriter{}, slackWriter: &native.SessionWriter{}}
+		wantNotify := s.slackWriter
+		if client == "codex" {
+			wantNotify = s.writer
+		}
+		if s.writerForTool("devflow_notify") != wantNotify {
+			t.Errorf("%s notification writer differs from its configured connection", client)
+		}
 		for name, desktop := range map[string]bool{
 			"devflow_comment": true, "devflow_docs_publish": true, "devflow_jira_remote_link": true,
 			"devflow_eod_post": false, "devflow_ac_update": false, "devflow_ticket_create": false,

@@ -12,6 +12,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
+	"github.com/nscaledev/devflow/internal/provider/slackoauth"
 )
 
 type MCPTool struct {
@@ -141,6 +142,19 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 // LoginProvider launches the selected provider OAuth flow. The enrollment
 // owner manages its own login and credential storage.
 func LoginProvider(ctx context.Context, dir, provider, client, server string, input io.Reader, output, diagnostics io.Writer) error {
+	if client == "devflow" && provider == "slack" {
+		if server != "" && server != "slack" {
+			return errors.New("use the slack server for Devflow Slack enrollment")
+		}
+		if err := slackoauth.Login(ctx, input, diagnostics); err != nil {
+			return err
+		}
+		if output != nil {
+			_, err := fmt.Fprintln(output, "Devflow connected Slack through the approved app.")
+			return err
+		}
+		return nil
+	}
 	if client == "devflow" {
 		if server != "" && server != "atlassian" {
 			return errors.New("use the atlassian server for Devflow Rovo enrollment")
@@ -176,7 +190,10 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	return nil
 }
 
-// DisconnectRovo discards the native grant enrolled by Devflow.
-func DisconnectRovo(ctx context.Context, provider string) error {
+// DisconnectProvider discards the selected native grant enrolled by Devflow.
+func DisconnectProvider(ctx context.Context, provider string) error {
+	if provider == "slack" {
+		return slackoauth.Disconnect(ctx)
+	}
 	return rovooauth.Disconnect(ctx, provider)
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/rovohost"
+	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -56,9 +57,9 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME] [--register]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for the Jira or Confluence pilot
+                                 use --client devflow for Jira, Confluence or an approved Slack app
   setup logout --provider NAME --client devflow
-                                 disconnect the local Devflow Rovo enrollment
+                                 disconnect the selected local Devflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login
@@ -109,6 +110,8 @@ Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop comment [KEY] TEXT [--yes]
                                  use the separately enrolled Rovo connection for a Jira comment
+  --native-client claude-desktop notify SIGNAL --operation-id ID
+                                 use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -167,10 +170,14 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop comment [KEY] TEXT [--yes]")
+		switch command {
+		case "comment":
+			return rovohost.NewWriter(), nil
+		case "notify":
+			return slackhost.NewWriter(), nil
+		default:
+			return nil, errors.New("claude-desktop native writes support comment and notify")
 		}
-		return rovohost.NewWriter(), nil
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)
 	}

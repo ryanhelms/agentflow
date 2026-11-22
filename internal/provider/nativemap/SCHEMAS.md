@@ -241,6 +241,15 @@ a timestamp and matching Slack permalink. Confirmed replays return
 blocks replay. The receipt store preserves status and the local receipt ID
 across attempts. The permalink is returned on the acknowledged attempt.
 
+The Devflow-owned writer in `internal/provider/slackhost` uses this same
+notification path. A generation-checked OAuth callback authenticates each
+request to the fixed Slack MCP endpoint. The writer checks the advertised
+input properties and JSON Schema before calling the tool. Its local catalog
+fixture exercises the mapped subset. The authenticated server's catalog is
+authoritative at runtime. [Slack MCP transport](https://docs.slack.dev/ai/slack-mcp-server/#transport-protocol-and-endpoint)
+· [Slack's bearer example](https://docs.slack.dev/ai/slack-mcp-server/developing/#the-mcp-call)
+· [Slack permalink identity](https://docs.slack.dev/reference/methods/chat.getPermalink/)
+
 [Slack MCP send catalog and permissions](https://docs.slack.dev/ai/slack-mcp-server/#oauth-scopes-needed-on-user-token-for-different-tools) ·
 [Official Slack message formatting](https://github.com/slackapi/slack-skills-plugin/blob/main/skills/slack-messaging/SKILL.md#formatting) ·
 [Observed native acknowledgement](https://slack.green/en/blog/slack-mcp-server#connecting-claude-code-and-codex-cli)

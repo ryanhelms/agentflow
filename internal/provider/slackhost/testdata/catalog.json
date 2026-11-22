@@ -1,0 +1,49 @@
+[
+  {
+    "name": "slack_send_message",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {"type": "string"},
+        "message": {"type": "string"},
+        "thread_ts": {"type": "string"}
+      },
+      "required": ["channel_id", "message"]
+    }
+  },
+  {
+    "name": "slack_read_user_profile",
+    "inputSchema": {"type": "object", "properties": {"user_id": {"type":"string"}}}
+  },
+  {
+    "name": "slack_list_user_channels",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "team_id": {"type": "string"},
+        "types": {"type": "string"},
+        "exclude_archived": {"type": "boolean"},
+        "format": {"type": "string", "enum": ["full", "names_only", "ids_only"]},
+        "cursor": {"type": ["string", "null"]}
+      }
+    }
+  },
+  {
+    "name": "slack_read_channel",
+    "inputSchema": {"type": "object", "properties": {"channel_id": {"type":"string"}}, "required": ["channel_id"]}
+  },
+  {
+    "name": "slack_read_thread",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "channel_id": {"type": "string"},
+        "message_ts": {"type": "string"},
+        "limit": {"type": "integer"},
+        "response_format": {"type": "string"}
+      },
+      "required": ["channel_id", "message_ts"]
+    }
+  },
+  {"name": "slack_schedule_message", "inputSchema": {"type":"object"}}
+]

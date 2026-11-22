@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/rovohost"
+	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -33,12 +34,13 @@ const Instructions = `devflow links this repo's work to Jira, Confluence and Git
 
 // Server wraps the MCP server and the app.
 type Server struct {
-	mcp       *mcp.Server
-	app       *app.App
-	blocked   error
-	updater   *update.Updater
-	updateMsg string
-	writer    *native.SessionWriter
+	mcp         *mcp.Server
+	app         *app.App
+	blocked     error
+	updater     *update.Updater
+	updateMsg   string
+	writer      *native.SessionWriter
+	slackWriter *native.SessionWriter
 }
 
 // New builds a server for the repo in dir.
@@ -53,6 +55,7 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		s.writer = codexhost.NewWriter(a.Repo.Dir)
 	case "claude", "claude-desktop":
 		s.writer = rovohost.NewWriter()
+		s.slackWriter = slackhost.NewWriter()
 	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: Instructions})
 	s.register()
@@ -69,6 +72,9 @@ func (s *Server) SetUpdater(u *update.Updater) { s.updater = u }
 func (s *Server) Run(ctx context.Context) error {
 	if s.writer != nil {
 		defer s.writer.Close()
+	}
+	if s.slackWriter != nil {
+		defer s.slackWriter.Close()
 	}
 	if s.updater != nil {
 		ectx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -118,6 +124,8 @@ func (s *Server) writerForTool(name string) *native.SessionWriter {
 	switch name {
 	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link":
 		return s.writer
+	case "devflow_notify":
+		return s.slackWriter
 	default:
 		return nil
 	}

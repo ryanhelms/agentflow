@@ -57,5 +57,11 @@ For the Devflow Rovo pilot in Claude Code Desktop, use
 page replacement when the user selects that connection. Each provider requires
 its own browser consent. Wait for consent before requesting a new preview.
 
+When the user selects Devflow's own Slack connection, direct them to run
+`devflow setup login --provider slack --client devflow` in their terminal.
+The approved app must have the registered HTTPS loopback callback and a matching
+browser-trusted certificate. The terminal handles the app credentials and Slack
+handles browser consent. Keep credential values out of the agent session.
+
 When asked to disconnect, run `devflow setup logout --provider NAME --client devflow`
 with the selected provider name.

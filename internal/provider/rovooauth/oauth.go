@@ -15,6 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
+	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
@@ -59,7 +60,7 @@ type enrollment struct {
 }
 
 func newEnrollment(service, scope string) *enrollment {
-	return &enrollment{service: service, scope: scope, client: newClient(), listen: listenCallback, open: openBrowser,
+	return &enrollment{service: service, scope: scope, client: newClient(), listen: listenCallback, open: nativeoauth.OpenBrowser,
 		get: keyring.Get, set: keyring.Set, remove: keyring.Delete, lockDir: userLockDir}
 }
 
