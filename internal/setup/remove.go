@@ -30,7 +30,14 @@ type RemoveOptions struct {
 const AutoInitKey = "devflow.autoinit"
 
 // Files devflow owns outright: removed even when edited.
-var ownedPaths = []string{".devflow", ".github/workflows/devflow.yml"}
+var ownedPaths = []string{
+	".devflow/config.yml",
+	".devflow/releases.yml",
+	".devflow/bin/devflow",
+	".devflow/bin/devflow.cmd",
+	".devflow/bin/devflow.ps1",
+	".github/workflows/devflow.yml",
+}
 
 // Files `devflow release init` generates.
 var releaseFiles = []string{"release-please-config.json", ".release-please-manifest.json"}
@@ -50,12 +57,17 @@ var mergedJSON = map[string][]string{
 // clone. Nothing is committed; the developer reviews and commits the deletions.
 func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, error) {
 	res := &Result{}
+	root, err := os.OpenRoot(repoDir)
+	if err != nil {
+		return res, err
+	}
+	defer root.Close()
 	del := func(rel string) error {
 		res.Removed = append(res.Removed, rel)
 		if opt.DryRun {
 			return nil
 		}
-		return os.RemoveAll(filepath.Join(repoDir, filepath.FromSlash(rel)))
+		return root.RemoveAll(filepath.FromSlash(rel))
 	}
 
 	for _, rel := range ownedPaths {
@@ -76,7 +88,7 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 	}
 
 	// Other template files: delete when unchanged (or forced), otherwise keep.
-	err := fs.WalkDir(templates.Repo, "repo", func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(templates.Repo, "repo", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -119,7 +131,7 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		return res, err
 	}
 	if !opt.DryRun {
-		for _, dir := range []string{".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"} {
+		for _, dir := range []string{".devflow/bin", ".devflow", ".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"} {
 			removeIfEmpty(filepath.Join(repoDir, filepath.FromSlash(dir)))
 		}
 	}
