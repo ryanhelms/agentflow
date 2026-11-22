@@ -26,6 +26,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/hooks"
 	"github.com/nscaledev/devflow/internal/mcpserver"
+	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -59,7 +60,7 @@ Work
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
-  docs search QUERY [--space S]  search Confluence
+  docs search QUERY [--space S]  search the selected knowledge base
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
                                  .devflow/releases.yml and the release-please files
@@ -254,7 +255,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 			return errors.New("usage: devflow docs search QUERY [--space S]")
 		}
 		fs := flag.NewFlagSet("docs", flag.ContinueOnError)
-		space := fs.String("space", "", "Confluence space key")
+		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
@@ -585,9 +586,16 @@ func runCommit(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		key := cc.Key
-		if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {
-			key = strings.ToUpper(k)
+		var keys []string
+		if a.Cfg.Providers.TaskManagement.Provider != "github-issues" || a.Cfg.Commit.KeyRequired() {
+			key := cc.Key
+			if a.Cfg.Providers.TaskManagement.Provider == "github-issues" {
+				key = ""
+			}
+			if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {
+				key = strings.ToUpper(k)
+			}
+			keys = []string{key}
 		}
 		typ := cc.SuggestedType
 		if t := ask(fmt.Sprintf("Type (%s) [%s]: ", strings.Join(a.Cfg.Commit.Types, "/"), typ)); t != "" {
@@ -604,7 +612,10 @@ func runCommit(ctx context.Context, args []string) error {
 		if breaking {
 			trailers = append(trailers, "BREAKING CHANGE: "+ask("What breaks and how to migrate: "))
 		}
-		*msg = commit.Format(typ, []string{key}, breaking, summary, body, verbs, trailers)
+		if cc.TaskRef != "" {
+			trailers = append(trailers, provider.TaskTrailer+cc.TaskRef)
+		}
+		*msg = commit.Format(typ, keys, breaking, summary, body, verbs, trailers)
 	}
 	if issues := a.Validate(ctx, *msg); len(issues) > 0 {
 		for _, i := range issues {

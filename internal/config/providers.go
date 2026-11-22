@@ -71,6 +71,8 @@ type GitHubIssuesSettings struct {
 	GitHubSettings `yaml:",inline"`
 	Labels         []string    `yaml:"labels"`
 	Search         IssueSearch `yaml:"search"`
+	// Events and commit verbs map to GitHub issue states. "none" disables a mapping.
+	Transitions map[string]string `yaml:"transitions" allowed:"open,closed,none"`
 }
 
 type IssueSearch struct {
@@ -134,7 +136,11 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		return &JiraSettings{Site: repo.Jira.Site, Projects: append([]string{}, repo.Jira.Projects...)}
 	}
 	tasks["github-issues"] = func() any {
-		return &GitHubIssuesSettings{Labels: []string{}, Search: IssueSearch{OpenOnly: true, Limit: 30}}
+		return &GitHubIssuesSettings{
+			Labels:      []string{},
+			Search:      IssueSearch{OpenOnly: true, Limit: 30},
+			Transitions: map[string]string{"pr.merged": "closed", "#done": "closed"},
+		}
 	}
 	knowledge := fileProviders("docs")
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
