@@ -13,6 +13,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
 type confluenceFixture struct {
@@ -133,7 +134,7 @@ func TestConfluenceLookupAndApprovedReplacement(t *testing.T) {
 	}
 	settings := a.Cfg.Providers.KnowledgeBase.Settings.(*config.ConfluenceSettings)
 	settings.Site = "https://other.example"
-	if _, err := a.DocsPublish(ctx, in, token); !errors.Is(err, policy.ErrToken) || f.writes != 0 {
+	if _, err := a.DocsPublish(ctx, in, token); !errors.Is(err, native.ErrDenied) || f.writes != 0 {
 		t.Fatalf("changed site: %v, writes %d", err, f.writes)
 	}
 	settings.Site = "https://docs.example"

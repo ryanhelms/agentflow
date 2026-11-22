@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
 func legacyApp(t *testing.T, handler http.HandlerFunc) *App {
@@ -161,7 +162,7 @@ func TestLegacyJiraApprovals(t *testing.T) {
 	token := confirmation(t, v)
 	settings := a.Cfg.Providers.TaskManagement.Settings.(*config.JiraSettings)
 	settings.Site = "https://other.example"
-	if _, err := a.Comment(ctx, "PLAT-1", "note", token); !errors.Is(err, policy.ErrToken) {
+	if _, err := a.Comment(ctx, "PLAT-1", "note", token); !errors.Is(err, native.ErrDenied) {
 		t.Fatalf("retargeted comment: %v", err)
 	}
 	settings.Site = "https://tasks.example"

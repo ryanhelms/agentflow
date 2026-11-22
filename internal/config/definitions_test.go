@@ -280,3 +280,20 @@ func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
 		t.Fatal("legacy settings lost their repository source")
 	}
 }
+
+func TestRepositoryScopeSurvivesReleaseAndUserDefaults(t *testing.T) {
+	root, home := layers(t, constrained)
+	config(t, root, "jira: {projects: [INFRA]}")
+	user(t, home, "user.yml", "version: 1\nproviders:\n  jira: {task_management: {settings: {projects: []}}}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Providers.TaskManagement
+	if got := s.RepositorySettings("projects").(*JiraSettings).Projects; !reflect.DeepEqual(got, []string{"INFRA"}) {
+		t.Fatalf("trusted projects %v", got)
+	}
+	if len(s.Settings.(*JiraSettings).Projects) != 0 || s.CheckTarget("projects", "OTHER") == nil || s.CheckTarget("projects", "INFRA") != nil {
+		t.Fatal("user preference or release allowlist lost")
+	}
+}

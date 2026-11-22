@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/nscaledev/devflow/internal/config"
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
@@ -130,7 +133,47 @@ func (w *boundTaskWrite) task(ctx context.Context, ref provider.Ref) (provider.T
 	return readBoundTaskData(ctx, w, read)
 }
 
+// Check the resolved destination before native preparation, REST or CLI
+// fallback. Explicit operation inputs and template defaults use the same ceiling.
+func (a *App) taskWriteScope(ctx context.Context, scope string) error {
+	sel := a.Cfg.Providers.TaskManagement
+	switch sel.Provider {
+	case "asana":
+		repo, _ := sel.RepositorySettings("project").(*config.AsanaSettings)
+		if repo == nil {
+			repo, _ = sel.RepositorySettings("transitions").(*config.AsanaSettings)
+		}
+		if repo != nil && !repo.HasProject(scope) {
+			return fmt.Errorf("asana project %q is outside the repository's configured projects: %w", scope, native.ErrDenied)
+		}
+	case issuesInstance:
+		repo, _ := sel.RepositorySettings("repository").(*config.GitHubIssuesSettings)
+		hosting := a.Cfg.Providers.CodeHosting.RepositorySettings("target_remote")
+		var ceiling string
+		switch {
+		case repo != nil && repo.Repository != nil:
+			ceiling = *repo.Repository
+		case repo != nil || hosting != nil:
+			var err error
+			ceiling, err = a.detectIssueRepo(ctx, hosting)
+			if err != nil {
+				return fmt.Errorf("resolve repository write scope: %w", errors.Join(native.ErrDenied, err))
+			}
+		}
+		if ceiling != "" && !strings.EqualFold(ceiling, scope) {
+			return fmt.Errorf("github issues target %q differs from repository %q: %w", scope, ceiling, native.ErrDenied)
+		}
+		if err := sel.CheckTarget("repository", scope); err != nil {
+			return fmt.Errorf("github issues target %q: %w", scope, errors.Join(native.ErrDenied, err))
+		}
+	}
+	return nil
+}
+
 func (a *App) taskTransitionWrite(ctx context.Context, ref provider.Ref, event, operationID string) (*boundTaskWrite, error) {
+	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
+		return nil, err
+	}
 	if operationID != "" || os.Getenv("GITHUB_ACTIONS") == "true" {
 		return nil, nil
 	}

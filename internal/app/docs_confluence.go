@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
+
+	"github.com/nscaledev/devflow/internal/config"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/policy"
@@ -38,6 +41,10 @@ func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summar
 	site, err := a.confluenceSite()
 	if err != nil {
 		return nil, err
+	}
+	if repo, ok := a.Cfg.Providers.KnowledgeBase.RepositorySettings("site").(*config.ConfluenceSettings); ok &&
+		strings.TrimRight(repo.Site, "/") != strings.TrimRight(site, "/") {
+		return nil, fmt.Errorf("confluence site differs from the configured repository site: %w", native.ErrDenied)
 	}
 	summary["site"] = site
 	draft, opts := in.replacement()

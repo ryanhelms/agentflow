@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -54,6 +55,36 @@ type Selection struct {
 	Sources map[string]Source
 	// Constraints are the release layer's limits on settings paths.
 	Constraints map[string]Constraint
+	// The pre-user snapshot supplies the write ceiling for targets explicitly
+	// set by the repository. User defaults still participate in Settings.
+	repositorySettings any
+	repositorySources  map[string]Source
+}
+
+// RepositorySettings returns the pre-user settings if the repository supplied
+// this property or any of its children, or the release locked the property.
+func (s Selection) RepositorySettings(property string) any {
+	if c := s.Constraints[property]; c.Lock == true {
+		return s.repositorySettings
+	}
+	for path, source := range s.repositorySources {
+		if source.Layer == LayerProject && (property == "" || path == property || strings.HasPrefix(path, property+".")) {
+			return s.repositorySettings
+		}
+	}
+	return nil
+}
+
+// CheckTarget applies release allow and pattern restrictions to a concrete
+// operation target, including targets resolved from Git or supplied as input.
+// Locks and append minima govern the setting itself during layer resolution.
+func (s Selection) CheckTarget(property, value string) error {
+	c, ok := s.Constraints[property]
+	if !ok {
+		return nil
+	}
+	c.Lock = nil
+	return c.check(value, nil)
 }
 
 type DisabledSettings struct{}
@@ -390,7 +421,8 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string, de
 		}
 		return sel, nil
 	}
-	return sel, sel.applyLayers(fields, path, defs, repo)
+	err = sel.applyLayers(fields, path, defs, repo)
+	return sel, err
 }
 
 var configSource = Source{Layer: LayerProject, File: ".devflow/config.yml"}
@@ -442,42 +474,6 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 			return err
 		}
 	}
-	apply := func(raw any, src Source) error {
-		if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
-			return err
-		}
-		leaves := map[string]any{}
-		flatten("", raw, leaves)
-		delete(leaves, "")
-		for leaf := range leaves {
-			sel.Sources[leaf] = src
-		}
-		return nil
-	}
-	check := func() error {
-		if baseline == nil {
-			return nil
-		}
-		current, err := plain(sel.Settings)
-		if err != nil {
-			return err
-		}
-		for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
-			con := sel.Constraints[name]
-			value, present := lookup(current, con.parts)
-			base, wasPresent := lookup(baseline, con.parts)
-			if con.Lock == true && present != wasPresent {
-				return fmt.Errorf("%s.settings.%s is locked by %s", path, name, con.source)
-			}
-			if value == nil && base == nil {
-				continue // an optional property has no configured value
-			}
-			if err := con.check(value, base); err != nil {
-				return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
-			}
-		}
-		return nil
-	}
 	fromDefinition := func(layer string) error {
 		def, ok := defs.get(layer, sel.Provider, path)
 		if !ok {
@@ -489,35 +485,96 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		if def.Settings == nil {
 			return nil
 		}
-		if err := apply(def.Settings, def.source); err != nil {
+		if err := sel.applyLayer(def.Settings, def.source, path); err != nil {
 			return &DefinitionError{Source: def.source, Err: err}
 		}
 		if layer != LayerRelease {
-			if err := check(); err != nil {
+			if err := sel.checkConstraints(baseline, path); err != nil {
 				return &DefinitionError{Source: def.source, Err: err}
 			}
 		}
 		return nil
 	}
-	if err := apply(repo.legacySettings(sel.Provider), configSource); err != nil {
+	legacy := repo.legacySettings(sel.Provider)
+	if err := sel.applyLayer(legacy, configSource, path); err != nil {
 		return err
 	}
 	if err := fromDefinition(LayerRelease); err != nil {
 		return err
 	}
-	if err := check(); err != nil {
+	if err := sel.checkConstraints(baseline, path); err != nil {
 		return err
 	}
 	if err := fromDefinition(LayerProject); err != nil {
 		return err
 	}
 	if overrides, ok := fields["settings"]; ok {
-		if err := apply(overrides, configSource); err != nil {
+		if err := sel.applyLayer(overrides, configSource, path); err != nil {
 			return err
 		}
-		if err := check(); err != nil {
+		if err := sel.checkConstraints(baseline, path); err != nil {
 			return err
 		}
 	}
+	// A release default can supersede an old top-level field for preferences.
+	// The explicit repository target still bounds writes until the repository
+	// specifies a new target in a project file or inline role setting.
+	sel.repositorySettings = copySettings(sel.Settings)
+	sel.repositorySources = maps.Clone(sel.Sources)
+	for key, value := range legacy {
+		if sel.Sources[key].Layer == LayerRelease {
+			if err := applySettings(sel.repositorySettings, map[string]any{key: value}, path+".settings"); err != nil {
+				return err
+			}
+			sel.repositorySources[key] = configSource
+		}
+	}
 	return fromDefinition(LayerUser)
+}
+
+// mergeSetting replaces modified maps, pointers and slices, so untouched
+// branches can be shared by these read-only snapshots.
+func copySettings(settings any) any {
+	current := reflect.ValueOf(settings).Elem()
+	copy := reflect.New(current.Type())
+	copy.Elem().Set(current)
+	return copy.Interface()
+}
+
+func (sel *Selection) applyLayer(raw any, src Source, path string) error {
+	if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
+		return err
+	}
+	leaves := map[string]any{}
+	flatten("", raw, leaves)
+	delete(leaves, "")
+	for leaf := range leaves {
+		sel.Sources[leaf] = src
+	}
+	return nil
+}
+
+func (sel Selection) checkConstraints(baseline map[string]any, path string) error {
+	if baseline == nil {
+		return nil
+	}
+	current, err := plain(sel.Settings)
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
+		con := sel.Constraints[name]
+		value, present := lookup(current, con.parts)
+		base, wasPresent := lookup(baseline, con.parts)
+		if con.Lock == true && present != wasPresent {
+			return fmt.Errorf("%s.settings.%s is locked by %s", path, name, con.source)
+		}
+		if value == nil && base == nil {
+			continue // an optional property has no configured value
+		}
+		if err := con.check(value, base); err != nil {
+			return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
+		}
+	}
+	return nil
 }
