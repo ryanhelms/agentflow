@@ -50,7 +50,7 @@ func (a *App) prepareWorkflowTasks() error {
 		}
 	case "asana":
 		if strings.TrimSpace(os.Getenv("ASANA_ACCESS_TOKEN")) == "" {
-			return errors.New("Asana task reads require ASANA_ACCESS_TOKEN in the workflow environment")
+			return errors.New("task reads from asana require ASANA_ACCESS_TOKEN in the workflow environment")
 		}
 	case "filesystem", "repository", "none":
 	default:
