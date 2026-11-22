@@ -1,0 +1,61 @@
+name: devflow provider pilot
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: devflow-provider-pilot-${{ github.repository_id }}
+  cancel-in-progress: false
+
+jobs:
+  approved-issue:
+    if: >-
+      github.repository == 'nscaledev/devflow' &&
+      github.event.pull_request.merged &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.DEVFLOW_PROVIDER_PILOT_ISSUE != '' &&
+      contains(github.event.pull_request.body, 'Task-Ref: github-issues/nscaledev%2Fdevflow/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out verified base code and provider configuration
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build devflow
+        run: go build -o "$RUNNER_TEMP/devflow" ./cmd/devflow
+      - name: Verify the published pilot ADR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_NO_UPDATE: "1"
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
+        run: |
+          gh auth setup-git --hostname github.com
+          "$RUNNER_TEMP/devflow" docs search "Provider contracts and repository configuration" --space engineering --json \
+            | jq -e 'any(.pages[]; .ref.instance == "repository" and .ref.id == "provider-architecture")'
+      - name: Close the approved issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
+          DEVFLOW_NO_UPDATE: "1"
+          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEVFLOW_APPROVED_ISSUE: ${{ vars.DEVFLOW_PROVIDER_PILOT_ISSUE }}
+        run: |
+          if [[ ! "$DEVFLOW_APPROVED_ISSUE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Set DEVFLOW_PROVIDER_PILOT_ISSUE to the exact pilot issue number"
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$DEVFLOW_HOME"
+          printf '%s\n' 'autonomy: {remote: auto}' > "$DEVFLOW_HOME/config.yml"
+          "$RUNNER_TEMP/devflow" transition --github-event
