@@ -682,9 +682,16 @@ func runPreview(ctx context.Context, args []string) error {
 func runTransition(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "preview only")
+	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions pull request event")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	if err := fs.Parse(reorder(args)); err != nil {
 		return err
+	}
+	if *githubEvent {
+		if fs.NArg() != 0 || *yes {
+			return errors.New("--github-event cannot be combined with a key, event, or --yes")
+		}
+		return runGitHubTaskEvent(ctx, *dry)
 	}
 	key, event := "", ""
 	switch fs.NArg() {

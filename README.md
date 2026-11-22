@@ -168,6 +168,11 @@ through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
 the qualified issue reference in the PR body and interactive commit message.
 
+GitHub Issues repositories can run the reusable `task-events.yml` workflow to
+preview or apply configured pull-request transitions. The job reads trusted
+base-branch configuration and uses an explicit qualified task reference in the
+PR body. The caller controls dry-run mode and grants the job issue permissions.
+
 ## Day-to-day use
 
 | Task | Terminal | AI client |
