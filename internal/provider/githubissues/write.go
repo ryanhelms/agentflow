@@ -22,18 +22,15 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 	if options.ExpectedRevision != "" {
 		return provider.WriteResult{}, provider.Unsupported(a.instance, "github issue revision preconditions")
 	}
-	if draft.Type != "" || draft.Priority != "" || len(draft.Links) != 0 {
-		return provider.WriteResult{}, provider.Unsupported(a.instance, "creating github issues with type, priority or structured links")
-	}
-	if strings.TrimSpace(draft.Title) == "" {
-		return provider.WriteResult{}, errors.New("github issue title is required")
+	if err := ValidateDraft(a.instance, draft); err != nil {
+		return provider.WriteResult{}, err
 	}
 	repo, err := a.scope(draft.Scope)
 	if err != nil {
 		return provider.WriteResult{}, err
 	}
 	path := issuesPath(repo)
-	marker := a.operationMarker(path, options.OperationID)
+	marker := a.bodyMarker(path, options.OperationID, draft.Template)
 	lookup := func() (provider.WriteResult, error) {
 		var result provider.WriteResult
 		err := listPages(ctx, a, path, issueListParams(), func(i issue) (bool, error) {
@@ -63,9 +60,12 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 		if err != nil {
 			return provider.WriteResult{}, err
 		}
+		if draft.Template != nil && !hasMarker(i.Body, marker) {
+			return provider.WriteResult{}, errors.New("github did not confirm the selected issue template")
+		}
 		return taskResult(task, provider.Applied), nil
 	}
-	result, err := postOnce(path, marker, lookup, post)
+	result, err := postOnce(path, options.OperationID != "", lookup, post)
 	if err != nil {
 		return provider.WriteResult{}, fmt.Errorf("create github issue in %s: %w", repo, err)
 	}
@@ -86,6 +86,9 @@ func (a *Adapter) Transition(ctx context.Context, ref provider.Ref, target provi
 	}
 	task, err := a.Get(ctx, ref)
 	if err != nil {
+		return provider.WriteResult{}, err
+	}
+	if err := checkTask(task, options); err != nil {
 		return provider.WriteResult{}, err
 	}
 	if task.State == desired {
@@ -123,8 +126,11 @@ func (a *Adapter) Comment(ctx context.Context, ref provider.Ref, body string, op
 	if err != nil {
 		return provider.WriteResult{}, err
 	}
+	if err := checkTask(task, options); err != nil {
+		return provider.WriteResult{}, err
+	}
 	path := issuePath(task.Ref) + "/comments"
-	marker := a.operationMarker(path, options.OperationID)
+	marker := a.bodyMarker(path, options.OperationID, nil)
 	lookup := func() (provider.WriteResult, error) {
 		var result provider.WriteResult
 		err := listPages(ctx, a, path, url.Values{}, func(c comment) (bool, error) {
@@ -146,7 +152,7 @@ func (a *Adapter) Comment(ctx context.Context, ref provider.Ref, body string, op
 		}
 		return provider.WriteResult{Ref: task.Ref, Status: provider.Applied, URL: c.HTMLURL}, nil
 	}
-	result, err := postOnce(path, marker, lookup, post)
+	result, err := postOnce(path, options.OperationID != "", lookup, post)
 	if err != nil {
 		return provider.WriteResult{}, fmt.Errorf("comment on github issue %s: %w", task.Key, err)
 	}
@@ -195,11 +201,17 @@ const (
 	bodyEscape   = "<!-- devflow:github-issues:body:v1 -->\n\n"
 )
 
-func (a *Adapter) operationMarker(path, id string) string {
-	if id == "" {
+func (a *Adapter) bodyMarker(path, id string, template *provider.TaskTemplateRef) string {
+	var key string
+	if id != "" {
+		key = provider.Ref{Instance: a.instance, Scope: path, ID: id}.StorageKey()
+	}
+	if template != nil {
+		return templateMarker(*template, key)
+	}
+	if key == "" {
 		return ""
 	}
-	key := provider.Ref{Instance: a.instance, Scope: path, ID: id}.StorageKey()
 	return markerPrefix + key + markerSuffix
 }
 
@@ -210,7 +222,7 @@ func markedBody(body, marker string) string {
 		}
 		return marker + markerGap + body
 	}
-	if plainBody(body) != body {
+	if plainBody(body) != body || strings.HasPrefix(body, templatePrefix) {
 		return bodyEscape + body
 	}
 	return body
@@ -246,8 +258,8 @@ func plainBody(body string) string {
 // GitHub provides no atomic check-and-create here. Concurrent calls with the
 // same ID, delayed visibility, and marker removal can allow duplicates. Callers
 // should serialize attempts for a given ID. Each invocation sends at most one POST.
-func postOnce(path, marker string, lookup, post func() (provider.WriteResult, error)) (provider.WriteResult, error) {
-	if marker != "" {
+func postOnce(path string, reconcile bool, lookup, post func() (provider.WriteResult, error)) (provider.WriteResult, error) {
+	if reconcile {
 		if found, err := lookup(); err != nil || found.Status != "" {
 			return found, err
 		}
@@ -260,7 +272,7 @@ func postOnce(path, marker string, lookup, post func() (provider.WriteResult, er
 	if errors.Is(err, provider.ErrNotFound) || (status >= 400 && status < 500 && status != http.StatusRequestTimeout) {
 		return provider.WriteResult{}, err
 	}
-	if marker != "" {
+	if reconcile {
 		found, lookupErr := lookup()
 		if lookupErr != nil {
 			return provider.WriteResult{}, fmt.Errorf("write outcome unknown: %w", errors.Join(err, fmt.Errorf("check operation marker: %w", lookupErr)))
