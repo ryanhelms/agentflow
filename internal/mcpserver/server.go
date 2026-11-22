@@ -116,7 +116,7 @@ func (s *Server) writerForTool(name string) *native.SessionWriter {
 		return s.writer
 	}
 	switch name {
-	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link":
+	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link", "devflow_ticket_create":
 		return s.writer
 	default:
 		return nil

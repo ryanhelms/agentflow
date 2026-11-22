@@ -313,8 +313,8 @@ sign-in, the setup agent launches its OAuth flow. After consent, request a
 fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
 Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
-Desktop can also use Devflow-owned connections for Jira comments, web links and
-Confluence page replacement. Each preview identifies Devflow as the connection owner.
+Desktop can also use Devflow-owned connections for unlinked Jira issue creation,
+Jira comments, web links and Confluence page replacement. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -351,6 +351,13 @@ target and connected owner before confirming. When no Devflow enrollment
 exists, the Jira link tool can use the signed-in CLI. To disconnect the local
 Devflow Rovo grant, run `devflow setup logout --provider jira --client devflow`.
 Use Atlassian account settings if you also want to revoke the vendor's grant.
+
+With that Jira enrollment, use `devflow_ticket_create` to preview an unlinked
+issue in an allowed project. Devflow verifies that the requested standard issue
+type exists in the project and binds the title, description and labels to one
+approval. A successful result includes the new issue key. A request with a parent
+or other issue link uses the existing linked-creation route. If the outcome is
+uncertain, inspect the project before approving another creation.
 
 With that Jira enrollment, `devflow_comment` can add one standard issue
 comment. The CLI uses the same grant and policy with

@@ -10,12 +10,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 )
 
@@ -23,6 +25,7 @@ const (
 	origin           = "https://mcp.atlassian.com"
 	catalogEndpoint  = rovooauth.Resource + "?tools=all"
 	commentTool      = "addOrEditJiraIssueComment"
+	createTool       = "createJiraIssue"
 	remoteLinkTool   = "createJiraIssueRemoteIssueLink"
 	updateTool       = "updateConfluenceContent"
 	pageTool         = "getConfluenceContent"
@@ -44,7 +47,7 @@ func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWr
 			return nil, native.ErrUnavailable
 		}
 		switch {
-		case call.Provider == "jira" && (call.Tool == remoteLinkTool || call.Tool == commentTool),
+		case call.Provider == "jira" && (call.Tool == remoteLinkTool || call.Tool == commentTool || call.Tool == createTool),
 			call.Provider == "confluence" && call.Tool == updateTool:
 			return connect(ctx, call, token, transport)
 		}
@@ -57,6 +60,7 @@ type session struct {
 	site             string
 	writeTool        string
 	issueKey         string
+	projectKey       string
 	pageID           string
 	verifiedSnapshot string
 	client           *mcp.ClientSession
@@ -102,8 +106,9 @@ func connect(ctx context.Context, call native.Call, token tokenSource, transport
 	site, _ := call.Arguments["cloudId"].(string)
 	pageID, _ := call.Arguments["contentId"].(string)
 	issueKey, _ := call.Arguments["issueIdOrKey"].(string)
+	projectKey, _ := call.Arguments["projectKey"].(string)
 	return &session{
-		provider: call.Provider, site: site, writeTool: call.Tool, issueKey: issueKey, pageID: pageID,
+		provider: call.Provider, site: site, writeTool: call.Tool, issueKey: issueKey, projectKey: projectKey, pageID: pageID,
 		client: connected, bearer: wire, tools: tools, token: token, generation: generation,
 	}, nil
 }
@@ -155,6 +160,8 @@ func relevantTool(writeTool, name string) bool {
 	switch writeTool {
 	case commentTool:
 		return name == commentTool || name == "getJiraIssue"
+	case createTool:
+		return name == createTool || name == nativemap.JiraProjectIssueTypesTool
 	case updateTool:
 		return name == updateTool || name == pageTool || name == spaceTool || name == versionTool
 	case remoteLinkTool:
@@ -183,6 +190,12 @@ func (s *session) wireCall(call native.Call) (native.Call, error) {
 	if !relevantTool(s.writeTool, call.Tool) {
 		return native.Call{}, native.ErrDenied
 	}
+	if s.writeTool == createTool {
+		if err := s.checkCreateCall(call); err != nil {
+			return native.Call{}, err
+		}
+		return call, s.checkSchema(call.Tool, call.Arguments)
+	}
 	if s.writeTool == commentTool {
 		if s.site == "" || s.issueKey == "" ||
 			call.Arguments["cloudId"] != s.site || call.Arguments["issueIdOrKey"] != s.issueKey {
@@ -200,6 +213,32 @@ func (s *session) wireCall(call native.Call) (native.Call, error) {
 		return native.Call{}, native.ErrDenied
 	}
 	return call, native.ValidateInputSchema(s.tools[call.Tool], call.Arguments)
+}
+
+func (s *session) checkCreateCall(call native.Call) error {
+	if s.site == "" || s.projectKey == "" || call.Arguments["cloudId"] != s.site {
+		return native.ErrDenied
+	}
+	if call.Tool == nativemap.JiraProjectIssueTypesTool {
+		if len(call.Arguments) != 3 || call.Arguments["projectIdOrKey"] != s.projectKey || call.Arguments["maxResults"] != 200 {
+			return native.ErrDenied
+		}
+		return nil
+	}
+	if call.Arguments["projectKey"] != s.projectKey {
+		return native.ErrDenied
+	}
+	_, hasDescription := call.Arguments["description"]
+	format, hasFormat := call.Arguments["contentFormat"]
+	if hasDescription != hasFormat || hasFormat && format != "html" {
+		return native.ErrDenied
+	}
+	for arg := range call.Arguments {
+		if !slices.Contains([]string{"cloudId", "projectKey", "summary", "issueType", "labels", "description", "contentFormat"}, arg) {
+			return native.ErrDenied
+		}
+	}
+	return nil
 }
 
 func (s *session) checkSchema(name string, args map[string]any) error {

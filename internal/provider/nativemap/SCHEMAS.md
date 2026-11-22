@@ -79,6 +79,17 @@ Atlassian catalog where their named tools are listed directly.
 [Atlassian transition contract](https://www.atlassian.com/blog/how-we-build/jira-depth-on-demand) ·
 [TWG work item command reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md#reads)
 
+### Claude Code Desktop issue creation
+
+The [Rovo catalog fixture](../rovohost/testdata/jira-create-flat-schema.json)
+covers `listJiraProjectIssueTypesMetadata` and `createJiraIssue`. The Desktop
+connection restricts both tools to the configured site and project. Complete
+metadata must establish exactly one matching standard issue type. Creation
+sends `cloudId`, `projectKey`, `issueType` and `summary`, plus any approved
+labels and escaped HTML description. Devflow requires an issue key in the
+requested project in the acknowledgement and claims the approval before calling
+the provider.
+
 ### Claude Code Desktop issue comments
 
 The flat input schemas for `addOrEditJiraIssueComment` and `getJiraIssue` are

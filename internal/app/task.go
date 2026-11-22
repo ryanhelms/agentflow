@@ -507,14 +507,18 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 		return p, err
 	}
 	if write != nil {
-		payload, err := write.run(ctx)
-		var created provider.Ref
-		if err == nil {
-			created, err = nativemap.DecodeJiraCreated(payload, "jira", project)
+		apply := func() (provider.Ref, error) {
+			payload, err := write.run(ctx)
 			if err != nil {
-				err = errors.Join(native.ErrWriteUncertain, err)
+				return provider.Ref{}, err
 			}
+			created, err := nativemap.DecodeJiraCreated(payload, "jira", project)
+			if err != nil {
+				return provider.Ref{}, errors.Join(native.ErrWriteUncertain, err)
+			}
+			return created, nil
 		}
+		created, err := applyTaskAppend(ctx, a.Home, token, taskWritePreview(*write), apply)
 		a.audit(policy.Remote, "ticket_create", s, err)
 		return map[string]string{"key": created.ID}, err
 	}

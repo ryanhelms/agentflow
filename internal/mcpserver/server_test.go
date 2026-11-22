@@ -131,7 +131,7 @@ func TestDesktopWriteEntryPoints(t *testing.T) {
 		s := &Server{app: &app.App{Client: client}, writer: &native.SessionWriter{}}
 		for name, desktop := range map[string]bool{
 			"devflow_comment": true, "devflow_docs_publish": true, "devflow_jira_remote_link": true,
-			"devflow_eod_post": false, "devflow_ac_update": false, "devflow_ticket_create": false,
+			"devflow_eod_post": false, "devflow_ac_update": false, "devflow_ticket_create": true,
 		} {
 			if got := s.writerForTool(name) != nil; got != (desktop || client == "codex") {
 				t.Errorf("%s %s writer available = %t", client, name, got)
