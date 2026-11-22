@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.10.0](https://github.com/nscaledev/devflow/compare/v0.9.0...v0.10.0) - 2026-11-22
+
+### Features
+
+- add git-backed repository providers ([07cb468](https://github.com/nscaledev/devflow/commit/07cb468d654fca809142148822cdd3f2d8f0472f))
+
 ## [0.9.0](https://github.com/nscaledev/devflow/compare/v0.8.0...v0.9.0) - 2026-11-22
 
 ### Features
