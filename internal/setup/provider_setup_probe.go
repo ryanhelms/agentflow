@@ -175,7 +175,7 @@ func (g *githubProbe) check(ctx context.Context, p *ProviderSetupPlan, role sele
 		g.auth[host] = authenticated
 	}
 	if !authenticated {
-		check(false, fmt.Sprintf("check connectivity and run gh auth login --hostname %s using %s, or supply a token for that host in this environment", host, g.command))
+		check(false, fmt.Sprintf("check connectivity and run gh auth login --hostname %s --web using %s", host, g.command))
 		return
 	}
 	endpoints := map[string][]string{

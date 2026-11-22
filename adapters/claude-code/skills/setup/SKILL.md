@@ -1,12 +1,31 @@
 ---
 name: setup
 description: Check provider readiness, verify provider MCP servers, install pinned companions, or register a project client
-argument-hint: "[plan | verify | apply] [--companion ID] [--client NAME] [--install | --install-gh]"
+argument-hint: "[plan | verify | apply | login] [--provider NAME] [--companion ID] [--client NAME]"
 ---
 Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
 provider requirements. Use the current client or the one requested by the user.
-Explain any missing prerequisites. If the plan offers `install_gh`, show the
-pinned artifact details. On request, use `devflow_setup_apply` with
+For a selected provider in `provider_tools`, discover its native MCP in the
+current client and try a small read for the configured site, repository or
+workspace. Reuse a working connector. Check Jira and Confluence access
+independently using the same Atlassian connection. Report permission denials
+as access issues.
+
+If the connector is missing, offer to install or register the official provider
+integration in the current client. Use the plan's vendor guide when the user
+authorizes setup. Start the client's Connect or Sign in action when the tool
+requires authentication. With Claude Code, run
+`devflow setup login --provider NAME --client claude --server SERVER` using
+the registered MCP server name. Use `claude-desktop` for Claude Code Desktop.
+Allow the user to complete consent in the browser, then retry the read.
+If the MCP is unavailable for the operation, use the provider's installed CLI,
+or offer to install it. To start its sign-in, use
+`devflow setup login --provider NAME` when the plan lists a CLI. Use the
+provider's native CLI directly if the delegated command cannot run. Keep user
+credentials in the vendor tool's login flow. If the host blocks the launch,
+show the user the specific host action it requires.
+
+If the plan offers `install_gh`, show the pinned artifact details. On request, use `devflow_setup_apply` with
 `install_gh: true` or `devflow setup apply --install-gh`. Obtain approval for
 the installation summary before retrying with its confirmation token.
 When the user approves client registration,
@@ -16,9 +35,10 @@ or `claude` for plugin marketplace enrollment. After desktop registration,
 restart Claude Code Desktop and check for `mcp__devflow__devflow_setup_plan`.
 
 For an MCP companion in the trusted user manifest, pass `companion: ID` to
-the plan. Show the declared endpoint or executable pin and credential
-variable name. Use `install: true` with the ID for a local installation.
+the plan. Show the declared endpoint or executable pin. Use `install: true`
+with the ID for a local installation.
 Request separate approval for the same ID with the user's explicit target
 `client` (claude, claude-desktop, cursor, gemini or vscode). Recheck the handshake, tool listing
-and managed entry with `devflow_setup_plan`. Ask the user to supply any missing credential
-in their runtime environment.
+and managed entry with `devflow_setup_plan`. For a custom integration that
+requires an environment credential, offer the vendor's interactive connector
+or CLI when available.
