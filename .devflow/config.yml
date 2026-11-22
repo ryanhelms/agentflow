@@ -8,6 +8,11 @@ task_management:
     transitions:
       pr.merged: closed
       "#done": none
+  templates:
+    catalog: .devflow/task-templates.json
+    default:
+      name: engineering-task
+      revision: "1"
 
 knowledge_base:
   provider: repository

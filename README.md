@@ -184,6 +184,9 @@ Configure a catalog and default under `task_management.templates` to preview new
 with template defaults, required sections and checklist items. Devflow records
 the selected revision and validates the issue against it before a comment or
 state change. See the [task template configuration](docs/providers.md#task-templates).
+
+New issues created through devflow in this repository use the
+[`engineering-task` template](.devflow/task-templates.json).
 GitHub Issues repositories can run the reusable `task-events.yml` workflow to
 preview configured pull-request transitions with read-only issue permissions.
 The job reads trusted base-branch configuration and uses an explicit qualified
