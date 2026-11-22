@@ -1,0 +1,253 @@
+// Package provider defines devflow's service objects and the operations its
+// application code can request from provider adapters.
+package provider
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ErrUnsupported identifies an operation the selected provider cannot perform.
+var ErrUnsupported = errors.New("provider does not support this operation")
+
+// Unsupported adds details suitable for displaying to a caller.
+func Unsupported(instance, operation string) error {
+	return fmt.Errorf("%s: %s: %w", instance, operation, ErrUnsupported)
+}
+
+var (
+	ErrNotFound = errors.New("provider resource not found")
+	ErrConflict = errors.New("provider resource changed")
+)
+
+// WriteStatus is the observed outcome of a provider write.
+type WriteStatus string
+
+const (
+	Applied        WriteStatus = "applied"
+	AlreadyApplied WriteStatus = "already_applied"
+	PendingReview  WriteStatus = "pending_review"
+)
+
+// WriteResult supports synchronous and review-based providers. Revision can be
+// supplied as a precondition on a later write. URL points to the result or
+// to the change request when Status is PendingReview.
+type WriteResult struct {
+	Ref      Ref         `json:"ref"`
+	Status   WriteStatus `json:"status"`
+	Revision string      `json:"revision,omitempty"`
+	URL      string      `json:"url,omitempty"`
+}
+
+// WriteOptions can carry a stable operation key and expected current revision
+// across retries. Adapters unable to enforce a requested precondition must
+// return ErrUnsupported.
+type WriteOptions struct {
+	OperationID      string
+	ExpectedRevision string
+}
+
+type Link struct {
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url,omitempty"`
+	Ref   *Ref   `json:"ref,omitempty"`
+}
+
+type TaskState struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Terminal bool   `json:"terminal,omitempty"`
+}
+
+type Task struct {
+	Ref         Ref       `json:"ref"`
+	Key         string    `json:"key,omitempty"`
+	URL         string    `json:"url,omitempty"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	Type        string    `json:"type,omitempty"`
+	State       TaskState `json:"state"`
+	Priority    string    `json:"priority,omitempty"`
+	Assignee    string    `json:"assignee,omitempty"`
+	Links       []Link    `json:"links,omitempty"`
+	Revision    string    `json:"revision,omitempty"`
+}
+
+type TaskQuery struct {
+	Scope        string
+	Text         string
+	AssignedToMe bool
+	OpenOnly     bool
+	Limit        int
+}
+
+type TaskDraft struct {
+	Scope       string
+	Title       string
+	Description string
+	Type        string
+	Priority    string
+	Labels      []string
+	Links       []Link
+}
+
+// Tasks describes the operations expected of a task management adapter.
+type Tasks interface {
+	Get(ctx context.Context, ref Ref) (Task, error)
+	Find(ctx context.Context, query TaskQuery) ([]Task, error)
+	Create(ctx context.Context, draft TaskDraft, options WriteOptions) (WriteResult, error)
+	Transition(ctx context.Context, ref Ref, target TaskState, options WriteOptions) (WriteResult, error)
+}
+
+// TaskComments and TaskAssignment are optional task capabilities.
+type TaskComments interface {
+	Comment(ctx context.Context, ref Ref, body string, options WriteOptions) (WriteResult, error)
+}
+
+type TaskAssignment interface {
+	AssignToMe(ctx context.Context, ref Ref, options WriteOptions) (WriteResult, error)
+}
+
+type Document struct {
+	Ref      Ref    `json:"ref"`
+	Title    string `json:"title"`
+	Body     string `json:"body,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	Links    []Link `json:"links,omitempty"`
+}
+
+type DocumentQuery struct {
+	Scope string
+	Text  string
+	Limit int
+}
+
+type DocumentDraft struct {
+	Title string
+	Body  string
+	Links []Link
+}
+
+// Knowledge reads and publishes documents. The publish reference identifies the
+// destination document even before its first revision exists.
+type Knowledge interface {
+	Get(ctx context.Context, ref Ref) (Document, error)
+	Find(ctx context.Context, query DocumentQuery) ([]Document, error)
+	Publish(ctx context.Context, ref Ref, draft DocumentDraft, options WriteOptions) (WriteResult, error)
+}
+
+type RepositoryRef struct {
+	Host string
+	Path string
+}
+
+type ChangeRequest struct {
+	Repository RepositoryRef
+	ID         string
+	URL        string
+	Title      string
+	Head       string
+	Base       string
+	Draft      bool
+}
+
+type ChangeDraft struct {
+	Title string
+	Body  string
+	Head  string
+	Base  string
+	Draft bool
+}
+
+type Review struct {
+	ID     string
+	Author string
+	Body   string
+	State  string
+	URL    string
+}
+
+type CodeHosting interface {
+	FindChange(ctx context.Context, repo RepositoryRef, head string) (ChangeRequest, error)
+	OpenChange(ctx context.Context, repo RepositoryRef, draft ChangeDraft) (ChangeRequest, error)
+	Reviews(ctx context.Context, change ChangeRequest) ([]Review, error)
+}
+
+type CheckRun struct {
+	Name       string
+	State      string
+	Conclusion string
+	URL        string
+}
+
+type Checks interface {
+	Checks(ctx context.Context, repo RepositoryRef, revision string) ([]CheckRun, error)
+}
+
+type Deployment struct {
+	Environment string
+	Revision    string
+	State       string
+	URL         string
+}
+
+type Deployments interface {
+	Deployments(ctx context.Context, repo RepositoryRef, revision string) ([]Deployment, error)
+}
+
+type Release struct {
+	Tag      string
+	Revision string
+	Title    string
+	Notes    string
+	URL      string
+}
+
+type Releases interface {
+	GetRelease(ctx context.Context, repo RepositoryRef, tag string) (Release, error)
+	PublishRelease(ctx context.Context, repo RepositoryRef, release Release, options WriteOptions) (WriteResult, error)
+}
+
+type Finding struct {
+	Ref      Ref
+	Title    string
+	Body     string
+	Severity string
+	URL      string
+}
+
+type Incident struct {
+	Ref      Ref
+	Title    string
+	Body     string
+	Severity string
+	URL      string
+}
+
+type Findings interface {
+	Findings(ctx context.Context, since time.Time) ([]Finding, error)
+}
+
+type Incidents interface {
+	Incidents(ctx context.Context, since time.Time) ([]Incident, error)
+}
+
+type Notification struct {
+	Destination string
+	Title       string
+	Body        string
+	Links       []Link
+}
+
+type DeliveryReceipt struct {
+	ID     string
+	Status WriteStatus
+	URL    string
+}
+
+type Notifications interface {
+	Deliver(ctx context.Context, notification Notification, options WriteOptions) (DeliveryReceipt, error)
+}

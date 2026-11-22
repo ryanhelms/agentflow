@@ -55,7 +55,9 @@ type Autonomy struct {
 // Repo is .devflow/config.yml.
 type Repo struct {
 	Devflow int `yaml:"devflow"`
-	Update  struct {
+	// Providers holds the effective role selections populated by LoadRepo.
+	Providers Providers `yaml:"-"`
+	Update    struct {
 		Channel    string `yaml:"channel"`
 		Track      *int   `yaml:"track"`
 		CheckEvery string `yaml:"check_every"`
@@ -121,18 +123,27 @@ var (
 
 // LoadRepo reads <root>/.devflow/config.yml. A missing file yields defaults and ok=false.
 func LoadRepo(root string) (*Repo, bool, error) {
-	c := &Repo{}
+	var file struct {
+		Repo  `yaml:",inline"`
+		Extra map[string]yaml.Node `yaml:",inline"`
+	}
 	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
 	found := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, false, err
 	}
 	if found {
-		if err := yaml.Unmarshal(b, c); err != nil {
+		if err := yaml.Unmarshal(b, &file); err != nil {
 			return nil, true, fmt.Errorf(".devflow/config.yml: %w", err)
 		}
 	}
+	c := &file.Repo
 	c.applyDefaults()
+	providers, err := resolveProviders(c, file.Extra)
+	if err != nil {
+		return nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
+	}
+	c.Providers = providers
 	return c, found, nil
 }
 
