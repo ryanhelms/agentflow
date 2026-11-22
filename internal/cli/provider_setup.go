@@ -253,8 +253,8 @@ func runProviderLogout(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *provider != "jira" || *client != "devflow" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup logout --provider jira --client devflow")
+	if *provider == "" || *client != "devflow" || fs.NArg() != 0 {
+		return errors.New("usage: devflow setup logout --provider NAME --client devflow")
 	}
-	return setup.DisconnectRovo(ctx)
+	return setup.DisconnectRovo(ctx, *provider)
 }

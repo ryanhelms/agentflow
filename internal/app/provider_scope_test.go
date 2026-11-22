@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
@@ -113,6 +114,55 @@ func TestLayeredConfluenceSiteCannotRedirectPublication(t *testing.T) {
 	}
 	if out, err := app.DocsPublish(WithConfluenceCLI(t.Context()), in, ""); !errors.Is(err, native.ErrDenied) || out != nil || fixture.writes != 0 {
 		t.Fatalf("publish: %v, %v", out, err)
+	}
+}
+
+func TestLayeredConfluenceSpaceScopeBeforeDispatch(t *testing.T) {
+	for _, tc := range []struct {
+		name, repo, user, space string
+		allowed                 bool
+	}{
+		{"cannot widen", "[ENG]", "publish_spaces: [ENG, OTHER]", "OTHER", false},
+		{"empty repository list", "[]", "publish_spaces: [ENG]", "ENG", false},
+		{"cannot move space key to another site", "[ENG]", "site: https://other.example", "ENG", false},
+		{"user can narrow", "[ENG, OPS]", "publish_spaces: [OPS]", "ENG", false},
+		{"explicit empty user list", "[ENG]", "publish_spaces: []", "ENG", false},
+		{"within both", "[ENG]", "publish_spaces: [ENG, OTHER]", "ENG", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			// Only the list is repository-supplied. Its keys still pin the pre-user site.
+			body := "knowledge_base: {provider: confluence, settings: {publish_spaces: " + tc.repo + "}}"
+			if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(body), 0600); err != nil {
+				t.Fatal(err)
+			}
+			writeUserDefinition(t, "confluence: {knowledge_base: {settings: {"+tc.user+"}}}")
+			a, err := Open(t.Context(), dir, "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			site, err := a.confluenceSite()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.allowed {
+				if err := a.confluenceWriteScope(site, tc.space); err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			host := &confluenceMCPFixture{t: t}
+			in := DocsPublishInput{Ref: provider.Ref{Instance: "confluence", Scope: tc.space, ID: "42"},
+				Title: "Runbook", Body: "replacement", OperationID: "scope-check", ExpectedRevision: "7"}
+			for _, ctx := range []context.Context{native.WithWriteHost(t.Context(), host), t.Context()} {
+				if out, err := a.DocsPublish(ctx, in, ""); !errors.Is(err, native.ErrDenied) || out != nil || host.prepares != 0 {
+					t.Fatalf("unexpected publication route, result %v, err %v", out, err)
+				}
+			}
+		})
 	}
 }
 

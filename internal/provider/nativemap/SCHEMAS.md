@@ -123,7 +123,18 @@ successful result must prove the exact successor receipt, either in the write
 response or through a read on the same connection. Replays of older writes use
 `getConfluenceContentVersion` through `executeRead` to verify the exact
 successor. Missing or conflicting receipt metadata leaves the result
-unconfirmed. The hosted version projection is fixture-tested.
+unconfirmed. On Claude Code Desktop, the Rovo flat catalog accepts the same
+update with `contentType` omitted. Its full HTML page read omits
+`include_metadata`. Before dispatch, the adapter checks the returned page
+ID, type, current status, snapshot, and `metadata.version.number` and
+`message`. It then calls `getConfluenceSpace` with the page’s numeric
+`spaceId` on the same grant. The returned ID must match, both space URLs
+must belong to the configured site, and the key must match the approved
+reference. The flat history tool receives `cloudId`, `contentId` and
+`versionNumber` directly. Its response identifies a page and supplies the
+receipt in `version.message`. The Desktop adapter checks the translated
+arguments against each named tool’s advertised schema. The canonical call,
+including `contentType`, remains part of the approval digest.
 
 [Rovo MCP tool catalog and deferred tool execution](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/) ·
 [Atlassian snapshot and version message example](https://github.com/atlassian/atlassian-mcp-server/blob/main/skills/generate-status-report/SKILL.md#updating-existing-reports) ·

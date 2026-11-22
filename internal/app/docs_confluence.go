@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -41,9 +42,8 @@ func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summar
 	if err != nil {
 		return nil, err
 	}
-	if repo, ok := a.Cfg.Providers.KnowledgeBase.RepositorySettings("site").(*config.ConfluenceSettings); ok &&
-		strings.TrimRight(repo.Site, "/") != strings.TrimRight(site, "/") {
-		return nil, fmt.Errorf("confluence site differs from the configured repository site: %w", native.ErrDenied)
+	if err := a.confluenceWriteScope(site, in.Ref.Scope); err != nil {
+		return nil, err
 	}
 	summary["site"] = site
 	draft, opts := in.replacement()
@@ -62,6 +62,9 @@ func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summar
 		prepare, err := prepareNativeConfluence(ctx, site, in.Ref, draft, opts)
 		switch {
 		case err == nil:
+			if token == "" && prepare.prior.Status == provider.AlreadyApplied {
+				return prepare.prior, nil
+			}
 			summary["backend"], summary["native_binding"] = "mcp", prepare.binding
 			summary["space_id"], summary["payload_sha256"] = prepare.spaceID, prepare.payloadDigest
 			apply = prepare.apply
@@ -100,10 +103,35 @@ func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summar
 	return out, err
 }
 
+// Space keys identify targets within a site. A repository space allow-list
+// therefore also pins the site where that list was defined.
+func (a *App) confluenceWriteScope(site, space string) error {
+	sel := a.Cfg.Providers.KnowledgeBase
+	repoSpaces, _ := sel.RepositorySettings("publish_spaces").(*config.ConfluenceSettings)
+	repoSite, _ := sel.RepositorySettings("site").(*config.ConfluenceSettings)
+	if repoSpaces != nil {
+		repoSite = repoSpaces
+	}
+	if repoSite != nil && strings.TrimRight(repoSite.Site, "/") != strings.TrimRight(site, "/") {
+		return fmt.Errorf("confluence site differs from the configured repository site: %w", native.ErrDenied)
+	}
+	current, _ := sel.Settings.(*config.ConfluenceSettings)
+	_, configured := sel.Sources["publish_spaces"]
+	if (repoSpaces != nil && !slices.Contains(repoSpaces.PublishSpaces, space)) ||
+		(current != nil && (configured || current.PublishSpaces != nil) && !slices.Contains(current.PublishSpaces, space)) {
+		return fmt.Errorf("space %q is outside knowledge_base.settings.publish_spaces: %w", space, native.ErrDenied)
+	}
+	if err := sel.CheckTarget("publish_spaces", space); err != nil {
+		return fmt.Errorf("confluence space %q: %w", space, errors.Join(native.ErrDenied, err))
+	}
+	return nil
+}
+
 type preparedNativeConfluence struct {
 	binding       native.WriteBinding
 	spaceID       string
 	payloadDigest string
+	prior         provider.WriteResult
 	apply         func() (provider.WriteResult, error)
 }
 
@@ -185,13 +213,18 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 			if err != nil {
 				return provider.WriteResult{}, err
 			}
-			payload, err := native.Payload(raw)
-			if err != nil {
-				return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
-			}
-			confirmed, err := pub.CheckAcknowledgement(payload, page.SpaceID)
-			if err != nil {
-				return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
+			// The flat Rovo update can return without page identity. Verify the
+			// persisted successor on the bound connection before reporting success.
+			confirmed := false
+			if exact.Owner != "devflow" {
+				payload, err := native.Payload(raw)
+				if err != nil {
+					return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
+				}
+				confirmed, err = pub.CheckAcknowledgement(payload, page.SpaceID)
+				if err != nil {
+					return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
+				}
 			}
 			if !confirmed {
 				current, err := readPage()
@@ -214,6 +247,6 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 		return zero, err
 	}
 	return preparedNativeConfluence{
-		binding: binding, spaceID: page.SpaceID, payloadDigest: fmt.Sprintf("%x", sha256.Sum256(payload)), apply: apply,
+		binding: binding, spaceID: page.SpaceID, payloadDigest: fmt.Sprintf("%x", sha256.Sum256(payload)), prior: prior, apply: apply,
 	}, nil
 }
