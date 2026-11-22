@@ -19,20 +19,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode"
 
+	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/repository"
 )
 
 const directory = "devflow-pages"
-
-var (
-	ownerPattern      = regexp.MustCompile(`^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$`)
-	repositoryPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,100}$`)
-)
 
 // Config identifies a github.com repository by owner/name. Origin optionally
 // overrides the Git transport with an absolute local path, for example to test
@@ -41,22 +36,23 @@ type Config struct {
 	Instance   string
 	Repository string
 	Origin     string
+	// BeforeWrite checks the resolved base and push target before publishing.
+	BeforeWrite func(base, target string) error
 }
 
 type Knowledge struct {
-	instance string
-	origin   string
-	wikiURL  string
+	instance    string
+	origin      string
+	wikiURL     string
+	beforeWrite func(base, target string) error
 }
 
 var _ provider.Knowledge = (*Knowledge)(nil)
 
 // NewKnowledge validates configuration without contacting the wiki.
 func NewKnowledge(c Config) (*Knowledge, error) {
-	owner, name, ok := strings.Cut(c.Repository, "/")
-	if !ok || len(owner) > 39 || !ownerPattern.MatchString(owner) ||
-		!repositoryPattern.MatchString(name) || name == "." || name == ".." {
-		return nil, errors.New("expected a GitHub repository in owner/name format")
+	if err := gitx.ValidateGitHubSlug(c.Repository); err != nil {
+		return nil, err
 	}
 	if err := (provider.Ref{Instance: c.Instance, Scope: "_", ID: "_"}).Validate(); err != nil {
 		return nil, fmt.Errorf("invalid wiki provider instance: %w", err)
@@ -68,7 +64,12 @@ func NewKnowledge(c Config) (*Knowledge, error) {
 	} else if !filepath.IsAbs(origin) || strings.ContainsFunc(origin, unicode.IsControl) {
 		return nil, errors.New("wiki origin override must be an absolute local path")
 	}
-	return &Knowledge{instance: c.Instance, origin: origin, wikiURL: base + "/wiki"}, nil
+	return &Knowledge{instance: c.Instance, origin: origin, wikiURL: base + "/wiki", beforeWrite: c.BeforeWrite}, nil
+}
+
+// Destination returns the wiki Git origin and the path containing managed pages.
+func (k *Knowledge) Destination() (origin, path string) {
+	return k.origin, directory
 }
 
 func (k *Knowledge) pageURL(slug string) string {
@@ -118,6 +119,7 @@ func (k *Knowledge) repository(ctx context.Context) (*repository.Knowledge, erro
 	}
 	return repository.NewKnowledge(repository.Config{
 		Instance: k.instance, Origin: k.origin, Branch: branch, Directory: directory, Publication: "push",
+		BeforeWrite: k.beforeWrite,
 	})
 }
 

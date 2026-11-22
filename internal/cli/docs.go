@@ -42,7 +42,11 @@ func runDocs(ctx context.Context, args []string) error {
 			}
 		case []provider.Document:
 			for _, p := range pages {
-				fmt.Printf("%s [%s]\n  revision %s\n  %s\n", p.Title, p.Ref, p.Revision, p.Body)
+				fmt.Printf("%s [%s]\n  revision %s\n", p.Title, p.Ref, p.Revision)
+				if p.URL != "" {
+					fmt.Printf("  %s\n", p.URL)
+				}
+				fmt.Printf("  %s\n", p.Body)
 			}
 		default:
 			return errors.New("unknown knowledge search result")

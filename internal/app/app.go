@@ -123,6 +123,20 @@ func (a *App) GitHubRepo(ctx context.Context) (string, error) {
 	return r, nil
 }
 
+func (a *App) detectForge(ctx context.Context) (gitx.Detection, error) {
+	opts := gitx.DetectOptions{}
+	if cfg, ok := a.Cfg.Providers.CodeHosting.Settings.(*config.CodeHostingSettings); ok {
+		opts.Hosts = cfg.Hosts
+		if cfg.SourceRemote != nil {
+			opts.Source = *cfg.SourceRemote
+		}
+		if cfg.TargetRemote != nil {
+			opts.Target = *cfg.TargetRemote
+		}
+	}
+	return a.Repo.DetectForge(ctx, opts)
+}
+
 // CurrentKey returns the resolved task key for the current branch, or "".
 func (a *App) CurrentKey(ctx context.Context) string {
 	if a.usesIssues() {
