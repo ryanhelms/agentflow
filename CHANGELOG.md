@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.33.0](https://github.com/nscaledev/devflow/compare/v0.32.0...v0.33.0) - 2026-11-22
+
+### Features
+
+- **jira:** use signed-in teamwork graph for comments (#76) ([aabcbf3](https://github.com/nscaledev/devflow/commit/aabcbf3f3adacf18cc42e2d5fd6161bd141c110f))
+
 ## [0.32.0](https://github.com/nscaledev/devflow/compare/v0.31.0...v0.32.0) - 2026-11-22
 
 ### Features
