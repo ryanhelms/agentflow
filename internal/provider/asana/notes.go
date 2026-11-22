@@ -69,3 +69,9 @@ func decodeNotes(notes string) (string, metadata, error) {
 	}
 	return strings.TrimPrefix(body, "\n"), m, m.validate()
 }
+
+// DecodeTaskNotes extracts Devflow's task template and links from provider notes.
+func DecodeTaskNotes(notes string) (string, *provider.TaskTemplateRef, []provider.Link, error) {
+	body, meta, err := decodeNotes(notes)
+	return body, meta.Template, meta.Links, err
+}

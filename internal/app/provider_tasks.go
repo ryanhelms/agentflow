@@ -193,7 +193,12 @@ func (a *App) nextTaskStates(t provider.Task) map[string]string {
 }
 
 func (a *App) syncTaskChecklist(ctx context.Context, ref provider.Ref, t provider.Task) (*contextx.Checklist, error) {
-	cl, err := a.Checklists(ctx).Sync(ref.StorageKey(), contextx.ParseCriteria(t.Description))
+	store := a.Checklists(ctx)
+	syncCriteria := store.Sync
+	if native.HasClientReplies(ctx) {
+		syncCriteria = store.PreviewSync
+	}
+	cl, err := syncCriteria(ref.StorageKey(), contextx.ParseCriteria(t.Description))
 	if err == nil {
 		cl.Key = taskKey(ref)
 	}

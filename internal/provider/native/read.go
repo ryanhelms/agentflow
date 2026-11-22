@@ -37,6 +37,18 @@ func WithHost(ctx context.Context, host Host) context.Context {
 	return context.WithValue(ctx, hostKey{}, host)
 }
 
+func HasHost(ctx context.Context) bool {
+	_, ok := ctx.Value(hostKey{}).(Host)
+	return ok
+}
+
+// HasClientReplies reports that the host supplied result data. Such reads can
+// inform a preview, but must not modify persistent Devflow state.
+func HasClientReplies(ctx context.Context) bool {
+	client, _ := ctx.Value(hostKey{}).(Client)
+	return len(client.Replies) != 0
+}
+
 func Read[T any](ctx context.Context, call Call, decode func(json.RawMessage) (T, error), fallback func() (T, error)) (T, error) {
 	host, _ := ctx.Value(hostKey{}).(Host)
 	if host != nil {

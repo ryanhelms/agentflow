@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/githubissues"
 )
 
 var repositoryScope = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9_.-]{1,100}$`)
@@ -90,9 +91,13 @@ func githubTask(ref provider.Ref, number int64, raw json.RawMessage) (provider.T
 	if len(issue.Assignees) != 0 {
 		assignee = issue.Assignees[0]
 	}
+	body, template, err := githubissues.DecodeIssueBody(issue.Body)
+	if err != nil {
+		return provider.Task{}, err
+	}
 	return provider.Task{
 		Ref: ref, Key: ref.Scope + "#" + ref.ID, Title: issue.Title, URL: u.String(),
-		Description: issue.Body, State: state, Type: issue.IssueType, Assignee: assignee,
+		Description: body, Template: template, State: state, Type: issue.IssueType, Assignee: assignee,
 		Labels: issue.Labels, Revision: issue.UpdatedAt,
 	}, nil
 }

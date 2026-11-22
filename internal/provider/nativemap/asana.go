@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/asana"
 )
 
 // AsanaTask maps a task GID in a project GID. The caller selects the
@@ -88,8 +89,12 @@ func asanaTask(ref provider.Ref, raw json.RawMessage) (provider.Task, error) {
 		if ok && strings.EqualFold(taskURL.Host, "app.asana.com") {
 			permalink = taskURL.String()
 		}
+		notes, template, links, err := asana.DecodeTaskNotes(task.Notes)
+		if err != nil {
+			return provider.Task{}, err
+		}
 		return provider.Task{
-			Ref: ref, Title: task.Name, URL: permalink, Description: task.Notes,
+			Ref: ref, Title: task.Name, URL: permalink, Description: notes, Template: template, Links: links,
 			State: state, Type: task.Subtype, Assignee: task.Assignee.GID, Revision: task.ModifiedAt,
 		}, nil
 	}

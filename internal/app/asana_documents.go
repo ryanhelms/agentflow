@@ -73,6 +73,9 @@ func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (pr
 			return zero, err
 		}
 		return mappedNativeRead(ctx, "atlassian", read, func() (provider.Document, error) {
+			if !useAtlassianCLI(ctx, site, "confluence") {
+				return legacyRead()
+			}
 			cli, err := twg.NewConfluence(ref.Instance, site, []string{ref.Scope})
 			if err != nil {
 				return zero, err

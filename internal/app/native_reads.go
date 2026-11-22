@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -66,7 +68,7 @@ func (a *App) jiraWorkSearch(ctx context.Context, site, jql string, activeSprint
 }
 
 func (a *App) cliJiraWork(ctx context.Context, site, jql string, activeSprint bool) ([]WorkItem, error) {
-	if strings.HasPrefix(site, "https://") {
+	if useAtlassianCLI(ctx, site, "jira") {
 		cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
 		if err != nil {
 			return nil, err
@@ -176,7 +178,7 @@ func (a *App) nativeConfluenceSearch(ctx context.Context, site, query, space str
 
 func (a *App) legacyConfluencePages(ctx context.Context, site, query, space string) ([]atlassian.Page, error) {
 	q := provider.DocumentQuery{Text: query, Scope: space, Limit: 10}
-	if strings.HasPrefix(site, "https://") {
+	if useAtlassianCLI(ctx, site, "confluence") {
 		cli, err := twg.NewConfluence("confluence", site, nil)
 		if err != nil {
 			return nil, err
@@ -209,9 +211,10 @@ func decodeConfluencePages(raw json.RawMessage, site, space string) ([]atlassian
 	var result struct {
 		Results []struct {
 			Content struct {
-				ID    string `json:"id"`
-				Title string `json:"title"`
-				Space struct {
+				ID      string                `json:"id"`
+				Title   string                `json:"title"`
+				Version atlassian.PageVersion `json:"version"`
+				Space   struct {
 					Key string `json:"key"`
 				} `json:"space"`
 			} `json:"content"`
@@ -225,15 +228,15 @@ func decodeConfluencePages(raw json.RawMessage, site, space string) ([]atlassian
 	pages := make([]atlassian.Page, 0, len(result.Results))
 	for _, item := range result.Results {
 		page := item.Content
-		if !atlassian.ValidConfluenceID(page.ID) || space != "" && page.Space.Key != "" && !strings.EqualFold(page.Space.Key, space) {
+		if !atlassian.ValidConfluenceID(page.ID) || space != "" && !strings.EqualFold(page.Space.Key, space) {
 			return nil, errors.New("invalid or out-of-scope Confluence search result")
 		}
-		pageSpace := page.Space.Key
-		if pageSpace == "" {
-			pageSpace = space
+		var revision string
+		if page.Version.Number > 0 {
+			revision = strconv.FormatInt(page.Version.Number, 10)
 		}
 		pages = append(pages, atlassian.Page{
-			ID: page.ID, Space: pageSpace, Title: page.Title, Excerpt: item.Excerpt,
+			ID: page.ID, Space: page.Space.Key, Title: page.Title, Excerpt: item.Excerpt, Revision: revision,
 			URL: strings.TrimRight(site, "/") + "/wiki/pages/viewpage.action?pageId=" + page.ID,
 		})
 	}
@@ -272,6 +275,9 @@ func (a *App) nativeJiraTask(ctx context.Context, ref provider.Ref, fallback fun
 		return provider.Task{}, err
 	}
 	return mappedNativeRead(ctx, "atlassian", read, func() (provider.Task, error) {
+		if !useAtlassianCLI(ctx, site, "jira") {
+			return fallback()
+		}
 		cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
 		if err != nil {
 			return provider.Task{}, err
@@ -282,4 +288,19 @@ func (a *App) nativeJiraTask(ctx context.Context, ref provider.Ref, fallback fun
 		}
 		return task, atlCLIError("jira", err)
 	})
+}
+
+func useAtlassianCLI(ctx context.Context, site, name string) bool {
+	if !strings.HasPrefix(site, "https://") {
+		return false
+	}
+	// Do not replace an explicitly selected headless service identity with the
+	// workstation CLI's saved OAuth identity.
+	if native.HasHost(ctx) {
+		return true
+	}
+	if name == "confluence" && (os.Getenv("CONFLUENCE_USER") != "" || os.Getenv("CONFLUENCE_TOKEN") != "") {
+		return false
+	}
+	return os.Getenv("JIRA_USER") == "" || os.Getenv("JIRA_TOKEN") == ""
 }

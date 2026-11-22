@@ -95,7 +95,12 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
 			}
 		}
-		if cl, err := a.Checklists(ctx).Sync(key, contextx.ParseCriteria(task.Description)); err == nil && len(cl.Items) > 0 {
+		checklist := a.Checklists(ctx)
+		syncCriteria := checklist.Sync
+		if native.HasClientReplies(ctx) {
+			syncCriteria = checklist.PreviewSync
+		}
+		if cl, err := syncCriteria(key, contextx.ParseCriteria(task.Description)); err == nil && len(cl.Items) > 0 {
 			tc.Criteria = cl
 		}
 	}

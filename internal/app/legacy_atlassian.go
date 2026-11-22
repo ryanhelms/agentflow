@@ -132,8 +132,14 @@ func (a *App) jiraMyWork(ctx context.Context) ([]WorkItem, error) {
 	}
 	base := scope + "assignee = currentUser() AND statusCategory != Done"
 	tasks, err := a.jiraWorkSearch(ctx, site, base+" AND sprint in openSprints() ORDER BY priority DESC, updated DESC", true)
-	if err != nil || len(tasks) != 0 {
+	if len(tasks) != 0 {
 		return tasks, err
+	}
+	if err != nil {
+		var apiError *atlassian.APIError
+		if !errors.As(err, &apiError) || apiError.Status != 400 {
+			return nil, err
+		}
 	}
 	return a.jiraWorkSearch(ctx, site, base+" ORDER BY priority DESC, updated DESC", false)
 }
