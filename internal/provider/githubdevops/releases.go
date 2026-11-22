@@ -2,10 +2,12 @@ package githubdevops
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
 )
@@ -174,6 +176,9 @@ func (a *Adapter) commitSHA(ctx context.Context, base, revision string) (string,
 	}
 	if commit.SHA == "" {
 		return "", fmt.Errorf("github returned an empty commit sha for %q", revision)
+	}
+	if hash, err := hex.DecodeString(revision); err == nil && len(hash) == 20 && !strings.EqualFold(commit.SHA, revision) {
+		return "", fmt.Errorf("github resolved commit %q to %q: %w", revision, commit.SHA, provider.ErrConflict)
 	}
 	return commit.SHA, nil
 }

@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -75,6 +77,38 @@ printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$DRY_RUN" "$TRANSITION_COMMENT"
 			if err != nil || string(out) != tt.want {
 				t.Fatalf("legacy transitions = %q, %v, want %q\nstderr: %s", out, err, tt.want, &stderr)
 			}
+			// Compare intents for the very same delivery. Fork events intentionally
+			// stop at the repository boundary before any provider reads.
+			actions := githubContext
+			actions.EventName, actions.TaskInstance = tt.event, "jira"
+			plan, err := PlanGitHubActions(actions, fixture(t, tt.fixture))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.fixture == "pr-fork" {
+				if plan.Skip != RepositoryMismatch || len(plan.Transitions) != 0 {
+					t.Fatal(plan)
+				}
+				return
+			}
+			var old, current []string
+			for line := range strings.Lines(string(out)) {
+				fields := strings.Split(line, "\t")
+				old = append(old, fields[0]+" "+fields[1])
+			}
+			for _, intent := range plan.Transitions {
+				lifecycle := intent.Lifecycle
+				if lifecycle == "" {
+					lifecycle = plan.Lifecycle
+				}
+				current = append(current, intent.Task.ID+" "+lifecycle)
+			}
+			slices.Sort(old)
+			slices.Sort(current)
+			if !slices.Equal(old, current) {
+				t.Fatalf("legacy=%v provider=%v", old, current)
+			}
+
 		})
 	}
 }

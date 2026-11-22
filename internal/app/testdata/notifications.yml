@@ -1,0 +1,17 @@
+task_management: {provider: none}
+knowledge_base: {provider: none}
+notifications:
+  provider: router
+  settings:
+    destinations:
+      team:
+        provider: slack
+        credential_ref: SLACK_WEBHOOK_URL
+      audit:
+        provider: webhook
+        credential_ref: WEBHOOK_URL
+        header_refs: {Authorization: FIXTURE_WEBHOOK_AUTH}
+        rejected_statuses: [429]
+    routes:
+      delivery: [team, audit, team]
+      hygiene: [team]

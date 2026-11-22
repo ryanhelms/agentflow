@@ -46,6 +46,26 @@ func LoadAtlassian(site string) (Atlassian, error) {
 	if u, t := os.Getenv("JIRA_USER"), os.Getenv("JIRA_TOKEN"); u != "" && t != "" {
 		return Atlassian{Site: site, Email: u, Token: t}, nil
 	}
+	return storedAtlassian(site)
+}
+
+// LoadConfluence uses the knowledge site's own credentials. Shared-site
+// installations retain the legacy Jira environment fallback.
+func LoadConfluence(site, jiraSite string) (Atlassian, error) {
+	u, t := os.Getenv("CONFLUENCE_USER"), os.Getenv("CONFLUENCE_TOKEN")
+	if u != "" || t != "" {
+		if u == "" || t == "" {
+			return Atlassian{}, errors.New("set both CONFLUENCE_USER and CONFLUENCE_TOKEN")
+		}
+		return Atlassian{Site: site, Email: u, Token: t}, nil
+	}
+	if strings.TrimRight(site, "/") == strings.TrimRight(jiraSite, "/") {
+		return LoadAtlassian(jiraSite)
+	}
+	return storedAtlassian(site)
+}
+
+func storedAtlassian(site string) (Atlassian, error) {
 	s, err := keyring.Get(service, "atlassian:"+site)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return Atlassian{}, ErrNoCredentials

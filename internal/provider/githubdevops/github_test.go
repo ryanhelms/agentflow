@@ -143,9 +143,9 @@ func TestDeployments(t *testing.T) {
 		}
 	})
 	want := []provider.Deployment{
-		{Environment: "production", Revision: "abc123", State: "inactive", URL: "https://ci.example.test/deploy/105"},
-		{Environment: "production", Revision: "abc123", State: "failure", URL: "https://ci.example.test/deploy/2"},
-		{Environment: "staging", Revision: "abc123", URL: "https://api.example.test/deployments/1"},
+		{ID: "105", Ref: "main", Environment: "production", Revision: "abc123", State: "inactive", URL: "https://ci.example.test/deploy/105"},
+		{ID: "2", Environment: "production", Revision: "abc123", State: "failure", URL: "https://ci.example.test/deploy/2"},
+		{ID: "1", Environment: "staging", Revision: "abc123", URL: "https://api.example.test/deployments/1"},
 	}
 	got, err := adapter.Deployments(t.Context(), repo, "abc123")
 	if err != nil || !reflect.DeepEqual(got, want) {

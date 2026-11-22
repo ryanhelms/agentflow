@@ -40,7 +40,7 @@ func openRegular(dir *os.Root, name string, requireOwner bool) (*os.File, error)
 	if !before.Mode().IsRegular() {
 		return nil, fmt.Errorf("expected a regular file for %q", name)
 	}
-	if requireOwner && (!ownedByEffectiveUser(before) || before.Mode().Perm()&0o022 != 0) {
+	if requireOwner && (!trustedOwner(filepath.Join(dir.Name(), name), before) || !privateMode(before.Mode())) {
 		return nil, fmt.Errorf("unsafe companion manifest %q: use a regular file owned by the current user without group or other write permission", name)
 	}
 	file, err := openNonblocking(dir, name)
@@ -48,7 +48,7 @@ func openRegular(dir *os.Root, name string, requireOwner bool) (*os.File, error)
 		return nil, err
 	}
 	after, err := file.Stat()
-	if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() || (requireOwner && !ownedByEffectiveUser(after)) {
+	if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() || (requireOwner && !trustedOwner(filepath.Join(dir.Name(), name), after)) {
 		_ = file.Close()
 		return nil, fmt.Errorf("file %q changed while opening", name)
 	}

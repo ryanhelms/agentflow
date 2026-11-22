@@ -35,7 +35,8 @@ var (
 
 var githubPath = regexp.MustCompile(`^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$`)
 
-func validateGitHubRepo(repo provider.RepositoryRef) error {
+// ValidateGitHubRepo checks the host and API path before a PR read, write or approval.
+func ValidateGitHubRepo(repo provider.RepositoryRef) error {
 	switch strings.ToLower(repo.Host) {
 	case "github.com", "www.github.com", "ssh.github.com":
 	default:
@@ -48,20 +49,18 @@ func validateGitHubRepo(repo provider.RepositoryRef) error {
 	return nil
 }
 
-// FindChange looks for an open pull request with a head owned by the target
-// repository's owner. The legacy branch lookup always scopes to that owner.
+// FindChange accepts a branch of the target repository or an owner-qualified fork head.
 func (g *GitHub) FindChange(ctx context.Context, repo provider.RepositoryRef, head string) (provider.ChangeRequest, error) {
-	if err := validateGitHubRepo(repo); err != nil {
+	if err := ValidateGitHubRepo(repo); err != nil {
 		return provider.ChangeRequest{}, err
 	}
-	if owner, branch, qualified := strings.Cut(head, ":"); qualified {
-		repoOwner, _, _ := strings.Cut(repo.Path, "/")
-		if !strings.EqualFold(owner, repoOwner) {
-			return provider.ChangeRequest{}, provider.Unsupported("github", "find a pull request by a head in another owner's fork")
+	owner, branch, qualified := strings.Cut(head, ":")
+	if qualified {
+		if !githubPath.MatchString(owner+"/repo") || strings.Contains(branch, ":") || strings.TrimSpace(branch) == "" {
+			return provider.ChangeRequest{}, errors.New("invalid owner-qualified github head")
 		}
-		head = branch
 	}
-	if strings.TrimSpace(head) == "" || strings.Contains(head, ":") {
+	if strings.TrimSpace(head) == "" {
 		return provider.ChangeRequest{}, errors.New("github pull request lookup requires a valid head branch")
 	}
 	pr, err := g.client.PRForBranch(ctx, repo.Path, head)
@@ -75,7 +74,7 @@ func (g *GitHub) FindChange(ctx context.Context, repo provider.RepositoryRef, he
 }
 
 func (g *GitHub) OpenChange(ctx context.Context, repo provider.RepositoryRef, draft provider.ChangeDraft) (provider.ChangeRequest, error) {
-	if err := validateGitHubRepo(repo); err != nil {
+	if err := ValidateGitHubRepo(repo); err != nil {
 		return provider.ChangeRequest{}, err
 	}
 	pr, err := g.client.CreatePR(ctx, repo.Path, draft.Title, draft.Body, draft.Head, draft.Base, draft.Draft)
@@ -91,14 +90,14 @@ func githubChange(repo provider.RepositoryRef, pr *gh.PR) (provider.ChangeReques
 	}
 	return provider.ChangeRequest{
 		Repository: repo, ID: strconv.Itoa(pr.Number), URL: pr.HTMLURL,
-		Title: pr.Title, Head: pr.Head.Ref, Base: pr.Base.Ref, Draft: pr.Draft,
+		Title: pr.Title, Head: pr.Head.Ref, HeadSHA: pr.Head.SHA, Base: pr.Base.Ref, Draft: pr.Draft,
 	}, nil
 }
 
 // Reviews returns unresolved review threads. The client exposes an outdated flag
 // for each thread but no thread URL or submitted review decision.
 func (g *GitHub) Reviews(ctx context.Context, change provider.ChangeRequest) ([]provider.Review, error) {
-	if err := validateGitHubRepo(change.Repository); err != nil {
+	if err := ValidateGitHubRepo(change.Repository); err != nil {
 		return nil, err
 	}
 	number, err := strconv.Atoi(change.ID)
@@ -115,7 +114,7 @@ func (g *GitHub) Reviews(ctx context.Context, change provider.ChangeRequest) ([]
 		if thread.Outdated {
 			state = "outdated"
 		}
-		reviews = append(reviews, provider.Review{ID: thread.ID, Author: thread.Author, Body: thread.Body, State: state})
+		reviews = append(reviews, provider.Review{ID: thread.ID, Path: thread.Path, Line: thread.Line, Author: thread.Author, Body: thread.Body, State: state})
 	}
 	return reviews, nil
 }

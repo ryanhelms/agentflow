@@ -3,7 +3,7 @@
 Every deployable asset at Nscale (apps, services, CLIs, images, Helm charts, libraries
 and modules) is versioned with [Semantic Versioning 2.0](https://semver.org) and shipped
 as a GitHub Release. The GitHub Release is the system of record: production deploys
-reference a release, Jira fix versions name it, and Confluence release notes link to it.
+reference a release, the task follow-up sets configured Jira fix versions, and Confluence release notes link to it.
 
 ## Rules
 
@@ -76,6 +76,27 @@ units:
     builds: [library]
     publish: go
 ```
+
+## Publish an explicit release
+
+The manual command publishes a stable release in the configured GitHub.com
+release repository. Preview the exact destination, tag, commit and metadata
+before confirming publication.
+
+```bash
+devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+  --title 'API 1.4.0' --notes 'Release notes' --dry-run
+devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+  --title 'API 1.4.0' --notes 'Release notes'
+devflow release get api-v1.4.0
+```
+
+The preview uses local configuration. Publication resolves the full commit SHA
+against GitHub and requires confirmation. Use `--yes` to accept the prompt in
+an authorized run. A matching stable release returns `already_applied` on retry.
+A tag at a different commit or a release with different metadata is a conflict.
+The operation can create a tag when one is absent. GitHub tag protections apply.
+The reusable workflow builds and uploads artifacts for its release-please releases.
 
 ## Using versions in your own workflows
 

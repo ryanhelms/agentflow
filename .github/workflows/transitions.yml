@@ -1,17 +1,22 @@
-# Reusable: move Jira tickets for branch, PR, merge and commit-verb events via flow-map.yml.
+# Plan branch, PR and push events using the configured task provider.
 name: transitions
 
 on:
   workflow_call:
     inputs:
       dry-run:
-        description: Log what would change without writing to Jira
+        description: Preview changes on the Jira route
         type: boolean
         default: false
     secrets:
       JIRA_USER:
         required: false
       JIRA_TOKEN:
+        required: false
+      ASANA_ACCESS_TOKEN:
+        required: false
+      TASK_READ_TOKEN:
+        description: Optional repository-scoped token with Issues read access
         required: false
 
 permissions:
@@ -25,8 +30,21 @@ jobs:
       group: devflow-transitions-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
+      - name: Read trusted repository configuration
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          persist-credentials: false
       - uses: nscaledev/devflow/actions/setup@v0
-      - name: Apply flow-map transitions
+        with:
+          binary: true
+      - id: task
+        name: Resolve task provider
+        run: |
+          provider=$(devflow keys --provider)
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+      - name: Apply legacy Jira transitions
+        if: steps.task.outputs.provider == 'jira'
         env:
           JIRA_BASE: ${{ vars.JIRA_BASE }}
           JIRA_USER: ${{ secrets.JIRA_USER }}
@@ -38,3 +56,18 @@ jobs:
             exit 0
           fi
           handle-event.sh
+      - name: Preview linked task transitions
+        if: steps.task.outputs.provider != 'jira'
+        env:
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-transitions
+          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PROVIDER: ${{ steps.task.outputs.provider }}
+          ASANA_ACCESS_TOKEN: ${{ steps.task.outputs.provider == 'asana' && secrets.ASANA_ACCESS_TOKEN || '' }}
+          GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || (steps.task.outputs.provider == 'repository') && github.token || '' }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
+          if [ "$DRY_RUN" != true ]; then
+            echo "::notice::Generic task workflows preview changes. Apply the reviewed transition through devflow transition."
+          fi
+          devflow transition --github-event --dry-run

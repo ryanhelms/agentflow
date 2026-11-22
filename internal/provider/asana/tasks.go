@@ -55,12 +55,12 @@ func New(client *http.Client, token string, config Config) (*Adapter, error) {
 	a := &Adapter{client: *client, token: token, instance: config.Instance, sections: make(map[string]map[string]struct{})}
 	a.client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	for project, sections := range config.Sections {
-		if !validGID(project) {
+		if !ValidGID(project) {
 			return nil, errors.New("asana requires a valid project gid in sections")
 		}
 		a.sections[project] = make(map[string]struct{}, len(sections))
 		for _, section := range sections {
-			if !validGID(section) || section == StateOpen || section == StateCompleted {
+			if !ValidGID(section) || section == StateOpen || section == StateCompleted {
 				return nil, errors.New("asana requires a valid section gid in sections")
 			}
 			a.sections[project][section] = struct{}{}
@@ -88,13 +88,14 @@ type taskData struct {
 	} `json:"memberships"`
 }
 
-func validGID(gid string) bool {
+// ValidGID accepts an opaque Asana identifier usable as one URL path segment.
+func ValidGID(gid string) bool {
 	return gid != "" && gid != "." && gid != ".." && !strings.ContainsAny(gid, "/\\") &&
 		!strings.ContainsFunc(gid, unicode.IsSpace) && !strings.ContainsFunc(gid, unicode.IsControl)
 }
 
 func (a *Adapter) validateRef(ref provider.Ref) error {
-	if ref.Instance != a.instance || !validGID(ref.Scope) || !validGID(ref.ID) {
+	if ref.Instance != a.instance || !ValidGID(ref.Scope) || !ValidGID(ref.ID) {
 		return errors.New("asana requires a reference for this instance with a project gid and a task gid")
 	}
 	return nil
@@ -105,7 +106,7 @@ func (a *Adapter) taskInProject(project string, data taskData) (provider.Task, e
 		if membership.Project.GID != project {
 			continue
 		}
-		if !validGID(data.GID) || data.Completed == nil {
+		if !ValidGID(data.GID) || data.Completed == nil {
 			return provider.Task{}, errors.New("asana task is missing a valid gid or completion status")
 		}
 		state := provider.TaskState{ID: StateOpen, Name: "Open"}
@@ -115,9 +116,14 @@ func (a *Adapter) taskInProject(project string, data taskData) (provider.Task, e
 		case membership.Section.GID != "":
 			state = provider.TaskState{ID: membership.Section.GID, Name: membership.Section.Name}
 		}
+		description, meta, err := decodeNotes(data.Notes)
+		if err != nil {
+			return provider.Task{}, err
+		}
 		return provider.Task{
+			Template: meta.Template, Links: meta.Links,
 			Ref: provider.Ref{Instance: a.instance, Scope: project, ID: data.GID},
-			URL: data.PermalinkURL, Title: data.Name, Description: data.Notes,
+			URL: data.PermalinkURL, Title: data.Name, Description: description,
 			Type: data.Subtype, Assignee: data.Assignee.GID, State: state,
 		}, nil
 	}
@@ -141,7 +147,7 @@ func (a *Adapter) Get(ctx context.Context, ref provider.Ref) (provider.Task, err
 // Find lists tasks in query.Scope and matches Text against names and notes.
 // A zero Limit reads all pages.
 func (a *Adapter) Find(ctx context.Context, query provider.TaskQuery) ([]provider.Task, error) {
-	if !validGID(query.Scope) || query.Limit < 0 {
+	if !ValidGID(query.Scope) || query.Limit < 0 {
 		return nil, errors.New("asana task search requires a project gid and a nonnegative limit")
 	}
 	if query.AssignedToMe {

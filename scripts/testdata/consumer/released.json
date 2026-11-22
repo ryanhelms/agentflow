@@ -1,0 +1,14 @@
+{
+  "releases_created": "true",
+  "paths_released": "[\".\",\"cli\"]",
+  "tag_name": "widget-v1.1.0",
+  "version": "1.1.0",
+  "major": "1",
+  "minor": "1",
+  "html_url": "https://example.invalid/releases/widget-v1.1.0",
+  "cli--tag_name": "cli-v2.0.1",
+  "cli--version": "2.0.1",
+  "cli--major": "2",
+  "cli--minor": "0",
+  "cli--html_url": "https://example.invalid/releases/cli-v2.0.1"
+}

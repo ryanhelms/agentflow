@@ -1,0 +1,69 @@
+name: secops-triage
+
+on:
+  workflow_call:
+    inputs:
+      apply-source:
+        description: Qualified source reference to approve on manual dispatch
+        type: string
+        default: ""
+      runner-label:
+        description: Label of self-hosted apply runners with persistent DEVFLOW_HOME storage
+        type: string
+        default: devflow-secops
+    secrets:
+      SECOPS_READ_TOKEN:
+        required: false
+
+permissions: {}
+
+jobs:
+  preview:
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' && inputs.apply-source == '' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - name: Preview task drafts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
+        run: devflow secops triage --dry-run
+
+  apply:
+    if: >-
+      vars.DEVFLOW_ENABLED != 'false' && inputs.apply-source != '' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
+    # Keep DEVFLOW_HOME on a persistent volume shared by runners with this label.
+    runs-on: [self-hosted, "${{ inputs.runner-label }}"]
+    concurrency:
+      group: devflow-secops-${{ github.repository_id }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - name: Create the approved triage task
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
+          SOURCE: ${{ inputs.apply-source }}
+        run: devflow secops triage --apply --source "$SOURCE" --yes

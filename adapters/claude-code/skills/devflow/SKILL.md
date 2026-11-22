@@ -64,3 +64,7 @@ Use `devflow_setup_plan` for provider and client readiness. When setup offers
 a user-pinned gh installation, show the artifact and request approval through
 `devflow_setup_apply` with `install_gh: true`. Project client registration
 uses the same tool with `client` and its own confirmation.
+For a declared provider MCP server, inspect `companion` through the same
+plan tool. Use `companion` with `install: true` to approve its pinned
+executable and a separate `companion` plus `client` request to register it.
+Use credential variable names in the conversation and check readiness again.

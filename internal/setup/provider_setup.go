@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,9 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/managedmcp"
+	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
 	"github.com/nscaledev/devflow/internal/provision"
 )
 
@@ -28,6 +32,7 @@ type ProviderSetupPlan struct {
 	Root         string                  `json:"root"`
 	Platform     provision.Platform      `json:"platform"`
 	Requirements []ProviderRequirement   `json:"requirements"`
+	Companions   []managedmcp.Status     `json:"companions,omitempty"`
 	InstallGH    *managedgh.Installation `json:"install_gh,omitempty"`
 	Registration *ClientRegistration     `json:"registration,omitempty"`
 	Ready        bool                    `json:"ready"`
@@ -46,6 +51,11 @@ type selectedRole struct {
 // PlanProviderSetup loads a fresh effective configuration on every invocation.
 // An empty client asks only about providers, suitable for terminal and CI use.
 func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupPlan, error) {
+	return PlanSetup(ctx, dir, client, "")
+}
+
+// PlanSetup optionally scopes the plan to one declared provider companion.
+func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSetupPlan, error) {
 	if client != "" && !slices.Contains(Clients, client) {
 		return nil, fmt.Errorf("unknown client %q: select a project adapter (%s) or omit the client for headless checks", client, strings.Join(Clients, ", "))
 	}
@@ -80,7 +90,7 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 	needsDetection := false
 	for _, role := range roles {
 		switch role.Settings.(type) {
-		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings, *config.GitHubWikiSettings:
+		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings, *config.GitHubWikiSettings, *config.GitHubSecOpsSettings:
 			needsDetection = true
 		}
 	}
@@ -94,10 +104,40 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 			return nil, err
 		}
 	}
+	var ids []string
+	for _, r := range roles {
+		if r.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
+			ids = append(ids, "github")
+		}
+		if r.Provider != "none" {
+			ids = append(ids, r.Provider)
+		}
+	}
+	p.Companions, err = managedmcp.Inspect(ctx, root, p.Platform, ids, companion)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range p.Companions {
+		p.check("companion", s.ID, s.Ready, s.Detail)
+	}
+	if companion != "" {
+		if client != "" {
+			s := p.Companions[0]
+			p.Registration, _, err = companionOverlay(root, client, s)
+			if err != nil {
+				return nil, err
+			}
+			p.Ready = p.Ready && p.Registration.State == "configured"
+		}
+		return p, ctx.Err()
+	}
 	var ghRoles, gitRoles []selectedRole
 	for _, r := range roles {
 		switch r.Provider {
 		case "github", "github-issues":
+			if settings, ok := r.Settings.(*config.GitHubSecOpsSettings); ok && len(settings.Findings) == 0 {
+				continue
+			}
 			ghRoles = append(ghRoles, r)
 		case "auto":
 			if detection.Forge == gitx.ForgeGitHub {
@@ -128,10 +168,30 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue
+		case *config.AsanaSettings:
+			if settings.Project == "" {
+				p.check(role.name, role.Provider, false, "set task_management.settings.project to the default Asana project GID")
+				continue
+			}
+			adapter, err := asana.FromEnvironment(settings.AdapterConfig())
+			if err == nil {
+				err = adapter.CheckAccess(ctx)
+			}
+			if err != nil {
+				p.check(role.name, role.Provider, false, err.Error())
+			} else {
+				p.check(role.name, role.Provider, true, "can list project tasks and read configured destination sections")
+			}
 		case *config.FileSystemSettings:
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
 			p.checkDirectory(role, settings.Root)
+		case *config.DevOpsFixtureSettings:
+			if err := checkDevOpsFixture(root, role.name, settings.Path); err != nil {
+				p.check(role.name, role.Provider, false, err.Error())
+			} else {
+				p.check(role.name, role.Provider, true, fmt.Sprintf("can read fixture %q", settings.Path))
+			}
 		case *config.RepositorySettings:
 			if gitOK {
 				p.checkRepository(ctx, role, settings, repo)
@@ -154,6 +214,20 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 			if github.command != "" {
 				github.check(ctx, p, role, settings.Repository)
 			}
+		case *config.GitHubSecOpsSettings:
+			if len(settings.Findings) > 0 && github.command != "" {
+				github.check(ctx, p, role, settings.Repository)
+			}
+			if settings.Incidents != nil {
+				rootDir, err := os.OpenRoot(root)
+				if err == nil {
+					info, statErr := rootDir.Stat(settings.Incidents.Fixture)
+					_ = rootDir.Close()
+					p.check(role.name, role.Provider, statErr == nil && info.Mode().IsRegular(), "incident fixture "+settings.Incidents.Fixture)
+				} else {
+					p.check(role.name, role.Provider, false, "open the checkout to read the incident fixture")
+				}
+			}
 		case *config.GitHubIssuesSettings:
 			if github.command != "" {
 				github.check(ctx, p, role, settings.Repository)
@@ -163,7 +237,16 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 				p.checkWiki(ctx, role, settings, detection)
 			}
 		default:
-			p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))
+			declared := false
+			for _, s := range p.Companions {
+				if slices.Contains(s.Providers, role.Provider) {
+					declared = true
+					p.check(role.name, role.Provider, s.Ready, s.ID+": "+s.Detail)
+				}
+			}
+			if !declared {
+				p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))
+			}
 		}
 	}
 	if client != "" {
@@ -175,6 +258,15 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		p.Ready = p.Ready && p.Registration.State == "configured"
 	}
 	return p, ctx.Err()
+}
+
+func checkDevOpsFixture(root, role, path string) error {
+	if role == "devops.deployments" {
+		_, err := devopsfixture.LoadDeployments(root, path)
+		return err
+	}
+	_, err := devopsfixture.LoadReleases(root, path)
+	return err
 }
 
 func value(s *string) string {
