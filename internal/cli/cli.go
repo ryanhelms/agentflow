@@ -32,7 +32,7 @@ import (
 	"github.com/nscaledev/devflow/internal/version"
 )
 
-const usage = `devflow links git work to Jira, Confluence and GitHub.
+const usage = `devflow links git work to your configured task, knowledge and code providers.
 
 Usage: devflow <command> [flags]
 
@@ -53,8 +53,10 @@ Setup
   doctor [--fix]                 check binary, hooks, auth, client config and API access
 
 Work
-  work                           your open tickets, active sprint first
-  start KEY [--worktree]         branch or worktree for KEY, assign it to you, move it to start
+  work                           list work from the selected task provider
+  task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
+              [--template NAME --template-revision REV] [--dry-run] [--yes]
+  start KEY [--worktree]         branch or worktree for KEY; apply supported start effects
   context [KEY]                  ticket bundle for the current branch
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
   preview [MSG]                  Jira effects of a message or of unpushed commits
@@ -173,6 +175,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return auth.DeleteAtlassian(a.Cfg.Jira.Site)
 	case "doctor":
 		return runDoctor(ctx, args)
+	case "task":
+		return runTask(ctx, args)
 	case "work":
 		a, err := open(ctx)
 		if err != nil {

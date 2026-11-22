@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
 )
@@ -25,22 +24,23 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 	if err := a.checkWriteOptions(options); err != nil {
 		return provider.WriteResult{}, err
 	}
-	if draft.Type != "" || draft.Priority != "" || len(draft.Labels) > 0 || len(draft.Links) > 0 {
-		return provider.WriteResult{}, provider.Unsupported(a.instance, "creating tasks with type, priority, labels or links")
+	if err := ValidateDraft(a.instance, draft); err != nil {
+		return provider.WriteResult{}, err
 	}
-	if !validGID(draft.Scope) || strings.TrimSpace(draft.Title) == "" {
-		return provider.WriteResult{}, errors.New("asana task creation requires a project gid and title")
+	notes, err := encodeNotes(draft)
+	if err != nil {
+		return provider.WriteResult{}, err
 	}
 	payload := struct {
 		Name     string   `json:"name"`
 		Notes    string   `json:"notes,omitempty"`
 		Projects []string `json:"projects"`
-	}{Name: draft.Title, Notes: draft.Description, Projects: []string{draft.Scope}}
+	}{Name: draft.Title, Notes: notes, Projects: []string{draft.Scope}}
 	result, err := request[taskData](ctx, a, http.MethodPost, "/tasks", url.Values{"opt_fields": {"gid,permalink_url"}}, payload)
 	if err != nil {
 		return provider.WriteResult{}, err
 	}
-	if !validGID(result.Data.GID) {
+	if !ValidGID(result.Data.GID) {
 		return provider.WriteResult{}, errors.New("asana task creation returned no valid gid")
 	}
 	return provider.WriteResult{
@@ -76,6 +76,13 @@ func (a *Adapter) Transition(ctx context.Context, ref provider.Ref, target provi
 	if task.State.Terminal {
 		return provider.WriteResult{}, provider.Unsupported(a.instance, "transition out of completion")
 	}
+	if options.CheckTask != nil {
+		if err := options.CheckTask(task); err != nil {
+			return provider.WriteResult{}, err
+		}
+	} else if task.Template != nil {
+		return provider.WriteResult{}, errors.New("asana task requires validation against its stored template")
+	}
 	if complete {
 		params := url.Values{"opt_fields": {"gid,completed,permalink_url"}}
 		updated, err := request[taskData](ctx, a, http.MethodPut, taskPath(ref.ID), params, struct {
@@ -99,6 +106,17 @@ func (a *Adapter) Transition(ctx context.Context, ref provider.Ref, target provi
 
 func (a *Adapter) moveToSection(ctx context.Context, ref provider.Ref, sectionGID string) error {
 	path := "/sections/" + url.PathEscape(sectionGID)
+	if err := a.checkSection(ctx, ref.Scope, sectionGID); err != nil {
+		return err
+	}
+	_, err := request[struct{}](ctx, a, http.MethodPost, path+"/addTask", nil, struct {
+		Task string `json:"task"`
+	}{Task: ref.ID})
+	return err
+}
+
+func (a *Adapter) checkSection(ctx context.Context, project, sectionGID string) error {
+	path := "/sections/" + url.PathEscape(sectionGID)
 	section, err := request[struct {
 		GID     string   `json:"gid"`
 		Project resource `json:"project"`
@@ -106,11 +124,8 @@ func (a *Adapter) moveToSection(ctx context.Context, ref provider.Ref, sectionGI
 	if err != nil {
 		return err
 	}
-	if section.Data.GID != sectionGID || section.Data.Project.GID != ref.Scope {
-		return fmt.Errorf("asana section %q is outside project %q: %w", sectionGID, ref.Scope, provider.ErrNotFound)
+	if section.Data.GID != sectionGID || section.Data.Project.GID != project {
+		return fmt.Errorf("asana section %q is outside project %q: %w", sectionGID, project, provider.ErrNotFound)
 	}
-	_, err = request[struct{}](ctx, a, http.MethodPost, path+"/addTask", nil, struct {
-		Task string `json:"task"`
-	}{Task: ref.ID})
-	return err
+	return nil
 }

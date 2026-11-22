@@ -125,7 +125,11 @@ func (a *App) renderContext(tc *TicketContext) string {
 		fmt.Fprintf(&b, "Epic %s\n", tc.Epic)
 	}
 	for _, d := range tc.Docs {
-		fmt.Fprintf(&b, "Doc: %s %s\n", d.Title, d.URL)
+		target := d.URL
+		if target == "" && a.usesAsana() {
+			target = d.ID
+		}
+		fmt.Fprintf(&b, "Doc: %s %s\n", d.Title, target)
 	}
 	if tc.Criteria != nil {
 		done, total := tc.Criteria.Progress()
@@ -337,6 +341,9 @@ func (a *App) Checklist(ctx context.Context, key string) (*contextx.Checklist, e
 
 // UpdateChecklist ticks (or unticks) an item and optionally posts progress to Jira.
 func (a *App) UpdateChecklist(ctx context.Context, key, item string, done bool, evidence string, post bool, token string) (any, error) {
+	if post && a.usesAsana() {
+		return nil, provider.Unsupported("asana", "posting checklist progress comments")
+	}
 	cl, err := a.Checklist(ctx, key)
 	if err != nil {
 		return nil, err
@@ -404,14 +411,23 @@ func (a *App) CreateTicket(ctx context.Context, project, issueType, summary, des
 
 // CreateTicketWithTemplate selects an exact template, or the repository default for a zero ref.
 func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, summary, description, linkTo string, ref tasktemplate.Ref, token string) (any, error) {
+	if a.usesAsana() {
+		return a.createAsanaTask(ctx, project, issueType, summary, description, linkTo, ref, token)
+	}
 	if a.usesIssues() {
 		return a.createIssue(ctx, project, issueType, summary, description, linkTo, ref, token)
 	}
 	if a.usesFileTasks() {
 		return a.createFileTask(ctx, project, issueType, summary, description, linkTo, ref, token)
 	}
-	if ref != (tasktemplate.Ref{}) {
-		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "explicit ticket template")
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return nil, provider.Unsupported("none", "task creation")
+	}
+	if ref != (tasktemplate.Ref{}) || a.Cfg.Providers.TaskTemplates != nil && a.Cfg.Providers.TaskTemplates.Default != nil {
+		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "ticket template")
+	}
+	if strings.TrimSpace(summary) == "" {
+		return nil, errors.New("task summary is required")
 	}
 	if project == "" {
 		project = projectOf(a.CurrentKey(ctx))

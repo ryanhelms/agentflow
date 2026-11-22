@@ -253,3 +253,70 @@ func TestCreateDoesNotRetryUncertainWrite(t *testing.T) {
 		t.Fatalf("create transport error = %v", err)
 	}
 }
+
+func TestTemplateMetadataAndNativeEdits(t *testing.T) {
+	pin := provider.TaskTemplateRef{Name: "work", Revision: "01"}
+	link := provider.Ref{Instance: "filesystem", Scope: "design", ID: "capacity"}
+	draft := provider.TaskDraft{Title: "Plan", Scope: "10", Description: "## Objective\nEditable", Template: &pin, Links: []provider.Link{{Ref: &link}}}
+	notes, err := encodeNotes(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]any{"data": map[string]any{"name": draft.Title, "projects": []string{"10"}, "notes": notes}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(notes, "Editable", "Updated in Asana", 1)
+	escaped, _ := json.Marshal(changed)
+	data := strings.Replace(taskJSON, `"Work item"`, string(escaped), 1)
+	a := fixture(t, exchange{method: "POST", path: "/tasks", status: 201, body: string(payload), response: `{"data":{"gid":"100"}}`}, getTaskFixture(data), getTaskFixture(data), getTaskFixture(data))
+	if _, err := a.Create(t.Context(), draft, provider.WriteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := a.Get(t.Context(), taskRef)
+	if err != nil || task.Template == nil || *task.Template != pin || !reflect.DeepEqual(task.Links, draft.Links) || task.Description != "## Objective\nUpdated in Asana" {
+		t.Fatalf("decoded %+v, %v", task, err)
+	}
+	target := provider.TaskState{ID: "12"}
+	if _, err := a.Transition(t.Context(), taskRef, target, provider.WriteOptions{}); err == nil {
+		t.Fatal("accepted template without validation")
+	}
+	check := func(current provider.Task) error {
+		if current.Description != task.Description {
+			t.Fatalf("stale task %+v", current)
+		}
+		return provider.ErrConflict
+	}
+	if _, err := a.Transition(t.Context(), taskRef, target, provider.WriteOptions{CheckTask: check}); !errors.Is(err, provider.ErrConflict) {
+		t.Fatalf("validation error %v", err)
+	}
+}
+
+func TestLiteralNotesPrefix(t *testing.T) {
+	literal := notesPrefix + "{user text}\n\nMore"
+	notes, err := encodeNotes(provider.TaskDraft{Description: literal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, meta, err := decodeNotes(notes)
+	if err != nil || body != literal || meta.Template != nil || len(meta.Links) != 0 {
+		t.Fatalf("decoded %q %+v %v", body, meta, err)
+	}
+}
+
+func TestReadinessChecksAllProjectMemberships(t *testing.T) {
+	projectRead := func(id string) exchange {
+		return exchange{method: "GET", path: "/projects/" + id + "/tasks", query: url.Values{"limit": {"1"}}, status: 200, response: `{"data":[]}`}
+	}
+	sectionRead := func(id, project string) exchange {
+		return exchange{method: "GET", path: "/sections/" + id, status: 200, response: `{"data":{"gid":"` + id + `","project":{"gid":"` + project + `"}}}`}
+	}
+	a := fixture(t, projectRead("10"), sectionRead("11", "10"), sectionRead("12", "10"), projectRead("20"), sectionRead("21", "20"))
+	if err := a.CheckAccess(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	a = fixture(t, projectRead("10"), sectionRead("11", "20"))
+	if err := a.CheckAccess(t.Context()); !errors.Is(err, provider.ErrNotFound) {
+		t.Fatal(err)
+	}
+}

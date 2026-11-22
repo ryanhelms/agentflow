@@ -267,6 +267,9 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 	if a.usesFileTasks() {
 		return plan, errors.New("file task transitions require a gated publication")
 	}
+	if a.usesAsana() {
+		return a.applyAsanaTransition(ctx, plan)
+	}
 	if a.usesIssues() {
 		return a.applyIssueTransition(ctx, plan)
 	}
@@ -312,7 +315,7 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 	}
 	var summary any = plan
 	commands := []string{fmt.Sprintf("devflow transition %s %s", key, event)}
-	if a.usesIssues() {
+	if a.usesIssues() || a.usesAsana() {
 		ref, err := a.taskRef(ctx, plan.Key)
 		if err != nil {
 			return nil, err
@@ -332,7 +335,7 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 
 // Comment posts a comment on a ticket.
 func (a *App) Comment(ctx context.Context, key, text, token string) (any, error) {
-	if a.usesFileTasks() {
+	if a.usesFileTasks() || a.usesAsana() {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "comments")
 	}
 	if a.usesIssues() {

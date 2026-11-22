@@ -171,7 +171,7 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 		}
 		if m.Comment != "" || m.Time != "" {
 			name := "GitHub Issues"
-			if a.usesFileTasks() {
+			if !a.usesIssues() {
 				name = a.Cfg.Providers.TaskManagement.Provider
 			}
 			warnings = append(warnings, name+" does not apply Jira Smart Commit commands")

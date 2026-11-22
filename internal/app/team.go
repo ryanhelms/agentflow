@@ -121,7 +121,9 @@ func (a *App) Standup(ctx context.Context, since time.Duration) (map[string]any,
 			}
 		}
 	}
-	if jc, err := a.Jira(); err == nil {
+	if a.usesAsana() {
+		out["task_note"] = "Asana does not support querying the current user's activity"
+	} else if jc, err := a.Jira(); err == nil {
 		days := int(since.Hours()/24) + 1
 		if issues, err := jc.Search(ctx, fmt.Sprintf("assignee = currentUser() AND updated >= -%dd ORDER BY updated DESC", days), 20); err == nil {
 			var list []string
@@ -154,7 +156,7 @@ func lastWorkingDay() time.Duration {
 
 // PostEOD posts an end-of-day progress comment on each ticket with commits today.
 func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string) (any, error) {
-	if a.usesFileTasks() {
+	if a.usesFileTasks() || a.usesAsana() {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "end-of-day comments")
 	}
 	if len(notes) == 0 {

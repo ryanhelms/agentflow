@@ -186,6 +186,19 @@ GitHub, and configure Git credentials for the wiki remote. Publication uses the
 remote approval policy and targets the wiki's default branch. See the
 [GitHub Wiki configuration and commands](docs/providers.md#publish-a-github-wiki-page).
 
+Create tasks with `devflow task create --summary "Review capacity"` or
+`devflow_ticket_create`. Both use the configured task provider. Use
+`--dry-run` to inspect the resolved task and `--yes` to approve in a
+noninteractive workflow. To select a catalog revision, pass
+`--template NAME --template-revision REV` or the MCP fields `template`
+and `template_revision`. Omit both to use the configured default.
+
+Select `asana` to list open project tasks, start a branch from a plain task GID,
+read linked knowledge documents and move a task to a configured section.
+Set the default project GID and provide `ASANA_ACCESS_TOKEN` in the calling
+environment. Verify access with `devflow setup verify`.
+[Asana setup, project mappings and capabilities](docs/providers.md#asana-project-tasks)
+
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
@@ -219,6 +232,7 @@ The status command reads checks from the configured `devops.checks` provider.
 
 | Task | Terminal | AI client |
 | --- | --- | --- |
+| Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
 | Commit | `devflow commit` (or plain `git commit`) | `/devflow:commit` |

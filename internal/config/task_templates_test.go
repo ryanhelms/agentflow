@@ -12,7 +12,7 @@ func TestTaskTemplateSettings(t *testing.T) {
 	if legacy.Providers.TaskTemplates != nil || legacy.Providers.TaskManagement.Settings.(*JiraSettings).Site != "old" {
 		t.Fatalf("legacy configuration changed: %+v", legacy.Providers)
 	}
-	for _, id := range []string{"jira", "github-issues", "filesystem", "repository", "none"} {
+	for _, id := range []string{"jira", "github-issues", "asana", "filesystem", "repository", "none"} {
 		t.Run(id, func(t *testing.T) {
 			cfg := loadConfig(t, "task_management:\n  provider: "+id+`
   templates:
