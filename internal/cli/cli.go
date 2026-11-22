@@ -497,7 +497,7 @@ func runLogin(ctx context.Context, args []string) error {
 	cfgSite := config.DefaultSite
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			cfgSite = cfg.Jira.Site
 		}
 		if *email == "" {
@@ -858,7 +858,7 @@ func newUpdater(ctx context.Context) (*update.Updater, error) {
 	opts := update.Options{Channel: "stable"}
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			opts.Channel, opts.Track, opts.Pin, opts.CheckEvery = cfg.Update.Channel, cfg.Update.Track, cfg.Update.Pin, cfg.CheckEvery()
 		}
 	}

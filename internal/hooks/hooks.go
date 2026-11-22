@@ -36,7 +36,7 @@ func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
 	rules := config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
 	keyHint := ""
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			rules = cfg.Commit
 		}
 		keyHint = gitx.KeyFromBranch(repo.Branch(ctx))
@@ -162,7 +162,7 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 	var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
 	keyHint := ""
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			protected, rules = cfg.Policy.ProtectedBranches, cfg.Commit
 		}
 		branch = repo.Branch(ctx)
