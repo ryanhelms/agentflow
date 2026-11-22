@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider"
 )
 
 // App is an opened repository plus the developer's configuration.
@@ -29,9 +30,10 @@ type App struct {
 	Client string
 	Home   string
 
-	jira *atlassian.Client
-	ghc  *gh.Client
-	fm   *flowmap.Map
+	tasks provider.Tasks
+	jira  *atlassian.Client
+	ghc   *gh.Client
+	fm    *flowmap.Map
 }
 
 // Open opens the repo containing dir. client names the calling AI client.
@@ -121,12 +123,25 @@ func (a *App) GitHubRepo(ctx context.Context) (string, error) {
 	return r, nil
 }
 
-// CurrentKey returns the Jira key for the current branch, or "".
+// CurrentKey returns the resolved task key for the current branch, or "".
 func (a *App) CurrentKey(ctx context.Context) string {
+	if a.usesIssues() {
+		if ref, err := a.branchIssue(ctx); err == nil && ref.ID != "" {
+			return issueKey(ref)
+		}
+		return ""
+	}
 	return gitx.KeyFromBranch(a.Repo.Branch(ctx))
 }
 
 func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
+	if a.usesIssues() {
+		ref, err := a.issueRef(ctx, key)
+		if err != nil {
+			return "", err
+		}
+		return issueKey(ref), nil
+	}
 	if key != "" {
 		return key, nil
 	}
@@ -176,16 +191,20 @@ func (a *App) audit(class policy.Class, action string, payload any, err error) {
 // Transition moves key to the status mapped for event ("pr.merged", "#qa").
 // It only moves forward: done-category issues and no-op mappings are skipped.
 type TransitionResult struct {
-	Key     string `json:"key"`
-	Event   string `json:"event"`
-	From    string `json:"from"`
-	To      string `json:"to,omitempty"`
-	Applied bool   `json:"applied"`
-	Note    string `json:"note,omitempty"`
+	operationID string
+	Key         string `json:"key"`
+	Event       string `json:"event"`
+	From        string `json:"from"`
+	To          string `json:"to,omitempty"`
+	Applied     bool   `json:"applied"`
+	Note        string `json:"note,omitempty"`
 }
 
 // PlanTransition works out what event would do to key without changing anything.
 func (a *App) PlanTransition(ctx context.Context, key, event string) (TransitionResult, error) {
+	if a.usesIssues() {
+		return a.planIssueTransition(ctx, key, event, nil)
+	}
 	res := TransitionResult{Key: key, Event: event}
 	fm, err := a.FlowMap(ctx)
 	if err != nil {
@@ -226,6 +245,9 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 	if plan.To == "" {
 		return plan, nil
 	}
+	if a.usesIssues() {
+		return a.applyIssueTransition(ctx, plan)
+	}
 	jc, err := a.Jira()
 	if err != nil {
 		return plan, err
@@ -250,15 +272,34 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 
 // Transition plans and, subject to the gate, applies a transition.
 func (a *App) Transition(ctx context.Context, key, event string, dryRun bool, token string) (any, error) {
+	return a.transition(ctx, key, event, dryRun, token, "")
+}
+
+func (a *App) transition(ctx context.Context, key, event string, dryRun bool, token, operationID string) (any, error) {
 	key, err := a.keyOrCurrent(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	plan, err := a.PlanTransition(ctx, key, event)
+	plan.operationID = operationID
 	if err != nil || dryRun || plan.To == "" {
 		return plan, err
 	}
-	if p, err := a.gate(policy.Remote, "transition", plan, token, false, []string{fmt.Sprintf("devflow transition %s %s", key, event)}); p != nil || err != nil {
+	var summary any = plan
+	commands := []string{fmt.Sprintf("devflow transition %s %s", key, event)}
+	if a.usesIssues() {
+		ref, err := a.issueRef(ctx, plan.Key)
+		if err != nil {
+			return nil, err
+		}
+		summary = struct {
+			TransitionResult
+			TaskRef string `json:"task_ref"`
+		}{plan, ref.String()}
+		// A structured suggestion preserves literal event names such as "#done".
+		commands = nil
+	}
+	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
 		return p, err
 	}
 	return a.ApplyTransition(ctx, plan)
@@ -266,6 +307,9 @@ func (a *App) Transition(ctx context.Context, key, event string, dryRun bool, to
 
 // Comment posts a comment on a ticket.
 func (a *App) Comment(ctx context.Context, key, text, token string) (any, error) {
+	if a.usesIssues() {
+		return a.commentIssue(ctx, key, text, token)
+	}
 	key, err := a.keyOrCurrent(ctx, key)
 	if err != nil {
 		return nil, err

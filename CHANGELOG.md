@@ -5,6 +5,30 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.12.0](https://github.com/nscaledev/devflow/compare/v0.11.0...v0.12.0) - 2026-11-22
+
+### Features
+
+- publish repository knowledge through devflow ([aab09ca](https://github.com/nscaledev/devflow/commit/aab09ca22df057d0dd8a2170809544e85492c011))
+
+## [0.11.0](https://github.com/nscaledev/devflow/compare/v0.10.0...v0.11.0) - 2026-11-22
+
+### Features
+
+- process github task events in ci ([8e05504](https://github.com/nscaledev/devflow/commit/8e055042c5a85425da6a432738213f0c3f6634cb))
+
+## [0.10.0](https://github.com/nscaledev/devflow/compare/v0.9.0...v0.10.0) - 2026-11-22
+
+### Features
+
+- add git-backed repository providers ([07cb468](https://github.com/nscaledev/devflow/commit/07cb468d654fca809142148822cdd3f2d8f0472f))
+
+## [0.9.0](https://github.com/nscaledev/devflow/compare/v0.8.0...v0.9.0) - 2026-11-22
+
+### Features
+
+- support the github issue task lifecycle ([95501fb](https://github.com/nscaledev/devflow/commit/95501fb58139cf2814d19259bebbbef3a4c2eeee))
+
 ## [0.8.0](https://github.com/nscaledev/devflow/compare/v0.7.0...v0.8.0) - 2026-11-22
 
 ### Features

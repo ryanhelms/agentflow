@@ -26,6 +26,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/hooks"
 	"github.com/nscaledev/devflow/internal/mcpserver"
+	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -62,6 +63,8 @@ Work
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
   docs search QUERY [--space S]  search the selected knowledge base
+  docs publish REF --title T --body TEXT --operation-id ID
+               [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
                                  .devflow/releases.yml and the release-please files
@@ -257,26 +260,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 		printStandup(out)
 		return nil
 	case "docs":
-		if len(args) < 2 || args[0] != "search" {
-			return errors.New("usage: devflow docs search QUERY [--space S]")
-		}
-		fs := flag.NewFlagSet("docs", flag.ContinueOnError)
-		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
-		if err := fs.Parse(args[2:]); err != nil {
-			return err
-		}
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		out, err := a.DocsSearch(ctx, args[1], *space)
-		if err != nil {
-			return err
-		}
-		for _, p := range out["pages"].([]atlassian.Page) {
-			fmt.Printf("%s [%s]\n  %s\n  %s\n", p.Title, p.Space, p.URL, p.Excerpt)
-		}
-		return nil
+		return runDocs(ctx, args)
 	case "adr":
 		if len(args) < 2 || args[0] != "new" {
 			return errors.New("usage: devflow adr new TITLE")
@@ -592,9 +576,16 @@ func runCommit(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		key := cc.Key
-		if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {
-			key = strings.ToUpper(k)
+		var keys []string
+		if a.Cfg.Providers.TaskManagement.Provider != "github-issues" || a.Cfg.Commit.KeyRequired() {
+			key := cc.Key
+			if a.Cfg.Providers.TaskManagement.Provider == "github-issues" {
+				key = ""
+			}
+			if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {
+				key = strings.ToUpper(k)
+			}
+			keys = []string{key}
 		}
 		typ := cc.SuggestedType
 		if t := ask(fmt.Sprintf("Type (%s) [%s]: ", strings.Join(a.Cfg.Commit.Types, "/"), typ)); t != "" {
@@ -611,7 +602,10 @@ func runCommit(ctx context.Context, args []string) error {
 		if breaking {
 			trailers = append(trailers, "BREAKING CHANGE: "+ask("What breaks and how to migrate: "))
 		}
-		*msg = commit.Format(typ, []string{key}, breaking, summary, body, verbs, trailers)
+		if cc.TaskRef != "" {
+			trailers = append(trailers, provider.TaskTrailer+cc.TaskRef)
+		}
+		*msg = commit.Format(typ, keys, breaking, summary, body, verbs, trailers)
 	}
 	if issues := a.Validate(ctx, *msg); len(issues) > 0 {
 		for _, i := range issues {
@@ -678,9 +672,16 @@ func runPreview(ctx context.Context, args []string) error {
 func runTransition(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "preview only")
+	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions pull request event")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	if err := fs.Parse(reorder(args)); err != nil {
 		return err
+	}
+	if *githubEvent {
+		if fs.NArg() != 0 || *yes {
+			return errors.New("--github-event cannot be combined with a key, event, or --yes")
+		}
+		return runGitHubTaskEvent(ctx, *dry)
 	}
 	key, event := "", ""
 	switch fs.NArg() {
