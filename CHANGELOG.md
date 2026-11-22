@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.27.0](https://github.com/nscaledev/devflow/compare/v0.26.0...v0.27.0) - 2026-11-22
+
+### Features
+
+- enable jira web links in claude code desktop (#70) ([0296645](https://github.com/nscaledev/devflow/commit/02966453ae2f788307310afb82eedce68c737665))
+
 ## [0.26.0](https://github.com/nscaledev/devflow/compare/v0.25.0...v0.26.0) - 2026-11-22
 
 ### Features
