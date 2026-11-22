@@ -27,7 +27,7 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 	if err := ValidateDraft(a.instance, draft); err != nil {
 		return provider.WriteResult{}, err
 	}
-	notes, err := encodeNotes(draft)
+	notes, err := EncodeTaskNotes(draft)
 	if err != nil {
 		return provider.WriteResult{}, err
 	}

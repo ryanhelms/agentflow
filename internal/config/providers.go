@@ -145,8 +145,9 @@ func defaultTransitions() map[string]string {
 }
 
 type SlackSettings struct {
-	Destination   *string `yaml:"destination"`
-	CredentialRef *string `yaml:"credential_ref"`
+	Destination   *string              `yaml:"destination"`
+	CredentialRef *string              `yaml:"credential_ref"`
+	Native        *SlackNativeSettings `yaml:"native"`
 }
 
 // Each entry constructs an independent default settings object. Role registries

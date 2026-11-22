@@ -198,6 +198,7 @@ func runNotificationFixture(t *testing.T, dir string, input NotifyInput, transpo
 	if err != nil {
 		t.Fatal(err)
 	}
+	input.Automation = true
 	result, pending, err := a.notify(t.Context(), input, "", transport)
 	if pending != nil || err != nil {
 		t.Fatalf("notify: %+v, %v", pending, err)

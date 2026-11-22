@@ -2,16 +2,14 @@ package legacy
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/confluence"
 )
 
 // ConfluenceClient is the search API exposed by the legacy Atlassian client.
@@ -101,27 +99,14 @@ func (c *Confluence) Find(ctx context.Context, query provider.DocumentQuery) ([]
 // ConfluenceReplacementVersion checks the destination and supported write
 // options before approval and for direct Knowledge.Publish callers.
 func ConfluenceReplacementVersion(ref provider.Ref, revision string, links []provider.Link) (int64, error) {
-	if revision == "" {
-		return 0, provider.Unsupported(ref.Instance, "create a Confluence page; replacement requires an expected revision")
-	}
-	if !atlassian.ValidConfluenceID(ref.ID) {
-		return 0, errors.New("expected a positive decimal Confluence page ID")
-	}
-	expected, err := strconv.ParseInt(revision, 10, 64)
-	if err != nil || expected < 1 || expected == math.MaxInt64 || strconv.FormatInt(expected, 10) != revision {
-		return 0, errors.New("expected a positive decimal Confluence page revision with a successor")
-	}
-	if len(links) > 0 {
-		return 0, provider.Unsupported(ref.Instance, "publish structured Confluence document links")
-	}
-	return expected, nil
+	return confluence.ReplacementVersion(ref, revision, links)
 }
 
 // Publish replaces one published revision. Its successor's version message
 // is the receipt, even if another author has since published a later edit.
 func (c *Confluence) Publish(ctx context.Context, ref provider.Ref, draft provider.DocumentDraft, opts provider.WriteOptions) (provider.WriteResult, error) {
 	var zero provider.WriteResult
-	expected, err := ConfluenceReplacementVersion(ref, opts.ExpectedRevision, draft.Links)
+	_, err := ConfluenceReplacementVersion(ref, opts.ExpectedRevision, draft.Links)
 	if err != nil {
 		return zero, err
 	}
@@ -132,31 +117,19 @@ func (c *Confluence) Publish(ctx context.Context, ref provider.Ref, draft provid
 	if err != nil {
 		return zero, err
 	}
-	// Hash a fixed sequence of strings so arbitrary input cannot alter the
-	// boundary between fields or inject a second marker into the message.
-	payload, err := json.Marshal([]string{page.URL, ref.String(), opts.ExpectedRevision, opts.OperationID, draft.Title, draft.Body})
+	replacement, err := confluence.NewReplacement(page.URL, ref, draft, opts)
 	if err != nil {
 		return zero, err
 	}
-	next := atlassian.PageVersion{Number: expected + 1, Message: fmt.Sprintf("devflow docs publish %x", sha256.Sum256(payload))}
-	out := provider.WriteResult{Ref: ref, URL: page.URL, Revision: strconv.FormatInt(next.Number, 10)}
-	if page.Version.Number != expected {
-		receipt := page.Version
-		if receipt.Number > next.Number {
-			receipt, err = api.GetConfluenceVersion(ctx, ref.ID, next.Number)
-			if err != nil {
-				return zero, fmt.Errorf("cannot verify earlier Confluence version %d: %w", next.Number, atlassianError(err))
-			}
-		}
-		if receipt != next {
-			return zero, fmt.Errorf("%w: expected Confluence revision %d, found %d", provider.ErrConflict, expected, page.Version.Number)
-		}
-		out.Status = provider.AlreadyApplied
-		return out, nil
+	out, err := replacement.Replay(page.Version, true, func(number int64) (atlassian.PageVersion, error) {
+		version, err := api.GetConfluenceVersion(ctx, ref.ID, number)
+		return version, atlassianError(err)
+	})
+	if out.Status != "" || err != nil {
+		return out, err
 	}
-	if err := api.ReplaceConfluencePage(ctx, page, draft.Title, draft.Body, next); err != nil {
+	if err := api.ReplaceConfluencePage(ctx, page, draft.Title, draft.Body, replacement.Successor); err != nil {
 		return zero, fmt.Errorf("replace Confluence page: %w", atlassianError(err))
 	}
-	out.Status = provider.Applied
-	return out, nil
+	return replacement.Result(provider.Applied), nil
 }

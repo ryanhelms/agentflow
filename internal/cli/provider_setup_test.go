@@ -206,7 +206,7 @@ notifications: {provider: none}
 printf '%s %s\n' "$0" "$*" >> "$GH_FIXTURE_LOG"
 case "$*" in
   "--version"|"auth status --hostname github.com"|"api --hostname github.com --method GET --silent repos/sample/project/issues?per_page=1") ;;
-  "auth token") printf 'fixture-token\n' ;;
+  "api --hostname github.com --method GET --include "*"-- user") printf 'HTTP/2.0 200 OK\r\n\r\n{"login":"fixture"}\n' ;;
   *) exit 7 ;;
 esac
 `
@@ -254,15 +254,21 @@ esac
 			t.Fatal(err)
 		}
 		client, err := a.GitHub(ctx)
-		if err != nil || client.Token != "fixture-token" {
-			t.Fatalf("provider authentication failed: %v", err)
+		if err != nil || client.Token != "" {
+			t.Fatalf("provider CLI selection failed: %v", err)
+		}
+		if login, err := client.Viewer(ctx); err != nil || login != "fixture" {
+			t.Fatalf("provider CLI authentication failed: %q, %v", login, err)
 		}
 		calls, err := os.ReadFile(log)
 		if err != nil {
 			t.Fatal(err)
 		}
 		executable := filepath.Join(plan.InstallGH.Home, "companions", runtime.GOOS+"-"+runtime.GOARCH, "gh", "2.3.4-"+digest)
-		for _, command := range []string{"--version", "auth status --hostname github.com", "api --hostname github.com --method GET", "auth token"} {
+		if strings.Contains(string(calls), " auth token") {
+			t.Fatal("provider extracted the stored GitHub token")
+		}
+		for _, command := range []string{"--version", "auth status --hostname github.com", "api --hostname github.com --method GET --include"} {
 			if !strings.Contains(string(calls), executable+" "+command) {
 				t.Fatalf("missing %q in %s", command, calls)
 			}

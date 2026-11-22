@@ -27,6 +27,8 @@ import (
 	"github.com/nscaledev/devflow/internal/hooks"
 	"github.com/nscaledev/devflow/internal/mcpserver"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -62,6 +64,7 @@ Work
   work                           list work from the selected task provider
   task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
               [--template NAME --template-revision REV] [--dry-run] [--yes]
+  task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
   start KEY [--worktree]         branch or worktree for KEY; apply supported start effects
   context [KEY]                  ticket bundle for the current branch
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
@@ -73,7 +76,7 @@ Work
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
-  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--yes]
+  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
                [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
@@ -91,6 +94,7 @@ Work
   lint-msg FILE | --github-event validate a commit file or runner PR and its task references
 
 Runtime
+  --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -100,6 +104,21 @@ Runtime
 // Main runs the CLI and returns the process exit code.
 func Main(args []string) int {
 	ctx := context.Background()
+	if len(args) > 0 && args[0] == "--native-client" {
+		if len(args) < 3 || args[1] != "codex" {
+			fmt.Fprintln(os.Stderr, "usage: devflow --native-client codex COMMAND")
+			return 1
+		}
+		dir, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "devflow:", err)
+			return 1
+		}
+		writer := codexhost.NewWriter(dir)
+		defer writer.Close()
+		ctx = native.WithWriteHost(ctx, writer)
+		args = args[2:]
+	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Print(usage)
 		return 0

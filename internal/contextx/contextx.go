@@ -124,6 +124,15 @@ func (s Store) Save(c *Checklist) error {
 // Sync merges freshly parsed criteria into the stored checklist, keeping done
 // state for items whose text is unchanged.
 func (s Store) Sync(key string, parsed []Item) (*Checklist, error) {
+	c, err := s.PreviewSync(key, parsed)
+	if err != nil {
+		return nil, err
+	}
+	return c, s.Save(c)
+}
+
+// PreviewSync merges criteria with prior local progress without writing it.
+func (s Store) PreviewSync(key string, parsed []Item) (*Checklist, error) {
 	old, err := s.Load(key)
 	if err != nil {
 		return nil, err
@@ -143,7 +152,7 @@ func (s Store) Sync(key string, parsed []Item) (*Checklist, error) {
 			}
 		}
 	}
-	return c, s.Save(c)
+	return c, nil
 }
 
 func normalise(s string) string {

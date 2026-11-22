@@ -15,6 +15,8 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
 func (a *App) usesFileTasks() bool {
@@ -100,6 +102,29 @@ func (a *App) providerWork(ctx context.Context) ([]WorkItem, error) {
 }
 
 func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, error) {
+	switch {
+	case a.usesAsana():
+		read, err := nativemap.AsanaTask(ref)
+		if err != nil {
+			return provider.Task{}, err
+		}
+		return mappedNativeRead(ctx, "asana", read, func() (provider.Task, error) {
+			return a.readTaskStore(ctx, ref)
+		})
+	case a.usesIssues():
+		read, err := nativemap.GitHubIssue(ref)
+		if err != nil {
+			return provider.Task{}, err
+		}
+		return mappedNativeRead(ctx, "github", read, func() (provider.Task, error) {
+			return a.readTaskStore(ctx, ref)
+		})
+	default:
+		return a.readTaskStore(ctx, ref)
+	}
+}
+
+func (a *App) readTaskStore(ctx context.Context, ref provider.Ref) (provider.Task, error) {
 	tasks, closeStore, err := a.openTaskStore(ctx)
 	if err != nil {
 		return provider.Task{}, err
@@ -130,6 +155,10 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 	tc.Key = taskKey(ref)
 	t, err := a.getTask(ctx, ref)
 	if err != nil {
+		var request *native.Request
+		if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+			return nil, err
+		}
 		tc.Warnings = append(tc.Warnings, err.Error())
 	} else {
 		tc.Summary, tc.Type, tc.Assignee, tc.Status = t.Title, taskType(t), t.Assignee, t.State.Name
@@ -140,7 +169,9 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 			tc.Criteria = cl
 		}
 		if a.usesAsana() {
-			a.addAsanaDocuments(ctx, tc, t.Links)
+			if err := a.addAsanaDocuments(ctx, tc, t.Links); err != nil {
+				return nil, err
+			}
 		}
 		tc.FlowNext = a.nextTaskStates(t)
 	}
@@ -162,7 +193,12 @@ func (a *App) nextTaskStates(t provider.Task) map[string]string {
 }
 
 func (a *App) syncTaskChecklist(ctx context.Context, ref provider.Ref, t provider.Task) (*contextx.Checklist, error) {
-	cl, err := a.Checklists(ctx).Sync(ref.StorageKey(), contextx.ParseCriteria(t.Description))
+	store := a.Checklists(ctx)
+	syncCriteria := store.Sync
+	if native.HasClientReplies(ctx) {
+		syncCriteria = store.PreviewSync
+	}
+	cl, err := syncCriteria(ref.StorageKey(), contextx.ParseCriteria(t.Description))
 	if err == nil {
 		cl.Key = taskKey(ref)
 	}
@@ -217,12 +253,11 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	if err != nil {
 		return nil, err
 	}
-	tasks, closeStore, err := a.openTaskStore(ctx)
+	write, err := a.taskTransitionWrite(ctx, ref, flowmap.BranchCreated, "")
 	if err != nil {
 		return nil, err
 	}
-	defer closeStore()
-	task, err := tasks.Get(ctx, ref)
+	task, write, err := a.prepareTaskForWrite(ctx, ref, write)
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +290,10 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	var plan TransitionResult
 	var assignment provider.TaskAssignment
 	if a.usesIssues() {
+		tasks, err := a.issueTasks(ctx)
+		if err != nil {
+			return nil, err
+		}
 		var ok bool
 		assignment, ok = tasks.(provider.TaskAssignment)
 		if !ok {
@@ -270,6 +309,9 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 			return nil, err
 		}
 		s["transition"] = plan
+		if plan.To != "" && write != nil {
+			s["native_write"] = write.taskWritePreview
+		}
 	}
 	if assignment != nil || plan.To != "" {
 		level := a.Gate.Autonomy
@@ -277,7 +319,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 			class = policy.Remote
 		}
 	}
-	if p, err := a.gate(class, "start", s, token, false, nil); p != nil || err != nil {
+	if p, err := a.gate(class, "start", s, token, token != "", nil); p != nil || err != nil {
 		return p, err
 	}
 	if err := a.ensureTaskBranch(ctx, ref, res); err != nil {
@@ -294,7 +336,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		res.Assigned = true
 	}
 	if plan.To != "" {
-		tr, err := a.ApplyTransition(ctx, plan)
+		tr, err := a.applyPreparedTaskTransition(ctx, ref, plan, write)
 		res.Transition = &tr
 		if err != nil {
 			return res, err
