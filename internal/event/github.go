@@ -29,6 +29,7 @@ type GitHubActionsContext struct {
 	EventID       string
 	TaskInstance  string
 	TaskScope     string
+	ApprovedIssue string
 }
 
 type SkipReason string

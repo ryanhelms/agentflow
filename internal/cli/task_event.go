@@ -25,6 +25,7 @@ func runGitHubTaskEvent(ctx context.Context, dryRun bool) error {
 		DefaultBranch: os.Getenv("DEVFLOW_DEFAULT_BRANCH"),
 		EventName:     os.Getenv("GITHUB_EVENT_NAME"),
 		EventID:       os.Getenv("GITHUB_RUN_ID"),
+		ApprovedIssue: os.Getenv("DEVFLOW_APPROVED_ISSUE"),
 	}
 	result, err := a.ApplyGitHubTaskEvent(ctx, metadata, os.Getenv("GITHUB_EVENT_PATH"), dryRun)
 	if err != nil {

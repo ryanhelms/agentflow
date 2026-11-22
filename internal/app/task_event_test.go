@@ -16,7 +16,7 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	a.Gate.Autonomy.Remote = config.Auto
 	metadata := event.GitHubActionsContext{
 		Repository:   provider.RepositoryRef{Host: "github.com", Path: fake.task.Ref.Scope},
-		RepositoryID: 100, DefaultBranch: "main", EventName: "pull_request", EventID: "test-run",
+		RepositoryID: 100, DefaultBranch: "main", EventName: "pull_request", EventID: "test-run", ApprovedIssue: fake.task.Ref.ID,
 	}
 	raw, err := os.ReadFile("../event/testdata/pr-merged.json")
 	if err != nil {
@@ -31,6 +31,11 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	preview, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, true)
 	if err != nil || len(preview.Effects) != 1 || preview.Effects[0].To != "closed" || len(fake.writes) != 0 {
 		t.Fatalf("preview = %+v, writes = %v, err = %v", preview, fake.writes, err)
+	}
+	wrong := metadata
+	wrong.ApprovedIssue = "57"
+	if _, err := a.ApplyGitHubTaskEvent(t.Context(), wrong, payload, false); err == nil || len(fake.writes) != 0 {
+		t.Fatalf("write attempted for an unapproved issue: %v, %v", fake.writes, err)
 	}
 	applied, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, false)
 	if err != nil || len(applied.Effects) != 1 || !applied.Effects[0].Applied || len(fake.writes) != 1 {

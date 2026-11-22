@@ -37,6 +37,12 @@ func (a *App) ApplyGitHubTaskEvent(ctx context.Context, actions event.GitHubActi
 	if err != nil {
 		return result, err
 	}
+	if !dryRun && len(result.Plan.Transitions) > 0 {
+		if result.Plan.Lifecycle != "pr.merged" || len(result.Plan.Transitions) != 1 ||
+			result.Plan.Transitions[0].Task.ID != actions.ApprovedIssue {
+			return result, fmt.Errorf("github task writes require one approved issue on a default-branch merge")
+		}
+	}
 	for _, intent := range result.Plan.Transitions {
 		response, err := a.transition(ctx, intent.Task.String(), result.Plan.Lifecycle, dryRun, "", intent.OperationID)
 		if err != nil {
