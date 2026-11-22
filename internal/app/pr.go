@@ -46,13 +46,13 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 	branch := a.Repo.Branch(ctx)
 	add(Check{Name: "feature branch", OK: branch != "" && !policy.IsProtected(branch, a.Cfg.Policy.ProtectedBranches), Detail: branch})
 	key := ""
-	if a.usesIssues() {
-		ref, err := a.branchIssue(ctx)
+	if a.UsesTaskRefs() {
+		ref, err := a.branchTask(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if ref.ID != "" {
-			key = issueKey(ref)
+			key = taskKey(ref)
 		}
 		add(Check{Name: "branch has task reference", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
 	} else {
@@ -85,8 +85,8 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 			r.Draft = d < n
 			r.Checks = append(r.Checks, Check{Name: "acceptance criteria", OK: true, Detail: fmt.Sprintf("%d/%d ticked (opens as draft if incomplete)", d, n)})
 		}
-		if a.usesIssues() {
-			ref, err := a.issueRef(ctx, key)
+		if a.UsesTaskRefs() {
+			ref, err := a.taskRef(ctx, key)
 			if err != nil {
 				return nil, err
 			}
@@ -107,7 +107,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 			}
 		}
 	}
-	if a.usesIssues() {
+	if a.UsesTaskRefs() {
 		if msgs, err := a.Repo.Messages(ctx, base+"..HEAD"); err == nil && len(msgs) > 0 {
 			r.SuggestTitle = commit.Parse(msgs[len(msgs)-1]).Subject
 		}
@@ -180,8 +180,8 @@ func (a *App) PROpen(ctx context.Context, in PROpenInput, token string) (any, er
 	if in.Body == "" {
 		in.Body = a.prBody(ctx, key)
 	}
-	if a.usesIssues() {
-		in.Body, err = a.issuePRBody(ctx, in.Body, key)
+	if a.UsesTaskRefs() {
+		in.Body, err = a.taskPRBody(ctx, in.Body, key)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,7 @@ func (a *App) prBody(ctx context.Context, key string) string {
 			break
 		}
 	}
-	if key != "" && !a.usesIssues() {
+	if key != "" && !a.UsesTaskRefs() {
 		fmt.Fprintf(&b, "Jira: [%s](%s/browse/%s)\n\n", key, strings.TrimRight(a.Cfg.Jira.Site, "/"), key)
 	}
 	if tmpl != "" {
@@ -263,15 +263,15 @@ func (a *App) prBody(ctx context.Context, key string) string {
 
 // Carry the branch binding into a PR even when the caller supplied its body.
 // Reject conflicting trailers before the push or the confirmation prompt.
-func (a *App) issuePRBody(ctx context.Context, body, key string) (string, error) {
-	keys, err := issueKeys(body)
+func (a *App) taskPRBody(ctx context.Context, body, key string) (string, error) {
+	keys, err := a.taskKeys(body)
 	if err != nil {
 		return "", err
 	}
 	if key == "" {
 		return body, nil
 	}
-	ref, err := a.issueRef(ctx, key)
+	ref, err := a.taskRef(ctx, key)
 	if err != nil {
 		return "", err
 	}
@@ -329,14 +329,14 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 	key := a.CurrentKey(ctx)
 	if key != "" {
 		out["key"] = key
-		if a.usesIssues() {
-			ref, err := a.issueRef(ctx, key)
+		if a.UsesTaskRefs() {
+			ref, err := a.taskRef(ctx, key)
 			if err != nil {
 				return out, err
 			}
-			if t, err := a.getIssue(ctx, ref); err == nil {
+			if t, err := a.getTask(ctx, ref); err == nil {
 				out["ticket_status"] = t.State.Name
-				out["flow_next"] = a.nextIssueStates(t)
+				out["flow_next"] = a.nextTaskStates(t)
 			}
 		} else {
 			if jc, err := a.Jira(); err == nil {

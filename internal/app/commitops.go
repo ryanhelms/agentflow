@@ -76,16 +76,16 @@ func (a *App) CommitContext(ctx context.Context, paths []string) (*CommitContext
 		DiffTruncated: trunc,
 		Rules:         a.rulesText(),
 	}
-	if a.usesIssues() {
-		ref, err := a.branchIssue(ctx)
+	if a.UsesTaskRefs() {
+		ref, err := a.branchTask(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if ref.ID != "" {
-			cc.Key = issueKey(ref)
+			cc.Key = taskKey(ref)
 			cc.TaskRef = ref.String()
 			cc.Rules += "\nInclude this trailer after a blank line:\n" + provider.TaskTrailer + ref.String()
-			if task, err := a.getIssue(ctx, ref); err == nil {
+			if task, err := a.getTask(ctx, ref); err == nil {
 				cc.Ticket = task.Title + " (status: " + task.State.Name + ")"
 			}
 		}
@@ -116,7 +116,7 @@ Optional verbs after the summary: #start #review #qa #done #block (moved via the
 Optional Smart Commits: #comment <text>, #time 1h 30m
 Body: blank line, then why the change was needed (not a list of files). Wrap at 72.
 Trailers: "Refs: KEY-2" for related tickets.`, r.SubjectMax, strings.Join(r.Types, ", "))
-	if a.usesIssues() {
+	if a.UsesTaskRefs() {
 		subject := "type[(scope)][!]: summary"
 		if r.KeyRequired() {
 			subject = "type(KEY[,KEY])[!]: summary"
@@ -131,16 +131,16 @@ Trailers: "Refs: KEY-2" for related tickets.`, r.SubjectMax, strings.Join(r.Type
 
 // Validate validates a message with the repo rules and branch key hint.
 func (a *App) Validate(ctx context.Context, msg string) []commit.Issue {
-	if a.usesIssues() {
-		return a.validateIssueMessage(msg)
+	if a.UsesTaskRefs() {
+		return a.validateTaskMessage(msg)
 	}
 	return commit.Validate(msg, a.Cfg.Commit, a.CurrentKey(ctx))
 }
 
-func (a *App) validateIssueMessage(msg string) []commit.Issue {
+func (a *App) validateTaskMessage(msg string) []commit.Issue {
 	issues := commit.Validate(msg, a.Cfg.Commit, "")
 	_, body, _ := strings.Cut(msg, "\n")
-	if _, err := issueKeys(body); err != nil {
+	if _, err := a.taskKeys(body); err != nil {
 		issues = append(issues, commit.Issue{Code: "task_ref", Message: err.Error()})
 	}
 	return issues
@@ -163,14 +163,18 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 	if m.Skip {
 		return nil, []string{"message has [devflow skip]; automation ignores it"}, nil
 	}
-	if a.usesIssues() {
+	if a.UsesTaskRefs() {
 		var err error
-		m.Keys, err = issueKeys(m.Body)
+		m.Keys, err = a.taskKeys(m.Body)
 		if err != nil {
 			return nil, nil, err
 		}
 		if m.Comment != "" || m.Time != "" {
-			warnings = append(warnings, "GitHub Issues does not apply Jira Smart Commit commands")
+			name := "GitHub Issues"
+			if a.usesFileTasks() {
+				name = a.Cfg.Providers.TaskManagement.Provider
+			}
+			warnings = append(warnings, name+" does not apply Jira Smart Commit commands")
 			m.Comment, m.Time = "", ""
 		}
 	}
@@ -180,7 +184,7 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 		for _, v := range m.Verbs {
 			if v == "done" && !onDefault {
 				warnings = append(warnings, key+": #done only applies when the commit lands on the default branch")
-				if a.usesIssues() {
+				if a.UsesTaskRefs() {
 					continue
 				}
 			}
@@ -195,7 +199,7 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 		}
 		for _, ev := range []string{flowmap.PROpened, flowmap.PRMerged} {
 			plan, err := a.PlanTransition(ctx, key, ev)
-			if err != nil && a.usesIssues() {
+			if err != nil && a.UsesTaskRefs() {
 				return nil, nil, err
 			}
 			if err == nil && plan.To != "" {
@@ -274,8 +278,8 @@ func (a *App) LintBranch(ctx context.Context) (map[string][]commit.Issue, error)
 			continue
 		}
 		var issues []commit.Issue
-		if a.usesIssues() {
-			issues = a.validateIssueMessage(msg)
+		if a.UsesTaskRefs() {
+			issues = a.validateTaskMessage(msg)
 		} else {
 			issues = commit.Validate(msg, a.Cfg.Commit, "")
 		}

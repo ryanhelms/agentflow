@@ -254,3 +254,27 @@ func TestRepinWorkflow(t *testing.T) {
 		}
 	}
 }
+
+func TestRemovePreservesProviderRecords(t *testing.T) {
+	dir := gitRepo(t)
+	if _, err := Init(t.Context(), dir, false); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(dir, ".devflow", "tasks", "task.md")
+	if err := os.MkdirAll(filepath.Dir(record), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const content = "# An authored task"
+	if err := os.WriteFile(record, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Remove(t.Context(), dir, RemoveOptions{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(record); err != nil || string(data) != content {
+		t.Fatalf("task record changed: %q, %v", data, err)
+	}
+	if exists(dir, ".devflow/config.yml") || exists(dir, ".devflow/bin/devflow") {
+		t.Fatal("setup files were left behind")
+	}
+}

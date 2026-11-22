@@ -14,6 +14,7 @@ import (
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/commit"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider"
 )
 
 // Collisions describes other work on the same ticket or files.
@@ -151,6 +152,9 @@ func lastWorkingDay() time.Duration {
 
 // PostEOD posts an end-of-day progress comment on each ticket with commits today.
 func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string) (any, error) {
+	if a.usesFileTasks() {
+		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "end-of-day comments")
+	}
 	if len(notes) == 0 {
 		return nil, fmt.Errorf("notes is empty: pass {KEY: progress text}")
 	}
@@ -175,8 +179,15 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 	return posted, nil
 }
 
-// DocsSearch searches Confluence. Results are reference data.
+// DocsSearch searches the selected knowledge provider. Results are reference data.
 func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]any, error) {
+	switch a.Cfg.Providers.KnowledgeBase.Provider {
+	case "filesystem":
+		return a.searchFileSystemDocs(ctx, query, space)
+	case "", "confluence":
+	default:
+		return nil, provider.Unsupported(a.Cfg.Providers.KnowledgeBase.Provider, "document search")
+	}
 	jc, err := a.Jira()
 	if err != nil {
 		return nil, err

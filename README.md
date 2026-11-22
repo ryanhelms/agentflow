@@ -145,11 +145,12 @@ that is behind, and the Claude Code session hook offers `/devflow:pin` when it i
 Dependabot or GitHub App access is needed.
 
 **Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
-`.devflow/`, the caller workflow, the release-please files (`--keep-releases` keeps them)
-and unchanged template files (`--force` deletes changed ones too), strips devflow's block
-from `AGENTS.md` and its entries from client configs, unsets `core.hooksPath` and turns
+the generated configuration and launchers under `.devflow/`, the caller workflow,
+the release-please files (`--keep-releases` keeps them), and unchanged template files
+(`--force` deletes changed ones too). It removes devflow's entries from `AGENTS.md` and
+client configs, unsets `core.hooksPath`, and turns
 automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
-in a PR; repo variables, secrets, tags and releases are not touched.
+in a PR. Authored task and knowledge records under `.devflow/` are preserved.
 
 ### Set up your machine (engineers)
 
@@ -161,12 +162,20 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules.
+service sections, versioned settings, defaults, and their override rules. Use the
+`filesystem` knowledge provider to search a local directory with
+`devflow docs search` or `devflow_docs_search`.
 
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
 the qualified issue reference in the PR body and interactive commit message.
+
+Select `filesystem` or `repository` to create, list, read and transition
+Markdown tasks. Use the qualified key from My Work in a `Task-Ref` trailer.
+FileSystem writes follow local autonomy. Repository task writes require
+remote approval for an unprotected branch with `publication: push`. Task PR
+publication is pending (#20). [Provider configuration](docs/providers.md)
 
 ## Day-to-day use
 

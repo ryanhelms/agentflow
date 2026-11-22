@@ -60,7 +60,7 @@ Work
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
-  docs search QUERY [--space S]  search Confluence
+  docs search QUERY [--space S]  search the selected knowledge base
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
                                  .devflow/releases.yml and the release-please files
@@ -255,7 +255,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 			return errors.New("usage: devflow docs search QUERY [--space S]")
 		}
 		fs := flag.NewFlagSet("docs", flag.ContinueOnError)
-		space := fs.String("space", "", "Confluence space key")
+		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
@@ -587,9 +587,9 @@ func runCommit(ctx context.Context, args []string) error {
 			return err
 		}
 		var keys []string
-		if a.Cfg.Providers.TaskManagement.Provider != "github-issues" || a.Cfg.Commit.KeyRequired() {
+		if !a.UsesTaskRefs() || a.Cfg.Commit.KeyRequired() {
 			key := cc.Key
-			if a.Cfg.Providers.TaskManagement.Provider == "github-issues" {
+			if a.UsesTaskRefs() {
 				key = ""
 			}
 			if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {

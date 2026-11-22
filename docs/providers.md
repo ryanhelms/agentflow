@@ -70,3 +70,71 @@ explicitly requires Jira-style subject scopes.
 `settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
 Set an event to `none` to disable its effect. Devflow previews transitions and
 only attempts to move open issues forward.
+
+## File-backed tasks
+
+Select `filesystem` or `repository` under `task_management` to create, list,
+read and transition Markdown tasks. The default scope is `default`. Set
+`settings.scope` to choose the scope for My Work and new tasks, or pass a
+project when creating a task to override its scope. My Work lists up to 30
+open tasks in that scope. Both adapters lack an authenticated assignee.
+
+```yaml
+task_management:
+  provider: filesystem
+  settings:
+    root: .devflow/tasks
+    scope: platform
+```
+
+FileSystem resolves a relative root from the checkout and accepts an absolute
+directory. The first approved create makes the directory if needed. Writes
+use local autonomy. Ticket creation always requires confirmation.
+
+Use the qualified key returned by create or My Work when requesting context
+or a transition. For example, a commit body or PR body can contain
+`Task-Ref: filesystem/platform/quota`. This identifies the record by its
+front matter and survives a file rename. A feature branch can recover the
+reference from its commits. The commit subject and ordinary issue mentions
+do not bind a task. The `transitions` setting uses the GitHub Issues event
+mapping above. File tasks start open and a close marks them terminal.
+Start and comments require capabilities these task adapters do not provide.
+
+For Repository, set `repository` to a Git remote name, URL or local repository
+path. Relative paths resolve from the checkout. The defaults use `origin`
+and the remote HEAD. Set `directory` to the record directory within the
+branch tree. Repository reads use the selected branch. To publish directly,
+choose `publication: push` and an unprotected branch. Devflow shows the
+resolved origin, branch and directory for remote approval. Protected targets
+are rejected. The default `pull-request` mode returns an unsupported-operation
+error for task writes until the PR publisher is integrated (#20).
+
+## Search a local knowledge directory
+
+Choose a dedicated directory for knowledge records. Relative roots resolve from
+the repository checkout. Use `devflow docs search quota --space engineering` to
+search the scope in the following example.
+
+```yaml
+knowledge_base:
+  provider: filesystem
+  settings:
+    root: handbook
+```
+
+Place a Markdown document in `handbook/` with devflow front matter.
+
+```markdown
+---
+version: 1
+kind: document
+instance: filesystem
+scope: engineering
+id: quota
+title: Quota design
+---
+The decision and its rationale.
+```
+
+The document's qualified reference survives a rename. Generated setup files
+and authored records have separate lifecycles during removal.

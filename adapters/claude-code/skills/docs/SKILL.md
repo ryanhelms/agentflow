@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Search Confluence for design docs, runbooks and ADRs
+description: Search the configured knowledge base for design docs, runbooks and ADRs
 argument-hint: "QUERY [--space S]"
 ---
 Call devflow_docs_search with "$ARGUMENTS" and list the top results as title, space,
