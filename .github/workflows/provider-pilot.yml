@@ -34,6 +34,15 @@ jobs:
           go-version-file: go.mod
       - name: Build devflow
         run: go build -o "$RUNNER_TEMP/devflow" ./cmd/devflow
+      - name: Verify the published pilot ADR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_NO_UPDATE: "1"
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
+        run: |
+          gh auth setup-git --hostname github.com
+          "$RUNNER_TEMP/devflow" docs search "Provider contracts and repository configuration" --space engineering \
+            | jq -e 'any(.pages[]; .ref.instance == "repository" and .ref.id == "provider-architecture")'
       - name: Close the approved issue
         env:
           GH_TOKEN: ${{ github.token }}

@@ -70,3 +70,13 @@ explicitly requires Jira-style subject scopes.
 `settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
 Set an event to `none` to disable its effect. Devflow previews transitions and
 only attempts to move open issues forward.
+
+## Devflow repository pilot
+
+This repository uses GitHub Issues for task management and the Repository
+provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
+enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
+variable. It applies `pr.merged` to that issue after a same-repository PR
+with a qualified `Task-Ref` merges into the default branch.
+
+The pilot uses the repository's existing GoReleaser release process.
