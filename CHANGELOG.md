@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.33.1](https://github.com/nscaledev/devflow/compare/v0.33.0...v0.33.1) - 2026-11-22
+
+### Fixes
+
+- **jira:** honor optional keys in pr readiness (#78) ([b93b8f6](https://github.com/nscaledev/devflow/commit/b93b8f61bf43a8ee2d8e04f1dced1d5313d81f1f))
+
 ## [0.33.0](https://github.com/nscaledev/devflow/compare/v0.32.0...v0.33.0) - 2026-11-22
 
 ### Features
