@@ -146,11 +146,11 @@ Dependabot or GitHub App access is needed.
 
 **Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
 the generated configuration and launchers under `.devflow/`, the caller workflow,
-the release-please files (`--keep-releases` keeps them), and unchanged template files (`--force` deletes changed ones too), strips devflow's block
-from `AGENTS.md` and its entries from client configs, unsets `core.hooksPath` and turns
+the release-please files (`--keep-releases` keeps them), and unchanged template files
+(`--force` deletes changed ones too). It removes devflow's entries from `AGENTS.md` and
+client configs, unsets `core.hooksPath`, and turns
 automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
-in a PR; repo variables, secrets, tags and releases are not touched. Authored task and
-knowledge records under `.devflow/` are preserved.
+in a PR. Authored task and knowledge records under `.devflow/` are preserved.
 
 ### Set up your machine (engineers)
 
@@ -162,7 +162,9 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules.
+service sections, versioned settings, defaults, and their override rules. Use the
+`filesystem` knowledge provider to search a local directory with
+`devflow docs search` or `devflow_docs_search`.
 
 ## Day-to-day use
 
