@@ -28,9 +28,11 @@ func mergeSetting(dst reflect.Value, value any, path string, rules reflect.Struc
 			dst.SetZero()
 			return nil
 		}
-		if dst.IsNil() {
-			dst.Set(reflect.New(dst.Type().Elem()))
+		next := reflect.New(dst.Type().Elem())
+		if !dst.IsNil() {
+			next.Elem().Set(dst.Elem())
 		}
+		dst.Set(next)
 		return mergeSetting(dst.Elem(), value, path, rules)
 	case reflect.Slice:
 		items, ok := value.([]any)
@@ -49,9 +51,12 @@ func mergeSetting(dst reflect.Value, value any, path string, rules reflect.Struc
 		if !ok {
 			return fmt.Errorf("%s: expected an object with string keys", path)
 		}
-		if dst.IsNil() {
-			dst.Set(reflect.MakeMap(dst.Type()))
+		merged := reflect.MakeMapWithSize(dst.Type(), dst.Len())
+		iter := dst.MapRange()
+		for iter.Next() {
+			merged.SetMapIndex(iter.Key(), iter.Value())
 		}
+		dst.Set(merged)
 		for _, key := range slices.Sorted(maps.Keys(fields)) {
 			mapKey := reflect.ValueOf(key)
 			item := reflect.New(dst.Type().Elem()).Elem()

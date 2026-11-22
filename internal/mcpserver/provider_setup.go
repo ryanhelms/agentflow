@@ -12,6 +12,10 @@ type setupPlanIn struct {
 	Client    string `json:"client,omitempty" jsonschema:"project adapter (claude, claude-desktop, codex, grok, cursor, vscode, gemini). Omit for headless readiness"`
 }
 
+type setupProvidersIn struct {
+	Explain bool `json:"explain,omitempty" jsonschema:"include each selected provider's effective settings, their source layer and release constraints"`
+}
+
 type setupApplyIn struct {
 	Companion    string `json:"companion,omitempty" jsonschema:"select one declared MCP companion; specify install or an explicit client"`
 	Install      bool   `json:"install,omitempty" jsonschema:"install the selected pinned MCP companion only"`
@@ -25,9 +29,9 @@ func (s *Server) registerProviderSetup() {
 		func(ctx context.Context, in setupPlanIn) (any, error) {
 			return setup.PlanSetup(ctx, s.app.Repo.Dir, in.Client, in.Companion)
 		})
-	add(s, "devflow_setup_providers", "List every provider each role accepts, the default, which one this workspace selects and whether devflow checks its readiness itself or through an MCP companion. Reads local configuration only.", readOnly,
-		func(ctx context.Context, _ noIn) (any, error) {
-			return setup.ListProviders(ctx, s.app.Repo.Dir)
+	add(s, "devflow_setup_providers", "List every provider each role accepts, the default, which one this workspace selects, its contract, the provider definition files loaded, and whether devflow checks readiness itself or through an MCP companion. With explain, also each selected provider's effective settings, the layer that set each one and any release constraint. Reads local configuration only.", readOnly,
+		func(ctx context.Context, in setupProvidersIn) (any, error) {
+			return setup.ListConfiguredProviders(ctx, s.app.Repo.Dir, s.app.Cfg, s.app.HasCfg, in.Explain)
 		})
 	add(s, "devflow_setup_apply", "Install a pinned gh or MCP companion, or register the selected adapter or companion in an explicit project client. Each action requires local confirmation. Rerun devflow_setup_plan to verify. Host trust and sign-in are handled by the client.", remote,
 		func(ctx context.Context, in setupApplyIn) (any, error) {

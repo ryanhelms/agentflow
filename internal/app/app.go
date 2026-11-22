@@ -114,8 +114,12 @@ func (a *App) FlowMap(ctx context.Context) (*flowmap.Map, error) {
 }
 
 func (a *App) detectForge(ctx context.Context) (gitx.Detection, error) {
+	return a.detectForgeWith(ctx, a.Cfg.Providers.CodeHosting.Settings)
+}
+
+func (a *App) detectForgeWith(ctx context.Context, settings any) (gitx.Detection, error) {
 	opts := gitx.DetectOptions{}
-	if cfg, ok := a.Cfg.Providers.CodeHosting.Settings.(*config.CodeHostingSettings); ok {
+	if cfg, ok := settings.(*config.CodeHostingSettings); ok {
 		opts.Hosts = cfg.Hosts
 		if cfg.SourceRemote != nil {
 			opts.Source = *cfg.SourceRemote
@@ -291,6 +295,9 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 	}
 	ref, err := legacy.JiraRef("jira", plan.Key)
 	if err != nil {
+		return plan, err
+	}
+	if err := a.jiraWriteScope(ref.Scope); err != nil {
 		return plan, err
 	}
 	fm, err := a.FlowMap(ctx)

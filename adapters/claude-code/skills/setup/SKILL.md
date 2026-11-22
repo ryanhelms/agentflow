@@ -4,7 +4,8 @@ description: Check provider readiness, verify provider MCP servers, install pinn
 argument-hint: "[providers | plan | verify | apply | login] [--provider NAME] [--companion ID] [--client NAME]"
 ---
 To list the providers each role can use, run `devflow setup providers` or call
-`devflow_setup_providers`. Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
+`devflow_setup_providers`. Add `--explain` (or `explain: true`) to show which definition
+file or config set each provider setting and any release constraint. Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
 provider requirements. Use the current client or the one requested by the user.
 For a selected provider in `provider_tools`, discover its native MCP in the
 current client and try a small read for the configured site, repository or

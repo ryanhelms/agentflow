@@ -105,6 +105,90 @@ The release file is a JSON array with unique `tag` values, each with a `revision
 and optional `title`, `notes`, `url` and `assets`. Use `devflow release get TAG` to read a
 record. Setup readiness checks that both selected files can be read and decoded.
 
+## Provider definitions
+
+Provider settings can also come from layered definition files. Each layer
+sets settings for a provider and role. Later layers win:
+
+| Layer | Location | May set |
+| --- | --- | --- |
+| release | embedded in the devflow binary | settings and constraints |
+| project | `.devflow/providers/*.yml` | settings |
+| project | `.devflow/config.yml` role `settings` | settings |
+| user | `~/.devflow/providers/*.yml` (or `$DEVFLOW_HOME/providers`) | settings |
+
+`.devflow/config.yml` still selects the provider for each role. A definition
+only applies when its provider is the one selected for that role. The shipped
+release catalog is empty. Each layer accepts `.yml` and `.yaml` files, with one YAML
+document per file and one definition per provider and role in that layer.
+Legacy Jira projects and site seed Jira preferences before the release layer.
+Confluence inherits the legacy Jira site unless its own legacy site is set.
+Inline role settings take precedence over project definition files. The legacy
+login and doctor commands still consult the top-level Jira configuration.
+
+```yaml
+# .devflow/providers/issues.yml
+version: 1
+providers:
+  github-issues:
+    task_management:
+      contract: tasks/v1          # optional; defaults to the current contract
+      settings:
+        labels: [devflow]
+        search: {limit: 50}
+```
+
+Settings merge the same way as `config.yml` settings: object keys merge one at
+a time, and a list replaces the whole list. Each definition declares the role
+contract it targets. devflow accepts the current version of a contract and the
+one before it.
+
+The release layer can constrain any settings property for every later layer:
+
+```yaml
+# Embedded release definition
+version: 1
+providers:
+  jira:
+    task_management:
+      settings: {site: https://nscale.atlassian.net, projects: [PLAT]}
+      constraints:
+        site: {lock: true}                  # no later change
+        projects: {allow: [PLAT, INFRA]}    # values from this set only
+  github-issues:
+    task_management:
+      settings: {labels: [triage]}
+      constraints:
+        labels: {lock: append}              # may add, never remove
+        repository: {pattern: '^nscaledev/'}
+```
+
+Constraints apply to merged settings after each layer. Quote literal dots in
+map keys with a backslash, for example `'transitions.pr\.merged'` and
+`'hosts.forge\.example\.com'`. Use `\\` for a literal backslash.
+
+Write authorization also checks targets supplied by the repository. Jira
+requires the project to be in both the repository and effective project lists
+when specified. An explicit empty list allows zero write targets. Project keys
+are scoped to the repository's Jira site. Asana checks the default project
+and the project keys in its transition map. GitHub Issues checks the resolved
+repository, including template and qualified inputs. Confluence checks the
+repository site and validates the requested space and page. Slack checks the
+configured route, workspace, channel and optional actor before preparing
+delivery. User defaults can supply an otherwise unspecified target. The same
+checks apply when a native operation uses a CLI or REST fallback.
+
+An invalid definition or constraint violation stops provider operations.
+Core hooks and update policy still read the repository's commit rules,
+protected branches and version settings from `.devflow/config.yml`.
+`devflow setup providers --explain` (MCP: `devflow_setup_providers` with
+`explain: true`) lists the definition files loaded and every effective
+setting of the selected providers, with the layer that set it and any
+constraint. The MCP tool describes the running server’s configuration. Restart
+the server after editing a definition. Each CLI invocation reads the current
+files. Definitions cannot add new providers yet. That arrives with the
+operation engine described in the [design](design/provider-definitions.md).
+
 ## Jira, Confluence and GitHub
 
 Jira task operations use `task_management.settings.site`. The project list in
@@ -219,6 +303,12 @@ owner.
 | Asana | Task creation, completion and comments |
 | GitHub Issues | Untemplated issue creation, closing and comments. Existing-task template validation also uses the authenticated issue adapter when verifying raw issue body markers. |
 | Slack | Top-level delivery to a configured workspace and conversation after scope verification |
+
+For example, `devflow --native-client codex comment APP-42 "Ready for review"`
+uses the same task comment operation as `devflow_comment`. To post Jira end-of-day
+notes with the same client, run `devflow --native-client codex eod post "APP-42=Reviewed the change"`.
+When Devflow prompts, review the target and text before approving. The CLI also
+accepts `--yes` for that approval.
 
 To add a Jira web link, use `devflow_jira_remote_link` or
 `devflow --native-client codex task link APP-42 --url https://docs.example.org/runbook --title Runbook`.

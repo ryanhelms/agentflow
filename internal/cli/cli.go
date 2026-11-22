@@ -48,7 +48,8 @@ Setup
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
-  setup providers [--json]       list every provider each role accepts and which one is selected
+  setup providers [--explain] [--json]   list every provider each role accepts and which one is selected;
+                                 --explain shows effective settings and the layer that set each
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
@@ -69,15 +70,23 @@ Work
   task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
   start KEY [--worktree]         branch or worktree for KEY; apply supported start effects
   context [KEY]                  ticket bundle for the current branch
+  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state
+  ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]
+                                 tick or untick a criterion; --post comments progress
+  scope [--json]                 changes and new TODOs that look outside the ticket
+  comment [KEY] TEXT [--yes]     comment on the task
+  collisions [KEY] [--json]      other PRs on this task or touching your files
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
   preview [MSG]                  Jira effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
   secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
                                  preview or create tasks from configured security events
   pr [--check] [--run] [--title T] [--draft] [--yes]   readiness check, then open the PR
-  review                         unresolved review threads on this branch's PR
+  review [threads] [--json]      unresolved review threads on this branch's PR
+  review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
+  eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
@@ -243,24 +252,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "pr":
 		return runPR(ctx, args)
 	case "review":
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		out, err := a.ReviewThreads(ctx)
-		if err != nil {
-			return err
-		}
-		threads, _ := out["threads"].([]gh.Thread)
-		if out["pr"] == nil {
-			fmt.Println("no open PR for this branch")
-			return nil
-		}
-		fmt.Printf("%v · %d unresolved\n", out["pr"], len(threads))
-		for _, t := range threads {
-			fmt.Printf("\n%s:%d  @%s\n%s\n", t.Path, t.Line, t.Author, indent(t.Body))
-		}
-		return nil
+		return runReview(ctx, args)
 	case "status":
 		a, err := open(ctx)
 		if err != nil {
@@ -291,6 +283,16 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 		printStandup(out)
 		return nil
+	case "ac":
+		return runAC(ctx, args)
+	case "scope":
+		return runScope(ctx, args)
+	case "comment":
+		return runComment(ctx, args)
+	case "eod":
+		return runEOD(ctx, args)
+	case "collisions":
+		return runCollisions(ctx, args)
 	case "docs":
 		return runDocs(ctx, args)
 	case "adr":
@@ -499,7 +501,7 @@ func runLogin(ctx context.Context, args []string) error {
 	cfgSite := config.DefaultSite
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			cfgSite = cfg.Jira.Site
 		}
 		if *email == "" {
@@ -860,7 +862,7 @@ func newUpdater(ctx context.Context) (*update.Updater, error) {
 	opts := update.Options{Channel: "stable"}
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			opts.Channel, opts.Track, opts.Pin, opts.CheckEvery = cfg.Update.Channel, cfg.Update.Track, cfg.Update.Pin, cfg.CheckEvery()
 		}
 	}

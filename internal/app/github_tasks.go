@@ -24,6 +24,9 @@ func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (
 	if err != nil {
 		return plan, err
 	}
+	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
+		return plan, err
+	}
 	if plan.Key != taskKey(ref) {
 		return plan, errors.New("issue transition plan requires a qualified target")
 	}
@@ -75,6 +78,9 @@ func issueWriteOptions(action string, payload map[string]any, token string) (pro
 func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, error) {
 	ref, err := a.taskRef(ctx, key)
 	if err != nil {
+		return nil, err
+	}
+	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(text) == "" {
@@ -141,6 +147,9 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 	}
 	draft, err := a.resolveIssueDraft(ctx, project, title, description, ref)
 	if err != nil {
+		return nil, err
+	}
+	if err := a.taskWriteScope(ctx, draft.Scope); err != nil {
 		return nil, err
 	}
 	var link provider.Ref
