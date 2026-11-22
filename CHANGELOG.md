@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.28.1](https://github.com/nscaledev/devflow/compare/v0.28.0...v0.28.1) - 2026-11-22
+
+### Fixes
+
+- share saved github cli login with desktop setup (#71) ([65659ea](https://github.com/nscaledev/devflow/commit/65659ea002c4b204db5594a8ff23f935e7873c34))
+
 ## [0.28.0](https://github.com/nscaledev/devflow/compare/v0.27.0...v0.28.0) - 2026-11-22
 
 ### Features
