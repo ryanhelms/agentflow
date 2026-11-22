@@ -1,0 +1,32 @@
+{
+  "action": "opened",
+  "number": 57,
+  "repository": {
+    "id": 100,
+    "full_name": "acme/widget",
+    "default_branch": "main",
+    "html_url": "https://github.com/acme/widget"
+  },
+  "pull_request": {
+    "number": 57,
+    "title": "fix(PLAT-12): match PLAT-12 and OPS-3 (#57)",
+    "body": "See #31 and acme/other#99 for context.\n\nTask-Ref: issues/acme%2Fwidget/42",
+    "html_url": "https://github.com/acme/widget/pull/57",
+    "draft": false,
+    "merged": false,
+    "base": {
+      "ref": "main",
+      "repo": {
+        "id": 100,
+        "full_name": "acme/widget"
+      }
+    },
+    "head": {
+      "ref": "work/OPS-3",
+      "repo": {
+        "id": 100,
+        "full_name": "acme/widget"
+      }
+    }
+  }
+}

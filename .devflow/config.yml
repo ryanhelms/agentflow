@@ -1,12 +1,22 @@
-# Commit rules for the devflow repository itself. This repo follows the same commit
-# convention devflow enforces in the repos that use it; it is not a devflow-managed repo
-# otherwise (no flow map transitions, no semver-release; see AGENTS.md).
+# This repository uses devflow for its own provider pilot.
 devflow: 1
+
+task_management:
+  provider: github-issues
+  settings:
+    repository: nscaledev/devflow
+    transitions:
+      pr.merged: closed
+      "#done": none
+
+knowledge_base:
+  provider: repository
+  settings:
+    directory: docs/adr
+    publication: pull-request
 
 commit:
   types: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]
   subject_max: 72
   ai_trailer: false
-  # Jira keys are optional here until devflow work has its own Jira project. Remove this
-  # line to require type(KEY-123): ... like every devflow-managed repo.
   require_key: false
