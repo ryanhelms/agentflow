@@ -127,8 +127,8 @@ func TestMixedDevOpsProvidersSharePRHead(t *testing.T) {
 			fmt.Fprint(w, `{"data":{}}`)
 		case "GET /repos/example/releases/releases/tags/v1.2.3":
 			fmt.Fprint(w, `{"tag_name":"v1.2.3"}`)
-		case "GET /repos/example/releases/commits/tags/v1.2.3":
-			fmt.Fprintf(w, `{"sha":%q}`, head)
+		case "GET /repos/example/releases/git/ref/tags/v1.2.3":
+			fmt.Fprintf(w, `{"object":{"type":"commit","sha":%q}}`, head)
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL)
 			http.NotFound(w, r)
@@ -171,12 +171,12 @@ devops:
 		switch r.Method + " " + r.URL.Path {
 		case "GET /repos/example/releases/commits/" + sha, "GET /repos/example/releases/commits/" + wrongSHA:
 			fmt.Fprintf(w, `{"sha":%q}`, sha)
-		case "GET /repos/example/releases/commits/tags/v1.2.3":
+		case "GET /repos/example/releases/git/ref/tags/v1.2.3":
 			if posts == 0 {
 				http.NotFound(w, r)
 				return
 			}
-			fmt.Fprintf(w, `{"sha":%q}`, sha)
+			fmt.Fprintf(w, `{"object":{"type":"commit","sha":%q}}`, sha)
 		case "GET /repos/example/releases/releases/tags/v1.2.3":
 			if posts == 0 {
 				http.NotFound(w, r)

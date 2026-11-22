@@ -249,11 +249,13 @@ func testPublishRelease(t *testing.T, tc publishCase) {
 		switch r.Method + " " + r.URL.EscapedPath() {
 		case "GET " + base + "/commits/heads%2Frelease":
 			respond(t, w, map[string]string{"sha": commit})
-		case "GET " + base + "/commits/tags%2Fcli%2Fv1.2.3":
+		case "GET " + base + "/git/ref/tags/cli%2Fv1.2.3":
 			if sha == "" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
+			respond(t, w, map[string]any{"object": map[string]string{"sha": otherCommit, "type": "tag"}})
+		case "GET " + base + "/commits/refs%2Ftags%2Fcli%2Fv1.2.3":
 			respond(t, w, map[string]string{"sha": sha})
 		case "GET " + base + "/releases/tags/cli%2Fv1.2.3":
 			if posts == 0 || tc.createdSHA == "" {
@@ -336,8 +338,8 @@ func TestPublishReleaseWithNoTarget(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusCreated)
 			respond(t, w, releaseResponse("", ""))
-		case "GET " + base + "/commits/tags%2Fcli%2Fv1.2.3":
-			respond(t, w, map[string]string{"sha": commit})
+		case "GET " + base + "/git/ref/tags/cli%2Fv1.2.3":
+			respond(t, w, map[string]any{"object": map[string]string{"sha": commit, "type": "commit"}})
 		default:
 			unexpected(t, w, r)
 		}

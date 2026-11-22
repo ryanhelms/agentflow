@@ -168,7 +168,29 @@ func (a *Adapter) releaseByTag(ctx context.Context, base, tag string) (githubRel
 }
 
 func (a *Adapter) tagCommit(ctx context.Context, base, tag string) (string, error) {
-	return a.commitSHA(ctx, base, "tags/"+tag)
+	// The commit API returns 422 for a missing ref. Read the tag ref first to
+	// distinguish an absent tag from a failed lookup before creating a release.
+	path := base + "/git/ref/tags/" + url.PathEscape(tag)
+	var ref struct {
+		Object struct {
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"object"`
+	}
+	if err := a.client.Do(ctx, http.MethodGet, path, nil, &ref); err != nil {
+		return "", fmt.Errorf("read github tag %q: %w", tag, githubReadError(err, path))
+	}
+	if sha, err := hex.DecodeString(ref.Object.SHA); err != nil || len(sha) != 20 {
+		return "", fmt.Errorf("github tag %q has an invalid object sha", tag)
+	}
+	switch ref.Object.Type {
+	case "commit":
+		return ref.Object.SHA, nil
+	case "tag":
+		return a.commitSHA(ctx, base, "refs/tags/"+tag)
+	default:
+		return "", fmt.Errorf("github tag %q points to a %s object, expected a commit", tag, ref.Object.Type)
+	}
 }
 
 func (a *Adapter) commitSHA(ctx context.Context, base, revision string) (string, error) {
