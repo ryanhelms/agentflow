@@ -45,8 +45,8 @@ type TicketContext struct {
 // Context builds the ticket bundle for key (or the current branch's key).
 // It degrades gracefully: missing credentials become warnings, not errors.
 func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
-	if a.usesIssues() {
-		return a.issueContext(ctx, key)
+	if a.UsesTaskRefs() {
+		return a.providerContext(ctx, key)
 	}
 	tc := &TicketContext{Branch: a.Repo.Branch(ctx)}
 	if key == "" {
@@ -134,9 +134,12 @@ func (a *App) renderContext(tc *TicketContext) string {
 	if len(tc.FlowNext) > 0 {
 		events := []string{flowmap.PROpened, flowmap.PRMerged, flowmap.DeployProduction}
 		heading := "Flow map (" + projectOf(tc.Key) + ")"
-		if a.usesIssues() {
+		if a.UsesTaskRefs() {
 			events = slices.Sorted(maps.Keys(tc.FlowNext))
-			heading = "Issue transitions"
+			heading = "Task transitions"
+			if a.usesIssues() {
+				heading = "Issue transitions"
+			}
 		}
 		var parts []string
 		for _, ev := range events {
@@ -148,7 +151,7 @@ func (a *App) renderContext(tc *TicketContext) string {
 	}
 	// GitHub Issues context currently has task data only. Report collaboration
 	// details when they were queried.
-	if !a.usesIssues() || tc.OpenPR != "" || len(tc.Others) > 0 {
+	if !a.UsesTaskRefs() || tc.OpenPR != "" || len(tc.Others) > 0 {
 		pr := "none"
 		if tc.OpenPR != "" {
 			pr = tc.OpenPR
@@ -182,8 +185,8 @@ type WorkItem struct {
 
 // MyWork lists the developer's open tickets, active sprint first.
 func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
-	if a.usesIssues() {
-		return a.issueWork(ctx)
+	if a.UsesTaskRefs() {
+		return a.providerWork(ctx)
 	}
 	jc, err := a.Jira()
 	if err != nil {
@@ -241,8 +244,8 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if key == "" {
 		return nil, errors.New("key is required; call devflow_my_work to choose one")
 	}
-	if a.usesIssues() {
-		return a.startIssue(ctx, key, worktree, token)
+	if a.UsesTaskRefs() {
+		return a.startProviderTask(ctx, key, worktree, token)
 	}
 	jc, err := a.Jira()
 	if err != nil {
@@ -301,14 +304,14 @@ func (a *App) Checklist(ctx context.Context, key string) (*contextx.Checklist, e
 		return nil, err
 	}
 	store := a.Checklists(ctx)
-	if a.usesIssues() {
-		ref, err := a.issueRef(ctx, key)
+	if a.UsesTaskRefs() {
+		ref, err := a.taskRef(ctx, key)
 		if err != nil {
 			return nil, err
 		}
-		task, getErr := a.getIssue(ctx, ref)
+		task, getErr := a.getTask(ctx, ref)
 		if getErr == nil {
-			return a.syncIssueChecklist(ctx, ref, task)
+			return a.syncTaskChecklist(ctx, ref, task)
 		}
 		cl, err := store.Load(ref.StorageKey())
 		if err != nil {
@@ -344,8 +347,8 @@ func (a *App) UpdateChecklist(ctx context.Context, key, item string, done bool, 
 	}
 	cl.Items[i].Done, cl.Items[i].Evidence = done, evidence
 	stored := *cl
-	if a.usesIssues() {
-		ref, err := a.issueRef(ctx, cl.Key)
+	if a.UsesTaskRefs() {
+		ref, err := a.taskRef(ctx, cl.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -404,6 +407,9 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 	if a.usesIssues() {
 		return a.createIssue(ctx, project, issueType, summary, description, linkTo, ref, token)
 	}
+	if a.usesFileTasks() {
+		return a.createFileTask(ctx, project, issueType, summary, description, linkTo, ref, token)
+	}
 	if ref != (tasktemplate.Ref{}) {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "explicit ticket template")
 	}
@@ -460,9 +466,9 @@ func (a *App) Keys(ctx context.Context, rng string) ([]string, error) {
 	var keys []string
 	for _, m := range msgs {
 		var found []string
-		if a.usesIssues() {
+		if a.UsesTaskRefs() {
 			_, body, _ := strings.Cut(m, "\n")
-			found, err = issueKeys(body)
+			found, err = a.taskKeys(body)
 			if err != nil {
 				return nil, err
 			}

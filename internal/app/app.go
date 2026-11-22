@@ -139,9 +139,9 @@ func (a *App) detectForge(ctx context.Context) (gitx.Detection, error) {
 
 // CurrentKey returns the resolved task key for the current branch, or "".
 func (a *App) CurrentKey(ctx context.Context) string {
-	if a.usesIssues() {
-		if ref, err := a.branchIssue(ctx); err == nil && ref.ID != "" {
-			return issueKey(ref)
+	if a.UsesTaskRefs() {
+		if ref, err := a.branchTask(ctx); err == nil && ref.ID != "" {
+			return taskKey(ref)
 		}
 		return ""
 	}
@@ -149,12 +149,12 @@ func (a *App) CurrentKey(ctx context.Context) string {
 }
 
 func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
-	if a.usesIssues() {
-		ref, err := a.issueRef(ctx, key)
+	if a.UsesTaskRefs() {
+		ref, err := a.taskRef(ctx, key)
 		if err != nil {
 			return "", err
 		}
-		return issueKey(ref), nil
+		return taskKey(ref), nil
 	}
 	if key != "" {
 		return key, nil
@@ -206,19 +206,23 @@ func (a *App) audit(class policy.Class, action string, payload any, err error) {
 // It only moves forward: done-category issues and no-op mappings are skipped.
 type TransitionResult struct {
 	operationID string
-	Template    *IssueTemplateSnapshot `json:"template,omitempty"`
-	Key         string                 `json:"key"`
-	Event       string                 `json:"event"`
-	From        string                 `json:"from"`
-	To          string                 `json:"to,omitempty"`
-	Applied     bool                   `json:"applied"`
-	Note        string                 `json:"note,omitempty"`
+	Template    *TaskTemplateSnapshot `json:"template,omitempty"`
+	revision    string                // observed file revision used to condition the approved write
+	Key         string                `json:"key"`
+	Event       string                `json:"event"`
+	From        string                `json:"from"`
+	To          string                `json:"to,omitempty"`
+	Applied     bool                  `json:"applied"`
+	Note        string                `json:"note,omitempty"`
+	Status      provider.WriteStatus  `json:"status,omitempty"`
+	URL         string                `json:"url,omitempty"`
+	Branch      string                `json:"branch,omitempty"`
 }
 
 // PlanTransition works out what event would do to key without changing anything.
 func (a *App) PlanTransition(ctx context.Context, key, event string) (TransitionResult, error) {
-	if a.usesIssues() {
-		return a.planIssueTransition(ctx, key, event, nil)
+	if a.UsesTaskRefs() {
+		return a.planTaskTransition(ctx, key, event, nil)
 	}
 	res := TransitionResult{Key: key, Event: event}
 	fm, err := a.FlowMap(ctx)
@@ -260,6 +264,9 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 	if plan.To == "" {
 		return plan, nil
 	}
+	if a.usesFileTasks() {
+		return plan, errors.New("file task transitions require a gated publication")
+	}
 	if a.usesIssues() {
 		return a.applyIssueTransition(ctx, plan)
 	}
@@ -300,10 +307,13 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 	if err != nil || dryRun || plan.To == "" {
 		return plan, err
 	}
+	if a.usesFileTasks() {
+		return a.transitionFileTask(ctx, plan, token)
+	}
 	var summary any = plan
 	commands := []string{fmt.Sprintf("devflow transition %s %s", key, event)}
 	if a.usesIssues() {
-		ref, err := a.issueRef(ctx, plan.Key)
+		ref, err := a.taskRef(ctx, plan.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -322,6 +332,9 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 
 // Comment posts a comment on a ticket.
 func (a *App) Comment(ctx context.Context, key, text, token string) (any, error) {
+	if a.usesFileTasks() {
+		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "comments")
+	}
 	if a.usesIssues() {
 		return a.commentIssue(ctx, key, text, token)
 	}

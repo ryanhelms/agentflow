@@ -1,9 +1,14 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 
+	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/githubissues"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -59,4 +64,59 @@ func readTaskTemplateCatalog(repo, path string) (tasktemplate.Catalog, error) {
 	}
 	defer f.Close()
 	return tasktemplate.DecodeCatalog(f)
+}
+
+// TaskTemplateSnapshot binds approval to a pinned template and the task fields it validates.
+type TaskTemplateSnapshot struct {
+	tasktemplate.Ref
+	ContentHash string `json:"content_hash"`
+}
+
+// IssueTemplateSnapshot is the original name used by GitHub Issues callers.
+type IssueTemplateSnapshot = TaskTemplateSnapshot
+
+func (a *App) validateTaskTemplate(task provider.Task) (*TaskTemplateSnapshot, error) {
+	if task.Template == nil {
+		return nil, nil
+	}
+	if err := task.Template.Validate(); err != nil {
+		return nil, err
+	}
+	t, err := a.ResolveTaskTemplate(*task.Template)
+	if err != nil {
+		return nil, err
+	}
+	d := provider.TaskDraft{
+		Scope: task.Ref.Scope, Title: task.Title, Description: task.Description, Labels: slices.Clone(task.Labels),
+	}
+	fields := githubissues.SupportedFields()
+	if a.usesFileTasks() {
+		fields = fileTaskFields
+		d.Type, d.Priority, d.Links = task.Type, task.Priority, task.Links
+	}
+	if err := t.CheckSupport(fields); err != nil {
+		return nil, err
+	}
+	if err := t.Validate(d); err != nil {
+		return nil, fmt.Errorf("task %s, template %q revision %q: %w", taskKey(task.Ref), t.Name, t.Revision, err)
+	}
+	slices.Sort(d.Labels)
+	content, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	return &TaskTemplateSnapshot{Ref: t.Ref, ContentHash: fmt.Sprintf("%x", sha256.Sum256(content))}, nil
+}
+
+func (a *App) checkTaskTemplate(expected *TaskTemplateSnapshot) func(provider.Task) error {
+	return func(task provider.Task) error {
+		current, err := a.validateTaskTemplate(task)
+		if err != nil {
+			return err
+		}
+		if expected == nil && current == nil || expected != nil && current != nil && *expected == *current {
+			return nil
+		}
+		return fmt.Errorf("task template or content changed since preview: %w", provider.ErrConflict)
+	}
 }

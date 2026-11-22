@@ -135,7 +135,7 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 		}
 		summary["origin"], summary["directory"], summary["publication"] = cfg.Origin, cfg.Directory, cfg.Publication
 		if cfg.Publication == "pull-request" {
-			cfg.Publisher, err = a.docsPublisher(ctx, cfg.Origin, in.Ref)
+			cfg.Publisher, err = a.repositoryPublisher(ctx, cfg.Origin, "document", in.Ref)
 			if err != nil {
 				return nil, err
 			}

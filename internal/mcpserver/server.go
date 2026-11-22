@@ -233,9 +233,9 @@ func (s *Server) register() {
 			tc, err := a.Context(ctx, in.Key)
 			return contextOut{tc}, err
 		})
-	add(s, "devflow_my_work", "The developer's open Jira tickets, active sprint first.", readOnly,
+	add(s, "devflow_my_work", "List work from the configured task provider.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.MyWork(ctx) })
-	add(s, "devflow_start", "Start a ticket: create a KEY-slug branch (or worktree), assign it to the developer and move it to the start status.", remote,
+	add(s, "devflow_start", "Start work on a task in a branch or worktree. File-backed tasks use a local branch binding.", remote,
 		func(ctx context.Context, in startIn) (any, error) {
 			return a.Start(ctx, in.Key, in.Worktree, in.ConfirmToken)
 		})
@@ -247,11 +247,11 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_scope_check", "Find changes and new TODOs that look outside the current ticket.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.ScopeCheck(ctx) })
-	add(s, "devflow_ticket_create", "Create a Jira ticket linked to the current one (always needs the user's confirmation).", remote,
+	add(s, "devflow_ticket_create", "Create a linked task with confirmation. Repository publication can return a pending review PR.", remote,
 		func(ctx context.Context, in ticketIn) (any, error) {
 			return a.CreateTicket(ctx, in.Project, in.Type, in.Summary, in.Description, in.LinkTo, in.ConfirmToken)
 		})
-	add(s, "devflow_transition", "Move a ticket by canonical event or verb through the flow map. Use dry_run to preview.", remote,
+	add(s, "devflow_transition", "Move a task by configured event or verb. Use dry_run to preview. A pending_review result requires a PR merge.", remote,
 		func(ctx context.Context, in transitionIn) (any, error) {
 			return a.Transition(ctx, in.Key, in.Event, in.DryRun, in.ConfirmToken)
 		})

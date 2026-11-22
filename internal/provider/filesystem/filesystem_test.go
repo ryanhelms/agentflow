@@ -233,15 +233,16 @@ func TestMalformedInputDoesNotOverwrite(t *testing.T) {
 	ref := provider.Ref{Instance: instance, Scope: "scope", ID: "42"}
 	good := "---\r\nversion: 1\r\nkind: document\r\ninstance: local\r\nscope: scope\r\nid: '42'\r\ntitle: Test\r\n---\r\nbody"
 	for name, raw := range map[string]string{
-		"no front matter":     "# user file\n",
-		"unterminated":        "---\nversion: 1\n",
-		"invalid YAML":        strings.Replace(good, "version: 1", "version: [", 1),
-		"duplicate key":       strings.Replace(good, "title: Test", "title: first\ntitle: last", 1),
-		"unknown field":       strings.Replace(good, "title: Test", "owner: me\ntitle: Test", 1),
-		"missing id":          strings.Replace(good, "id: '42'", "id: ''", 1),
-		"unsupported version": strings.Replace(good, "version: 1", "version: 2", 1),
-		"invalid body":        good + "\xff",
-		"broken receipt":      strings.Replace(good, "title: Test", "title: Test\noperations: {op: wrong}", 1),
+		"no front matter":      "# user file\n",
+		"unterminated":         "---\nversion: 1\n",
+		"invalid YAML":         strings.Replace(good, "version: 1", "version: [", 1),
+		"duplicate key":        strings.Replace(good, "title: Test", "title: first\ntitle: last", 1),
+		"unknown field":        strings.Replace(good, "title: Test", "owner: me\ntitle: Test", 1),
+		"missing id":           strings.Replace(good, "id: '42'", "id: ''", 1),
+		"unsupported version":  strings.Replace(good, "version: 1", "version: 2", 1),
+		"invalid body":         good + "\xff",
+		"task pin on document": strings.Replace(good, "title: Test", "title: Test\ntemplate: {name: work, revision: '01'}", 1),
+		"broken receipt":       strings.Replace(good, "title: Test", "title: Test\noperations: {op: wrong}", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()

@@ -96,6 +96,26 @@ type RepositorySettings struct {
 	Publication string  `yaml:"publication" allowed:"pull-request,push"`
 }
 
+// FileTaskSettings apply only to file-backed task management.
+type FileTaskSettings struct {
+	Scope       string            `yaml:"scope"`
+	Transitions map[string]string `yaml:"transitions" allowed:"open,closed,none"`
+}
+
+type FileSystemTaskSettings struct {
+	FileSystemSettings `yaml:",inline"`
+	FileTaskSettings   `yaml:",inline"`
+}
+
+type RepositoryTaskSettings struct {
+	RepositorySettings `yaml:",inline"`
+	FileTaskSettings   `yaml:",inline"`
+}
+
+func defaultTransitions() map[string]string {
+	return map[string]string{"pr.merged": "closed", "#done": "closed"}
+}
+
 type SlackSettings struct {
 	Destination   *string `yaml:"destination"`
 	CredentialRef *string `yaml:"credential_ref"`
@@ -113,15 +133,6 @@ func githubSettings() any { return &GitHubSettings{} }
 
 func codeHostingSettings() any { return &CodeHostingSettings{Hosts: map[string]string{}} }
 
-func fileProviders(directory string) map[string]settingsFactory {
-	return map[string]settingsFactory{
-		"filesystem": func() any { return &FileSystemSettings{Root: directory} },
-		"repository": func() any {
-			return &RepositorySettings{Directory: directory, Publication: "pull-request"}
-		},
-	}
-}
-
 func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error) {
 	// Decode only the reserved sections. Unrelated top-level extensions keep
 	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
@@ -136,7 +147,23 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		}
 	}
 
-	tasks := fileProviders(".devflow/tasks")
+	const taskDir = ".devflow/tasks"
+	fileDefaults := func() FileTaskSettings {
+		return FileTaskSettings{Scope: "default", Transitions: defaultTransitions()}
+	}
+	tasks := map[string]settingsFactory{
+		"filesystem": func() any {
+			return &FileSystemTaskSettings{
+				FileSystemSettings: FileSystemSettings{Root: taskDir}, FileTaskSettings: fileDefaults(),
+			}
+		},
+		"repository": func() any {
+			return &RepositoryTaskSettings{
+				RepositorySettings: RepositorySettings{Directory: taskDir, Publication: "pull-request"},
+				FileTaskSettings:   fileDefaults(),
+			}
+		},
+	}
 	tasks["jira"] = func() any {
 		return &JiraSettings{Site: repo.Jira.Site, Projects: append([]string{}, repo.Jira.Projects...)}
 	}
@@ -144,10 +171,13 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		return &GitHubIssuesSettings{
 			Labels:      []string{},
 			Search:      IssueSearch{OpenOnly: true, Limit: 30},
-			Transitions: map[string]string{"pr.merged": "closed", "#done": "closed"},
+			Transitions: defaultTransitions(),
 		}
 	}
-	knowledge := fileProviders("docs")
+	knowledge := map[string]settingsFactory{
+		"filesystem": func() any { return &FileSystemSettings{Root: "docs"} },
+		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
+	}
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}

@@ -77,11 +77,44 @@ func validatedIssueRef(ref provider.Ref) (provider.Ref, error) {
 	return ref, nil
 }
 
-func issueKey(ref provider.Ref) string { return ref.Scope + "#" + ref.ID }
+func taskKey(ref provider.Ref) string {
+	if ref.Instance == issuesInstance {
+		return ref.Scope + "#" + ref.ID
+	}
+	return ref.String()
+}
+
+func (a *App) validateTaskRef(ref provider.Ref) (provider.Ref, error) {
+	if a.usesIssues() {
+		return validatedIssueRef(ref)
+	}
+	if ref.Instance != a.Cfg.Providers.TaskManagement.Provider {
+		return provider.Ref{}, fmt.Errorf("expected %s task reference, got %q", a.Cfg.Providers.TaskManagement.Provider, ref.Instance)
+	}
+	return ref, ref.Validate()
+}
+
+func (a *App) taskRef(ctx context.Context, input string) (provider.Ref, error) {
+	if a.usesIssues() {
+		return a.issueRef(ctx, input)
+	}
+	if input == "" {
+		ref, err := a.branchTask(ctx)
+		if err == nil && ref.ID == "" {
+			err = errors.New("pass a qualified task reference or add a Task-Ref trailer to a branch commit")
+		}
+		return ref, err
+	}
+	ref, err := provider.ParseRef(input)
+	if err != nil {
+		return ref, err
+	}
+	return a.validateTaskRef(ref)
+}
 
 func (a *App) issueRef(ctx context.Context, input string) (provider.Ref, error) {
 	if input == "" {
-		ref, err := a.branchIssue(ctx)
+		ref, err := a.branchTask(ctx)
 		if err == nil && ref.ID == "" {
 			err = errors.New("no issue bound to this branch; pass owner/repo#number or run devflow start")
 		}
@@ -107,7 +140,7 @@ func (a *App) issueRef(ctx context.Context, input string) (provider.Ref, error) 
 
 // Branch configuration is local, shared by linked worktrees, and follows a
 // git branch rename. Read only repository-local configuration for a binding.
-func (a *App) boundIssue(ctx context.Context, branch string) (provider.Ref, error) {
+func (a *App) boundTask(ctx context.Context, branch string) (provider.Ref, error) {
 	raw, err := a.Repo.Git(ctx, "config", "--local", "--get-all", "branch."+branch+".devflowTaskRef")
 	if err != nil {
 		var exit *exec.ExitError
@@ -120,33 +153,33 @@ func (a *App) boundIssue(ctx context.Context, branch string) (provider.Ref, erro
 	if err != nil {
 		return provider.Ref{}, fmt.Errorf("invalid binding for branch %q: %w", branch, err)
 	}
-	return validatedIssueRef(ref)
+	return a.validateTaskRef(ref)
 }
 
-func issueKeys(body string) ([]string, error) {
+func (a *App) taskKeys(body string) ([]string, error) {
 	refs, err := provider.TaskRefs(body)
 	if err != nil {
 		return nil, err
 	}
 	var keys []string
 	for _, ref := range refs {
-		ref, err = validatedIssueRef(ref)
+		ref, err = a.validateTaskRef(ref)
 		if err != nil {
 			return nil, err
 		}
-		if key := issueKey(ref); !slices.Contains(keys, key) {
+		if key := taskKey(ref); !slices.Contains(keys, key) {
 			keys = append(keys, key)
 		}
 	}
 	return keys, nil
 }
 
-func (a *App) branchIssue(ctx context.Context) (provider.Ref, error) {
+func (a *App) branchTask(ctx context.Context) (provider.Ref, error) {
 	branch := a.Repo.Branch(ctx)
 	if branch == "" || branch == a.Repo.DefaultBranch(ctx) || policy.IsProtected(branch, a.Cfg.Policy.ProtectedBranches) {
 		return provider.Ref{}, nil
 	}
-	ref, err := a.boundIssue(ctx, branch)
+	ref, err := a.boundTask(ctx, branch)
 	if err != nil || ref.ID != "" {
 		return ref, err
 	}
@@ -159,5 +192,5 @@ func (a *App) branchIssue(ctx context.Context) (provider.Ref, error) {
 	if len(keys) > 1 {
 		return provider.Ref{}, errors.New("branch commits reference multiple issues; pass an explicit task")
 	}
-	return a.issueRef(ctx, keys[0])
+	return a.taskRef(ctx, keys[0])
 }

@@ -27,7 +27,7 @@ func task(r record) provider.Task {
 	return provider.Task{
 		Ref: r.Ref, Key: r.Ref.ID, Title: r.Title, Description: r.body, Type: r.Type,
 		State: *r.State, Priority: r.Priority, Assignee: r.Assignee,
-		Links: r.Links, Revision: r.revision,
+		Links: r.Links, Labels: r.Labels, Template: r.Template, Revision: r.revision,
 	}
 }
 
@@ -76,7 +76,7 @@ func (s *Tasks) Create(ctx context.Context, draft provider.TaskDraft, opts provi
 	}
 	r := record{header: header{
 		Version: 1, Kind: taskKind, Ref: provider.Ref{Instance: s.instance, Scope: draft.Scope, ID: id},
-		Title: draft.Title, Type: draft.Type, Priority: draft.Priority, Labels: draft.Labels, Links: draft.Links,
+		Template: draft.Template, Title: draft.Title, Type: draft.Type, Priority: draft.Priority, Labels: draft.Labels, Links: draft.Links,
 		State: &provider.TaskState{ID: "open", Name: "Open"},
 	}, body: draft.Description}
 	return s.write(ctx, create, r, opts)

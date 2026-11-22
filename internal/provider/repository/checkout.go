@@ -79,6 +79,23 @@ func (c checkout) fetch(ctx context.Context, branch string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
+// Git can rewrite even literal URLs through insteadOf and pushInsteadOf.
+// Inspect Git's effective push destination in this private checkout before
+// asking the caller to approve the configured origin.
+func (c checkout) checkPushOrigin(ctx context.Context) error {
+	if _, err := c.git(ctx, nil, "config", "--local", "remote.devflow-approval.url", c.origin); err != nil {
+		return err
+	}
+	pushURL, err := c.git(ctx, nil, "remote", "get-url", "--push", "--all", "devflow-approval")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSuffix(pushURL, "\n") != c.origin {
+		return errors.New("git rewrites the repository push destination; configure the resolved repository URL for approval")
+	}
+	return nil
+}
+
 func (c checkout) push(ctx context.Context, commit, branch string) error {
 	_, err := c.git(ctx, nil, "push", "--no-follow-tags", "--recurse-submodules=no", "--", c.origin, commit+":refs/heads/"+branch)
 	return err

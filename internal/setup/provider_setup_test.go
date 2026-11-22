@@ -214,3 +214,16 @@ esac
 	}
 	planContains(t, plan, "can read the wiki default branch")
 }
+
+func TestFileTaskReadinessUsesSelectedDirectory(t *testing.T) {
+	dir := t.TempDir()
+	cfg := strings.Replace(headlessConfig, "task_management: {provider: github-issues, settings: {repository: sample/project}}", "task_management: {provider: filesystem, settings: {root: tasks, scope: engineering}}", 1)
+	cfg = strings.Replace(cfg, "knowledge_base: {provider: filesystem, settings: {root: records}}", "knowledge_base: {provider: none}", 1)
+	setupFile(t, dir, ".devflow/config.yml", cfg, 0o644)
+	setupFile(t, dir, "tasks/one.md", "# fixture", 0o644)
+	plan := planFixture(t, dir, "")
+	if !plan.Ready {
+		t.Fatalf("configured task directory was not ready: %+v", plan)
+	}
+	planContains(t, plan, "can list directory")
+}
