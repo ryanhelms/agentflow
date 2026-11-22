@@ -196,7 +196,12 @@ func runProviderList(ctx context.Context, args []string) error {
 			fmt.Println(line)
 		}
 	}
-	fmt.Println("\n* selected. Companion providers need a declared MCP companion before devflow setup plan reports them ready.")
+	fmt.Println(`
+* selected
+built-in           devflow checks the provider directly
+client             verify with the client MCP or a declared companion (Jira and Confluence also support signed-in Teamwork Graph CLI)
+client-or-headless use client verification, or run headless with ASANA_ACCESS_TOKEN for a direct Asana check
+companion          setup checks a declared MCP companion`)
 	return nil
 }
 
