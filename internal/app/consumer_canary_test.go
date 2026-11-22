@@ -44,12 +44,12 @@ func TestProviderConsumerCanary(t *testing.T) {
 			}
 		case req.Method == http.MethodGet && req.URL.Path == "/repos/example/consumer/commits/"+revision:
 			fmt.Fprintf(w, `{"sha":%q}`, revision)
-		case req.Method == http.MethodGet && req.URL.Path == "/repos/example/consumer/commits/tags/v0.2.0":
+		case req.Method == http.MethodGet && req.URL.Path == "/repos/example/consumer/git/ref/tags/v0.2.0":
 			if acceptedRelease.Load() == 0 {
 				http.NotFound(w, req)
 				return
 			}
-			fmt.Fprintf(w, `{"sha":%q}`, revision)
+			fmt.Fprintf(w, `{"object":{"type":"commit","sha":%q}}`, revision)
 		case req.Method == http.MethodGet && req.URL.Path == "/repos/example/consumer/releases/tags/v0.2.0":
 			if acceptedRelease.Load() == 0 {
 				http.NotFound(w, req)

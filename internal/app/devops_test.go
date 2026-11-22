@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -101,6 +102,55 @@ func TestShipStatusCorrelatesGitHubDeployments(t *testing.T) {
 	}
 }
 
+func TestMixedDevOpsProvidersSharePRHead(t *testing.T) {
+	a := devOpsApp(t, `devops:
+  checks: {provider: github, settings: {repository: example/checks}}
+  deployments: {provider: fixture, settings: {path: .devflow/deployments.json}}
+  releases: {provider: github, settings: {repository: example/releases}}
+`)
+	mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/example/source.git")
+	const head = "5d2aa0f9c6d247a84148d0cbaa1e544492060ade"
+	deployments := fmt.Sprintf(`[
+  {"environment":"staging","revision":"unrelated","state":"failure"},
+  {"environment":"staging","revision":%q,"state":"success"}
+]`, head)
+	if err := os.WriteFile(filepath.Join(a.Repo.Dir, ".devflow", "deployments.json"), []byte(deployments), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mockDevOpsAPI(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /repos/example/source/pulls":
+			fmt.Fprintf(w, `[{"number":42,"head":{"sha":%q}}]`, head)
+		case "GET /repos/example/checks/commits/" + head + "/check-runs":
+			fmt.Fprint(w, `{"total_count":1,"check_runs":[{"name":"lint","conclusion":"success"}]}`)
+		case "POST /graphql":
+			fmt.Fprint(w, `{"data":{}}`)
+		case "GET /repos/example/releases/releases/tags/v1.2.3":
+			fmt.Fprint(w, `{"tag_name":"v1.2.3"}`)
+		case "GET /repos/example/releases/git/ref/tags/v1.2.3":
+			fmt.Fprintf(w, `{"object":{"type":"commit","sha":%q}}`, head)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL)
+			http.NotFound(w, r)
+		}
+	})
+	out, err := a.ShipStatus(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checks, ok := out["checks"].(map[string]int); !ok || checks["success"] != 1 {
+		t.Fatalf("checks at PR head = %+v", out)
+	}
+	records, _ := out["deployments"].(map[string]provider.Deployment)
+	deployed := records["staging"]
+	if deployed.Revision != head || deployed.State != "success" {
+		t.Fatalf("fixture deployment at PR head = %+v", out)
+	}
+	if release, err := a.ReleaseGet(t.Context(), "v1.2.3"); err != nil || release.Revision != deployed.Revision {
+		t.Fatalf("release for deployed revision %s = %+v, %v", deployed.Revision, release, err)
+	}
+}
+
 func TestReleasePublicationApprovalAndRetry(t *testing.T) {
 	a := devOpsApp(t, `code_hosting: {provider: none}
 devops:
@@ -111,19 +161,22 @@ devops:
 	a.Gate.Autonomy.Remote = config.Auto
 	const sha = "abcdef0123456789abcdef0123456789abcdef01"
 	const wrongSHA = "1111111111111111111111111111111111111111"
-	const response = `{"tag_name":"v1.2.3","name":"v1.2.3","body":"notes","html_url":"https://example.test/release"}`
+	const response = `{"tag_name":"v1.2.3","name":"v1.2.3","body":"notes","html_url":"https://example.test/release","assets":[
+  {"name":"cli.tar.gz","browser_download_url":"https://example.test/cli.tar.gz","size":4156,"digest":"sha256:abcd"},
+  {"name":"checksums.txt","browser_download_url":"https://example.test/checksums.txt","size":84,"digest":null}
+]}`
 	var posts, requests int
 	mockDevOpsAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		switch r.Method + " " + r.URL.Path {
 		case "GET /repos/example/releases/commits/" + sha, "GET /repos/example/releases/commits/" + wrongSHA:
 			fmt.Fprintf(w, `{"sha":%q}`, sha)
-		case "GET /repos/example/releases/commits/tags/v1.2.3":
+		case "GET /repos/example/releases/git/ref/tags/v1.2.3":
 			if posts == 0 {
 				http.NotFound(w, r)
 				return
 			}
-			fmt.Fprintf(w, `{"sha":%q}`, sha)
+			fmt.Fprintf(w, `{"object":{"type":"commit","sha":%q}}`, sha)
 		case "GET /repos/example/releases/releases/tags/v1.2.3":
 			if posts == 0 {
 				http.NotFound(w, r)
@@ -176,6 +229,18 @@ devops:
 		}
 	}
 	publish(token)
+	wantAssets := []provider.ReleaseAsset{
+		{Name: "cli.tar.gz", DownloadURL: "https://example.test/cli.tar.gz", Size: 4156, Digest: "sha256:abcd"},
+		{Name: "checksums.txt", DownloadURL: "https://example.test/checksums.txt", Size: 84},
+	}
+	checkLookup := func() {
+		t.Helper()
+		got, err := a.ReleaseGet(t.Context(), in.Tag)
+		if err != nil || got.Revision != sha || got.Notes != "notes" || !slices.Equal(got.Assets, wantAssets) {
+			t.Fatalf("read after publish = %+v, %v", got, err)
+		}
+	}
+	checkLookup()
 	// A retry opens a new gate, as a second CLI invocation would.
 	gate, err := policy.NewGate(a.Home, a.Gate.Autonomy, "test")
 	if err != nil {
@@ -183,6 +248,7 @@ devops:
 	}
 	a.Gate = gate
 	publish(approval(in))
+	checkLookup()
 	if _, err := a.ReleasePublish(t.Context(), changed, approval(changed)); !errors.Is(err, provider.ErrConflict) || posts != 1 {
 		t.Fatalf("conflicting replay = %v, %d writes", err, posts)
 	}
@@ -193,8 +259,5 @@ devops:
 	entry, err := os.ReadFile(filepath.Join(a.Home, "audit.log"))
 	if err != nil || strings.Count(string(entry), `"action":"release_publish"`) != 4 {
 		t.Fatalf("unexpected audit records %s, %v", entry, err)
-	}
-	if got, err := a.ReleaseGet(t.Context(), in.Tag); err != nil || got.Revision != sha || got.Notes != "notes" {
-		t.Fatalf("read after publish = %+v, %v", got, err)
 	}
 }

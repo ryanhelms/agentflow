@@ -249,11 +249,13 @@ func testPublishRelease(t *testing.T, tc publishCase) {
 		switch r.Method + " " + r.URL.EscapedPath() {
 		case "GET " + base + "/commits/heads%2Frelease":
 			respond(t, w, map[string]string{"sha": commit})
-		case "GET " + base + "/commits/tags%2Fcli%2Fv1.2.3":
+		case "GET " + base + "/git/ref/tags/cli%2Fv1.2.3":
 			if sha == "" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
+			respond(t, w, map[string]any{"object": map[string]string{"sha": otherCommit, "type": "tag"}})
+		case "GET " + base + "/commits/refs%2Ftags%2Fcli%2Fv1.2.3":
 			respond(t, w, map[string]string{"sha": sha})
 		case "GET " + base + "/releases/tags/cli%2Fv1.2.3":
 			if posts == 0 || tc.createdSHA == "" {
@@ -306,8 +308,11 @@ func testPublishRelease(t *testing.T, tc publishCase) {
 		got, err := adapter.PublishRelease(t.Context(), repo, draft, opts)
 		requireReleaseResult(t, got, err, provider.AlreadyApplied)
 		observed, err := adapter.GetRelease(t.Context(), repo, tag)
-		want := provider.Release{Tag: tag, Revision: commit, Title: draft.Title, Notes: draft.Notes, URL: releaseURL}
-		if err != nil || observed != want {
+		want := provider.Release{
+			Tag: tag, Revision: commit, Title: draft.Title, Notes: draft.Notes, URL: releaseURL,
+			Assets: []provider.ReleaseAsset{{Name: "cli.tar.gz", DownloadURL: releaseURL + "/cli.tar.gz"}},
+		}
+		if err != nil || !reflect.DeepEqual(observed, want) {
 			t.Fatalf("get release = %+v, %v, want %+v", observed, err, want)
 		}
 		changed := draft
@@ -333,8 +338,8 @@ func TestPublishReleaseWithNoTarget(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusCreated)
 			respond(t, w, releaseResponse("", ""))
-		case "GET " + base + "/commits/tags%2Fcli%2Fv1.2.3":
-			respond(t, w, map[string]string{"sha": commit})
+		case "GET " + base + "/git/ref/tags/cli%2Fv1.2.3":
+			respond(t, w, map[string]any{"object": map[string]string{"sha": commit, "type": "commit"}})
 		default:
 			unexpected(t, w, r)
 		}

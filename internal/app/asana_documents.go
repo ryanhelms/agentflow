@@ -22,6 +22,7 @@ func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []
 			tc.Warnings = append(tc.Warnings, fmt.Sprintf("document %s: %v", ref, err))
 		} else {
 			page.Title = doc.Title
+			page.Revision = doc.Revision
 			if doc.URL != "" {
 				page.URL = doc.URL
 			}
@@ -42,6 +43,15 @@ func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (pr
 	var knowledge provider.Knowledge
 	var err error
 	switch name {
+	case "confluence":
+		site, err := a.confluenceSite()
+		if err != nil {
+			return zero, err
+		}
+		knowledge, err = a.confluenceKnowledge(site)
+		if err != nil {
+			return zero, err
+		}
 	case "filesystem":
 		store, err := filesystem.NewKnowledge(name, a.knowledgeDirectory())
 		if err != nil {

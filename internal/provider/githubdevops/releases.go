@@ -19,12 +19,16 @@ type githubRelease struct {
 	URL        string `json:"html_url"`
 	Draft      bool   `json:"draft"`
 	Prerelease bool   `json:"prerelease"`
+	Assets     []struct {
+		Name        string `json:"name"`
+		DownloadURL string `json:"browser_download_url"`
+		Size        int64  `json:"size"`
+		Digest      string `json:"digest"`
+	} `json:"assets"`
 }
 
 // GetRelease reads a published release by tag. Revision is the commit the tag
-// points to, including for annotated tags. An asset extension can add typed
-// asset metadata (name, download URL, size and digest) to provider.Release and
-// map GitHub's release assets into it. Asset uploads belong to the build workflow.
+// points to, including for annotated tags.
 func (a *Adapter) GetRelease(ctx context.Context, repo provider.RepositoryRef, tag string) (provider.Release, error) {
 	base, ref, err := releaseLocation(repo, tag)
 	if err != nil {
@@ -41,7 +45,11 @@ func (a *Adapter) GetRelease(ctx context.Context, repo provider.RepositoryRef, t
 	if err != nil {
 		return provider.Release{}, err
 	}
-	return provider.Release{Tag: remote.Tag, Revision: sha, Title: remote.Title, Notes: remote.Notes, URL: remote.URL}, nil
+	release := provider.Release{Tag: remote.Tag, Revision: sha, Title: remote.Title, Notes: remote.Notes, URL: remote.URL}
+	for _, asset := range remote.Assets {
+		release.Assets = append(release.Assets, provider.ReleaseAsset(asset))
+	}
+	return release, nil
 }
 
 // PublishRelease creates a stable release. The repository and tag provide the
@@ -160,7 +168,29 @@ func (a *Adapter) releaseByTag(ctx context.Context, base, tag string) (githubRel
 }
 
 func (a *Adapter) tagCommit(ctx context.Context, base, tag string) (string, error) {
-	return a.commitSHA(ctx, base, "tags/"+tag)
+	// The commit API returns 422 for a missing ref. Read the tag ref first to
+	// distinguish an absent tag from a failed lookup before creating a release.
+	path := base + "/git/ref/tags/" + url.PathEscape(tag)
+	var ref struct {
+		Object struct {
+			Type string `json:"type"`
+			SHA  string `json:"sha"`
+		} `json:"object"`
+	}
+	if err := a.client.Do(ctx, http.MethodGet, path, nil, &ref); err != nil {
+		return "", fmt.Errorf("read github tag %q: %w", tag, githubReadError(err, path))
+	}
+	if sha, err := hex.DecodeString(ref.Object.SHA); err != nil || len(sha) != 20 {
+		return "", fmt.Errorf("github tag %q has an invalid object sha", tag)
+	}
+	switch ref.Object.Type {
+	case "commit":
+		return ref.Object.SHA, nil
+	case "tag":
+		return a.commitSHA(ctx, base, "refs/tags/"+tag)
+	default:
+		return "", fmt.Errorf("github tag %q points to a %s object, expected a commit", tag, ref.Object.Type)
+	}
 }
 
 func (a *Adapter) commitSHA(ctx context.Context, base, revision string) (string, error) {

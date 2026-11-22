@@ -152,6 +152,11 @@ client configs, unsets `core.hooksPath`, and turns
 automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
 in a PR. Authored task and knowledge records under `.devflow/` are preserved.
 
+For provider MCP companions, removal compares each project entry with the receipt
+written by setup. It removes unchanged, recorded entries and lists edited or
+untracked entries for manual review, including registrations from older versions.
+The shared installation stays available to other projects. [Companion cleanup and repair](docs/providers.md#companion-cleanup-and-repair).
+
 ### Set up your machine (engineers)
 
 Opening the repo in a supported client runs the devflow launcher.
@@ -244,9 +249,15 @@ GitHub PR URL and review branch. The task listing reflects the change after
 merge. Use `publication: push` for direct writes to an unprotected branch.
 [Provider configuration](docs/providers.md)
 
+Confluence search returns the page ID, space key and revision in `devflow docs search QUERY --json`.
+Use `devflow docs publish confluence/SPACE/PAGE_ID` with the expected revision
+to replace an existing page through the remote approval policy. The page body
+displays Markdown as literal text. See the [Confluence example](docs/providers.md#replace-a-confluence-page).
+
 `devflow status` reads checks and deployments from their own `devops` providers.
 Deployments match the open PR's head commit or the local `HEAD` when there is no
 open PR. Use `devflow release get TAG` to inspect a release from `devops.releases`.
+GitHub lookup includes the tagged commit and any assets attached by the build pipeline.
 Deployments and release lookup also support local JSON fixtures.
 [DevOps provider configuration](docs/providers.md#deployment-and-release-providers)
 

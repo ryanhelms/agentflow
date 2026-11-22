@@ -72,7 +72,11 @@ entries retain `environment`, `ref`, `sha`, `created_at`, `state` and numeric `i
 Select `none` to omit deployments from status.
 
 `devflow release get TAG` reads a published release from `devops.releases`.
-Set `settings.repository` on either GitHub role to choose a specific GitHub.com
+Compare its `revision` with the deployment commit to correlate a release with
+status across providers. GitHub lookup returns an `assets` array when the release
+has attached files. Each entry has a `name`, `download_url`, `size` in bytes
+and a `digest` when GitHub supplies one.
+Set `settings.repository` on each GitHub role to choose a specific GitHub.com
 `owner/name`. With the setting unset, devflow uses the detected GitHub.com target.
 
 This configuration uses two read-only fixtures in the local checkout. The
@@ -98,7 +102,7 @@ The deployment file is a JSON array ordered newest first. Each record needs
 `environment` and `revision` and can include `state` and `url`. Use the full
 commit ID from `git rev-parse HEAD` as `revision` to see a record in `devflow status`.
 The release file is a JSON array with unique `tag` values, each with a `revision`
-and optional `title`, `notes` and `url`. Use `devflow release get TAG` to read a
+and optional `title`, `notes`, `url` and `assets`. Use `devflow release get TAG` to read a
 record. Setup readiness checks that both selected files can be read and decoded.
 
 ## Jira, Confluence and GitHub
@@ -112,8 +116,8 @@ overrides the legacy Jira site, pass its URL to `devflow login --site URL` to
 store the credential for that site.
 
 Confluence search uses `knowledge_base.settings.site` and returns page IDs, space
-keys, titles, URLs and excerpts. Set `CONFLUENCE_USER` and `CONFLUENCE_TOKEN`
-together to supply knowledge credentials. With those variables unset, a separate
+keys, titles, URLs, excerpts and published revisions. Set `CONFLUENCE_USER`
+and `CONFLUENCE_TOKEN` together to supply knowledge credentials. With those variables unset, a separate
 site uses its own Atlassian keychain entry. A shared site also accepts the existing
 `JIRA_USER` and `JIRA_TOKEN` environment pair.
 
@@ -282,6 +286,28 @@ registration. Review each summary, then repeat the same request with its
 Omit `companion` from `setup verify` or use `doctor --providers` to check
 all selected providers and their declared MCP prerequisites.
 
+### Companion cleanup and repair
+
+When setup writes a companion entry, it saves the entry name and a SHA256
+digest beside the project config, for example in
+`.vscode/mcp.json.devflow-companions.json`. Keep the receipt with the
+corresponding config. A matching entry already present at setup time keeps
+its existing ownership.
+
+Run `devflow remove --dry-run` to preview removal for the project. Then run
+`devflow remove` to delete recorded entries whose full JSON value still
+matches and discard their project receipts. Both commands work offline.
+Even with `--force`, edited entries and entries without a receipt stay in
+the client config. For registrations made before receipts were introduced,
+review the command or endpoint in the project file listed above and delete
+only the server entry you recognize. The user manifest, cached executables
+and active version selections remain available to other projects.
+
+To repair a registration, run `devflow setup plan --companion ID --client NAME`,
+review the proposed change, then run `devflow setup apply --companion ID --client NAME`.
+This updates the selected entry and its receipt. Use the separate `--install`
+action when the shared executable itself needs repair.
+
 ## GitHub Issues task lifecycle
 
 Use the `github-issues` task provider with the detected GitHub repository or set
@@ -350,8 +376,8 @@ To link a managed document, pass `--link-to filesystem/design/capacity` or
 set a template default such as
 `"links":[{"ref":{"instance":"filesystem","scope":"design","id":"capacity"}}]`.
 An explicit link takes precedence over template defaults. Context resolves
-the qualified reference through the selected knowledge provider. FileSystem,
-Repository and GitHub Wiki support that lookup. When lookup fails, context
+the qualified reference through the selected knowledge provider. Confluence,
+FileSystem, Repository and GitHub Wiki support that lookup. When lookup fails, context
 includes the reference and a warning. Link resolution uses the provider,
 scope and ID, independent of the document's URL.
 
@@ -539,6 +565,41 @@ The decision and its rationale.
 
 The document's qualified reference survives a rename. Generated setup files
 and authored records have separate lifecycles during removal.
+
+## Replace a Confluence page
+
+With `knowledge_base.provider: confluence`, search for the current page ID,
+space key and revision. For example, to replace published version 7 of page
+42 in the ENG space, supply the complete new title and body.
+
+```bash
+devflow docs search quota --space ENG --json
+devflow docs publish confluence/ENG/42 \
+  --title "Quota policy" --body "Each team owns its quota." \
+  --expected-revision 7 --operation-id quota-policy-1
+```
+
+The CLI and `devflow_docs_publish` apply the remote autonomy policy. Confirmation
+covers the configured site, qualified reference, expected revision, operation ID
+and complete replacement. Devflow checks the space key immediately before the
+update and verifies the space ID in the response. Confluence uses the page
+version as its write precondition. In this example the requested version is 8.
+If another edit wins, review the newer version before publishing a replacement.
+
+Retry an uncertain result with the same operation ID, revision, title and body.
+Devflow checks the message on the exact successor version, including in page
+history after later edits. A matching receipt returns `already_applied` with
+the original published revision. An inaccessible version history can prevent
+verification. For a new edit, use a new operation ID and the current revision.
+
+Lookup renders readable text from the page's Atlassian Document Format.
+Publication escapes Markdown and HTML as literal text and preserves line breaks.
+Replacing the body removes its previous rich formatting and embedded macros.
+Structured `links` are unsupported. Parent, owner, labels and properties are
+outside the update. Confluence reconciles the published body with open drafts
+and may overwrite a diverged draft. Create the page in Confluence first to obtain
+its assigned numeric ID. CI docs sync and release notes use their existing
+Pandoc publishing path. [Confluence page API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-put)
 
 ## Publish a Repository document
 

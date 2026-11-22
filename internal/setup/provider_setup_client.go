@@ -164,10 +164,10 @@ func registrationJSON(current []byte, r *ClientRegistration) map[string]any {
 // plan must have passed before calling. Re-read the overlay under a writer
 // lock so two setup processes cannot overwrite one another's changes.
 func RegisterProviderClient(dir, client string) error {
-	return registerOverlay(dir, func() (*ClientRegistration, []byte, error) { return clientOverlay(dir, client) })
+	return registerOverlay(dir, nil, func() (*ClientRegistration, []byte, error) { return clientOverlay(dir, client) })
 }
 
-func registerOverlay(dir string, overlay func() (*ClientRegistration, []byte, error)) error {
+func registerOverlay(dir string, companion map[string]any, overlay func() (*ClientRegistration, []byte, error)) error {
 	r, _, err := overlay()
 	if err != nil {
 		return err
@@ -193,44 +193,91 @@ func registerOverlay(dir string, overlay func() (*ClientRegistration, []byte, er
 	}
 	defer clientDir.Close()
 	name := filepath.Base(r.Path)
-	stage := name + ".devflow-tmp"
-	f, err := clientDir.OpenFile(stage, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	return withClientLock(clientDir, name, func() error {
+		now, next, err := overlay()
+		if err != nil {
+			return err
+		}
+		if now.State == "blocked" {
+			return errors.New(now.Detail)
+		}
+		if next == nil {
+			return nil
+		}
+		writeConfig := func() error { return publishAfter(clientDir, name, next, nil) }
+		if companion == nil {
+			return writeConfig()
+		}
+		return recordCompanion(clientDir, name, now.Entry, companion, writeConfig)
+	})
+}
+
+var errNotRegular = errors.New("expected a regular project file")
+
+// A missing file is an empty overlay. A symlink is never a client config or receipt.
+func readProjectFile(dir *os.Root, name string) ([]byte, error) {
+	info, err := dir.Lstat(name)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: %w", name, errNotRegular)
+	}
+	return dir.ReadFile(name)
+}
+
+// Keep the writer lock through publication of both the config and its receipt.
+func withClientLock(dir *os.Root, name string, edit func() error) error {
+	lock := name + ".devflow-tmp"
+	f, err := dir.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("another registration is pending: retry or remove %s after confirming the previous setup has stopped", filepath.Join(parent, stage))
+		return fmt.Errorf("another registration is pending: retry or remove %s after confirming the previous setup has stopped", filepath.Join(dir.Name(), lock))
 	}
 	if err != nil {
 		return err
 	}
-	published := false
-	defer func() {
-		if !published {
-			_ = clientDir.Remove(stage)
-		}
-	}()
-	var next []byte
-	r, next, err = overlay()
-	if err == nil && r.State == "blocked" {
-		err = errors.New(r.Detail)
+	defer func() { _ = dir.Remove(lock) }()
+	if err := f.Close(); err != nil {
+		return err
 	}
-	if err == nil && next != nil {
-		if info, statErr := clientDir.Stat(name); statErr == nil {
+	return edit()
+}
+
+// Stage a complete file under the client lock, preserving existing permissions.
+func publishAfter(dir *os.Root, name string, data []byte, before func() error) error {
+	stage := name + ".devflow-new"
+	f, err := dir.OpenFile(stage, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Remove(stage) }()
+	if info, statErr := dir.Lstat(name); statErr == nil {
+		if !info.Mode().IsRegular() {
+			err = fmt.Errorf("use a regular project file for %s", name)
+		} else {
 			err = f.Chmod(info.Mode().Perm())
-		} else if !errors.Is(statErr, os.ErrNotExist) {
-			err = statErr
 		}
-		if err == nil {
-			_, err = f.Write(next)
-		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		err = statErr
+	}
+	if err == nil {
+		_, err = f.Write(data)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
 	}
-	if err != nil || next == nil {
+	if err != nil {
 		return err
 	}
-	err = clientDir.Rename(stage, name)
-	published = err == nil
-	return err
+	if before != nil {
+		if err := before(); err != nil {
+			return err
+		}
+	}
+	return dir.Rename(stage, name)
 }
 
 func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, hasRepo bool) {

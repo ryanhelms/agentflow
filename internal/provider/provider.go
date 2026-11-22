@@ -213,12 +213,21 @@ type Deployments interface {
 	Deployments(ctx context.Context, repo RepositoryRef, revision string) ([]Deployment, error)
 }
 
+// ReleaseAsset describes an artifact attached by the build pipeline.
+type ReleaseAsset struct {
+	Name        string `json:"name"`
+	DownloadURL string `json:"download_url"`
+	Size        int64  `json:"size"` // bytes
+	Digest      string `json:"digest,omitempty"`
+}
+
 type Release struct {
-	Tag      string `json:"tag"`
-	Revision string `json:"revision"`
-	Title    string `json:"title"`
-	Notes    string `json:"notes"`
-	URL      string `json:"url,omitempty"`
+	Tag      string         `json:"tag"`
+	Revision string         `json:"revision"`
+	Title    string         `json:"title"`
+	Notes    string         `json:"notes"`
+	URL      string         `json:"url,omitempty"`
+	Assets   []ReleaseAsset `json:"assets,omitempty"` // read-only
 }
 
 type ReleaseReader interface {

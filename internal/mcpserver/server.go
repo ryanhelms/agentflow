@@ -308,7 +308,7 @@ func (s *Server) register() {
 		func(ctx context.Context, in eodIn) (any, error) { return a.PostEOD(ctx, in.Notes, in.ConfirmToken) })
 	add(s, "devflow_docs_search", "Search design docs and ADRs in the selected knowledge base.", readOnly,
 		func(ctx context.Context, in docsIn) (any, error) { return a.DocsSearch(ctx, in.Query, in.Space) })
-	add(s, "devflow_docs_publish", "Publish a Markdown document to the configured FileSystem, Repository, or GitHub Wiki knowledge base. Use the same operation_id on retry.", remote,
+	add(s, "devflow_docs_publish", "Publish a document to the selected knowledge base. For Confluence, replace an existing page with literal text and supply expected_revision. Use the same operation_id on retry.", remote,
 		func(ctx context.Context, in docsPublishIn) (any, error) {
 			return a.DocsPublish(ctx, in.DocsPublishInput, in.ConfirmToken)
 		})

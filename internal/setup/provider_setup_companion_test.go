@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -48,6 +49,18 @@ func TestRegisterReviewedCompanion(t *testing.T) {
 	if err != nil || r.State != "configured" || data != nil {
 		t.Fatalf("native path did not round trip: %+v %v", r, err)
 	}
+	// A user-edited entry survives even a forced removal.
+	edited := `{"mcpServers":{"devflow-wiki":{"command":"team","env":{"TOKEN":"private"}}}}`
+	setupFile(t, dir, file, edited, 0o600)
+	res, err := Remove(t.Context(), dir, RemoveOptions{Force: true})
+	notes := strings.Join(res.Notes, " ")
+	if err != nil || !strings.Contains(notes, "changed since registration") || strings.Contains(notes, "private") {
+		t.Fatalf("expected a redacted manual cleanup notice: %+v, %v", res, err)
+	}
+	data, err = os.ReadFile(filepath.Join(dir, file))
+	if err != nil || string(data) != edited {
+		t.Fatal("forced removal changed the edited entry")
+	}
 }
 
 func TestCompanionProjectClientFormats(t *testing.T) {
@@ -76,6 +89,59 @@ func TestCompanionProjectClientFormats(t *testing.T) {
 					t.Errorf("missing %s", part)
 				}
 			}
+			res, err := Remove(t.Context(), root, RemoveOptions{})
+			if err != nil || !slices.Contains(res.Removed, shape.path) {
+				t.Fatalf("remove did not report %s: %+v, %v", shape.path, res, err)
+			}
+			for _, name := range []string{shape.path, companionReceiptName(shape.path)} {
+				if _, err := os.Stat(filepath.Join(root, name)); !os.IsNotExist(err) {
+					t.Errorf("%s after remove: %v", name, err)
+				}
+			}
 		})
+	}
+}
+
+func TestRemoveLeavesMatchingUntrackedCompanion(t *testing.T) {
+	root := t.TempDir()
+	s := managedmcp.Status{ID: "wiki", Kind: provision.RemoteMCP, Endpoint: "https://fixture.invalid/mcp", Ready: true}
+	r, data, err := companionOverlay(root, "cursor", s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An earlier release (or a user) wrote exactly today's desired entry.
+	setupFile(t, root, r.Path, string(data), 0o600)
+	if err := RegisterCompanion(root, r, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, companionReceiptName(r.Path))); !os.IsNotExist(err) {
+		t.Fatalf("no-op registration claimed an existing entry: %v", err)
+	}
+	res, err := Remove(t.Context(), root, RemoveOptions{Force: true})
+	if err != nil || !strings.Contains(strings.Join(res.Notes, " "), "untracked") {
+		t.Fatalf("expected manual cleanup guidance: %+v, %v", res, err)
+	}
+	after, err := os.ReadFile(filepath.Join(root, r.Path))
+	if err != nil || string(after) != string(data) {
+		t.Fatalf("untracked config changed: %v", err)
+	}
+}
+
+func TestCompanionReceiptConflictPreservesConfig(t *testing.T) {
+	root := t.TempDir()
+	s := managedmcp.Status{ID: "docs", Kind: provision.RemoteMCP, Endpoint: "https://fixture.invalid/mcp", Ready: true}
+	const existing = `{"mcpServers":{"devflow-docs":{"command":"team"}}}`
+	setupFile(t, root, ".mcp.json", existing, 0o600)
+	r, _, err := companionOverlay(root, "claude", s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupFile(t, root, companionReceiptName(r.Path), `{"team":"settings"}`, 0o600)
+	if err := RegisterCompanion(root, r, s); err == nil {
+		t.Fatal("overwrote a conflicting receipt")
+	}
+	data, err := os.ReadFile(filepath.Join(root, r.Path))
+	if err != nil || string(data) != existing {
+		t.Fatal("failed registration changed the existing config")
 	}
 }
