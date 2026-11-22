@@ -10,6 +10,10 @@ import (
 // It cannot select another transport or automatically retry.
 var ErrWriteUncertain = errors.New("native provider write outcome is uncertain")
 
+// ErrWriteNotDispatched means the selected session proved it never sent the
+// mutation. It permits releasing a durable claim for a fresh approval.
+var ErrWriteNotDispatched = errors.New("native provider write was not dispatched")
+
 // WriteBinding pins the server and exact operation to a prepared provider
 // session. Include it in the Devflow approval summary before dispatching.
 type WriteBinding struct {

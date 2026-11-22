@@ -40,6 +40,9 @@ func (f *jiraNativeFixture) Write(_ context.Context, binding native.WriteBinding
 	if binding.Connection != f.route || binding.Tool != call.Tool {
 		return nil, native.ErrDenied
 	}
+	if errors.Is(f.writeErr, native.ErrWriteNotDispatched) {
+		return nil, f.writeErr
+	}
 	f.writes = append(f.writes, call)
 	if f.writeErr != nil {
 		return nil, f.writeErr
@@ -346,5 +349,27 @@ esac
 	out, err := a.LinkJiraRemote(ctx, "PLAT-1", linkURL, "Runbook", "")
 	if err != nil || out.(map[string]any)["status"] != provider.AlreadyApplied || len(host.writes) != 0 {
 		t.Fatalf("CLI replay: %+v, err=%v, MCP writes=%v", out, err, host.writes)
+	}
+}
+
+func TestJiraRemoteLinkReleasesTheClaimBeforeDispatch(t *testing.T) {
+	appl, fixture, ctx := jiraNativeApp(t)
+	const url = "https://example.com/failed-before-dispatch"
+	preview, err := appl.LinkJiraRemote(ctx, "PLAT-1", url, "Fixture", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.writeErr = errors.Join(native.ErrWriteNotDispatched, native.ErrSignIn)
+	_, err = appl.LinkJiraRemote(ctx, "PLAT-1", url, "Fixture", confirmation(t, preview))
+	if !errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrWriteUncertain) || len(fixture.writes) != 0 {
+		t.Fatalf("pre-dispatch failure = %v, writes = %d", err, len(fixture.writes))
+	}
+	fixture.writeErr, fixture.route = nil, "fresh-fixture-session"
+	preview, err = appl.LinkJiraRemote(ctx, "PLAT-1", url, "Fixture", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appl.LinkJiraRemote(ctx, "PLAT-1", url, "Fixture", confirmation(t, preview)); err != nil || len(fixture.writes) != 1 {
+		t.Fatalf("fresh approval = %v, writes = %d", err, len(fixture.writes))
 	}
 }

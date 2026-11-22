@@ -40,10 +40,14 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 		return nil, map[string]any{"data": map[string]string{"key": input.Key}}, nil
 	})
 
+	var lastBearer atomic.Value
 	endpoint := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
-		if req.Header.Get("Authorization") != "Bearer local-fixture-only" || req.URL.Query().Get("tools") != "all" {
+		authorization := req.Header.Get("Authorization")
+		if (authorization != "Bearer local-fixture-only" && authorization != "Bearer refreshed-fixture-only") ||
+			req.URL.Query().Get("tools") != "all" {
 			t.Error("missing scoped fixture authentication")
 		}
+		lastBearer.Store(authorization)
 		return server
 	}, nil))
 	defer endpoint.Close()
@@ -51,9 +55,9 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	generation := "fixture-generation"
+	generation, token := "fixture-generation", "local-fixture-only"
 	writer := newWriter(func(context.Context) (string, string, error) {
-		return "local-fixture-only", generation, nil
+		return token, generation, nil
 	}, rewriteTo{host})
 	defer writer.Close()
 
@@ -73,15 +77,20 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 		t.Fatalf("preflight: %v, writes = %d", err, writes.Load())
 	}
 	generation = "changed-grant"
-	if _, err := writer.Write(t.Context(), binding, call); !errors.Is(err, native.ErrDenied) || writes.Load() != 0 {
+	if _, err := writer.Write(t.Context(), binding, call); !errors.Is(err, native.ErrWriteNotDispatched) ||
+		!errors.Is(err, native.ErrDenied) || writes.Load() != 0 {
 		t.Fatalf("account changed: %v, writes = %d", err, writes.Load())
 	}
 	binding, err = writer.Prepare(t.Context(), call)
 	if err != nil {
 		t.Fatal(err)
 	}
+	token = "refreshed-fixture-only"
 	if _, err := writer.Write(t.Context(), binding, call); err != nil {
 		t.Fatal(err)
+	}
+	if lastBearer.Load() != "Bearer refreshed-fixture-only" {
+		t.Fatal("the write used the preview's expired bearer")
 	}
 	if _, err := writer.ReadBound(t.Context(), binding, read); err != nil {
 		t.Fatal(err)
@@ -102,7 +111,7 @@ func (r rewriteTo) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestRovoBearerNeverLeavesTheExactCatalogEndpoint(t *testing.T) {
-	b := bearer{accessToken: "local-fixture-only"}
+	b := &bearer{}
 	for _, url := range []string{
 		"https://other.example/v2/mcp?tools=all",
 		origin + "/v2/mcp",
@@ -118,6 +127,14 @@ func TestRovoBearerNeverLeavesTheExactCatalogEndpoint(t *testing.T) {
 		}
 		if !errors.Is(err, native.ErrDenied) {
 			t.Fatalf("%s: %v", url, err)
+		}
+	}
+}
+
+func TestRovoRejectsMalformedCatalogSchema(t *testing.T) {
+	for _, input := range []any{nil, map[string]any{"type": 42}} {
+		if schema, err := decodeCatalogSchema(input); err == nil || schema != nil {
+			t.Fatalf("invalid schema accepted: %v", input)
 		}
 	}
 }

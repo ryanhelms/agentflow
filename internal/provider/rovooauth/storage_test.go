@@ -1,11 +1,13 @@
 package rovooauth
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zalando/go-keyring"
 )
@@ -21,6 +23,147 @@ func largeLogin(t *testing.T, f *fixture) chunkManifest {
 		t.Fatal("expected multi-chunk grant")
 	}
 	return m
+}
+
+func TestDisconnect(t *testing.T) {
+	f := newFixture(t)
+	old := desktop
+	desktop = f.e
+	t.Cleanup(func() { desktop = old })
+	largeLogin(t, f)
+	token, generation, err := BoundToken(t.Context())
+	if err != nil || token == "" || generation == "" {
+		t.Fatal("missing initial binding", err)
+	}
+	// Another process can still hold the issued bearer in its own cache.
+	peer := &enrollment{get: f.e.get, lockDir: f.e.lockDir}
+	peer.cached.Store(f.e.cached.Load())
+	requests := len(f.requests)
+	for range 2 {
+		if err := Disconnect(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		if f.e.cached.Load() != nil || len(f.records) != 0 {
+			t.Fatal("disconnect retained grant state")
+		}
+		if tok, gen, err := peer.boundToken(t.Context()); !errors.Is(err, ErrNotEnrolled) || tok != "" || gen != "" {
+			t.Fatal("peer accepted a disconnected binding", err)
+		}
+	}
+	if len(f.requests) != requests || f.opens.Load() != 1 {
+		t.Fatal("disconnect contacted issuer or opened browser")
+	}
+	if err := Login(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, gen, err := BoundToken(t.Context()); err != nil || gen == generation {
+		t.Fatal("re-enrollment reused disconnected generation", err)
+	}
+}
+
+func TestDisconnectWaitsForGrantLock(t *testing.T) {
+	f := newFixture(t)
+	active := largeLogin(t, f)
+	lock, err := f.e.lock(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	if err := f.e.disconnect(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("disconnect bypassed held lock", err)
+	}
+	if f.records[account] != active.encode() || f.e.cached.Load() == nil {
+		t.Fatal("disconnect changed enrollment outside the lock")
+	}
+}
+
+func TestDisconnectAmbiguousRetirement(t *testing.T) {
+	for _, mode := range []string{"head retained", "head spent", "chunk retained", "marker retained"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newFixture(t)
+			active := largeLogin(t, f)
+			set, remove := f.e.set, f.e.remove
+			f.e.set = func(s, a, raw string) error {
+				if a == account && mode == "head retained" {
+					return nil // Backend acknowledges a write it did not apply.
+				}
+				err := set(s, a, raw)
+				if a == account && mode == "head spent" {
+					return errors.New("synthetic uncertain write")
+				}
+				return err
+			}
+			f.e.remove = func(s, a string) error {
+				if (mode == "chunk retained" && a == active.chunkAccount(chunkSize)) ||
+					(mode == "marker retained" && a == account) {
+					return nil
+				}
+				return remove(s, a)
+			}
+			if err := f.e.disconnect(t.Context()); !errors.Is(err, errStorage) || f.e.cached.Load() != nil {
+				t.Fatal("unverified disconnect reported success or retained cache", err)
+			}
+			if mode == "marker retained" {
+				if f.records[account] != "{}" || len(f.records) != 1 {
+					t.Fatal("primary deletion attempted before retirement")
+				}
+			} else if f.records[journalAccount] != (chunkChange{before: active}).encode() {
+				t.Fatal("lost retirement journal")
+			}
+			if mode == "head retained" {
+				if f.records[account] != active.encode() {
+					t.Fatal("unexpected head after ignored write")
+				}
+				if _, err := f.e.readGrant(f.records[account]); err != nil {
+					t.Fatal("uncertain publication damaged active chunks", err)
+				}
+			}
+			f.e.set, f.e.remove = set, remove
+			if err := f.e.disconnect(t.Context()); err != nil || len(f.records) != 0 {
+				t.Fatal("retry failed to finish disconnect", err)
+			}
+		})
+	}
+}
+
+func TestDisconnectCorruptJournal(t *testing.T) {
+	f := newFixture(t)
+	active := largeLogin(t, f)
+	f.records[journalAccount] = active.encode() + "\ninvalid"
+	if err := f.e.disconnect(t.Context()); !errors.Is(err, ErrLoginRequired) || f.e.cached.Load() != nil {
+		t.Fatal("corrupt journal accepted", err)
+	}
+	if f.records[account] != active.encode() || f.records[journalAccount] != active.encode()+"\ninvalid" {
+		t.Fatal("disconnect changed ambiguous bookkeeping")
+	}
+	if _, err := f.e.readGrant(f.records[account]); err != nil {
+		t.Fatal("disconnect damaged published chunks", err)
+	}
+	if tok, gen, err := f.e.boundToken(t.Context()); !errors.Is(err, ErrLoginRequired) || tok != "" || gen != "" {
+		t.Fatal("corrupt journal permitted access", err)
+	}
+}
+
+func TestDisconnectMalformedManifest(t *testing.T) {
+	f := newFixture(t)
+	active := largeLogin(t, f)
+	active.size = maxGrantSize + 1
+	f.records[account] = active.encode()
+	remove := f.e.remove
+	f.e.remove = func(s, a string) error {
+		if a != account {
+			t.Fatal("derived a deletion target from a malformed manifest")
+		}
+		return remove(s, a)
+	}
+	if err := f.e.disconnect(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if tok, gen, err := f.e.boundToken(t.Context()); !errors.Is(err, ErrNotEnrolled) || tok != "" || gen != "" {
+		t.Fatal("malformed head remained published", err)
+	}
 }
 
 func TestChunkedSpendAndRotation(t *testing.T) {

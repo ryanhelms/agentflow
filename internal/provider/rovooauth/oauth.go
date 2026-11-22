@@ -60,6 +60,10 @@ var desktop = &enrollment{
 // Login opens the system browser for an explicit user-initiated enrollment.
 func Login(ctx context.Context) error { return desktop.login(ctx) }
 
+// Disconnect removes the local Rovo enrollment. It succeeds if already
+// unenrolled. It does not contact the issuer or revoke tokens remotely.
+func Disconnect(ctx context.Context) error { return desktop.disconnect(ctx) }
+
 // Token returns the current grant's access token to the in-process MCP transport.
 func Token(ctx context.Context) (string, error) {
 	token, _, err := BoundToken(ctx)

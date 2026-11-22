@@ -47,3 +47,6 @@ For the Jira web-link pilot in Claude Code Desktop, launch
 `devflow setup login --provider jira --client devflow` if the user has selected
 the Devflow Rovo connection. This opens Atlassian consent in the browser.
 Wait for the user to finish consent before requesting a new write preview.
+
+When asked to disconnect the Devflow Rovo connection, use
+`devflow setup logout --provider jira --client devflow`.

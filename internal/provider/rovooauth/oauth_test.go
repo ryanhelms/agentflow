@@ -124,11 +124,14 @@ func newFixture(t *testing.T) *fixture {
 			return nil
 		},
 		remove: func(s, a string) error {
-			if s != service || a == account {
+			if s != service {
 				t.Fatal("invalid keyring deletion")
 			}
 			f.storeMu.Lock()
 			defer f.storeMu.Unlock()
+			if a == account && f.records[a] != "{}" {
+				t.Fatal("primary entry deleted before grant retirement")
+			}
 			if _, ok := f.records[a]; !ok {
 				return keyring.ErrNotFound
 			}

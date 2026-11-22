@@ -225,7 +225,9 @@ The OS credential store holds the grant. The workspace configuration continues
 to specify the Jira site and allowed projects. Reopen the session if it uses a
 previous Devflow binary. Run `devflow_jira_remote_link` to preview the exact
 target and connected owner before confirming. When no Devflow enrollment
-exists, the Jira link tool can use the signed-in CLI.
+exists, the Jira link tool can use the signed-in CLI. To disconnect the local
+Devflow Rovo grant, run `devflow setup logout --provider jira --client devflow`.
+Use Atlassian account settings if you also want to revoke the vendor's grant.
 
 [Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
 

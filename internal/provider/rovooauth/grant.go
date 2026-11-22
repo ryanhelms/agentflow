@@ -74,6 +74,30 @@ func (e *enrollment) lock(ctx context.Context) (*os.File, error) {
 	}
 }
 
+func (e *enrollment) disconnect(ctx context.Context) error {
+	lock, err := e.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	e.cached.Store(nil)
+	head, err := e.currentHead(false)
+	if errors.Is(err, ErrNotEnrolled) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	// Verify the spent marker and finish journaled chunk retirement before
+	// removing the primary entry. Only a clean absence means unenrolled.
+	if head != "{}" {
+		if err := e.replace(head, "{}"); err != nil {
+			return err
+		}
+	}
+	return e.discard(account)
+}
+
 func (e *enrollment) boundToken(ctx context.Context) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

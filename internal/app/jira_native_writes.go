@@ -431,7 +431,9 @@ func (a *App) LinkJiraRemote(ctx context.Context, key, linkURL, title, token str
 	if state != notifications.Claimed {
 		return nil, fmt.Errorf("%w: jira web link was claimed but is absent from the current issue", native.ErrWriteUncertain)
 	}
-	if err = apply(); err == nil {
+	if err = apply(); errors.Is(err, native.ErrWriteNotDispatched) {
+		err = errors.Join(err, store.Finish(context.WithoutCancel(ctx), receipt, notifications.Retryable))
+	} else if err == nil {
 		exists, err = read()
 		switch {
 		case err != nil:

@@ -155,3 +155,8 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	}
 	return nil
 }
+
+// DisconnectRovo discards the native grant enrolled by Devflow.
+func DisconnectRovo(ctx context.Context) error {
+	return rovooauth.Disconnect(ctx)
+}

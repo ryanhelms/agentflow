@@ -197,7 +197,7 @@ func (w *SessionWriter) Write(ctx context.Context, binding WriteBinding, call Ca
 		}
 	}()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, errors.Join(ErrWriteNotDispatched, err)
 	}
 	if err := lease.ctx.Err(); err != nil {
 		return nil, fmt.Errorf("%w: prepared provider connection ended", ErrDenied)
@@ -206,6 +206,9 @@ func (w *SessionWriter) Write(ctx context.Context, binding WriteBinding, call Ca
 	defer cancel()
 	raw, err := lease.session.Call(limit, call)
 	if err != nil {
+		if errors.Is(err, ErrWriteNotDispatched) {
+			return nil, err
+		}
 		if errors.Is(err, ErrUnavailable) {
 			return nil, fmt.Errorf("%w: provider capability became unavailable after dispatch", ErrWriteUncertain)
 		}

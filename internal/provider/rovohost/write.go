@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -43,6 +44,7 @@ func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWr
 
 type session struct {
 	client     *mcp.ClientSession
+	bearer     *bearer
 	tools      map[string]*jsonschema.Schema
 	token      tokenSource
 	generation string
@@ -59,6 +61,8 @@ func connect(ctx context.Context, token tokenSource, transport http.RoundTripper
 	if accessToken == "" || generation == "" {
 		return nil, fmt.Errorf("%w: enroll Devflow through Atlassian OAuth", native.ErrSignIn)
 	}
+	wire := &bearer{transport: transport}
+	wire.token.Store(&accessToken)
 	client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
 		Capabilities: &mcp.ClientCapabilities{},
 		Logger:       slog.New(slog.DiscardHandler),
@@ -66,7 +70,7 @@ func connect(ctx context.Context, token tokenSource, transport http.RoundTripper
 	connected, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint: catalogEndpoint, MaxRetries: -1, DisableStandaloneSSE: true,
 		HTTPClient: &http.Client{
-			Transport:     bearer{accessToken: accessToken, transport: transport},
+			Transport:     wire,
 			Timeout:       time.Minute,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
@@ -79,7 +83,7 @@ func connect(ctx context.Context, token tokenSource, transport http.RoundTripper
 		_ = connected.Close()
 		return nil, err
 	}
-	return &session{client: connected, tools: tools, token: token, generation: generation}, nil
+	return &session{client: connected, bearer: wire, tools: tools, token: token, generation: generation}, nil
 }
 
 func listTools(ctx context.Context, client *mcp.ClientSession) (map[string]*jsonschema.Schema, error) {
@@ -98,9 +102,9 @@ func listTools(ctx context.Context, client *mcp.ClientSession) (map[string]*json
 			if _, exists := tools[tool.Name]; exists {
 				return nil, errors.New("atlassian MCP returned an ambiguous tool catalog")
 			}
-			var schema *jsonschema.Schema
-			if raw, err := json.Marshal(tool.InputSchema); err == nil {
-				_ = json.Unmarshal(raw, &schema)
+			schema, err := decodeCatalogSchema(tool.InputSchema)
+			if err != nil {
+				return nil, err
 			}
 			tools[tool.Name] = schema
 		}
@@ -114,6 +118,15 @@ func listTools(ctx context.Context, client *mcp.ClientSession) (map[string]*json
 		params.Cursor = page.NextCursor
 	}
 	return nil, errors.New("atlassian MCP returned an incomplete tool catalog")
+}
+
+func decodeCatalogSchema(input any) (*jsonschema.Schema, error) {
+	raw, err := json.Marshal(input)
+	var schema *jsonschema.Schema
+	if err != nil || json.Unmarshal(raw, &schema) != nil || schema == nil {
+		return nil, errors.New("atlassian MCP returned a malformed input schema")
+	}
+	return schema, nil
 }
 
 func relevantTool(name string) bool {
@@ -138,13 +151,17 @@ func (s *session) Check(call native.Call) error {
 }
 
 func (s *session) Call(ctx context.Context, call native.Call) (json.RawMessage, error) {
-	_, generation, err := s.token(ctx)
+	accessToken, generation, err := s.token(ctx)
 	if err != nil {
-		return nil, enrollmentError(err)
+		return nil, errors.Join(native.ErrWriteNotDispatched, enrollmentError(err))
 	}
 	if s.generation != generation {
-		return nil, fmt.Errorf("%w: the enrolled Atlassian connection changed", native.ErrDenied)
+		return nil, errors.Join(native.ErrWriteNotDispatched, native.ErrDenied, errors.New("the enrolled Atlassian connection changed"))
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(native.ErrWriteNotDispatched, err)
+	}
+	s.bearer.token.Store(&accessToken)
 	args := call.Arguments
 	if args == nil {
 		args = map[string]any{}
@@ -173,16 +190,20 @@ func (s *session) Call(ctx context.Context, call native.Call) (json.RawMessage, 
 func (s *session) Close() { _ = s.client.Close() }
 
 type bearer struct {
-	accessToken string
-	transport   http.RoundTripper
+	token     atomic.Pointer[string]
+	transport http.RoundTripper
 }
 
-func (b bearer) RoundTrip(req *http.Request) (*http.Response, error) {
+func (b *bearer) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.String() != catalogEndpoint || req.Host != "" && req.Host != req.URL.Host {
 		return nil, native.ErrDenied
 	}
+	token := b.token.Load()
+	if token == nil || *token == "" {
+		return nil, native.ErrSignIn
+	}
 	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", "Bearer "+b.accessToken)
+	req.Header.Set("Authorization", "Bearer "+*token)
 	resp, err := b.transport.RoundTrip(req)
 	if err != nil {
 		return nil, err

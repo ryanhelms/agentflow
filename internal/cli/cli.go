@@ -54,9 +54,11 @@ Setup
   setup login --provider NAME [--client NAME] [--server NAME]
                                  start sign-in through a provider CLI or MCP client
                                  use --client devflow for the Jira web-link pilot
+  setup logout --provider jira --client devflow
+                                 disconnect the local Devflow Rovo enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
-  logout                         remove stored Atlassian credentials
+  logout                         remove the legacy Atlassian API-token login
   doctor [--fix]                 check binary, hooks, auth, client config and API access
 
 Work
