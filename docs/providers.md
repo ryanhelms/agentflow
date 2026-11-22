@@ -121,6 +121,104 @@ An already verified copy works with the source offline. `GH_TOKEN` and
 tools stay as configured. The project launcher and devflow update verification
 still use the system `gh` for release bootstrap.
 
+### Register a provider MCP companion
+
+Create `mcp-companions.yml` in your devflow home, outside the workspace, under
+stable directories you control. The home and manifest must be ordinary,
+user-owned filesystem objects. On macOS and Linux, remove group and other
+write permission from both. On Windows, use a local NTFS directory under
+your profile with write access limited to you, Administrators and SYSTEM.
+Devflow checks the owner and DACL before using the declaration.
+
+Each ID identifies one companion. The `providers` list selects the provider
+IDs that need it. A shared companion is checked once when several roles use
+it. The example configures a local document server for FileSystem and a hosted
+tool server for Jira or Confluence. Replace the sample endpoint, executable
+source and digest with values from the distributor you trust.
+
+```yaml
+mcp:
+  - id: documents
+    providers: [filesystem]
+    kind: stdio-mcp
+    args: [stdio]
+    auth_env: DOCS_API_TOKEN
+    artifacts:
+      - platform: {os: linux, arch: amd64}
+        version: "1.4.0"
+        source: file:///opt/approved-tools/document-server
+        sha256: "<64 lowercase hexadecimal digits>"
+  - id: work-items
+    providers: [jira, confluence]
+    kind: remote-mcp
+    endpoint: https://tools.example.org/mcp
+    auth_env: WORK_ITEMS_TOKEN
+```
+
+Use one raw executable pin per native platform as in the gh example. Windows
+pins use `os: windows`, raw PE executables and an HTTPS source or a local
+URL such as `file:///C:/Approved/document-server.exe`. Supported optional
+launch arguments are `mcp`, `serve`, `stdio`, `--stdio`, `--transport` and
+`--transport=stdio`. Supply arguments in the order your server expects.
+The verified binary is published under
+`DEVFLOW_HOME/mcp-companions/<os>-<arch>/<id>/`. The installer locks the
+cache and atomically selects a digest-specific file. Windows uses a
+`current.txt` selection and an `.exe` suffix. A new pin can be installed
+while the client still uses the previous version.
+
+Use a direct HTTPS Streamable HTTP endpoint without URL credentials, a query
+or a fragment. The optional `auth_env` names a variable available to setup
+and the target editor process. A local probe passes this variable to the
+server. A hosted probe sends it as a bearer token to the declared endpoint
+and refuses redirects. Configure the credential through the operating
+environment on the machine or remote development host running the client.
+A GUI process may have a different environment from a terminal.
+
+1. Run `devflow setup plan --companion documents --json`. Review the version,
+   source, digest and destination. Approve the install with
+   `devflow setup apply --companion documents --install`. Hosted companions
+   start at the verification step.
+2. Run `devflow setup verify --companion documents` or
+   `devflow setup verify --companion work-items`. Both transports negotiate
+   an MCP session and request `tools/list`. The check discards tool metadata
+   and server diagnostics. A missing credential or a failed handshake or list
+   request gives a nonzero exit code.
+3. Review `devflow setup plan --companion documents --client vscode --json`.
+   Approve `devflow setup apply --companion documents --client vscode` and
+   rerun `devflow setup verify --companion documents --client vscode`. Pass
+   `--client cursor`, `--client claude` or `--client gemini` for those clients.
+   The CLI accepts `--yes` for explicit noninteractive approval. Reload the
+   client and complete its project trust prompts.
+
+Registration reserves `devflow-<id>` in one project file.
+
+| Client | Project file | Credential reference |
+| --- | --- | --- |
+| VS Code | `.vscode/mcp.json` | `${env:NAME}` |
+| Cursor | `.cursor/mcp.json` | `${env:NAME}` |
+| Claude Code | `.mcp.json` | `${NAME}` |
+| Gemini CLI | `.gemini/settings.json` | `${NAME}` |
+
+Review any pending replacement of that key. The merge preserves other entries,
+including the existing `devflow` launcher. It writes the absolute verified command or the declared
+URL and an environment reference. The resolved credential stays in memory.
+A matching entry makes repeat apply a no-op. Re-register after a pin,
+endpoint or credential reference changes. An absolute native path is specific
+to the host where the editor launches servers. See the editor configuration
+references for environment interpolation and project file scope.
+[VS Code MCP configuration](https://code.visualstudio.com/docs/agents/reference/mcp-configuration),
+[Cursor MCP configuration](https://cursor.com/docs/mcp),
+[Claude Code project scope](https://code.claude.com/docs/en/mcp#project-scope)
+and [Gemini CLI configuration](https://geminicli.com/docs/reference/configuration/).
+
+`devflow_setup_plan` accepts `companion` and an optional `client`.
+Use `devflow_setup_apply` with `{"companion":"documents","install":true}`
+for installation or `{"companion":"documents","client":"vscode"}` for
+registration. Review each summary, then repeat the same request with its
+`confirm_token`. Each approval covers one action and its reviewed inputs.
+Omit `companion` from `setup verify` or use `doctor --providers` to check
+all selected providers and their declared MCP prerequisites.
+
 ## GitHub Issues task lifecycle
 
 Use the `github-issues` task provider with the detected GitHub repository or set

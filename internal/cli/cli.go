@@ -45,8 +45,10 @@ Setup
   pin [--check]                  pin .github/workflows/devflow.yml to this devflow release
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
-  setup [plan|verify] [--client NAME] [--json]   inspect provider and client readiness
+  setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
+  setup apply --companion ID [--install | --client NAME] [--yes]
+                                 install or register one declared MCP companion
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials

@@ -25,7 +25,7 @@
 // call BuildPlan again to reconcile from observed state. There is no journal to
 // recover, and already published, conforming artifacts are kept.
 //
-// Issue #22 still needs the provider manifest catalog and loading, concrete
-// bootstrap distribution and environment-scoped probe and installer adapters,
-// credential resolution, client registration, and CLI/MCP entry points.
+// The local package publishes verified raw executables. The user package
+// supplies trusted artifact pins and sources. Guided setup combines these
+// with managedgh and managedmcp probes and the client's project registration.
 package provision
