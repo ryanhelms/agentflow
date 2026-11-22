@@ -59,6 +59,18 @@ values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
 
+## GitHub Issues task lifecycle
+
+Use the `github-issues` task provider with the detected GitHub repository or set
+`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
+GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
+trailers. Existing commit rules still apply, including when the repository
+explicitly requires Jira-style subject scopes.
+
+`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
+Set an event to `none` to disable its effect. Devflow previews transitions and
+only attempts to move open issues forward.
+
 ## Task templates
 
 Task object templates apply independently of the task provider. Configure a
@@ -78,17 +90,20 @@ The templates section is unset by default. If it is present, `catalog` is
 required and `default` may be omitted. The catalog defines each revision's
 required fields, defaults, body sections, and acceptance checklist. See the
 [task template format](../internal/tasktemplate/README.md).
-## GitHub Issues task lifecycle
 
-Use the `github-issues` task provider with the detected GitHub repository or set
-`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
-GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
-trailers. Existing commit rules still apply, including when the repository
-explicitly requires Jira-style subject scopes.
+GitHub Issues resolves the configured default when creating an issue. Application
+callers can select another exact revision with `App.CreateTicketWithTemplate`.
+The confirmation shows the selected revision, repository, title, Markdown body
+and labels. A template can require any of those four issue fields. Type,
+priority and structured links are unsupported. Template defaults for repository
+and labels take precedence over the provider settings. An explicit repository,
+title or description takes precedence over the template default.
 
-`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
-Set an event to `none` to disable its effect. Devflow previews transitions and
-only attempts to move open issues forward.
+Devflow stores the exact template name and revision in a leading HTML comment.
+Keep that marker and the corresponding catalog revision when editing the issue.
+Before posting a comment or changing state, devflow validates the current issue
+against that revision. Issues without a template marker keep their existing
+workflow even when a default is configured later.
 
 ## File-backed tasks
 
@@ -149,7 +164,9 @@ This repository uses GitHub Issues for task management and the Repository
 provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
 enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
 variable. It applies `pr.merged` to that issue after a same-repository PR
-with a qualified `Task-Ref` merges into the default branch.
+with a qualified `Task-Ref` merges into the default branch. The job builds
+devflow at that merge commit and uses it to find the published ADR before
+closing the enrolled issue.
 
 The pilot uses the repository's existing GoReleaser release process.
 

@@ -172,11 +172,15 @@ Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
 
+
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
 the qualified issue reference in the PR body and interactive commit message.
-
+Configure a catalog and default under `task_management.templates` to preview new issues
+with template defaults, required sections and checklist items. Devflow records
+the selected revision and validates the issue against it before a comment or
+state change. See the [task template configuration](docs/providers.md#task-templates).
 GitHub Issues repositories can run the reusable `task-events.yml` workflow to
 preview configured pull-request transitions with read-only issue permissions.
 The job reads trusted base-branch configuration and uses an explicit qualified
@@ -190,6 +194,8 @@ remote confirmation. By default they return `pending_review` with the task key,
 GitHub PR URL and review branch. The task listing reflects the change after
 merge. Use `publication: push` for direct writes to an unprotected branch.
 [Provider configuration](docs/providers.md)
+
+The status command reads checks from the configured `devops.checks` provider.
 
 ## Day-to-day use
 

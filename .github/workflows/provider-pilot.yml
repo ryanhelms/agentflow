@@ -23,11 +23,14 @@ jobs:
       vars.DEVFLOW_PROVIDER_PILOT_ISSUE != '' &&
       contains(github.event.pull_request.body, 'Task-Ref: github-issues/nscaledev%2Fdevflow/')
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Check out verified base code and provider configuration
+      - name: Check out the default-branch merge commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:

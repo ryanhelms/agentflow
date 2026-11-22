@@ -16,6 +16,8 @@ import (
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
 // Untrusted wraps text that came from Jira or Confluence.
@@ -397,11 +399,19 @@ func (a *App) ScopeCheck(ctx context.Context) (*contextx.Drift, error) {
 // CreateTicket creates a linked ticket. It always requires confirmation
 // because its content usually comes from code or ticket text.
 func (a *App) CreateTicket(ctx context.Context, project, issueType, summary, description, linkTo, token string) (any, error) {
+	return a.CreateTicketWithTemplate(ctx, project, issueType, summary, description, linkTo, tasktemplate.Ref{}, token)
+}
+
+// CreateTicketWithTemplate selects an exact template, or the repository default for a zero ref.
+func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, summary, description, linkTo string, ref tasktemplate.Ref, token string) (any, error) {
+	if a.usesIssues() {
+		return a.createIssue(ctx, project, issueType, summary, description, linkTo, ref, token)
+	}
+	if ref != (tasktemplate.Ref{}) {
+		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "explicit ticket template")
+	}
 	if a.usesFileTasks() {
 		return a.createFileTask(ctx, project, issueType, summary, description, linkTo, token)
-	}
-	if a.usesIssues() {
-		return a.createIssue(ctx, project, issueType, summary, description, linkTo, token)
 	}
 	if project == "" {
 		project = projectOf(a.CurrentKey(ctx))

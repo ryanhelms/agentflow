@@ -11,6 +11,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
 func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (TransitionResult, error) {
@@ -32,7 +33,7 @@ func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (
 	if operationID == "" {
 		operationID = ref.String() + "/" + plan.Event
 	}
-	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: operationID})
+	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: operationID, CheckTask: a.checkIssueTemplate(plan.Template)})
 	a.audit(policy.Remote, "transition", plan, err)
 	plan.Applied = err == nil && w.Status == provider.Applied
 	if err == nil && w.Status == provider.AlreadyApplied {
@@ -79,9 +80,6 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	}
 	body := text + viaNote(a)
 	s := map[string]any{"key": taskKey(ref), "task_ref": ref.String(), "comment": body, "operation_id": issueOperation()}
-	if p, err := a.gate(policy.Remote, "comment", s, token, false, nil); p != nil || err != nil {
-		return p, err
-	}
 	tasks, err := a.issueTasks(ctx)
 	if err != nil {
 		return nil, err
@@ -90,30 +88,38 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if !ok {
 		return nil, provider.Unsupported(ref.Instance, "comments")
 	}
+	task, err := tasks.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := a.validateIssueTemplate(task)
+	if err != nil {
+		return nil, err
+	}
+	// Retries identify the comment by its target and text, even after an issue edit.
 	opts, err := issueWriteOptions("comment", s, token)
 	if err != nil {
 		return nil, err
 	}
+	if snapshot != nil {
+		s["template"] = snapshot
+	}
+	if p, err := a.gate(policy.Remote, "comment", s, token, false, nil); p != nil || err != nil {
+		return p, err
+	}
+	opts.CheckTask = a.checkIssueTemplate(snapshot)
 	_, err = comments.Comment(ctx, ref, body, opts)
 	a.audit(policy.Remote, "comment", s, err)
 	return map[string]any{"key": taskKey(ref), "commented": err == nil}, err
 }
 
-func (a *App) createIssue(ctx context.Context, project, issueType, title, description, linkTo, token string) (any, error) {
-	var err error
-	if project == "" {
-		project, err = a.defaultIssueRepo(ctx)
-	} else {
-		project, err = issueScope(project)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(title) == "" {
-		return nil, errors.New("issue title is required")
-	}
+func (a *App) createIssue(ctx context.Context, project, issueType, title, description, linkTo string, ref tasktemplate.Ref, token string) (any, error) {
 	if issueType != "" && !strings.EqualFold(issueType, "issue") && !strings.EqualFold(issueType, "task") {
 		return nil, provider.Unsupported(issuesInstance, "issue type "+issueType)
+	}
+	draft, err := a.resolveIssueDraft(ctx, project, title, description, ref)
+	if err != nil {
+		return nil, err
 	}
 	var link provider.Ref
 	if linkTo == "" {
@@ -126,10 +132,12 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 	}
 	if link.ID != "" {
 		linkTo = taskKey(link)
-		description = strings.TrimRight(description, "\n") + "\n\nRelated issue: " + linkTo
+		draft.Description += "\n\nRelated issue: " + linkTo
 	}
-	draft := provider.TaskDraft{Scope: project, Title: title, Description: description, Labels: a.issueSettings().Labels}
-	s := map[string]any{"provider": issuesInstance, "project": project, "type": "Issue", "summary": title, "description": description, "link_to": linkTo, "labels": draft.Labels, "operation_id": issueOperation()}
+	s := map[string]any{"provider": issuesInstance, "project": draft.Scope, "type": "Issue", "summary": draft.Title, "description": draft.Description, "link_to": linkTo, "labels": draft.Labels, "operation_id": issueOperation()}
+	if draft.Template != nil {
+		s["template"] = draft.Template
+	}
 	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
