@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.28.0](https://github.com/nscaledev/devflow/compare/v0.27.0...v0.28.0) - 2026-11-22
+
+### Features
+
+- add layered provider definitions with release constraints (#67) ([af1aeaf](https://github.com/nscaledev/devflow/commit/af1aeaf2093d28672a6fc4d92a1efc564fa45fa6))
+
 ## [0.27.0](https://github.com/nscaledev/devflow/compare/v0.26.0...v0.27.0) - 2026-11-22
 
 ### Features
