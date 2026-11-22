@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | The GitHub Issues and Repository provider pilot completed in this repository. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
+| **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
 | **Current release** | <!-- devflow:version -->`v0.20.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |

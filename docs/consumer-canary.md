@@ -66,6 +66,24 @@ inputs and provider responses are fixtures. A successful run ends with
    completed effects. Re-enable the selected writer for subsequent events.
    Retain the before/after diff, run IDs and reconciliation results as evidence.
 
-Hosted release-please PR creation, runner permission enforcement and GoReleaser
-publication require a separately authorized hosted rehearsal. The local harness
-exercises the consumer matrix and devflow's independent version calculation.
+## Recorded consumer rehearsal
+
+The isolated `nscaledev/mcp-gateway` branch rehearsed devflow v0.20.0 against
+consumer baseline `9a12968`. The runner selected the FileSystem task provider
+and verified every updated caller pin, then restored the exact legacy config
+and caller. Both runs checked the existing image workflow against the same
+baseline. [Consumer canary](https://github.com/nscaledev/mcp-gateway/actions/runs/44981506133),
+[rollback rehearsal](https://github.com/nscaledev/mcp-gateway/actions/runs/44981636085).
+
+The fixture interrupted the delivery after Slack accepted it and the webhook
+rejected it. Replay retried the rejected destination and finished with one
+task, one document, one release and one accepted notification per destination.
+The Git-backed and Jira event fixtures checked the legacy comparisons and
+restored the original settings and manifest.
+
+Both hosted runs passed the native Windows companion install and client
+registration fixtures. Release Please 17.3.0 used a read-only token and
+proposed one `0.2.0` release PR in dry-run mode. `mcp-gateway`'s image workflow
+continues to own its production versions. Devflow's separate GoReleaser
+workflow published v0.20.0. [GoReleaser run](https://github.com/nscaledev/devflow/actions/runs/44981124315),
+[verification work item](https://github.com/nscaledev/devflow/issues/29).

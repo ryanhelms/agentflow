@@ -5,7 +5,7 @@ passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollo
 
 ## Gate · Architecture approval
 
-Nothing below starts until both approvers sign off on [the blueprint](blueprint.html).
+Production rollout starts after both approvers sign off on [the blueprint](blueprint.html).
 
 - [ ] Kyle Redelinghuys approves the architecture and plan
 - [ ] Vishal Srini approves the architecture and plan
@@ -43,8 +43,8 @@ and revision when comparing legacy and provider previews.
    owners before considering any compensating write.
 
 The existing [devflow repository pilot](https://github.com/nscaledev/devflow/issues/25)
-provides issue and ADR replay evidence. Track the consumer rehearsal and its
-rollback evidence in [the canary work item](https://github.com/nscaledev/devflow/issues/29).
+provides issue and ADR replay evidence. The [consumer rehearsal report](consumer-canary.md#recorded-consumer-rehearsal)
+links the hosted canary, rollback, and release verification.
 
 ## P0 · Foundations
 - [ ] Engineering leadership nominates the pilot team and two pilot repos
