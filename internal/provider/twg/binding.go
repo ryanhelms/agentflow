@@ -17,7 +17,7 @@ var (
 	jiraProject  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 	jiraIssueKey = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*-[1-9][0-9]*$`)
 	spaceKey     = regexp.MustCompile(`^~?[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
-	pageID       = regexp.MustCompile(`^[1-9][0-9]*$`)
+	decimalID    = regexp.MustCompile(`^[1-9][0-9]*$`)
 	queryEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 )
 

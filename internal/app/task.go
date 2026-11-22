@@ -518,7 +518,7 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 			}
 			return created, nil
 		}
-		created, err := applyTaskAppend(ctx, a.Home, token, taskWritePreview(*write), apply)
+		created, err := applyTaskAppend(ctx, a.Home, token, write.Call.Provider, taskWritePreview(*write), apply)
 		a.audit(policy.Remote, "ticket_create", s, err)
 		return map[string]string{"key": created.ID}, err
 	}

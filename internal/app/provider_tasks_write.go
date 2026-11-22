@@ -65,19 +65,19 @@ func (w *boundTaskWrite) apply(ctx context.Context) (provider.WriteResult, error
 
 // applyTaskAppend makes the single-use approval survive process restarts.
 // Keep an uncertain attempt claimed, since a prior append may have succeeded.
-func applyTaskAppend[T any](ctx context.Context, home, token string, write taskWritePreview, apply func() (T, error)) (T, error) {
+func applyTaskAppend[T any](ctx context.Context, home, token, destination string, intent any, apply func() (T, error)) (T, error) {
 	var zero T
 	if token == "" {
 		return zero, policy.ErrToken
 	}
-	encoded, err := json.Marshal(write)
+	encoded, err := json.Marshal(intent)
 	if err != nil {
 		return zero, err
 	}
 	store := notifications.FileStore{Dir: filepath.Join(home, "task-write-receipts")}
 	key := notifications.ReceiptKey{
 		OperationID: fmt.Sprintf("%x", sha256.Sum256([]byte(token))),
-		Destination: write.Call.Provider,
+		Destination: destination,
 	}
 	state, err := store.Claim(ctx, key, sha256.Sum256(encoded))
 	if err != nil {
@@ -314,7 +314,7 @@ func (a *App) commentBoundTask(ctx context.Context, task provider.Task, body, to
 	if p, err := a.gate(policy.Remote, "comment", summary, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
-	_, err = applyTaskAppend(ctx, a.Home, token, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })
+	_, err = applyTaskAppend(ctx, a.Home, token, write.Call.Provider, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })
 	a.audit(policy.Remote, "comment", summary, err)
 	return map[string]any{"key": taskKey(ref), "commented": err == nil}, err
 }
