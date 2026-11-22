@@ -1,17 +1,15 @@
 package app
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
-func TestDocsWikiSearchAndApproval(t *testing.T) {
+func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("GH_TOKEN", "")
@@ -32,7 +30,6 @@ func TestDocsWikiSearchAndApproval(t *testing.T) {
 	docsGit(t, dir, "switch", "-c", branch)
 	docsGit(t, dir, "add", "devflow-pages")
 	docsGit(t, dir, "commit", "-m", "seed wiki")
-	docsGit(t, dir, "branch", "wiki/other")
 	bare := filepath.Join(t.TempDir(), "runbooks.wiki.git")
 	docsGit(t, dir, "clone", "--bare", "--", dir, bare)
 	// Any unexpected HTTPS destination also resolves locally and fails fast.
@@ -68,28 +65,9 @@ func TestDocsWikiSearchAndApproval(t *testing.T) {
 	}
 
 	before := docsGit(t, bare, "show-ref")
-	in := DocsPublishInput{Ref: ref, Title: "Quota update", Body: "New text", OperationID: "edit-quota", ExpectedRevision: "stale"}
-	out, err := a.DocsPublish(ctx, in, "")
-	pending, ok := out.(*Pending)
-	if err != nil || !ok || pending.Status != "needs_confirmation" || pending.ConfirmToken == "" {
-		t.Fatalf("wiki publication plan: %+v, %v", out, err)
-	}
-	summary := pending.Summary.(map[string]any)
-	if summary["origin"] != origin || summary["directory"] != "devflow-pages" ||
-		summary["publication"] != "push" || summary["base"] != branch || summary["target"] != branch {
-		t.Fatalf("wiki publication destination: %+v", summary)
-	}
-	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/wiki/other")
-	if _, err := a.DocsPublish(ctx, in, pending.ConfirmToken); !errors.Is(err, policy.ErrToken) {
-		t.Fatalf("approval accepted after wiki target changed: %v", err)
-	}
-	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
-	if _, err := a.DocsPublish(ctx, in, ""); err == nil || !strings.Contains(err.Error(), `protected branch "main"`) {
-		t.Fatalf("wiki publication to protected branch: %v", err)
-	}
-	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/"+branch)
-	if _, err := a.DocsPublish(ctx, in, pending.ConfirmToken); !errors.Is(err, provider.ErrConflict) {
-		t.Fatalf("approved wiki write with stale revision: %v", err)
+	in := DocsPublishInput{Ref: ref, Title: "Quota update", Body: "New text", OperationID: "edit-quota", ExpectedRevision: pages[0].Revision}
+	if _, err := a.DocsPublish(ctx, in, ""); err == nil || !strings.Contains(err.Error(), "git rewrites the repository push destination") {
+		t.Fatalf("expected rejection before approval for the rewritten wiki URL: %v", err)
 	}
 	if refs := docsGit(t, bare, "show-ref"); refs != before {
 		t.Fatalf("wiki refs changed from %q to %q", before, refs)

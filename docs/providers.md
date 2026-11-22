@@ -310,6 +310,8 @@ page in GitHub's web UI. Configure Git's HTTPS credential helper for any reads
 that need authentication and for writes to
 `https://github.com/owner/name.wiki.git`. Use credentials with permission to
 edit the wiki when publishing.
+Use the direct GitHub wiki remote so the configured URL and Git's push
+destination match.
 
 ```yaml
 devflow: 1
