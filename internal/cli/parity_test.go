@@ -16,8 +16,9 @@ import (
 	"github.com/nscaledev/devflow/internal/mcpserver"
 )
 
-// mcpToCLI maps every MCP tool to the CLI command that runs the same
-// internal/app operation. A new MCP tool must add a CLI command and a row here.
+// mcpToCLI maps every statically registered MCP tool to the CLI command that
+// runs the same internal/app operation. A new static tool must add a CLI
+// command and a row here.
 var mcpToCLI = map[string]string{
 	"devflow_context":         "context",
 	"devflow_my_work":         "work",
@@ -49,6 +50,12 @@ var mcpToCLI = map[string]string{
 	"devflow_setup_plan":      "setup",
 	"devflow_setup_apply":     "setup apply",
 }
+
+// definitionTool reports whether a tool was generated at runtime from a
+// provider definition rather than registered statically. Such tools get their
+// CLI command from the same definition and are checked separately, not
+// against mcpToCLI. None exist yet.
+func definitionTool(string) bool { return false }
 
 func registeredTools(t *testing.T) []string {
 	t.Helper()
@@ -84,11 +91,10 @@ func TestEveryMCPToolHasCLICommand(t *testing.T) {
 	t.Setenv("DEVFLOW_HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	tools := registeredTools(t)
 	registered := map[string]bool{}
-	for _, name := range tools {
+	for _, name := range registeredTools(t) {
 		registered[name] = true
-		if _, ok := mcpToCLI[name]; !ok {
+		if _, ok := mcpToCLI[name]; !ok && !definitionTool(name) {
 			t.Errorf("MCP tool %s has no CLI command: add one in internal/cli and a row in mcpToCLI", name)
 		}
 	}
