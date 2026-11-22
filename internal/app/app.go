@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -18,6 +20,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/legacy"
 )
 
 // App is an opened repository plus the developer's configuration.
@@ -30,10 +33,11 @@ type App struct {
 	Client string
 	Home   string
 
-	tasks provider.Tasks
-	jira  *atlassian.Client
-	ghc   *gh.Client
-	fm    *flowmap.Map
+	jiraMu sync.Mutex
+	jira   *atlassian.Client
+	tasks  provider.Tasks
+	ghc    *gh.Client
+	fm     *flowmap.Map
 }
 
 // Open opens the repo containing dir. client names the calling AI client.
@@ -62,22 +66,6 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 		return nil, err
 	}
 	return &App{Repo: repo, Cfg: cfg, HasCfg: found, User: user, Gate: gate, Client: client, Home: home}, nil
-}
-
-// Jira returns an authenticated Atlassian client.
-func (a *App) Jira() (*atlassian.Client, error) {
-	if a.jira != nil {
-		return a.jira, nil
-	}
-	cred, err := auth.LoadAtlassian(a.Cfg.Jira.Site)
-	if err != nil {
-		return nil, err
-	}
-	if cred.Site == "" {
-		cred.Site = a.Cfg.Jira.Site
-	}
-	a.jira = atlassian.New(cred)
-	return a.jira, nil
 }
 
 // GitHub returns a client using the developer's gh token.
@@ -114,15 +102,6 @@ func (a *App) FlowMap(ctx context.Context) (*flowmap.Map, error) {
 	return m, nil
 }
 
-// GitHubRepo returns origin as owner/name.
-func (a *App) GitHubRepo(ctx context.Context) (string, error) {
-	r := a.Repo.RemoteRepo(ctx)
-	if r == "" {
-		return "", errors.New("origin is not a GitHub remote")
-	}
-	return r, nil
-}
-
 func (a *App) detectForge(ctx context.Context) (gitx.Detection, error) {
 	opts := gitx.DetectOptions{}
 	if cfg, ok := a.Cfg.Providers.CodeHosting.Settings.(*config.CodeHostingSettings); ok {
@@ -156,11 +135,12 @@ func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
 		}
 		return taskKey(ref), nil
 	}
-	if key != "" {
-		return key, nil
+	if key == "" {
+		key = a.CurrentKey(ctx)
 	}
-	if k := a.CurrentKey(ctx); k != "" {
-		return k, nil
+	if key != "" {
+		_, err := legacy.JiraRef("jira", key)
+		return key, err
 	}
 	return "", errors.New("no Jira key given and the branch name has none; pass a key or run devflow start")
 }
@@ -168,6 +148,11 @@ func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
 // Checklists returns the local acceptance-criteria store.
 func (a *App) Checklists(ctx context.Context) contextx.Store {
 	return contextx.Store{Dir: filepath.Join(a.Repo.GitDir(ctx), "devflow")}
+}
+
+// shellQuote preserves a single literal argument in a suggested POSIX shell command.
+func shellQuote(arg string) string {
+	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
 }
 
 // Pending is returned instead of a result when an action did not run yet.
@@ -225,6 +210,13 @@ func (a *App) PlanTransition(ctx context.Context, key, event string) (Transition
 		return a.planTaskTransition(ctx, key, event, nil)
 	}
 	res := TransitionResult{Key: key, Event: event}
+	ref, err := legacy.JiraRef("jira", key)
+	if err != nil {
+		return res, err
+	}
+	if _, err := a.jiraSite(); err != nil {
+		return res, err
+	}
 	fm, err := a.FlowMap(ctx)
 	if err != nil {
 		return res, err
@@ -235,24 +227,24 @@ func (a *App) PlanTransition(ctx context.Context, key, event string) (Transition
 		return res, nil
 	}
 	res.To = target
-	jc, err := a.Jira()
+	j, err := a.jiraTasks(nil)
 	if err != nil {
 		res.Note = "Jira not reachable: " + err.Error()
 		return res, nil
 	}
-	iss, err := jc.GetIssue(ctx, key)
+	task, err := j.GetFields(ctx, ref)
 	if err != nil {
 		return res, err
 	}
-	res.From = iss.Fields.Status.Name
+	res.From = task.State.Name
 	switch {
 	case fm.Backwards(projectOf(key), res.From, target):
 		res.Note = fmt.Sprintf("%s is before %s in the project's order; devflow only moves forward", target, res.From)
 		res.To = ""
-	case res.From == target:
+	case strings.EqualFold(res.From, target):
 		res.Note = "already in " + target
 		res.To = ""
-	case iss.Fields.Status.Category.Key == "done":
+	case task.State.Terminal:
 		res.Note = "ticket is done; devflow never moves it back"
 		res.To = ""
 	}
@@ -270,26 +262,32 @@ func (a *App) ApplyTransition(ctx context.Context, plan TransitionResult) (Trans
 	if a.usesIssues() {
 		return a.applyIssueTransition(ctx, plan)
 	}
-	jc, err := a.Jira()
+	ref, err := legacy.JiraRef("jira", plan.Key)
 	if err != nil {
 		return plan, err
 	}
-	ts, err := jc.Transitions(ctx, plan.Key)
+	fm, err := a.FlowMap(ctx)
 	if err != nil {
 		return plan, err
 	}
-	for _, t := range ts {
-		if t.To.Name == plan.To {
-			err := jc.DoTransition(ctx, plan.Key, t.ID)
-			a.audit(policy.Remote, "transition", plan, err)
-			if err == nil {
-				plan.Applied = true
-			}
-			return plan, err
-		}
+	if target, ok := fm.Resolve(ref.Scope, plan.Event); !ok || target != plan.To {
+		return plan, errors.New("transition destination differs from the Jira flow map")
 	}
-	plan.Note = fmt.Sprintf("no transition from %q to %q in this workflow", plan.From, plan.To)
-	return plan, nil
+	j, err := a.jiraTasks(fm)
+	if err != nil {
+		return plan, err
+	}
+	result, err := j.Transition(ctx, ref, provider.TaskState{Name: plan.To}, provider.WriteOptions{})
+	if errors.Is(err, legacy.ErrNoTransition) {
+		plan.Note = fmt.Sprintf("no transition from %q to %q in this workflow", plan.From, plan.To)
+		return plan, nil
+	}
+	plan.Applied = err == nil && result.Status == provider.Applied
+	if result.Status == provider.AlreadyApplied {
+		plan.Note = "already in " + plan.To
+	}
+	a.audit(policy.Remote, "transition", map[string]any{"site": a.jiraSettings().Site, "transition": plan}, err)
+	return plan, err
 }
 
 // Transition plans and, subject to the gate, applies a transition.
@@ -310,8 +308,11 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 	if a.usesFileTasks() {
 		return a.transitionFileTask(ctx, plan, token)
 	}
-	var summary any = plan
-	commands := []string{fmt.Sprintf("devflow transition %s %s", key, event)}
+	var summary any = struct {
+		TransitionResult
+		Site string `json:"site"`
+	}{plan, a.jiraSettings().Site}
+	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
 	if a.usesIssues() {
 		ref, err := a.taskRef(ctx, plan.Key)
 		if err != nil {
@@ -321,7 +322,6 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 			TransitionResult
 			TaskRef string `json:"task_ref"`
 		}{plan, ref.String()}
-		// A structured suggestion preserves literal event names such as "#done".
 		commands = nil
 	}
 	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
@@ -342,15 +342,24 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	summary := map[string]string{"key": key, "comment": text}
-	if p, err := a.gate(policy.Remote, "comment", summary, token, false, nil); p != nil || err != nil {
-		return p, err
-	}
-	jc, err := a.Jira()
+	ref, err := legacy.JiraRef("jira", key)
 	if err != nil {
 		return nil, err
 	}
-	err = jc.AddComment(ctx, key, text+viaNote(a))
+	site, err := a.jiraSite()
+	if err != nil {
+		return nil, err
+	}
+	body := text + viaNote(a)
+	summary := map[string]string{"site": site, "key": key, "comment": body}
+	if p, err := a.gate(policy.Remote, "comment", summary, token, false, nil); p != nil || err != nil {
+		return p, err
+	}
+	j, err := a.jiraTasks(nil)
+	if err != nil {
+		return nil, err
+	}
+	_, err = j.Comment(ctx, ref, body, provider.WriteOptions{})
 	a.audit(policy.Remote, "comment", summary, err)
 	return map[string]any{"key": key, "commented": err == nil}, err
 }
@@ -363,10 +372,8 @@ func viaNote(a *App) string {
 }
 
 func projectOf(key string) string {
-	for i := range key {
-		if key[i] == '-' {
-			return key[:i]
-		}
+	if i := strings.LastIndexByte(key, '-'); i >= 0 {
+		return key[:i]
 	}
 	return key
 }
