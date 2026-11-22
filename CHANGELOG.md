@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.32.0](https://github.com/nscaledev/devflow/compare/v0.31.0...v0.32.0) - 2026-11-22
+
+### Features
+
+- **jira:** create issues from claude code desktop (#75) ([3fba552](https://github.com/nscaledev/devflow/commit/3fba552c4646b103ec4c26216bb8e796b07efa9f))
+
 ## [0.31.0](https://github.com/nscaledev/devflow/compare/v0.30.0...v0.31.0) - 2026-11-22
 
 ### Features
