@@ -23,9 +23,10 @@ func runProviderSetup(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("setup "+op, flag.ContinueOnError)
 	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.Clients, ", "))
 	asJSON := fs.Bool("json", false, "print the typed setup plan as JSON")
-	var yes bool
+	var yes, installGH bool
 	if op == "apply" {
-		fs.BoolVar(&yes, "yes", false, "approve registering the named project adapter")
+		fs.BoolVar(&yes, "yes", false, "approve the selected local setup action")
+		fs.BoolVar(&installGH, "install-gh", false, "install the pinned gh companion only")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -42,33 +43,33 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			return err
 		}
 	case "apply":
-		if *client == "" {
-			return errors.New("setup apply requires --client NAME")
+		if *client == "" && !installGH {
+			return errors.New("setup apply requires --client NAME or --install-gh")
 		}
 		a, err := open(ctx)
 		if err != nil {
 			return err
 		}
-		result, err := a.ApplyProviderSetup(ctx, *client, "")
+		result, err := a.ApplyProviderSetup(ctx, *client, "", installGH)
 		if err != nil {
 			return err
 		}
 		if pending, ok := result.(*app.Pending); ok {
 			if pending.Status == "suggest" {
-				return fmt.Errorf("project registration requires local write permission: %s", pending.Reason)
+				return fmt.Errorf("setup apply requires local write permission: %s", pending.Reason)
 			}
 			if !yes {
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
-					return errors.New("review devflow setup plan, then pass --yes to approve noninteractive registration")
+					return errors.New("review devflow setup plan, then pass --yes to approve the selected setup action")
 				}
 				if err := printJSON(pending.Summary); err != nil {
 					return err
 				}
-				if !strings.EqualFold(ask("Register this project adapter? [y/N] "), "y") {
+				if !strings.EqualFold(ask("Apply this setup action? [y/N] "), "y") {
 					return errors.New("cancelled")
 				}
 			}
-			result, err = a.ApplyProviderSetup(ctx, *client, pending.ConfirmToken)
+			result, err = a.ApplyProviderSetup(ctx, *client, pending.ConfirmToken, installGH)
 			if err != nil {
 				return err
 			}
@@ -93,6 +94,10 @@ func runProviderSetup(ctx context.Context, args []string) error {
 				state = "needs attention"
 			}
 			fmt.Printf("%s  %s (%s)  %s\n", state, r.Role, r.Provider, r.Detail)
+		}
+		if i := plan.InstallGH; i != nil {
+			a := i.Artifact
+			fmt.Printf("Pinned gh %d.%d.%d from %s (SHA256 %s) under %s\n", a.Version.Major, a.Version.Minor, a.Version.Patch, a.Source, a.SHA256, i.Home)
 		}
 		if r := plan.Registration; r != nil {
 			fmt.Printf("%s  %s  %s\n", r.State, r.Path, r.Detail)

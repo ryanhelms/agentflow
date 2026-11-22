@@ -193,15 +193,23 @@ func (c *Repo) CheckEvery() time.Duration {
 
 // Home returns ~/.devflow, creating it if needed.
 func Home() (string, error) {
+	dir, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return dir, os.MkdirAll(dir, 0o700)
+}
+
+// HomeDir returns the configured user directory without creating it.
+func HomeDir() (string, error) {
 	if h := os.Getenv("DEVFLOW_HOME"); h != "" {
-		return h, os.MkdirAll(h, 0o700)
+		return h, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(home, ".devflow")
-	return dir, os.MkdirAll(dir, 0o700)
+	return filepath.Join(home, ".devflow"), nil
 }
 
 // LoadUser reads ~/.devflow/config.yml, defaulting autonomy to confirm.

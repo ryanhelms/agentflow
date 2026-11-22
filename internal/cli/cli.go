@@ -45,7 +45,8 @@ Setup
   pin [--check]                  pin .github/workflows/devflow.yml to this devflow release
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
-  setup [plan|verify|apply] [--client NAME] [--json]   inspect providers or register a project adapter
+  setup [plan|verify] [--client NAME] [--json]   inspect provider and client readiness
+  setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
@@ -505,7 +506,7 @@ func runLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Printf("Signed in to %s as %s. Token saved in the OS keychain.\n", *site, me.DisplayName)
-	if _, err := auth.GitHubToken(ctx); err != nil {
+	if _, err := auth.GitHubToken(ctx, ""); err != nil {
 		fmt.Println("GitHub: run `gh auth login` so devflow can open PRs and install updates.")
 	}
 	return nil
@@ -824,7 +825,7 @@ func newUpdater(ctx context.Context) (*update.Updater, error) {
 	if u, err := config.LoadUser(); err == nil && u.Update.Auto != nil && !*u.Update.Auto {
 		opts.Disabled = true
 	}
-	tok, err := auth.GitHubToken(ctx)
+	tok, err := auth.GitHubToken(ctx, "")
 	if err != nil {
 		return nil, err
 	}

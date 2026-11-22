@@ -1,5 +1,4 @@
-// Guided setup inspects the environment running devflow. It never installs a
-// companion, asks for a credential, or changes the selected providers.
+// Guided setup inspects the environment running devflow.
 package setup
 
 import (
@@ -14,6 +13,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/provision"
 )
 
@@ -25,11 +25,12 @@ type ProviderRequirement struct {
 }
 
 type ProviderSetupPlan struct {
-	Root         string                `json:"root"`
-	Platform     provision.Platform    `json:"platform"`
-	Requirements []ProviderRequirement `json:"requirements"`
-	Registration *ClientRegistration   `json:"registration,omitempty"`
-	Ready        bool                  `json:"ready"`
+	Root         string                  `json:"root"`
+	Platform     provision.Platform      `json:"platform"`
+	Requirements []ProviderRequirement   `json:"requirements"`
+	InstallGH    *managedgh.Installation `json:"install_gh,omitempty"`
+	Registration *ClientRegistration     `json:"registration,omitempty"`
+	Ready        bool                    `json:"ready"`
 }
 
 func (p *ProviderSetupPlan) check(role, provider string, ready bool, detail string) {
@@ -107,15 +108,22 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		}
 	}
 	env := provision.Environment{ID: "local", Platform: p.Platform}
-	gitOK, err := p.companion(ctx, env, "git", gitRoles)
-	if err != nil {
-		return nil, err
-	}
-	ghOK, err := p.companion(ctx, env, "gh", ghRoles)
+	gitOK, err := p.checkGit(ctx, env, gitRoles)
 	if err != nil {
 		return nil, err
 	}
 	github := githubProbe{dir: root, detection: detection, auth: map[string]bool{}}
+	if len(ghRoles) != 0 {
+		selection, err := managedgh.Inspect(ctx, root)
+		if err != nil {
+			selection.Detail = "cannot use managed gh: " + err.Error()
+		}
+		p.InstallGH = selection.Install
+		github.command = selection.Command
+		for _, role := range ghRoles {
+			p.check(role.name, role.Provider, github.command != "", selection.Detail)
+		}
+	}
 	for _, role := range roles {
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
@@ -139,15 +147,15 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 					detail = "select a GitHub target remote for this workspace or disable code_hosting"
 				}
 				p.check(role.name, role.Provider, false, detail)
-			} else if ghOK {
+			} else if github.command != "" {
 				github.check(ctx, p, role, nil)
 			}
 		case *config.GitHubSettings:
-			if ghOK {
+			if github.command != "" {
 				github.check(ctx, p, role, settings.Repository)
 			}
 		case *config.GitHubIssuesSettings:
-			if ghOK {
+			if github.command != "" {
 				github.check(ctx, p, role, settings.Repository)
 			}
 		default:
@@ -188,13 +196,12 @@ func (p commandProbe) Observe(ctx context.Context, _ provision.Environment, targ
 	return seen, ctx.Err()
 }
 
-// Reconcile each shared executable independently so a missing gh does not
-// suppress diagnostics for Git or unrelated local providers.
-func (p *ProviderSetupPlan) companion(ctx context.Context, env provision.Environment, command string, roles []selectedRole) (bool, error) {
+// Check the system Git once across all repository providers.
+func (p *ProviderSetupPlan) checkGit(ctx context.Context, env provision.Environment, roles []selectedRole) (bool, error) {
 	if len(roles) == 0 {
 		return true, nil
 	}
-	target := provision.Target{ID: command, Command: command, Kind: provision.CLI, Health: provision.HealthProbe{Name: "version"}}
+	target := provision.Target{ID: "git", Command: "git", Kind: provision.CLI, Health: provision.HealthProbe{Name: "version"}}
 	var manifests []provision.Manifest
 	for _, role := range roles {
 		manifests = append(manifests, provision.Manifest{ProviderID: role.name, Companions: []provision.Companion{{Target: target}}})
@@ -206,7 +213,7 @@ func (p *ProviderSetupPlan) companion(ctx context.Context, env provision.Environ
 	var detail string
 	switch {
 	case errors.As(err, &conflict):
-		detail = "install " + command + " on PATH in the environment running devflow and rerun setup. No installation artifact is declared"
+		detail = "install git on PATH in the environment running devflow and rerun setup. No installation artifact is declared"
 	case err != nil:
 		return false, err
 	default:
@@ -216,9 +223,9 @@ func (p *ProviderSetupPlan) companion(ctx context.Context, env provision.Environ
 			return false, err
 		}
 		ready = err == nil
-		detail = command + " --version succeeded"
+		detail = "git --version succeeded"
 		if !ready {
-			detail = "repair " + command + " on PATH so " + command + " --version succeeds"
+			detail = "repair git on PATH so git --version succeeds"
 		}
 	}
 	for _, role := range roles {

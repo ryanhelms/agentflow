@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/nscaledev/devflow/internal/managedgh"
 )
 
 const service = "devflow"
@@ -68,13 +70,26 @@ func DeleteAtlassian(site string) error {
 }
 
 // GitHubToken returns GH_TOKEN/GITHUB_TOKEN or the token from the gh CLI.
-func GitHubToken(ctx context.Context) (string, error) {
+// For provider operations, repo names the workspace for managed gh resolution.
+func GitHubToken(ctx context.Context, repo string) (string, error) {
 	for _, k := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
 		if t := os.Getenv(k); t != "" {
 			return t, nil
 		}
 	}
-	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
+	command := "gh"
+	if repo != "" {
+		selection, err := managedgh.Inspect(ctx, repo)
+		if err != nil {
+			return "", err
+		}
+		if selection.Command == "" {
+			return "", errors.New(selection.Detail)
+		}
+		command = selection.Command
+	}
+	cmd := exec.CommandContext(ctx, command, "auth", "token")
+	cmd.Dir = repo
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	if err := cmd.Run(); err != nil {
