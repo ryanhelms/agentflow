@@ -39,3 +39,19 @@ func TestScopeCheck(t *testing.T) {
 		t.Fatalf("d = %+v", d)
 	}
 }
+
+func TestPreviewSyncDoesNotSaveProviderReply(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	initial, err := s.Sync("APP-1", []Item{{Text: "Verified"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := s.PreviewSync("APP-1", []Item{{Text: "Verified", Done: true}})
+	if err != nil || !preview.Items[0].Done {
+		t.Fatalf("preview %+v: %v", preview, err)
+	}
+	saved, err := s.Load("APP-1")
+	if err != nil || saved.Items[0].Done || !saved.Updated.Equal(initial.Updated) {
+		t.Fatalf("preview changed saved checklist %+v: %v", saved, err)
+	}
+}

@@ -110,10 +110,9 @@ func (c *Client) ReplaceConfluencePage(ctx context.Context, page CurrentPage, ti
 	if err != nil {
 		return err
 	}
-	storage := "<p>" + strings.ReplaceAll(html.EscapeString(body), "\n", "<br />") + "</p>"
 	in := map[string]any{
 		"id": page.ID, "status": "current", "title": title, "version": version,
-		"body": map[string]string{"representation": "storage", "value": storage},
+		"body": map[string]string{"representation": "storage", "value": ConfluenceLiteralHTML(body)},
 	}
 	var out confluencePageResponse
 	if err := c.pageRequest(ctx, "PUT", path, in, &out); err != nil {
@@ -123,4 +122,9 @@ func (c *Client) ReplaceConfluencePage(ctx context.Context, page CurrentPage, ti
 		return fmt.Errorf("could not confirm Confluence page %s version %d, retry the same operation to verify", page.ID, version.Number)
 	}
 	return nil
+}
+
+// ConfluenceLiteralHTML encodes a replacement body as literal text with line breaks.
+func ConfluenceLiteralHTML(body string) string {
+	return "<p>" + strings.ReplaceAll(html.EscapeString(body), "\n", "<br />") + "</p>"
 }
