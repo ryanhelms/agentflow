@@ -15,6 +15,8 @@ import (
 	"github.com/nscaledev/devflow/internal/commit"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/repository"
 )
 
 // Collisions describes other work on the same ticket or files.
@@ -183,7 +185,22 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]any, error) {
 	switch a.Cfg.Providers.KnowledgeBase.Provider {
 	case "filesystem":
-		return a.searchFileSystemDocs(ctx, query, space)
+		knowledge, err := filesystem.NewKnowledge("filesystem", a.knowledgeDirectory())
+		if err != nil {
+			return nil, err
+		}
+		defer knowledge.Close()
+		return searchDocuments(ctx, knowledge, query, space)
+	case "repository":
+		cfg, err := a.knowledgeRepository(ctx)
+		if err != nil {
+			return nil, err
+		}
+		knowledge, err := repository.NewKnowledge(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return searchDocuments(ctx, knowledge, query, space)
 	case "", "confluence":
 	default:
 		return nil, provider.Unsupported(a.Cfg.Providers.KnowledgeBase.Provider, "document search")

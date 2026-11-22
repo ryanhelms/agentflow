@@ -32,7 +32,11 @@ func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (
 	if err != nil {
 		return plan, err
 	}
-	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: ref.String() + "/" + plan.Event})
+	operationID := plan.operationID
+	if operationID == "" {
+		operationID = ref.String() + "/" + plan.Event
+	}
+	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: operationID})
 	a.audit(policy.Remote, "transition", plan, err)
 	plan.Applied = err == nil && w.Status == provider.Applied
 	if err == nil && w.Status == provider.AlreadyApplied {
