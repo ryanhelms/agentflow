@@ -11,14 +11,15 @@ import (
 
 // Readiness says how devflow setup plan checks a provider.
 const (
-	ReadinessBuiltIn   = "built-in"  // devflow probes it directly
-	ReadinessCompanion = "companion" // needs a declared MCP companion
-	ReadinessNone      = "none"      // the role is disabled
+	ReadinessBuiltIn          = "built-in"           // devflow probes it directly
+	ReadinessCompanion        = "companion"          // needs a declared MCP companion
+	ReadinessClient           = "client"             // verify through client tooling or a declared companion
+	ReadinessClientOrHeadless = "client-or-headless" // also supports a direct headless probe with explicit credentials
+	ReadinessNone             = "none"               // the role is disabled
 )
 
-// builtInReadiness lists the providers PlanSetup probes itself. Every other
-// provider falls through to its companion check.
-var builtInReadiness = []string{"auto", "github", "github-issues", "github-wiki", "asana", "filesystem", "repository", "fixture"}
+// builtInReadiness lists providers whose standard readiness checks run directly in devflow.
+var builtInReadiness = []string{"auto", "github", "github-issues", "github-wiki", "filesystem", "repository", "fixture"}
 
 type ProviderOption struct {
 	ID        string `json:"id"`
@@ -77,6 +78,10 @@ func ListProviders(ctx context.Context, dir string) (*ProviderList, error) {
 
 func readiness(id string) string {
 	switch {
+	case id == "jira" || id == "confluence" || id == "slack":
+		return ReadinessClient
+	case id == "asana":
+		return ReadinessClientOrHeadless
 	case id == "none":
 		return ReadinessNone
 	case slices.Contains(builtInReadiness, id):
