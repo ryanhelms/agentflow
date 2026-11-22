@@ -1,0 +1,96 @@
+{
+  "createJiraIssue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "additional_fields": {
+        "additionalProperties": {},
+        "description": "Additional Jira fields. Keys can be human-readable field names or raw customfield_* IDs. Values can be human-readable (resolved automatically) or already-correct Jira shapes. Examples:\n  {\"Story Points\": 8}                          ← number field by name\n  {\"Team\": \"Backend\"}                          ← option/select by name\n  {\"Reviewers\": [\"alice@acme.com\", \"bob@acme.com\"]}  ← multi-user by accountId\n  {\"Component Area\": \"Platform / Auth\"}        ← cascading select as \"Parent / Child\"\n  {\"customfield_10010\": 8}                     ← raw ID (no resolution needed, fastest)\n  {\"components\": [{\"name\": \"Backend\"}]}        ← system array field (raw shape)\n  {\"fixVersions\": [{\"name\": \"v2.0\"}]}          ← system array field (raw shape)\nOn error, the response includes allowedValues and a repairHint for self-correction.\n",
+        "type": "object"
+      },
+      "assignToSprint": {
+        "description": "Optional sprint assignment after the issue is created. Accepts a numeric sprint ID, an exact sprint name, or \"active\" to resolve an active sprint. Numeric sprint IDs assign directly and do not need board lookup. When omitted, createJiraIssue behaves exactly as before and does not make sprint calls.\n",
+        "type": "string"
+      },
+      "assignee": {
+        "description": "Account ID of the assignee. Resolve a name with listJiraIssueAssignableUsers, which returns only users who can be assigned in this project; lookupJiraAccountId resolves any user and does not check that.",
+        "type": "string"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "contentFormat": {
+        "description": "Body format for description. Defaults to markdown; html adds panels, tables and status lozenges. For HTML body shapes, first get the format guide via the generic operation runner (execute) as name=getContentFormatGuide, inputs={toolName: \"createJiraIssue\"}. Inline media needs an existing issue: create first, then embed with editJiraIssue. When the HTML content-format feature is disabled the call is rejected rather than downgraded, because markdown would store the HTML tags as literal text.\n",
+        "enum": [
+          "markdown",
+          "html"
+        ],
+        "type": "string"
+      },
+      "description": {
+        "description": "Issue description in markdown, or HTML with contentFormat html. Converted to Jira ADF automatically.",
+        "type": "string"
+      },
+      "issueType": {
+        "description": "Issue type name (e.g. Bug, Task, Story, Epic). Use listJiraProjectIssueTypesMetadata to list valid types for this project if unsure.\n",
+        "type": "string"
+      },
+      "labels": {
+        "description": "List of label strings (e.g. [\"bug\", \"needs-triage\"]).",
+        "items": {},
+        "type": "array"
+      },
+      "parent": {
+        "description": "Parent issue key for sub-tasks or child issues (e.g. PROJ-10).",
+        "type": "string"
+      },
+      "priority": {
+        "description": "Priority name (e.g. High, Medium, Low, Highest, Lowest).",
+        "type": "string"
+      },
+      "projectKey": {
+        "description": "Project key (e.g. PROJ).",
+        "type": "string"
+      },
+      "summary": {
+        "description": "Issue summary / title.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId",
+      "projectKey",
+      "summary",
+      "issueType"
+    ],
+    "type": "object"
+  },
+  "listJiraProjectIssueTypesMetadata": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "maxResults": {
+        "description": "Maximum issue types to return per page (max 200, default 50).",
+        "type": "number"
+      },
+      "projectIdOrKey": {
+        "description": "Project ID or key (e.g. PROJ or 10000)",
+        "type": "string"
+      },
+      "startAt": {
+        "description": "Index of the first issue type to return (page offset). Defaults to 0.",
+        "type": "number"
+      }
+    },
+    "required": [
+      "cloudId",
+      "projectIdOrKey"
+    ],
+    "type": "object"
+  }
+}

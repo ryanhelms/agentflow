@@ -212,8 +212,10 @@ and preview the update with `devflow_docs_publish`. Desktop verifies the page’
 space ID and key on the same site before it can publish. Repositories can limit
 publication to space keys in `knowledge_base.settings.publish_spaces`.
 
-In a regular Claude Code Desktop session, `devflow_ticket_create` can create a
-GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
+In a regular Claude Code Desktop session, `devflow_ticket_create` can create an
+unlinked Jira issue through the Devflow Rovo enrollment. Devflow checks the Jira
+project and issue type, then requests approval for the exact issue. The same
+tool can create a GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
 account and repository. If sign-in is needed, run
 `devflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·

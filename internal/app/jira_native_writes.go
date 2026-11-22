@@ -207,6 +207,17 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 	if err != nil {
 		return nil, err
 	}
+	if write.Binding.Owner == "devflow" {
+		read, err := nativemap.JiraProjectIssueTypes(site, draft.Scope)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := jiraNativeRead(ctx, write, read, func(raw json.RawMessage) (struct{}, error) {
+			return struct{}{}, nativemap.CheckJiraCreateType(raw, draft.Type)
+		}); err != nil {
+			return nil, err
+		}
+	}
 	return write, nil
 }
 
