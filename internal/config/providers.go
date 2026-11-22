@@ -221,7 +221,9 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		{devops, "releases", "devops.releases", github, &p.DevOps.Releases},
 		{raw, "secops", "secops", github, &p.SecOps},
 		{raw, "notifications", "notifications", roleSchema{"slack", map[string]settingsFactory{
-			"slack": func() any { return &SlackSettings{} },
+			"slack":   func() any { return &SlackSettings{} },
+			"webhook": func() any { return &WebhookSettings{} },
+			"router":  func() any { return &NotificationRoutes{} },
 		}}, &p.Notifications},
 	} {
 		fields, present, err := section(role.parent, role.key, role.path, "version", "provider", "settings")
@@ -238,7 +240,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 			return Providers{}, fmt.Errorf("knowledge_base.settings.repository: %w", err)
 		}
 	}
-	return p, nil
+	return p, validateNotificationSettings(p.Notifications)
 }
 
 func section(parent map[string]any, key, path string, keys ...string) (map[string]any, bool, error) {

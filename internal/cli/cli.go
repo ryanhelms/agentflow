@@ -63,6 +63,7 @@ Work
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
+  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
                [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
@@ -115,7 +116,7 @@ func Main(args []string) int {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "setup", "update", "version", "help":
+	case "hook", "lint-msg", "keys", "mcp", "notify", "setup", "update", "version", "help":
 		return true
 	}
 	return false
@@ -161,6 +162,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runPin(ctx, args)
 	case "setup":
 		return runProviderSetup(ctx, args)
+	case "notify":
+		return runNotify(ctx, args)
 	case "install":
 		return runInstall(ctx, args)
 	case "login":

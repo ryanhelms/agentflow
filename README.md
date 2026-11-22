@@ -60,7 +60,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions |
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
-| **Signals** | Slack notifications, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
+| **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
 | **AI assist** | 29 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
@@ -78,14 +78,14 @@ flowchart LR
   actions --> conf
   actions --> rel["GitHub Releases<br/>binaries · images · charts"]
   jira -->|Jira Automation| conf
-  actions --> slack[Slack]
+  actions --> notifications[Slack and webhook destinations]
 ```
 
 devflow has two halves that share one status map and one set of rules:
 
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
    every opted-in repo: Jira key checks, ticket transitions, semantic releases, release
-   guard, Confluence publishing, Slack and hygiene. Repos call them from a single
+   guard, Confluence publishing, delivery notifications and hygiene. Repos call them from a single
    caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that `devflow pin`
    moves forward in a reviewed PR.
 2. **The `devflow` binary**, one Go program that is a CLI, an MCP server and a set of git
@@ -321,6 +321,7 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 | Task | How |
 | --- | --- |
 | Org secrets, optional GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
+| Configure and replay delivery notifications from CI or `devflow notify` | [docs/notifications.md](docs/notifications.md) |
 | Rollout phases and checklists | [docs/rollout.md](docs/rollout.md) |
 | Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
 | Pause devflow in one repo | Repository variable `DEVFLOW_ENABLED=false` |
