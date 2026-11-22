@@ -19,17 +19,21 @@ import (
 )
 
 type jiraNativeFixture struct {
-	reads     []native.Call
-	writes    []native.Call
-	account   string
-	issueFrom string
-	boundFrom string
-	route     string
-	missing   string
-	writeErr  error
+	reads      []native.Call
+	writes     []native.Call
+	account    string
+	issueFrom  string
+	boundFrom  string
+	route      string
+	missing    string
+	prepareErr error
+	writeErr   error
 }
 
 func (f *jiraNativeFixture) Prepare(_ context.Context, call native.Call) (native.WriteBinding, error) {
+	if f.prepareErr != nil {
+		return native.WriteBinding{}, f.prepareErr
+	}
 	if call.Tool == f.missing {
 		return native.WriteBinding{}, native.ErrUnavailable
 	}
@@ -371,5 +375,15 @@ func TestJiraRemoteLinkReleasesTheClaimBeforeDispatch(t *testing.T) {
 	}
 	if _, err := appl.LinkJiraRemote(ctx, "PLAT-1", url, "Fixture", confirmation(t, preview)); err != nil || len(fixture.writes) != 1 {
 		t.Fatalf("fresh approval = %v, writes = %d", err, len(fixture.writes))
+	}
+}
+
+func TestJiraRemoteLinkDoesNotFallBackOnMalformedMCPTool(t *testing.T) {
+	appl, fixture, ctx := jiraNativeApp(t)
+	fixture.prepareErr = native.ErrDenied
+	t.Setenv("PATH", t.TempDir())
+	_, err := appl.LinkJiraRemote(ctx, "PLAT-1", "https://example.com/scope", "Fixture", "")
+	if !errors.Is(err, native.ErrDenied) || len(fixture.writes) != 0 {
+		t.Fatalf("malformed MCP preparation = %v, writes = %d", err, len(fixture.writes))
 	}
 }

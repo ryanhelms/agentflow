@@ -72,7 +72,7 @@ func (s *writeSession) Check(call native.Call) error {
 		InputSchema *jsonschema.Schema `json:"inputSchema"`
 	}
 	if err := json.Unmarshal(s.target.Tools[call.Tool], &spec); err != nil {
-		return native.ErrUnavailable
+		return fmt.Errorf("%w: the provider tool supplied an invalid input schema", native.ErrDenied)
 	}
 	return native.ValidateInputSchema(spec.InputSchema, call.Arguments)
 }

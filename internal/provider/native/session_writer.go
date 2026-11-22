@@ -185,7 +185,7 @@ func (w *SessionWriter) Write(ctx context.Context, binding WriteBinding, call Ca
 		}
 	}
 	if lease == nil {
-		return nil, fmt.Errorf("%w: write binding expired, changed, or was consumed", ErrDenied)
+		return nil, errors.Join(ErrWriteNotDispatched, fmt.Errorf("%w: write binding expired, changed, or was consumed", ErrDenied))
 	}
 	if lease.timer != nil {
 		lease.timer.Stop()
@@ -200,7 +200,7 @@ func (w *SessionWriter) Write(ctx context.Context, binding WriteBinding, call Ca
 		return nil, errors.Join(ErrWriteNotDispatched, err)
 	}
 	if err := lease.ctx.Err(); err != nil {
-		return nil, fmt.Errorf("%w: prepared provider connection ended", ErrDenied)
+		return nil, errors.Join(ErrWriteNotDispatched, fmt.Errorf("%w: prepared provider connection ended", ErrDenied))
 	}
 	limit, cancel := context.WithTimeout(ctx, writeCallTimeout)
 	defer cancel()
@@ -313,13 +313,16 @@ func allowedBoundRead(call Call) bool {
 // references from a network URL.
 func ValidateInputSchema(schema *jsonschema.Schema, args map[string]any) error {
 	if schema == nil {
-		return fmt.Errorf("%w: the provider tool did not supply an input schema", ErrUnavailable)
+		return fmt.Errorf("%w: the provider tool did not supply an input schema", ErrDenied)
 	}
 	resolved, err := schema.Resolve(nil)
+	if err != nil {
+		return fmt.Errorf("%w: the provider tool supplied an invalid input schema", ErrDenied)
+	}
 	if args == nil {
 		args = map[string]any{}
 	}
-	if err != nil || resolved.Validate(args) != nil {
+	if resolved.Validate(args) != nil {
 		return fmt.Errorf("%w: provider schema rejected the prepared arguments", ErrUnavailable)
 	}
 	return nil
