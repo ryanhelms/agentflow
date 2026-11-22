@@ -218,6 +218,12 @@ provided by Codex App Server.
 | GitHub Issues | Untemplated issue creation, closing and comments. Existing-task template validation also uses the authenticated issue adapter when verifying raw issue body markers. |
 | Slack | Top-level delivery to a configured workspace and conversation after scope verification |
 
+For example, `devflow --native-client codex comment APP-42 "Ready for review"`
+uses the same task comment operation as `devflow_comment`. To post Jira end-of-day
+notes with the same client, run `devflow --native-client codex eod post "APP-42=Reviewed the change"`.
+When Devflow prompts, review the target and text before approving. The CLI also
+accepts `--yes` for that approval.
+
 To add a Jira web link, use `devflow_jira_remote_link` or
 `devflow --native-client codex task link APP-42 --url https://docs.example.org/runbook --title Runbook`.
 Atlassian's full catalog endpoint, `https://mcp.atlassian.com/v2/mcp?tools=all`,

@@ -293,17 +293,27 @@ Deployments and release lookup also support local JSON fixtures.
 | Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
+| Track acceptance criteria | `devflow ac`, `devflow ac done ITEM --evidence SHA` | `/devflow:ac` |
+| Check for scope drift | `devflow scope` | `/devflow:scope` |
+| Comment on the task | `devflow comment [KEY] TEXT` | `/devflow:comment` |
+| Check for overlapping PRs | `devflow collisions` | `/devflow:collisions` |
 | Commit | `devflow commit` (or plain `git commit`) | `/devflow:commit` |
 | Preview Jira effects | `devflow preview` | shown before every commit |
 | Open a PR | `devflow pr` | `/devflow:pr` |
-| Address review comments | `devflow review` | `/devflow:review` |
+| Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
 | Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
 | Standup | `devflow standup` | `/devflow:standup` |
+| End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
 | Next release version | `devflow release plan` | "what version will this ship as?" |
 
 Each developer chooses an autonomy level per action class (`suggest`, `confirm` or
 `auto`) in `~/.devflow/config.yml`, capped by the repo's `policy.max_autonomy`. The
 default is `confirm`: the agent shows what it will do and waits.
+
+The table above gives the terminal commands for the same day-to-day operations.
+When a provider write needs confirmation, the CLI shows the approval summary. Pass
+`--yes` to accept it. For supported writes through a connected Codex provider, put
+`--native-client codex` before the command. See [provider routing and examples](docs/providers.md).
 
 ## Commit convention
 
@@ -363,9 +373,9 @@ Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `k
 CI.
 
 The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
-`install`, `setup`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`,
-`transition`, `pr`, `review`, `status`, `standup`, `docs`, `adr`, `release`, `update` and
-`version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
+`install`, `setup`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
+`comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
+`eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos devflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
 `update`) run only when you invoke them. Install the Claude Code plugin for yourself with
