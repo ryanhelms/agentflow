@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/nscaledev/devflow/internal/provider/asana"
@@ -19,17 +21,20 @@ func (s *AsanaSettings) HasProject(project string) bool {
 	return project != "" && (project == s.Project || mapped)
 }
 
-func (s *AsanaSettings) validate() error {
+func (s *AsanaSettings) validate(sel Selection) error {
 	if s.Project != "" && !asana.ValidGID(s.Project) {
-		return fmt.Errorf("task_management.settings.project: expected an Asana project GID")
+		return sel.settingError("task_management", "project", errors.New("expected an Asana project GID"))
 	}
-	for project, events := range s.Transitions {
+	for _, project := range slices.Sorted(maps.Keys(s.Transitions)) {
+		events := s.Transitions[project]
+		path := "transitions." + escapeSettingKey.Replace(project)
 		if !asana.ValidGID(project) {
-			return fmt.Errorf("task_management.settings.transitions: invalid project GID %q", project)
+			return sel.settingError("task_management", path, fmt.Errorf("invalid project GID %q", project))
 		}
-		for event, target := range events {
+		for _, event := range slices.Sorted(maps.Keys(events)) {
+			target := events[event]
 			if !asana.ValidGID(target) || target == asana.StateOpen {
-				return fmt.Errorf("task_management.settings.transitions.%s.%s: expected a section GID, completed or none", project, event)
+				return sel.settingError("task_management", path+"."+escapeSettingKey.Replace(event), errors.New("expected a section GID, completed or none"))
 			}
 		}
 	}

@@ -74,6 +74,18 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 		return res.Content[0].(*mcp.TextContent).Text
 	}
 
+	// Provider operations and explain must agree until this server restarts.
+	defDir := filepath.Join(os.Getenv("DEVFLOW_HOME"), "providers")
+	if err := os.MkdirAll(defDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(defDir, "later.yml"), []byte("version: 1\nproviders: {jira: {task_management: {settings: {site: https://later.example}}}}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out := call("devflow_setup_providers", map[string]any{"explain": true}); !strings.Contains(out, s.app.Cfg.Jira.Site) || strings.Contains(out, "later.example") || strings.Contains(out, "later.yml") {
+		t.Fatalf("explain differs from active snapshot: %s", out)
+	}
+
 	if out := call("devflow_commit_validate", map[string]any{"message": "updated stuff"}); !strings.Contains(out, "PLAT-123") {
 		t.Errorf("validate should suggest a fix with the branch key: %s", out)
 	}
