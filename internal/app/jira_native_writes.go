@@ -431,7 +431,9 @@ func (a *App) LinkJiraRemote(ctx context.Context, key, linkURL, title, token str
 	if state != notifications.Claimed {
 		return nil, fmt.Errorf("%w: jira web link was claimed but is absent from the current issue", native.ErrWriteUncertain)
 	}
-	if err = apply(); err == nil {
+	if err = apply(); errors.Is(err, native.ErrWriteNotDispatched) {
+		err = errors.Join(err, store.Finish(context.WithoutCancel(ctx), receipt, notifications.Retryable))
+	} else if err == nil {
 		exists, err = read()
 		switch {
 		case err != nil:
@@ -457,7 +459,13 @@ func (a *App) prepareJiraRemoteLink(ctx context.Context, site string, ref provid
 	write, err := prepareJiraWrite(ctx, call)
 	switch {
 	case err == nil:
-		if _, err := jiraNativeIssue(ctx, write, site, ref); err != nil {
+		issue, err := nativemap.JiraWriteIssue(site, ref)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if _, err := jiraNativeRead(ctx, write, issue, func(raw json.RawMessage) (struct{}, error) {
+			return struct{}{}, nativemap.CheckJiraIssueIdentity(raw, ref)
+		}); err != nil {
 			return "", nil, nil, err
 		}
 		list, err := nativemap.JiraRemoteLinks(site, ref)

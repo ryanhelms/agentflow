@@ -20,11 +20,13 @@ func runProviderSetup(ctx context.Context, args []string) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		op, args = args[0], args[1:]
 	}
-	if op == "providers" {
+	switch op {
+	case "providers":
 		return runProviderList(ctx, args)
-	}
-	if op == "login" {
+	case "login":
 		return runProviderLogin(ctx, args)
+	case "logout":
+		return runProviderLogout(ctx, args)
 	}
 	fs := flag.NewFlagSet("setup "+op, flag.ContinueOnError)
 	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.SetupClients, ", "))
@@ -200,4 +202,17 @@ func runProviderLogin(ctx context.Context, args []string) error {
 		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME]")
 	}
 	return setup.LoginProvider(ctx, ".", *provider, *client, *server, os.Stdin, os.Stdout, os.Stderr)
+}
+
+func runProviderLogout(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("setup logout", flag.ContinueOnError)
+	provider := fs.String("provider", "", "provider to disconnect")
+	client := fs.String("client", "", "the client that owns the enrollment")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *provider != "jira" || *client != "devflow" || fs.NArg() != 0 {
+		return errors.New("usage: devflow setup logout --provider jira --client devflow")
+	}
+	return setup.DisconnectRovo(ctx)
 }

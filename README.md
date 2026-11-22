@@ -194,7 +194,10 @@ writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery. [Slack destination configuration](docs/notifications.md)
+for delivery. The Claude Code Desktop Jira web-link pilot uses a separately
+enrolled Devflow Rovo connection with browser OAuth and OS credential storage.
+[Provider setup](docs/providers.md#interactive-provider-setup) ·
+[Slack destination configuration](docs/notifications.md)
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

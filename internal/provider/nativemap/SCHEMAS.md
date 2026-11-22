@@ -61,6 +61,10 @@ standard catalog exposes the operation through `executeRead`. The decoder
 projects each Jira remote link's `object.title` and `object.url` from the list.
 TWG uses `jira workitem get <KEY> --remote-links` with the same site and login
 used to load issue fields.
+The official Rovo flat catalog wraps the Jira issue and remote-link list in a
+single `data` field. The Devflow-owned connection unwraps that response before
+mapping it. The web-link preflight checks the exact issue key and any returned
+project key. Workflow status fields are unnecessary for adding a web link.
 
 Direct write calls use `createJiraIssueRemoteIssueLink` for an external URL,
 `addOrEditJiraIssueComment` for a new comment, `editJiraIssue` with the current

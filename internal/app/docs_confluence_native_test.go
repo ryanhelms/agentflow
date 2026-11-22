@@ -16,6 +16,7 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
 type confluenceMCPFixture struct {
@@ -27,6 +28,7 @@ type confluenceMCPFixture struct {
 	successorMessage      string
 	prepareErr, writeErr  error
 	ack                   json.RawMessage
+	readback              func(native.Call) (json.RawMessage, error)
 	prepares, reads, puts int
 }
 
@@ -51,6 +53,9 @@ func (f *confluenceMCPFixture) ReadBound(_ context.Context, binding native.Write
 	if binding.Connection != f.connection || call.Provider != "confluence" || call.Server != "atlassian" ||
 		call.Arguments["cloudId"] != "https://docs.example" {
 		f.t.Fatalf("unexpected bound read: %#v, %#v", binding, call)
+	}
+	if f.puts > 0 && f.readback != nil {
+		return f.readback(call)
 	}
 	switch call.Tool {
 	case "getConfluenceContent":
@@ -181,6 +186,52 @@ func TestConfluenceNativeVerifiesMinimalAcknowledgement(t *testing.T) {
 	v, err := a.DocsPublish(native.WithWriteHost(t.Context(), host), in, "")
 	if err != nil || v.(provider.WriteResult).Status != provider.Applied || host.reads != 2 || host.puts != 1 || rest.writes != 0 {
 		t.Fatalf("read-back: %+v, %v, reads %d", v, err, host.reads)
+	}
+}
+
+func TestConfluenceNativeUnverifiedReceipt(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		ack     string
+		version int64 // page revision observed during readback, zero if the page read fails
+		cause   error
+		reads   int
+	}{
+		{name: "malformed envelope", ack: "{", reads: 1},
+		{name: "wrong page in acknowledgement", ack: `{"contentId":"43"}`, cause: nativemap.ErrInvalidResult, reads: 1},
+		{name: "page unavailable", ack: `{"contentId":"42"}`, cause: native.ErrUnavailable, reads: 2},
+		{name: "conflicting successor", ack: `{"contentId":"42"}`, version: 8, cause: provider.ErrConflict, reads: 2},
+		{name: "history unavailable", ack: `{"contentId":"42"}`, version: 9, cause: native.ErrUnavailable, reads: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, rest, host, in := newConfluenceMCPFixture(t)
+			a.Gate.Autonomy.Remote = config.Auto
+			host.ack = json.RawMessage(tc.ack)
+			host.readback = func(call native.Call) (json.RawMessage, error) {
+				if call.Tool == "getConfluenceContent" && tc.version != 0 {
+					host.version, host.currentMessage = tc.version, "different edit"
+					return host.page(), nil
+				}
+				return nil, native.ErrUnavailable
+			}
+			_, err := a.DocsPublish(native.WithWriteHost(t.Context(), host), in, "")
+			if host.reads != tc.reads || host.puts != 1 || rest.writes != 0 {
+				t.Fatalf("reads %d, writes %d MCP and %d REST", host.reads, host.puts, rest.writes)
+			}
+			if !errors.Is(err, native.ErrWriteUncertain) {
+				t.Fatalf("expected uncertain write, got %v", err)
+			}
+			if tc.cause != nil {
+				if !errors.Is(err, tc.cause) {
+					t.Fatalf("expected cause %v, got %v", tc.cause, err)
+				}
+			} else {
+				var syntaxErr *json.SyntaxError
+				if !errors.As(err, &syntaxErr) {
+					t.Fatalf("expected JSON syntax error, got %v", err)
+				}
+			}
+		})
 	}
 }
 

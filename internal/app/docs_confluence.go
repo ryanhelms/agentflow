@@ -140,15 +140,16 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 		return pub.Replay(page.Version, page.HasMessage, func(number int64) (atlassian.PageVersion, error) {
 			raw, err := read(pub.VersionCall(number))
 			if err != nil {
-				if errors.Is(err, native.ErrUnavailable) {
-					return atlassian.PageVersion{}, errors.New("selected native confluence route cannot read historical versions")
-				}
 				return atlassian.PageVersion{}, err
 			}
 			return pub.DecodeVersion(raw, number)
 		})
 	}
 	prior, err := replay(page)
+	if errors.Is(err, native.ErrUnavailable) {
+		// Missing history on the selected route cannot authorize fallback.
+		return zero, errors.New("selected native confluence route cannot read historical versions")
+	}
 	if err != nil {
 		return zero, err
 	}
@@ -180,26 +181,23 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 			}
 			payload, err := native.Payload(raw)
 			if err != nil {
-				return provider.WriteResult{}, err
+				return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
 			}
 			confirmed, err := pub.CheckAcknowledgement(payload, page.SpaceID)
 			if err != nil {
-				return provider.WriteResult{}, err
+				return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)
 			}
 			if !confirmed {
 				current, err := readPage()
-				if errors.Is(err, native.ErrUnavailable) {
-					err = native.ErrWriteUncertain
-				}
 				if err != nil || current.SpaceID != page.SpaceID {
 					return provider.WriteResult{}, fmt.Errorf("cannot verify native confluence update in the approved space: %w",
-						errors.Join(nativemap.ErrInvalidResult, err))
+						errors.Join(native.ErrWriteUncertain, nativemap.ErrInvalidResult, err))
 				}
 				status, err := replay(current)
 				if err != nil || status.Status != provider.AlreadyApplied ||
 					(current.Version.Number == pub.Successor.Number && current.Title != pub.Title) {
 					return provider.WriteResult{}, fmt.Errorf("cannot verify native confluence update at the exact successor: %w",
-						errors.Join(nativemap.ErrInvalidResult, err))
+						errors.Join(native.ErrWriteUncertain, nativemap.ErrInvalidResult, err))
 				}
 			}
 			return pub.Result(provider.Applied), nil

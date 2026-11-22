@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"regexp"
 	"slices"
+
+	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 )
 
 type MCPTool struct {
@@ -126,9 +128,22 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 	}
 }
 
-// LoginProvider runs the provider CLI or the MCP client's own interactive OAuth
-// command. These tools own their credential storage and their browser consent flow.
+// LoginProvider launches the selected provider OAuth flow. The enrollment
+// owner manages its own login and credential storage.
 func LoginProvider(ctx context.Context, dir, provider, client, server string, input io.Reader, output, diagnostics io.Writer) error {
+	if client == "devflow" {
+		if provider != "jira" || server != "" && server != "atlassian" {
+			return errors.New("use the Devflow-owned MCP sign-in with the Jira web-link pilot")
+		}
+		if err := rovooauth.Login(ctx); err != nil {
+			return err
+		}
+		if output != nil {
+			_, err := fmt.Fprintln(output, "Devflow connected Jira through Atlassian OAuth.")
+			return err
+		}
+		return nil
+	}
 	args, err := providerLoginCommand(provider, client, server)
 	if err != nil {
 		return err
@@ -139,4 +154,9 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 		return fmt.Errorf("provider sign-in via %s: %w", args[0], err)
 	}
 	return nil
+}
+
+// DisconnectRovo discards the native grant enrolled by Devflow.
+func DisconnectRovo(ctx context.Context) error {
+	return rovooauth.Disconnect(ctx)
 }
