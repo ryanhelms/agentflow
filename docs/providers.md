@@ -61,6 +61,28 @@ values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
 
+## Jira, Confluence and GitHub
+
+Jira task operations use `task_management.settings.site`. The project list in
+`task_management.settings.projects` scopes My Work, which looks in active sprints
+first. Existing Jira keys, acceptance checklists, and per-project event and verb
+mappings in `flow-map.yml` continue to work. A transition uses the destination
+status name and rechecks the current status before writing. When a provider
+overrides the legacy Jira site, pass its URL to `devflow login --site URL` to
+store the credential for that site.
+
+Confluence search uses `knowledge_base.settings.site` and returns page IDs, space
+keys, titles, URLs and excerpts. Set `CONFLUENCE_USER` and `CONFLUENCE_TOKEN`
+together to supply knowledge credentials. With those variables unset, a separate
+site uses its own Atlassian keychain entry. A shared site also accepts the existing
+`JIRA_USER` and `JIRA_TOKEN` environment pair.
+
+For GitHub pull requests, forge detection selects the source remote for the
+push and the target repository for the PR. The source must have one GitHub.com
+push destination matching its repository. Review thread replies verify the PR
+repository before requesting approval. Jira write confirmations include the
+effective Jira site, so switching sites requires fresh approval.
+
 ## Check workstation and runner readiness
 
 `devflow setup plan --json` reports the selected roles, detected forge, installed

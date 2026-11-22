@@ -62,6 +62,7 @@ type Link struct {
 type TaskState struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
+	Category string `json:"category,omitempty"`
 	Terminal bool   `json:"terminal,omitempty"`
 }
 
@@ -157,6 +158,7 @@ type ChangeRequest struct {
 	URL        string
 	Title      string
 	Head       string
+	HeadSHA    string
 	Base       string
 	Draft      bool
 }
@@ -171,6 +173,8 @@ type ChangeDraft struct {
 
 type Review struct {
 	ID     string
+	Path   string
+	Line   int
 	Author string
 	Body   string
 	State  string

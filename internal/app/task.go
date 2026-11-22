@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -57,27 +58,29 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 		tc.Text = "devflow · no Jira key on branch " + tc.Branch + ". Call devflow_my_work to pick a ticket, then devflow_start."
 		return tc, nil
 	}
+	ref, err := legacy.JiraRef("jira", key)
+	if err != nil {
+		return nil, err
+	}
 	if jc, err := a.Jira(); err != nil {
 		tc.Warnings = append(tc.Warnings, err.Error())
-	} else if iss, err := jc.GetIssue(ctx, key); err != nil {
+	} else if task, err := legacy.NewJira("jira", jc.Base, jc, nil).GetFields(ctx, ref); err != nil {
 		tc.Warnings = append(tc.Warnings, "Jira: "+err.Error())
 	} else {
-		tc.Summary = iss.Fields.Summary
-		tc.Status = iss.Fields.Status.Name
-		tc.Type = iss.Fields.IssueType.Name
-		if iss.Fields.Assignee != nil {
-			tc.Assignee = iss.Fields.Assignee.DisplayName
-		}
-		if iss.Fields.Parent != nil {
-			tc.Epic = iss.Fields.Parent.Key + " " + iss.Fields.Parent.Fields.Summary
-			if links, err := jc.RemoteLinks(ctx, iss.Fields.Parent.Key); err == nil {
+		tc.Summary, tc.Status, tc.Type, tc.Assignee = task.Title, task.State.Name, task.Type, task.Assignee
+		for _, parent := range task.Links {
+			if parent.Ref == nil {
+				continue
+			}
+			tc.Epic = parent.Ref.ID + " " + parent.Title
+			if links, err := jc.RemoteLinks(ctx, parent.Ref.ID); err == nil {
 				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
 			}
 		}
 		if links, err := jc.RemoteLinks(ctx, key); err == nil {
 			tc.Docs = append(tc.Docs, confluenceOnly(links)...)
 		}
-		if cl, err := a.Checklists(ctx).Sync(key, contextx.ParseCriteria(iss.DescriptionText())); err == nil && len(cl.Items) > 0 {
+		if cl, err := a.Checklists(ctx).Sync(key, contextx.ParseCriteria(task.Description)); err == nil && len(cl.Items) > 0 {
 			tc.Criteria = cl
 		}
 	}
@@ -192,31 +195,7 @@ func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
 	if a.UsesTaskRefs() {
 		return a.providerWork(ctx)
 	}
-	jc, err := a.Jira()
-	if err != nil {
-		return nil, err
-	}
-	scope := ""
-	if len(a.Cfg.Jira.Projects) > 0 {
-		scope = fmt.Sprintf("project in (%s) AND ", strings.Join(a.Cfg.Jira.Projects, ","))
-	}
-	base := scope + "assignee = currentUser() AND statusCategory != Done"
-	issues, err := jc.Search(ctx, base+" AND sprint in openSprints() ORDER BY priority DESC, updated DESC", 30)
-	if err != nil || len(issues) == 0 {
-		issues, err = jc.Search(ctx, base+" ORDER BY priority DESC, updated DESC", 30)
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []WorkItem
-	for _, i := range issues {
-		w := WorkItem{Key: i.Key, Summary: i.Fields.Summary, Status: i.Fields.Status.Name, Type: i.Fields.IssueType.Name}
-		if i.Fields.Priority != nil {
-			w.Priority = i.Fields.Priority.Name
-		}
-		out = append(out, w)
-	}
-	return out, nil
+	return a.jiraMyWork(ctx)
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
@@ -251,35 +230,47 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if a.UsesTaskRefs() {
 		return a.startProviderTask(ctx, key, worktree, token)
 	}
-	jc, err := a.Jira()
+	ref, err := legacy.JiraRef("jira", key)
 	if err != nil {
 		return nil, err
 	}
-	iss, err := jc.GetIssue(ctx, key)
+	j, err := a.jiraTasks(nil)
 	if err != nil {
 		return nil, err
 	}
-	branch := BranchName(key, iss.Fields.Summary)
+	task, err := j.GetFields(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	branch := BranchName(key, task.Title)
 	if !worktree && a.Repo.HasUncommitted(ctx) {
 		worktree = true
 	}
-	plan, _ := a.PlanTransition(ctx, key, flowmap.BranchCreated)
+	plan, planErr := a.PlanTransition(ctx, key, flowmap.BranchCreated)
+	if planErr != nil {
+		// Starting without a flow map still creates and assigns the branch.
+		plan.To = ""
+		plan.Note = planErr.Error()
+	}
 	col, _ := a.Collisions(ctx, key)
-	summary := map[string]any{"key": key, "branch": branch, "worktree": worktree, "assign_to_me": true, "transition": plan}
+	summary := map[string]any{"key": key, "site": a.jiraSettings().Site, "repo": a.Repo.Dir, "branch": branch, "worktree": worktree, "assign_to_me": true, "transition": plan}
+	res := StartResult{Key: key, Branch: branch, Collisions: col}
+	if worktree {
+		res.Worktree = filepath.Join(filepath.Dir(a.Repo.Dir), filepath.Base(a.Repo.Dir)+"-"+key)
+		summary["worktree_path"] = res.Worktree
+	}
 	if col != nil && len(col.OthersOnTicket) > 0 {
 		summary["warning"] = "others already have work on this ticket: " + strings.Join(col.OthersOnTicket, ", ")
 	}
 	if p, err := a.gate(policy.Remote, "start", summary, token, false, []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
 		return p, err
 	}
-	res := StartResult{Key: key, Branch: branch, Collisions: col}
 	_, _ = a.Repo.Git(ctx, "fetch", "--quiet", "origin")
 	start := "origin/" + a.Repo.DefaultBranch(ctx)
 	if _, err := a.Repo.Git(ctx, "rev-parse", "--verify", "--quiet", start); err != nil {
 		start = "HEAD"
 	}
 	if worktree {
-		res.Worktree = filepath.Join(filepath.Dir(a.Repo.Dir), filepath.Base(a.Repo.Dir)+"-"+key)
 		err = a.Repo.AddWorktree(ctx, res.Worktree, branch, start)
 	} else {
 		err = a.Repo.CreateBranch(ctx, branch, start)
@@ -288,9 +279,9 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if err != nil {
 		return nil, err
 	}
-	if me, err := jc.Myself(ctx); err == nil {
-		res.Assigned = jc.Assign(ctx, key, me.AccountID) == nil
-	}
+	_, assignErr := j.AssignToMe(ctx, ref, provider.WriteOptions{})
+	res.Assigned = assignErr == nil
+	a.audit(policy.Remote, "assign_to_me", summary, assignErr)
 	if plan.To != "" {
 		tr, err := a.ApplyTransition(ctx, plan)
 		res.Transition = &tr
@@ -327,10 +318,8 @@ func (a *App) Checklist(ctx context.Context, key string) (*contextx.Checklist, e
 		cl.Key = key
 		return cl, nil
 	}
-	if jc, err := a.Jira(); err == nil {
-		if iss, err := jc.GetIssue(ctx, key); err == nil {
-			return store.Sync(key, contextx.ParseCriteria(iss.DescriptionText()))
-		}
+	if t, err := a.jiraTask(ctx, key); err == nil {
+		return store.Sync(key, contextx.ParseCriteria(t.Description))
 	}
 	cl, err := store.Load(key)
 	if cl == nil && err == nil {
@@ -441,22 +430,46 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 	if linkTo == "" {
 		linkTo = a.CurrentKey(ctx)
 	}
-	s := map[string]string{"project": project, "type": issueType, "summary": summary, "description": description, "link_to": linkTo}
-	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
-		return p, err
-	}
-	jc, err := a.Jira()
+	site, err := a.jiraSite()
 	if err != nil {
 		return nil, err
 	}
-	key, err := jc.CreateIssue(ctx, project, issueType, summary, description, []string{"devflow"}, linkTo)
+	if err := legacy.ValidateJiraProject(project); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(summary) == "" {
+		return nil, errors.New("summary is required")
+	}
+	draft := provider.TaskDraft{Scope: project, Type: issueType, Title: summary, Description: description, Labels: []string{"devflow"}}
+	if linkTo != "" {
+		link, err := legacy.JiraRef("jira", linkTo)
+		if err != nil {
+			return nil, err
+		}
+		draft.Links = []provider.Link{{Ref: &link}}
+	}
+	s := map[string]string{"site": site, "project": project, "type": issueType, "summary": summary, "description": description, "link_to": linkTo}
+	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
+		return p, err
+	}
+	j, err := a.jiraTasks(nil)
+	if err != nil {
+		return nil, err
+	}
+	result, err := j.Create(ctx, draft, provider.WriteOptions{})
 	a.audit(policy.Remote, "ticket_create", s, err)
-	return map[string]string{"key": key}, err
+	return map[string]string{"key": result.Ref.ID}, err
 }
 
 // LoginCheck verifies Atlassian and GitHub credentials.
 func (a *App) LoginCheck(ctx context.Context) (string, string, error) {
-	jc, err := a.Jira()
+	// The legacy doctor explicitly checks the developer's Atlassian login,
+	// including in repositories that selected a different task provider.
+	site := a.jiraSettings().Site
+	if err := validateSite(site); err != nil {
+		return "", "", err
+	}
+	jc, err := a.loadJiraClient(site)
 	if err != nil {
 		return "", "", err
 	}
