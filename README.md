@@ -180,6 +180,12 @@ Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
 
+Select `knowledge_base.provider: github-wiki` to search and publish managed
+pages with the same CLI and MCP tools. Enable Wikis, create the first page on
+GitHub, and configure Git credentials for the wiki remote. Publication uses the
+remote approval policy and targets the wiki's default branch. See the
+[GitHub Wiki configuration and commands](docs/providers.md#publish-a-github-wiki-page).
+
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
@@ -290,8 +296,8 @@ through `.claude/settings.json`.
 
 ## Security and governance
 
-- **Identity.** Writes use each developer's own Atlassian and GitHub credentials from the
-  OS keychain, so history shows the real person. CI uses a scoped service account.
+- **Identity.** Writes use each developer's own Atlassian and GitHub credentials. GitHub
+  Wiki uses Git's configured credentials. CI uses a scoped service account.
 - **Release integrity.** devflow installs only builds whose SHA-256 and GitHub build
   attestation both verify, and the attestation must come from devflow's release workflow
   (`gh attestation verify --repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml`).

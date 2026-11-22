@@ -202,6 +202,11 @@ func TestInvalidProviderConfig(t *testing.T) {
 		{"task_management: {settings: {projects: [OK, false]}}", "task_management.settings.projects[1]"},
 		{"knowledge_base: {provider: repository, settings: {publication: overwrite}}", "knowledge_base.settings.publication"},
 		{"knowledge_base: {provider: filesystem, settings: {root: null}}", "knowledge_base.settings.root"},
+		{"knowledge_base: {provider: github-wiki, settings: {origin: /local/wiki.git}}", "knowledge_base.settings.origin"},
+		{"knowledge_base: {provider: github-wiki, settings: {repository: 123}}", "knowledge_base.settings.repository"},
+		{"knowledge_base: {provider: github-wiki, settings: {repository: ''}}", "knowledge_base.settings.repository"},
+		{"knowledge_base: {provider: github-wiki, settings: {repository: https://github.com/owner/repo}}", "knowledge_base.settings.repository"},
+		{"knowledge_base: {provider: github-wiki, settings: {repository: owner/..}}", "knowledge_base.settings.repository"},
 		{"code_hosting: {settings: {hosts: {forge: bogus}}}", "code_hosting.settings.hosts.forge"},
 		{"devops: {version: '1'}", "devops.version"},
 		{"devops: {check: {}}", "devops.check"},
@@ -215,6 +220,21 @@ func TestInvalidProviderConfig(t *testing.T) {
 				t.Fatalf("want error at %s, got found=%v, err=%v", tc.path, found, err)
 			}
 		})
+	}
+}
+
+func TestGitHubWikiSettings(t *testing.T) {
+	const section = "knowledge_base: {provider: github-wiki"
+	for _, overrides := range []string{"", ", settings: {}", ", settings: {repository: null}"} {
+		got := loadConfig(t, section+overrides+"}").Providers.KnowledgeBase
+		settings, ok := got.Settings.(*GitHubWikiSettings)
+		if !ok || settings.Repository != nil || got.Version != 1 || !got.Configured || got.Provider != "github-wiki" {
+			t.Fatalf("default wiki settings (%q): %+v", overrides, got)
+		}
+	}
+	cfg := loadConfig(t, section+", settings: {repository: Docs-Team/Runbooks.v2}}")
+	if got := cfg.Providers.KnowledgeBase.Settings.(*GitHubWikiSettings).Repository; got == nil || *got != "Docs-Team/Runbooks.v2" {
+		t.Fatalf("wiki repository: %v", got)
 	}
 }
 

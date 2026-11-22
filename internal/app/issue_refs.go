@@ -50,17 +50,7 @@ func (a *App) defaultIssueRepo(ctx context.Context) (string, error) {
 	if configured := a.issueSettings().Repository; configured != nil {
 		return issueScope(*configured)
 	}
-	opts := gitx.DetectOptions{}
-	if cfg, ok := a.Cfg.Providers.CodeHosting.Settings.(*config.CodeHostingSettings); ok {
-		opts.Hosts = cfg.Hosts
-		if cfg.SourceRemote != nil {
-			opts.Source = *cfg.SourceRemote
-		}
-		if cfg.TargetRemote != nil {
-			opts.Target = *cfg.TargetRemote
-		}
-	}
-	d, err := a.Repo.DetectForge(ctx, opts)
+	d, err := a.detectForge(ctx)
 	if err != nil {
 		return "", err
 	}

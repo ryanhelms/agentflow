@@ -201,6 +201,12 @@ func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]a
 			return nil, err
 		}
 		return searchDocuments(ctx, knowledge, query, space)
+	case "github-wiki":
+		knowledge, err := a.knowledgeWiki(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		return searchDocuments(ctx, knowledge, query, space)
 	case "", "confluence":
 	default:
 		return nil, provider.Unsupported(a.Cfg.Providers.KnowledgeBase.Provider, "document search")

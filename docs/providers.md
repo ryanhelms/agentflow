@@ -12,7 +12,7 @@ The migration of commands and workflows to these selections is tracked separatel
 | --- | --- | --- |
 | `code_hosting` | `auto` | `github`, `none` |
 | `task_management` | `jira` | `github-issues`, `filesystem`, `repository`, `none` |
-| `knowledge_base` | `confluence` | `filesystem`, `repository`, `none` |
+| `knowledge_base` | `confluence` | `filesystem`, `repository`, `github-wiki`, `none` |
 | `devops.checks` | `github` | `none` |
 | `devops.deployments` | `github` | `none` |
 | `devops.releases` | `github` | `none` |
@@ -31,6 +31,7 @@ settings object. Validation errors identify the property to correct.
 | Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. |
 | GitHub | An unset `repository` defers to Git remote detection. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
+| GitHub Wiki | `repository` defaults to unset, so Git forge detection selects the GitHub.com target. Set an explicit `owner/name` to use another GitHub.com repository. |
 | FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
 | Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. |
 | Slack | `destination` and `credential_ref` default to unset. |
@@ -301,3 +302,47 @@ operation ID for retries. The CLI and `devflow_docs_publish` present the
 resolved destination and document for approval and record the outcome.
 
 Use `devflow docs search QUERY --json` to check a qualified document in CI.
+
+## Publish a GitHub Wiki page
+
+Enable Wikis in the target repository's GitHub settings and create the first
+page in GitHub's web UI. Configure Git's HTTPS credential helper for any reads
+that need authentication and for writes to
+`https://github.com/owner/name.wiki.git`. Use credentials with permission to
+edit the wiki when publishing.
+Use the direct GitHub wiki remote so the configured URL and Git's push
+destination match.
+
+```yaml
+devflow: 1
+knowledge_base:
+  provider: github-wiki
+  settings:
+    repository: docs-team/handbook
+```
+
+Omit `settings` to use the detected GitHub.com target. In a fork checkout this
+uses the upstream target when forge detection selects it. You can set
+`code_hosting.settings.target_remote` to select a different remote.
+
+Devflow publishes directly to the wiki's default branch. The resolved wiki
+remote and branch appear in the confirmation summary, and the remote
+autonomy policy and `policy.protected_branches` apply. If your wiki uses
+`master` and your code repository doesn't use that branch, you can set
+`policy.protected_branches: [main, develop, 'release/*']` to keep those code
+branches protected while allowing Wiki publication.
+
+```bash
+devflow docs publish github-wiki/engineering/quota \
+  --title "Quota policy" --body "The policy and its rationale." \
+  --operation-id quota-policy-1
+devflow docs search quota --space engineering
+```
+
+The equivalent MCP tools are `devflow_docs_publish` and `devflow_docs_search`.
+Search and publication operate on managed Markdown under `devflow-pages/`.
+Use the same operation ID to retry a publish. To update a page, use a new
+operation ID and pass the revision from search with `--expected-revision`
+or the MCP field `expected_revision`. Ordinary wiki pages such as `Home.md`
+are edited in GitHub. Publish the body under a new qualified reference to
+adopt an existing page as a managed document.

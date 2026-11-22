@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nscaledev/devflow/internal/gitx"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,6 +65,10 @@ type ConfluenceSettings struct {
 
 type GitHubSettings struct {
 	// An unset repository uses the repository selected by code-host detection.
+	Repository *string `yaml:"repository"`
+}
+type GitHubWikiSettings struct {
+	// An unset repository uses the GitHub.com target selected by forge detection.
 	Repository *string `yaml:"repository"`
 }
 
@@ -174,6 +179,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
 	}
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
+	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
 
 	var p Providers
@@ -225,6 +231,11 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		*role.out, err = role.schema.resolve(fields, present, role.path)
 		if err != nil {
 			return Providers{}, err
+		}
+	}
+	if wiki, ok := p.KnowledgeBase.Settings.(*GitHubWikiSettings); ok && wiki.Repository != nil {
+		if err := gitx.ValidateGitHubSlug(*wiki.Repository); err != nil {
+			return Providers{}, fmt.Errorf("knowledge_base.settings.repository: %w", err)
 		}
 	}
 	return p, nil

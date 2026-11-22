@@ -69,7 +69,9 @@ type DocsPublishInput struct {
 
 func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string) (any, error) {
 	name := a.Cfg.Providers.KnowledgeBase.Provider
-	if name != "filesystem" && name != "repository" {
+	switch name {
+	case "filesystem", "repository", "github-wiki":
+	default:
 		return nil, provider.Unsupported(name, "document publish")
 	}
 	if err := in.Ref.Validate(); err != nil {
@@ -100,22 +102,11 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 		return out, err
 	}
 
-	cfg, err := a.knowledgeRepository(ctx)
-	if err != nil {
-		return nil, err
-	}
-	summary["origin"], summary["directory"], summary["publication"] = cfg.Origin, cfg.Directory, cfg.Publication
-	if cfg.Publication == "pull-request" {
-		cfg.Publisher, err = a.repositoryPublisher(ctx, cfg.Origin, "document", in.Ref)
-		if err != nil {
-			return nil, err
-		}
-	}
 	// The adapter resolves remote HEAD and the operation's branch together.
 	// Bind the token to those same branches, including on confirmation replay.
 	var pending *Pending
 	errPending := errors.New("document publication pending approval")
-	cfg.BeforeWrite = func(base, target string) error {
+	beforeWrite := func(base, target string) error {
 		summary["base"], summary["target"] = base, target
 		if policy.IsProtected(target, a.Cfg.Policy.ProtectedBranches) {
 			return fmt.Errorf("pushing to protected branch %q is forbidden", target)
@@ -127,11 +118,35 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 		}
 		return gateErr
 	}
-	k, err := repository.NewKnowledge(cfg)
-	if err != nil {
-		return nil, err
+
+	var knowledge provider.Knowledge
+	if name == "github-wiki" {
+		wiki, err := a.knowledgeWiki(ctx, beforeWrite)
+		if err != nil {
+			return nil, err
+		}
+		summary["origin"], summary["directory"] = wiki.Destination()
+		summary["publication"] = "push"
+		knowledge = wiki
+	} else {
+		cfg, err := a.knowledgeRepository(ctx)
+		if err != nil {
+			return nil, err
+		}
+		summary["origin"], summary["directory"], summary["publication"] = cfg.Origin, cfg.Directory, cfg.Publication
+		if cfg.Publication == "pull-request" {
+			cfg.Publisher, err = a.repositoryPublisher(ctx, cfg.Origin, "document", in.Ref)
+			if err != nil {
+				return nil, err
+			}
+		}
+		cfg.BeforeWrite = beforeWrite
+		knowledge, err = repository.NewKnowledge(cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
-	out, err := in.publish(ctx, k)
+	out, err := in.publish(ctx, knowledge)
 	if errors.Is(err, errPending) {
 		return pending, nil
 	}
