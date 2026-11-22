@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/config"
-
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/asana"
@@ -148,17 +147,21 @@ func (a *App) taskWriteScope(ctx context.Context, scope string) error {
 		}
 	case issuesInstance:
 		repo, _ := sel.RepositorySettings("repository").(*config.GitHubIssuesSettings)
-		hosting := a.Cfg.Providers.CodeHosting.RepositorySettings("target_remote")
+		codeHosting := a.Cfg.Providers.CodeHosting
+		hosting := codeHosting.RepositorySettings("target_remote")
+		if hosting == nil && repo != nil {
+			hosting = codeHosting.RepositorySettings("")
+		}
 		var ceiling string
+		var err error
 		switch {
 		case repo != nil && repo.Repository != nil:
-			ceiling = *repo.Repository
+			ceiling, err = issueScope(*repo.Repository)
 		case repo != nil || hosting != nil:
-			var err error
 			ceiling, err = a.detectIssueRepo(ctx, hosting)
-			if err != nil {
-				return fmt.Errorf("resolve repository write scope: %w", errors.Join(native.ErrDenied, err))
-			}
+		}
+		if err != nil {
+			return fmt.Errorf("resolve repository write scope: %w", errors.Join(native.ErrDenied, err))
 		}
 		if ceiling != "" && !strings.EqualFold(ceiling, scope) {
 			return fmt.Errorf("github issues target %q differs from repository %q: %w", scope, ceiling, native.ErrDenied)

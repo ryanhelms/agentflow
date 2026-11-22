@@ -10,9 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-
 	"github.com/nscaledev/devflow/internal/atlassian"
+	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/confluence"
