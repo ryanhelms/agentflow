@@ -306,3 +306,30 @@ func mustJSON(t *testing.T, v any) []byte {
 	}
 	return b
 }
+
+func TestSetupLoginRegistrationIsOptIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX command fixture")
+	}
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("PATH", root)
+	const fake = `#!/bin/sh
+printf '%s\n' "$*" >> calls
+if [ "$2" = list ]; then printf '%s\n' 'slack: custom - ✔ Connected'; fi
+`
+	if err := os.WriteFile(filepath.Join(root, "claude"), []byte(fake), 0700); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--provider", "slack", "--client", "claude-desktop"}
+	if err := runProviderLogin(t.Context(), args); err != nil {
+		t.Fatal(err)
+	}
+	if err := runProviderLogin(t.Context(), append(args, "--register")); err != nil {
+		t.Fatal(err)
+	}
+	calls, err := os.ReadFile("calls")
+	if err != nil || string(calls) != "mcp login slack\nmcp list\n" {
+		t.Fatalf("calls %q, err %v", calls, err)
+	}
+}
