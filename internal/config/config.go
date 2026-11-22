@@ -54,7 +54,8 @@ type Autonomy struct {
 
 // Repo is .devflow/config.yml.
 type Repo struct {
-	Devflow int `yaml:"devflow"`
+	Devflow                              int `yaml:"devflow"`
+	legacyJiraSite, legacyConfluenceSite bool
 	// Providers holds the effective role selections populated by LoadRepo.
 	Providers Providers `yaml:"-"`
 	Update    struct {
@@ -138,6 +139,8 @@ func LoadRepo(root string) (*Repo, bool, error) {
 		}
 	}
 	c := &file.Repo
+	c.legacyJiraSite = c.Jira.Site != ""
+	c.legacyConfluenceSite = c.Confluence.Site != "" || c.legacyJiraSite
 	c.applyDefaults()
 	providers, err := resolveProviders(c, file.Extra, root)
 	var defErr *DefinitionError
