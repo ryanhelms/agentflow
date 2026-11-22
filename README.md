@@ -172,7 +172,6 @@ Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
 
-
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
@@ -189,6 +188,8 @@ confirmation flow in `devflow transition`.
 
 Select `filesystem` or `repository` to manage Markdown tasks. Start work with
 `devflow start <qualified-key>` to bind a local branch or worktree to the task.
+With a default task template, both providers store its exact name and revision
+in the Markdown front matter and validate the task against it before closing.
 FileSystem writes use local autonomy. Repository creates and transitions require
 remote confirmation. By default they return `pending_review` with the task key,
 GitHub PR URL and review branch. The task listing reflects the change after

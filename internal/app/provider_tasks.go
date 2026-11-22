@@ -177,11 +177,9 @@ func (a *App) planTaskTransition(ctx context.Context, key, event string, task *p
 	case task.State.Terminal || plan.From != "open" || target != "closed":
 		plan.Note = "only open issues can move forward to closed"
 	default:
-		if a.usesIssues() {
-			plan.Template, err = a.validateIssueTemplate(*task)
-			if err != nil {
-				return plan, err
-			}
+		plan.Template, err = a.validateTaskTemplate(*task)
+		if err != nil {
+			return plan, err
 		}
 		plan.To = target
 	}

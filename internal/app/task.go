@@ -407,11 +407,11 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 	if a.usesIssues() {
 		return a.createIssue(ctx, project, issueType, summary, description, linkTo, ref, token)
 	}
+	if a.usesFileTasks() {
+		return a.createFileTask(ctx, project, issueType, summary, description, linkTo, ref, token)
+	}
 	if ref != (tasktemplate.Ref{}) {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "explicit ticket template")
-	}
-	if a.usesFileTasks() {
-		return a.createFileTask(ctx, project, issueType, summary, description, linkTo, token)
 	}
 	if project == "" {
 		project = projectOf(a.CurrentKey(ctx))

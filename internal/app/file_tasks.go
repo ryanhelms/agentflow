@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
 	"github.com/nscaledev/devflow/internal/provider/repository"
+	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
 func (a *App) fileTaskSettings() config.FileTaskSettings {
@@ -184,20 +185,8 @@ func (a *App) writeFileTask(ctx context.Context, action string, summary map[stri
 	return result, nil, err
 }
 
-func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkTo, token string) (any, error) {
-	if strings.TrimSpace(title) == "" {
-		return nil, errors.New("task title is required")
-	}
-	if scope == "" {
-		scope = a.fileScope()
-	}
-	if typ == "" {
-		typ = "Task"
-	}
+func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkTo string, template tasktemplate.Ref, token string) (any, error) {
 	instance := a.Cfg.Providers.TaskManagement.Provider
-	if err := (provider.Ref{Instance: instance, Scope: scope, ID: "_"}).Validate(); err != nil {
-		return nil, err
-	}
 	draft := provider.TaskDraft{Scope: scope, Title: title, Description: body, Type: typ}
 	var link provider.Ref
 	var err error
@@ -211,6 +200,10 @@ func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkT
 	}
 	if link.ID != "" {
 		draft.Links = []provider.Link{{Ref: &link}}
+	}
+	draft, err = a.resolveFileTaskDraft(draft, template)
+	if err != nil {
+		return nil, err
 	}
 	operationID := issueOperation()
 	// Interactive PR creation needs its operation ID before approval because the
@@ -229,12 +222,18 @@ func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkT
 			}
 		}
 	}
-	summary := map[string]any{"provider": instance, "task": draft, "operation_id": operationID}
+	// Omit a missing pin to preserve the approval payload and operation IDs
+	// for tasks created before TaskDraft carried a template.
+	approvedDraft := struct {
+		Template *provider.TaskTemplateRef `json:",omitempty"`
+		provider.TaskDraft
+	}{draft.Template, draft}
+	summary := map[string]any{"provider": instance, "task": approvedDraft, "operation_id": operationID}
 	opts, err := issueWriteOptions("ticket_create", summary, token)
 	if err != nil {
 		return nil, err
 	}
-	w, p, err := a.writeFileTask(ctx, "ticket_create", summary, token, provider.Ref{Instance: instance, Scope: scope}, func(tasks provider.Tasks) (provider.WriteResult, error) {
+	w, p, err := a.writeFileTask(ctx, "ticket_create", summary, token, provider.Ref{Instance: instance, Scope: draft.Scope}, func(tasks provider.Tasks) (provider.WriteResult, error) {
 		return tasks.Create(ctx, draft, opts)
 	})
 	if p != nil || err != nil {
@@ -255,7 +254,10 @@ func (a *App) transitionFileTask(ctx context.Context, plan TransitionResult, tok
 		return nil, err
 	}
 	summary := map[string]any{"task_ref": ref.String(), "transition": plan, "revision": plan.revision}
-	opts := provider.WriteOptions{ExpectedRevision: plan.revision, OperationID: ref.String() + "/" + plan.Event + "/" + plan.revision}
+	opts := provider.WriteOptions{
+		ExpectedRevision: plan.revision, OperationID: ref.String() + "/" + plan.Event + "/" + plan.revision,
+		CheckTask: a.checkTaskTemplate(plan.Template),
+	}
 	result, p, err := a.writeFileTask(ctx, "transition", summary, token, ref, func(tasks provider.Tasks) (provider.WriteResult, error) {
 		return tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, opts)
 	})

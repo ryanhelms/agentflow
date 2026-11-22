@@ -33,7 +33,7 @@ func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (
 	if operationID == "" {
 		operationID = ref.String() + "/" + plan.Event
 	}
-	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: operationID, CheckTask: a.checkIssueTemplate(plan.Template)})
+	w, err := tasks.Transition(ctx, ref, provider.TaskState{ID: "closed", Name: "Closed", Terminal: true}, provider.WriteOptions{OperationID: operationID, CheckTask: a.checkTaskTemplate(plan.Template)})
 	a.audit(policy.Remote, "transition", plan, err)
 	plan.Applied = err == nil && w.Status == provider.Applied
 	if err == nil && w.Status == provider.AlreadyApplied {
@@ -92,7 +92,7 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := a.validateIssueTemplate(task)
+	snapshot, err := a.validateTaskTemplate(task)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if p, err := a.gate(policy.Remote, "comment", s, token, false, nil); p != nil || err != nil {
 		return p, err
 	}
-	opts.CheckTask = a.checkIssueTemplate(snapshot)
+	opts.CheckTask = a.checkTaskTemplate(snapshot)
 	_, err = comments.Comment(ctx, ref, body, opts)
 	a.audit(policy.Remote, "comment", s, err)
 	return map[string]any{"key": taskKey(ref), "commented": err == nil}, err

@@ -73,7 +73,7 @@ only attempts to move open issues forward.
 
 ## Task templates
 
-Task object templates apply independently of the task provider. Configure a
+GitHub Issues, FileSystem and Repository support task templates. Configure a
 JSON catalog file relative to the checkout and an optional default template.
 Use an exact name and revision for a reproducible task definition.
 
@@ -104,6 +104,23 @@ Keep that marker and the corresponding catalog revision when editing the issue.
 Before posting a comment or changing state, devflow validates the current issue
 against that revision. Issues without a template marker keep their existing
 workflow even when a default is configured later.
+
+FileSystem and Repository use the same catalog and default for Markdown tasks.
+Templates can supply or require `scope`, `title`, `description`, `type`,
+`priority`, `labels` and structured `links`. Sections and checklist items go
+in the Markdown body. A supplied project, summary, description or type takes
+precedence over its template default. A linked task (explicit or bound to the
+branch) takes precedence over default links. When neither the caller nor the
+template supplies a scope or type, creation uses the configured scope and
+the type `Task`.
+
+The create preview includes the resolved draft and pin. The approved record
+stores the pin in version 1 YAML front matter, for example
+`template: {name: engineering-task, revision: "01"}`. Retain that catalog
+revision while tasks reference it. Before a configured transition, devflow
+validates the current fields, sections and checklist against the stored
+revision and checks the approved file revision before writing. Older tasks
+without a pin continue through their original transition flow.
 
 ## File-backed tasks
 

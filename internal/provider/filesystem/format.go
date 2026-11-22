@@ -21,17 +21,18 @@ const (
 )
 
 type header struct {
-	Version    int                 `yaml:"version"`
-	Kind       string              `yaml:"kind"`
-	Ref        provider.Ref        `yaml:",inline"`
-	Title      string              `yaml:"title"`
-	State      *provider.TaskState `yaml:"state,omitempty"`
-	Type       string              `yaml:"type,omitempty"`
-	Priority   string              `yaml:"priority,omitempty"`
-	Assignee   string              `yaml:"assignee,omitempty"`
-	Labels     []string            `yaml:"labels,omitempty"`
-	Links      []provider.Link     `yaml:"links,omitempty"`
-	Operations map[string]string   `yaml:"operations,omitempty"`
+	Template   *provider.TaskTemplateRef `yaml:"template,omitempty"`
+	Version    int                       `yaml:"version"`
+	Kind       string                    `yaml:"kind"`
+	Ref        provider.Ref              `yaml:",inline"`
+	Title      string                    `yaml:"title"`
+	State      *provider.TaskState       `yaml:"state,omitempty"`
+	Type       string                    `yaml:"type,omitempty"`
+	Priority   string                    `yaml:"priority,omitempty"`
+	Assignee   string                    `yaml:"assignee,omitempty"`
+	Labels     []string                  `yaml:"labels,omitempty"`
+	Links      []provider.Link           `yaml:"links,omitempty"`
+	Operations map[string]string         `yaml:"operations,omitempty"`
 }
 
 type record struct {
@@ -59,11 +60,16 @@ func (r record) validate() error {
 	}
 	switch r.Kind {
 	case taskKind:
+		if r.Template != nil {
+			if err := r.Template.Validate(); err != nil {
+				return err
+			}
+		}
 		if r.State == nil || strings.TrimSpace(r.State.ID) == "" {
 			return errors.New("task state.id is required")
 		}
 	case documentKind:
-		if r.State != nil || r.Type != "" || r.Priority != "" || r.Assignee != "" || len(r.Labels) > 0 {
+		if r.Template != nil || r.State != nil || r.Type != "" || r.Priority != "" || r.Assignee != "" || len(r.Labels) > 0 {
 			return errors.New("document contains task-only fields")
 		}
 	default:

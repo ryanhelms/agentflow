@@ -192,17 +192,17 @@ func (a *App) audit(class policy.Class, action string, payload any, err error) {
 // It only moves forward: done-category issues and no-op mappings are skipped.
 type TransitionResult struct {
 	operationID string
-	Template    *IssueTemplateSnapshot `json:"template,omitempty"`
-	revision    string                 // observed file revision used to condition the approved write
-	Key         string                 `json:"key"`
-	Event       string                 `json:"event"`
-	From        string                 `json:"from"`
-	To          string                 `json:"to,omitempty"`
-	Applied     bool                   `json:"applied"`
-	Note        string                 `json:"note,omitempty"`
-	Status      provider.WriteStatus   `json:"status,omitempty"`
-	URL         string                 `json:"url,omitempty"`
-	Branch      string                 `json:"branch,omitempty"`
+	Template    *TaskTemplateSnapshot `json:"template,omitempty"`
+	revision    string                // observed file revision used to condition the approved write
+	Key         string                `json:"key"`
+	Event       string                `json:"event"`
+	From        string                `json:"from"`
+	To          string                `json:"to,omitempty"`
+	Applied     bool                  `json:"applied"`
+	Note        string                `json:"note,omitempty"`
+	Status      provider.WriteStatus  `json:"status,omitempty"`
+	URL         string                `json:"url,omitempty"`
+	Branch      string                `json:"branch,omitempty"`
 }
 
 // PlanTransition works out what event would do to key without changing anything.

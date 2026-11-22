@@ -274,6 +274,15 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 			replayed = true
 		}
 	}
+	if op == transition && old != nil {
+		if opts.CheckTask != nil {
+			if err := opts.CheckTask(task(*old)); err != nil {
+				return zero, err
+			}
+		} else if old.Template != nil {
+			return zero, errors.New("task requires validation against its stored template")
+		}
+	}
 	if replayed {
 		return provider.WriteResult{Ref: r.Ref, Revision: old.revision, Status: provider.AlreadyApplied}, nil
 	}
