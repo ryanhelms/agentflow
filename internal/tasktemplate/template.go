@@ -10,18 +10,7 @@ import (
 )
 
 // Ref is stored alongside the created task. Revision is an opaque, exact identifier.
-type Ref struct {
-	Name     string `yaml:"name" json:"name"`
-	Revision string `yaml:"revision" json:"revision"`
-}
-
-// Validate requires both parts of an exact reference.
-func (r Ref) Validate() error {
-	if strings.TrimSpace(r.Name) == "" || strings.TrimSpace(r.Revision) == "" {
-		return fmt.Errorf("template requires a name and revision")
-	}
-	return nil
-}
+type Ref = provider.TaskTemplateRef
 
 type Template struct {
 	Ref       `yaml:",inline"`
