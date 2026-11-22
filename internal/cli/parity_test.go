@@ -215,3 +215,16 @@ func TestParityCommandsRunLocally(t *testing.T) {
 		}
 	}
 }
+
+func TestDesktopNativeClientOnlyRoutesComments(t *testing.T) {
+	writer, err := nativeWriter("claude-desktop", "comment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	for _, command := range []string{"eod", "ac", "task", "transition", "docs"} {
+		if _, err := nativeWriter("claude-desktop", command); err == nil {
+			t.Fatalf("enabled Desktop writer for %s", command)
+		}
+	}
+}

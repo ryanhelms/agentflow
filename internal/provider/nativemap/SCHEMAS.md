@@ -79,6 +79,32 @@ Atlassian catalog where their named tools are listed directly.
 [Atlassian transition contract](https://www.atlassian.com/blog/how-we-build/jira-depth-on-demand) ·
 [TWG work item command reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md#reads)
 
+### Claude Code Desktop issue comments
+
+The flat input schemas for `addOrEditJiraIssueComment` and `getJiraIssue` are
+in [the offline catalog fixture](../rovohost/testdata/jira-comment-flat-schema.json).
+Desktop sends exactly `cloudId`, `issueIdOrKey`, `contentFormat: "html"` and
+`commentBody`. Omitting `commentId` selects creation. The body encodes the
+approved plain text as escaped HTML. The catalog describes an HTML echo by
+default for this input. Devflow checks that every submitted field is advertised.
+
+The synthetic write fixture uses the following receipt inside MCP structured
+content or a single JSON text block. The authenticated call and its preflight
+bind the issue. A returned issue key must also match.
+
+```json
+{"data":{"commentId":"101","issueKey":"DEV-13","body":"<p>Ready</p>","appliedContentFormat":"html"}}
+```
+
+Success requires a positive decimal comment ID and the exact approved HTML
+echo. Any ambiguous acknowledgement spends the approval and returns an
+uncertain outcome. The captured input schema does not specify the output
+envelope or the echoed body's field name. Those fields need a sanitized
+hosted receipt to confirm this projection.
+
+[Atlassian's issue triage example](https://github.com/atlassian/atlassian-mcp-server/blob/main/skills/triage-issue/SKILL.md) ·
+[Rovo Jira read and write tools](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#jira)
+
 ## Confluence page → `provider.Document`
 
 ```json

@@ -23,10 +23,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/twg"
 )
 
-type jiraWrite struct {
-	Binding native.WriteBinding `json:"binding"`
-	Call    native.Call         `json:"call"`
-}
+type jiraWrite taskWritePreview
 
 func jiraMCPOrigin(site string) bool {
 	u, err := url.Parse(site)
@@ -55,6 +52,18 @@ func (w *jiraWrite) run(ctx context.Context) (json.RawMessage, error) {
 		return nil, errors.Join(native.ErrWriteUncertain, err)
 	}
 	return payload, nil
+}
+
+func (w *jiraWrite) commentID(ctx context.Context, ref provider.Ref, body string) (string, error) {
+	payload, err := w.run(ctx)
+	if err != nil {
+		return "", err
+	}
+	id, err := nativemap.DecodeJiraCommentReceipt(payload, ref, body)
+	if err != nil {
+		return "", errors.Join(native.ErrWriteUncertain, err)
+	}
+	return id, nil
 }
 
 func jiraRemoteSummary(summary any, write *jiraWrite) any {
@@ -136,6 +145,17 @@ func jiraNativeAccount(ctx context.Context, write *jiraWrite, site string) (stri
 	return jiraNativeRead(ctx, write, call, nativemap.DecodeJiraCurrentUser)
 }
 
+func (w *jiraWrite) checkIssueIdentity(ctx context.Context, site string, ref provider.Ref) error {
+	call, err := nativemap.JiraWriteIssue(site, ref)
+	if err != nil {
+		return err
+	}
+	_, err = jiraNativeRead(ctx, w, call, func(raw json.RawMessage) (struct{}, error) {
+		return struct{}{}, nativemap.CheckJiraIssueIdentity(raw, ref)
+	})
+	return err
+}
+
 func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.Ref, body string) (*jiraWrite, error) {
 	if err := a.jiraWriteScope(ref.Scope); err != nil {
 		return nil, err
@@ -154,10 +174,12 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 	if err != nil {
 		return nil, err
 	}
-	if _, err := jiraNativeIssue(ctx, write, site, ref); err != nil {
-		return nil, err
+	if write.Binding.Owner == "devflow" {
+		err = write.checkIssueIdentity(ctx, site, ref)
+	} else {
+		_, err = jiraNativeIssue(ctx, write, site, ref)
 	}
-	return write, nil
+	return write, err
 }
 
 func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider.TaskDraft) (*jiraWrite, error) {
@@ -486,13 +508,7 @@ func (a *App) prepareJiraRemoteLink(ctx context.Context, site string, ref provid
 	write, err := prepareJiraWrite(ctx, call)
 	switch {
 	case err == nil:
-		issue, err := nativemap.JiraWriteIssue(site, ref)
-		if err != nil {
-			return "", nil, nil, err
-		}
-		if _, err := jiraNativeRead(ctx, write, issue, func(raw json.RawMessage) (struct{}, error) {
-			return struct{}{}, nativemap.CheckJiraIssueIdentity(raw, ref)
-		}); err != nil {
+		if err := write.checkIssueIdentity(ctx, site, ref); err != nil {
 			return "", nil, nil, err
 		}
 		list, err := nativemap.JiraRemoteLinks(site, ref)

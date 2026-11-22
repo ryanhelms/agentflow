@@ -127,7 +127,7 @@ func (a *App) createAsanaTask(ctx context.Context, project, typ, title, descript
 	}
 	var result provider.WriteResult
 	if write != nil {
-		result, err = a.applyTaskAppend(ctx, token, write, func() (provider.WriteResult, error) {
+		result, err = applyTaskAppend(ctx, a.Home, token, write.taskWritePreview, func() (provider.WriteResult, error) {
 			return createBoundAsanaTask(ctx, d, write)
 		})
 	} else {

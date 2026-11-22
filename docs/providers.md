@@ -313,7 +313,7 @@ sign-in, the setup agent launches its OAuth flow. After consent, request a
 fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
 Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
-Desktop can also use Devflow-owned connections for Jira web links and
+Desktop can also use Devflow-owned connections for Jira comments, web links and
 Confluence page replacement. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
@@ -351,6 +351,21 @@ target and connected owner before confirming. When no Devflow enrollment
 exists, the Jira link tool can use the signed-in CLI. To disconnect the local
 Devflow Rovo grant, run `devflow setup logout --provider jira --client devflow`.
 Use Atlassian account settings if you also want to revoke the vendor's grant.
+
+With that Jira enrollment, `devflow_comment` can add one standard issue
+comment. The CLI uses the same grant and policy with
+`devflow --native-client claude-desktop comment APP-42 "Ready for review"`.
+Devflow checks the issue key and project on the enrolled connection.
+Review the site, key and full text, then confirm even if remote autonomy is
+`auto`. A successful result includes `commented: true` and `comment_id`.
+The input schema comes from the Rovo flat catalog. The receipt is fixture-tested
+and its hosted response shape still needs verification.
+
+Each approval authorizes one append. Devflow records a durable claim before
+sending it. An old token cannot authorize a second post or a different route.
+If the result is uncertain, inspect the issue before approving a new append.
+A new approval can intentionally post the same text again. Without a Devflow
+grant, comments use the existing configured Jira API route.
 
 Confluence page replacement uses a separate enrollment. From the enrolled
 workspace, run `devflow setup login --provider confluence --client devflow`
