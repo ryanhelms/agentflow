@@ -148,13 +148,13 @@ knowledge_base: {provider: filesystem, settings: {root: ../handbook}}
 		p.Notifications.Provider != "none" || p.SecOps.Provider != "github" || !p.SecOps.Configured {
 		t.Fatalf("independent selections = %+v", p)
 	}
-	tasks := p.TaskManagement.Settings.(*RepositorySettings)
+	tasks := p.TaskManagement.Settings.(*RepositoryTaskSettings)
 	if tasks.Directory != ".devflow/tasks" || *tasks.Branch != "tasks" || tasks.Publication != "push" ||
 		p.KnowledgeBase.Settings.(*FileSystemSettings).Root != "../handbook" {
 		t.Fatalf("file-backed roles = %+v, %+v", tasks, p.KnowledgeBase)
 	}
 	c = loadConfig(t, "task_management: {provider: filesystem}\nknowledge_base: {provider: repository}")
-	if c.Providers.TaskManagement.Settings.(*FileSystemSettings).Root != ".devflow/tasks" ||
+	if c.Providers.TaskManagement.Settings.(*FileSystemTaskSettings).Root != ".devflow/tasks" ||
 		c.Providers.KnowledgeBase.Settings.(*RepositorySettings).Directory != "docs" {
 		t.Fatal("both roles must support each file-backed provider with its own defaults")
 	}

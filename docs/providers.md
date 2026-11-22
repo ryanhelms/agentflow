@@ -134,7 +134,7 @@ only attempts to move open issues forward.
 
 ## Task templates
 
-Task object templates apply independently of the task provider. Configure a
+GitHub Issues, FileSystem and Repository support task templates. Configure a
 JSON catalog file relative to the checkout and an optional default template.
 Use an exact name and revision for a reproducible task definition.
 
@@ -165,15 +165,76 @@ Keep that marker and the corresponding catalog revision when editing the issue.
 Before posting a comment or changing state, devflow validates the current issue
 against that revision. Issues without a template marker keep their existing
 workflow even when a default is configured later.
-Use the `github-issues` task provider with the detected GitHub repository or set
-`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
-GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
-trailers. Existing commit rules still apply, including when the repository
-explicitly requires Jira-style subject scopes.
 
-`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
-Set an event to `none` to disable its effect. Devflow previews transitions and
-only attempts to move open issues forward.
+FileSystem and Repository use the same catalog and default for Markdown tasks.
+Templates can supply or require `scope`, `title`, `description`, `type`,
+`priority`, `labels` and structured `links`. Sections and checklist items go
+in the Markdown body. A supplied project, summary, description or type takes
+precedence over its template default. A linked task (explicit or bound to the
+branch) takes precedence over default links. When neither the caller nor the
+template supplies a scope or type, creation uses the configured scope and
+the type `Task`.
+
+The create preview includes the resolved draft and pin. The approved record
+stores the pin in version 1 YAML front matter, for example
+`template: {name: engineering-task, revision: "01"}`. Retain that catalog
+revision while tasks reference it. Before a configured transition, devflow
+validates the current fields, sections and checklist against the stored
+revision and checks the approved file revision before writing. Older tasks
+without a pin continue through their original transition flow.
+
+## File-backed tasks
+
+Select `filesystem` or `repository` under `task_management` to create, list,
+read and transition Markdown tasks. The default scope is `default`. Set
+`settings.scope` to choose the scope for My Work and new tasks, or pass a
+project when creating a task to override its scope. My Work lists up to 30
+open tasks in that scope. Both adapters lack an authenticated assignee.
+
+```yaml
+task_management:
+  provider: filesystem
+  settings:
+    root: .devflow/tasks
+    scope: platform
+```
+
+FileSystem resolves a relative root from the checkout and accepts an absolute
+directory. The first approved create makes the directory if needed. Writes
+use local autonomy. Ticket creation always requires confirmation.
+
+Use the qualified key returned by create or My Work when requesting context
+or a transition. For example, a commit body or PR body can contain
+`Task-Ref: filesystem/platform/quota`. This identifies the record by its
+front matter and survives a file rename. A feature branch can recover the
+reference from its commits. The commit subject and ordinary issue mentions
+do not bind a task. The `transitions` setting uses the GitHub Issues event
+mapping above. File tasks start open and a close marks them terminal.
+Run `devflow start <qualified-key>` to bind a local branch to the task under
+local autonomy. Use `--worktree` for a linked checkout. To share a FileSystem
+task directory across worktrees, configure an absolute root. Start records the
+binding in local Git configuration. The file-backed adapters do not support
+assignment or comments.
+
+For Repository, set `repository` to a Git remote name, URL or local repository
+path. Relative paths resolve from the checkout. The defaults use `origin`
+and the remote HEAD. Set `directory` to the record directory within the
+branch tree. Reads always use this base branch.
+
+Repository creates and transitions require remote confirmation, including at
+the `auto` level. The preview identifies the origin, directory, base and push
+target. The default `publication: pull-request` requires a GitHub.com origin
+and GitHub authentication. Approval publishes a review branch and opens or
+reuses its PR. The result carries `status: pending_review`, the qualified task
+`key`, PR `url` and review `branch`. A pending transition returns
+`applied: false`. The new task or state becomes visible once the PR is merged.
+
+For create retries, reuse the same `DEVFLOW_OPERATION_ID` and task inputs.
+An interactive PR preview includes a generated `operation_id` when no
+operation ID is supplied. Use that ID to reconcile an interrupted publication
+with fresh approval. For direct publication, set `publication: push` and
+choose an unprotected target branch. Protected push targets are rejected in
+both modes.
 
 ## Devflow repository pilot
 

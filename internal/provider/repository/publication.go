@@ -89,6 +89,9 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		}
 	}
 	if a.BeforeWrite != nil {
+		if err := c.checkPushOrigin(ctx); err != nil {
+			return zero, err
+		}
 		if err := a.BeforeWrite(c.branch, target); err != nil {
 			return zero, err
 		}
@@ -187,6 +190,7 @@ func (a adapter) existingReview(ctx context.Context, c checkout, head string, ap
 
 func (a adapter) requestReview(ctx context.Context, c checkout, head, op string, r provider.WriteResult) (provider.WriteResult, error) {
 	r.Status = provider.PendingReview
+	r.Branch = head
 	if a.Publisher == nil {
 		return r, nil
 	}

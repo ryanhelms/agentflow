@@ -197,6 +197,16 @@ The job reads trusted base-branch configuration and uses an explicit qualified
 task reference in the PR body. Apply a previewed transition with the usual
 confirmation flow in `devflow transition`.
 
+Select `filesystem` or `repository` to manage Markdown tasks. Start work with
+`devflow start <qualified-key>` to bind a local branch or worktree to the task.
+With a default task template, both providers store its exact name and revision
+in the Markdown front matter and validate the task against it before closing.
+FileSystem writes use local autonomy. Repository creates and transitions require
+remote confirmation. By default they return `pending_review` with the task key,
+GitHub PR URL and review branch. The task listing reflects the change after
+merge. Use `publication: push` for direct writes to an unprotected branch.
+[Provider configuration](docs/providers.md)
+
 The status command reads checks from the configured `devops.checks` provider.
 
 ## Day-to-day use

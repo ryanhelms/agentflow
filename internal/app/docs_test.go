@@ -29,9 +29,11 @@ func docsGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// Git rewrites the configured GitHub URL to a bare repository in this test's
-// private config. The provider sees the same owner/name as the fake PR API.
-func knowledgeFixture(t *testing.T) (*App, string) {
+const fixtureOrigin = "git@github.com:docs-team/handbook"
+
+// A local SSH stand-in serves a bare repository while preserving the hosted
+// origin inspected by both the approval gate and the GitHub publisher.
+func repositoryFixture(t *testing.T, role string) (*App, string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -39,12 +41,28 @@ func knowledgeFixture(t *testing.T) (*App, string) {
 	bare := filepath.Join(t.TempDir(), "knowledge.git")
 	docsGit(t, dir, "clone", "--quiet", "--bare", "--", dir, bare)
 	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
-	docsGit(t, dir, "config", "--global", "url."+bare+".insteadOf", "https://github.com/docs-team/handbook")
+	ssh := filepath.Join(t.TempDir(), "fixture-ssh")
+	const script = `#!/bin/sh
+set -eu
+[ "$1" = git@github.com ]
+case "$2" in
+  "git-upload-pack 'docs-team/handbook'") exec git-upload-pack "$DEVFLOW_FIXTURE_BARE" ;;
+  "git-receive-pack 'docs-team/handbook'") exec git-receive-pack "$DEVFLOW_FIXTURE_BARE" ;;
+  *) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(ssh, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DEVFLOW_FIXTURE_SSH", ssh)
+	t.Setenv("DEVFLOW_FIXTURE_BARE", bare)
+	docsGit(t, dir, "config", "--global", "core.sshCommand", `sh "$DEVFLOW_FIXTURE_SSH"`)
+	docsGit(t, dir, "config", "--global", "ssh.variant", "simple")
 	docsGit(t, dir, "remote", "add", "origin", "git@github.com:engineers/application.git")
 	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "devflow: 1\nknowledge_base: {provider: repository, settings: {repository: docs-team/handbook, directory: records}}\n"
+	cfg := "devflow: 1\n" + role + ": {provider: repository, settings: {repository: " + fixtureOrigin + ", directory: records}}\n"
 	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +86,7 @@ func (api docsPRTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestDocsRepositoryPublishPR(t *testing.T) {
-	a, bare := knowledgeFixture(t)
+	a, bare := repositoryFixture(t, "knowledge_base")
 	ctx := t.Context()
 	var head string
 	const prURL = "https://github.com/docs-team/handbook/pull/1"
@@ -186,10 +204,15 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 }
 
 func TestDocsPublicationPreflight(t *testing.T) {
-	a, bare := knowledgeFixture(t)
+	a, bare := repositoryFixture(t, "knowledge_base")
 	// Exercise the implicit origin and HEAD of a local repository.
 	docsGit(t, a.Repo.Dir, "remote", "set-url", "origin", bare)
 	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositorySettings)
+	slug := "docs-team/handbook"
+	cfg.Repository = &slug
+	if dest, err := a.knowledgeRepository(t.Context()); err != nil || dest.Origin != "https://github.com/"+slug {
+		t.Fatalf("knowledge origin for repository slug: %+v, %v", dest, err)
+	}
 	cfg.Repository = nil
 	a.Gate.Autonomy.Remote = config.Auto
 	in := DocsPublishInput{Ref: provider.Ref{Instance: "repository", Scope: "docs", ID: "one"}, Title: "one", OperationID: "create"}
@@ -209,7 +232,7 @@ func TestDocsPublicationPreflight(t *testing.T) {
 	checkDenied("protected branch")
 	branch = "PLAT-1-quota"
 	cfg.Publication = "pull-request"
-	origin := "docs-team/handbook"
+	origin := fixtureOrigin
 	cfg.Repository = &origin
 	a.ghc = gh.New("")
 	checkDenied("authentication")

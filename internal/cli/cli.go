@@ -530,7 +530,7 @@ func runStart(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(items) == 0 {
-			return errors.New("no open tickets assigned to you")
+			return errors.New("no open tasks found")
 		}
 		for i, it := range items {
 			fmt.Printf("%2d) %-12s %-14s %s\n", i+1, it.Key, it.Status, it.Summary)
@@ -578,9 +578,9 @@ func runCommit(ctx context.Context, args []string) error {
 			return err
 		}
 		var keys []string
-		if a.Cfg.Providers.TaskManagement.Provider != "github-issues" || a.Cfg.Commit.KeyRequired() {
+		if !a.UsesTaskRefs() || a.Cfg.Commit.KeyRequired() {
 			key := cc.Key
-			if a.Cfg.Providers.TaskManagement.Provider == "github-issues" {
+			if a.UsesTaskRefs() {
 				key = ""
 			}
 			if k := ask(fmt.Sprintf("Jira key [%s]: ", key)); k != "" {

@@ -22,7 +22,8 @@
 //
 // A document uses kind "document" and omits state. The Markdown body is the task
 // description or document body, including its original trailing newline, if any.
-// Task metadata also supports type, priority, assignee and labels. Both kinds
+// Task metadata also supports type, priority, assignee, labels and an optional
+// template mapping with its exact name and revision. Both kinds
 // support links (title, url, ref) and operations (operation ID to request digest).
 // Keep operations and the identity fields intact across edits. Scope and ID are
 // opaque values. The full identity is (kind, instance, scope, id), independent of
