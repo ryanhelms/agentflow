@@ -42,6 +42,7 @@ jobs:
     secrets:
       JIRA_USER: ${{ secrets.JIRA_USER }}
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      TASK_READ_TOKEN: ${{ secrets.TASK_READ_TOKEN }}  # optional, Issues read for private repositories
 
   transitions:
     if: >-
@@ -53,10 +54,11 @@ jobs:
     secrets:
       JIRA_USER: ${{ secrets.JIRA_USER }}
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      TASK_READ_TOKEN: ${{ secrets.TASK_READ_TOKEN }}  # optional, Issues read for private repositories
 
   # Semantic versioning: every merge to the default branch with feat/fix/! commits
   # publishes a GitHub Release per changed unit in .devflow/releases.yml, with its
-  # binaries, image, chart or package, and sets Jira fix versions.
+  # binaries, image, chart or package, and previews linked tasks and Jira fix versions.
   release:
     if: >-
       vars.DEVFLOW_ENABLED != 'false' && github.event_name == 'push' &&
@@ -71,8 +73,6 @@ jobs:
     secrets:
       DEVFLOW_APP_PRIVATE_KEY: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}   # optional
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-      JIRA_USER: ${{ secrets.JIRA_USER }}
-      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
 
   # Notes for each unit the release job just published (Jira-linked, plus Confluence).
   release-notes:
@@ -120,8 +120,8 @@ jobs:
   auto-issues:
     if: >-
       vars.DEVFLOW_ENABLED != 'false' &&
-      github.event_name == 'issues' || github.event_name == 'workflow_run' ||
-      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5')
+      (github.event_name == 'issues' || github.event_name == 'workflow_run' ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5'))
     uses: nscaledev/devflow/.github/workflows/auto-issues.yml@v0
     permissions:
       contents: read

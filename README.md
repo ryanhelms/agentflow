@@ -57,7 +57,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | Area | Capabilities |
 | --- | --- |
 | **Commit and PR hygiene** | Commit convention with Jira keys, enforced locally (`commit-msg`) and in CI (`key-check` runs the same rules from `.devflow/config.yml` on the PR title and every commit, then checks the keys exist; `commit.require_key: false` makes keys optional) · generated, validated and split commits · PR readiness checks and PR creation from templates |
-| **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions |
+| **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions and provider previews |
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
@@ -84,7 +84,7 @@ flowchart LR
 devflow has two halves that share one status map and one set of rules:
 
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
-   every opted-in repo: Jira key checks, ticket transitions, semantic releases, release
+   every opted-in repo: task reference checks, ticket transitions, semantic releases, release
    guard, Confluence publishing, delivery notifications and hygiene. Repos call them from a single
    caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that `devflow pin`
    moves forward in a reviewed PR.
@@ -197,11 +197,14 @@ state change. See the [task template configuration](docs/providers.md#task-templ
 
 New issues created through devflow in this repository use the
 [`engineering-task` template](.devflow/task-templates.json).
-GitHub Issues repositories can run the reusable `task-events.yml` workflow to
-preview configured pull-request transitions with read-only issue permissions.
-The job reads trusted base-branch configuration and uses an explicit qualified
-task reference in the PR body. Apply a previewed transition with the usual
-confirmation flow in `devflow transition`.
+The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
+task provider. Validation checks the squash title and each commit. The
+existing Jira paths apply transitions and fix versions when configured.
+Other task providers use previews in the generic transition, ship and release
+workflows. Apply a reviewed change through `devflow transition`. For GitHub Issues, PR and commit bodies carry
+qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
+read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
+covers runner credentials, event replay, release outputs and pin rollback.
 
 Use `devflow secops triage` to preview tasks from configured GitHub findings
 and fixture incidents. Apply a source reference to create a linked task using
@@ -256,7 +259,7 @@ default is `confirm`: the agent shows what it will do and waits.
 ```
 
 - `type`: `feat fix perf refactor docs test build ci chore revert`
-- `#start #review #qa #done #block` move the ticket through `flow-map.yml`; Jira Smart
+- `#start #review #qa #done #block` select ticket transitions from `flow-map.yml`. Jira Smart
   Commits still handle `#comment` and `#time`
 - `feat` → minor, `fix`/`perf` → patch, `!` or `BREAKING CHANGE:` → major
 - No AI attribution trailers; devflow strips known ones

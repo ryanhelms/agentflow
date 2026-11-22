@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"strconv"
 
@@ -19,8 +20,16 @@ func runGitHubTaskEvent(ctx context.Context, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	host := "github.com"
+	if server := os.Getenv("GITHUB_SERVER_URL"); server != "" {
+		u, err := url.Parse(server)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			return errors.New("expected an HTTPS GITHUB_SERVER_URL")
+		}
+		host = u.Host
+	}
 	metadata := event.GitHubActionsContext{
-		Repository:    provider.RepositoryRef{Host: "github.com", Path: os.Getenv("GITHUB_REPOSITORY")},
+		Repository:    provider.RepositoryRef{Host: host, Path: os.Getenv("GITHUB_REPOSITORY")},
 		RepositoryID:  repoID,
 		DefaultBranch: os.Getenv("DEVFLOW_DEFAULT_BRANCH"),
 		EventName:     os.Getenv("GITHUB_EVENT_NAME"),
