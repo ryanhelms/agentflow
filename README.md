@@ -174,6 +174,10 @@ and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
+Run `devflow setup providers` (MCP: `devflow_setup_providers`) to list every provider
+each role accepts, its default, which one this repo selects, and how to verify readiness. Jira, Confluence, Slack
+and Asana support client verification. Headless setup can also probe Asana directly
+with an explicit `ASANA_ACCESS_TOKEN`.
 Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`

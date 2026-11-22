@@ -25,6 +25,10 @@ func (s *Server) registerProviderSetup() {
 		func(ctx context.Context, in setupPlanIn) (any, error) {
 			return setup.PlanSetup(ctx, s.app.Repo.Dir, in.Client, in.Companion)
 		})
+	add(s, "devflow_setup_providers", "List every provider each role accepts, the default, which one this workspace selects and whether devflow checks its readiness itself or through an MCP companion. Reads local configuration only.", readOnly,
+		func(ctx context.Context, _ noIn) (any, error) {
+			return setup.ListProviders(ctx, s.app.Repo.Dir)
+		})
 	add(s, "devflow_setup_apply", "Install a pinned gh or MCP companion, or register the selected adapter or companion in an explicit project client. Each action requires local confirmation. Rerun devflow_setup_plan to verify. Host trust and sign-in are handled by the client.", remote,
 		func(ctx context.Context, in setupApplyIn) (any, error) {
 			return s.app.ApplySetup(ctx, app.SetupAction{Client: in.Client, Companion: in.Companion, InstallGH: in.InstallGH, InstallMCP: in.Install}, in.ConfirmToken)

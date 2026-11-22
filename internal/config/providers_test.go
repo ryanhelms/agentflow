@@ -275,3 +275,24 @@ func TestAsanaScopeAndTransitions(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderCatalog(t *testing.T) {
+	catalog := ProviderCatalog()
+	if len(catalog) != len(ProviderRoles) {
+		t.Fatalf("catalog has %d roles, want %d", len(catalog), len(ProviderRoles))
+	}
+	for i, r := range catalog {
+		if r.Role != ProviderRoles[i] {
+			t.Errorf("role %d = %s, want %s", i, r.Role, ProviderRoles[i])
+		}
+		if !slices.Contains(r.Providers, r.Default) {
+			t.Errorf("%s default %q is not an option: %v", r.Role, r.Default, r.Providers)
+		}
+		if r.Providers[len(r.Providers)-1] != "none" {
+			t.Errorf("%s options do not end with none: %v", r.Role, r.Providers)
+		}
+	}
+	if got := catalog[1].Providers; !slices.Equal(got, []string{"asana", "filesystem", "github-issues", "jira", "repository", "none"}) {
+		t.Errorf("task_management providers = %v", got)
+	}
+}
