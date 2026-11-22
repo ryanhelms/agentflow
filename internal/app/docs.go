@@ -14,6 +14,7 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/provider/repository"
 )
 
@@ -70,7 +71,7 @@ type DocsPublishInput struct {
 func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string) (any, error) {
 	name := a.Cfg.Providers.KnowledgeBase.Provider
 	switch name {
-	case "filesystem", "repository", "github-wiki":
+	case "filesystem", "repository", "github-wiki", "confluence":
 	default:
 		return nil, provider.Unsupported(name, "document publish")
 	}
@@ -85,6 +86,27 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 	}
 
 	summary := map[string]any{"document": in}
+	if name == "confluence" {
+		if _, err := legacy.ConfluenceReplacementVersion(in.Ref, in.ExpectedRevision, in.Links); err != nil {
+			return nil, err
+		}
+		site, err := a.confluenceSite()
+		if err != nil {
+			return nil, err
+		}
+		summary["site"] = site
+		if p, err := a.gate(policy.Remote, "docs_publish", summary, token, false, nil); p != nil || err != nil {
+			return p, err
+		}
+		k, err := a.confluenceKnowledge(site)
+		if err != nil {
+			a.audit(policy.Remote, "docs_publish", summary, err)
+			return nil, err
+		}
+		out, err := in.publish(ctx, k)
+		a.audit(policy.Remote, "docs_publish", summary, err)
+		return out, err
+	}
 	if name == "filesystem" {
 		root := a.knowledgeDirectory()
 		summary["directory"] = root

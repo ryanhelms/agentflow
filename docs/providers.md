@@ -116,8 +116,8 @@ overrides the legacy Jira site, pass its URL to `devflow login --site URL` to
 store the credential for that site.
 
 Confluence search uses `knowledge_base.settings.site` and returns page IDs, space
-keys, titles, URLs and excerpts. Set `CONFLUENCE_USER` and `CONFLUENCE_TOKEN`
-together to supply knowledge credentials. With those variables unset, a separate
+keys, titles, URLs, excerpts and published revisions. Set `CONFLUENCE_USER`
+and `CONFLUENCE_TOKEN` together to supply knowledge credentials. With those variables unset, a separate
 site uses its own Atlassian keychain entry. A shared site also accepts the existing
 `JIRA_USER` and `JIRA_TOKEN` environment pair.
 
@@ -354,8 +354,8 @@ To link a managed document, pass `--link-to filesystem/design/capacity` or
 set a template default such as
 `"links":[{"ref":{"instance":"filesystem","scope":"design","id":"capacity"}}]`.
 An explicit link takes precedence over template defaults. Context resolves
-the qualified reference through the selected knowledge provider. FileSystem,
-Repository and GitHub Wiki support that lookup. When lookup fails, context
+the qualified reference through the selected knowledge provider. Confluence,
+FileSystem, Repository and GitHub Wiki support that lookup. When lookup fails, context
 includes the reference and a warning. Link resolution uses the provider,
 scope and ID, independent of the document's URL.
 
@@ -543,6 +543,41 @@ The decision and its rationale.
 
 The document's qualified reference survives a rename. Generated setup files
 and authored records have separate lifecycles during removal.
+
+## Replace a Confluence page
+
+With `knowledge_base.provider: confluence`, search for the current page ID,
+space key and revision. For example, to replace published version 7 of page
+42 in the ENG space, supply the complete new title and body.
+
+```bash
+devflow docs search quota --space ENG --json
+devflow docs publish confluence/ENG/42 \
+  --title "Quota policy" --body "Each team owns its quota." \
+  --expected-revision 7 --operation-id quota-policy-1
+```
+
+The CLI and `devflow_docs_publish` apply the remote autonomy policy. Confirmation
+covers the configured site, qualified reference, expected revision, operation ID
+and complete replacement. Devflow checks the space key immediately before the
+update and verifies the space ID in the response. Confluence uses the page
+version as its write precondition. In this example the requested version is 8.
+If another edit wins, review the newer version before publishing a replacement.
+
+Retry an uncertain result with the same operation ID, revision, title and body.
+Devflow checks the message on the exact successor version, including in page
+history after later edits. A matching receipt returns `already_applied` with
+the original published revision. An inaccessible version history can prevent
+verification. For a new edit, use a new operation ID and the current revision.
+
+Lookup renders readable text from the page's Atlassian Document Format.
+Publication escapes Markdown and HTML as literal text and preserves line breaks.
+Replacing the body removes its previous rich formatting and embedded macros.
+Structured `links` are unsupported. Parent, owner, labels and properties are
+outside the update. Confluence reconciles the published body with open drafts
+and may overwrite a diverged draft. Create the page in Confluence first to obtain
+its assigned numeric ID. CI docs sync and release notes use their existing
+Pandoc publishing path. [Confluence page API](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-put)
 
 ## Publish a Repository document
 

@@ -61,10 +61,11 @@ func TestLegacyProviderReads(t *testing.T) {
 		user, token, _ := r.BasicAuth()
 		if r.URL.Host == "docs.example" {
 			if user != "wiki-user" || token != "wiki-fixture" || r.URL.Path != "/wiki/rest/api/search" ||
+				r.URL.Query().Get("expand") != "content.space,content.version" ||
 				r.URL.Query().Get("cql") != `type=page AND text ~ "quota" AND space = "ENG"` {
 				t.Fatalf("wrong knowledge request at %s for %q", r.URL, user)
 			}
-			fmt.Fprint(w, `{"results":[{"content":{"id":"42","space":{"key":"ENG"},"title":"Design"},"url":"/design","excerpt":"@@@hl@@@Quota@@@endhl@@@"}]}`)
+			fmt.Fprint(w, `{"results":[{"content":{"id":"42","space":{"key":"ENG"},"title":"Design","version":{"number":7}},"url":"/design","excerpt":"@@@hl@@@Quota@@@endhl@@@"}]}`)
 			return
 		}
 		if r.URL.Host != "tasks.example" || user != "jira-user" || token != "jira-fixture" {
@@ -113,7 +114,7 @@ func TestLegacyProviderReads(t *testing.T) {
 	}
 	a.Cfg.Providers.TaskManagement = config.Selection{Provider: "none"}
 	pages, err := a.DocsSearch(ctx, "quota", "ENG")
-	want := []atlassian.Page{{ID: "42", Space: "ENG", Title: "Design", URL: "https://docs.example/wiki/design", Excerpt: "Quota"}}
+	want := []atlassian.Page{{ID: "42", Space: "ENG", Title: "Design", URL: "https://docs.example/wiki/design", Excerpt: "Quota", Revision: "7"}}
 	if err != nil || !reflect.DeepEqual(pages["pages"], want) || pages["note"] == "" {
 		t.Fatalf("docs = %+v, %v", pages, err)
 	}
