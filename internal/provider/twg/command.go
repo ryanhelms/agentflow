@@ -165,7 +165,7 @@ func classify(raw json.RawMessage) error {
 		}
 	}
 	switch code {
-	case "AUTH_EXPIRED", "AUTH_INVALID", "AUTH_MIGRATION_REQUIRED", "AUTH_REQUIRED", "HTTP_401", "UNAUTHENTICATED":
+	case "AUTH_EXPIRED", "AUTH_INVALID", "AUTH_MIGRATION_REQUIRED", "AUTH_PROFILE_MISSING", "AUTH_REQUIRED", "HTTP_401", "UNAUTHENTICATED":
 		return ErrAuthRequired
 	case "HTTP_404", "NOT_FOUND", "RESOURCE_NOT_FOUND":
 		return provider.ErrNotFound

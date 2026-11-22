@@ -127,6 +127,27 @@ func JiraWriteIssue(site string, ref provider.Ref) (native.Call, error) {
 	})
 }
 
+// CheckJiraIssueIdentity binds an operation that needs the issue and project,
+// without requiring workflow fields such as the status category.
+func CheckJiraIssueIdentity(raw json.RawMessage, ref provider.Ref) error {
+	var issue struct {
+		Key    string `json:"key"`
+		Fields struct {
+			Project struct {
+				Key string `json:"key"`
+			} `json:"project"`
+		} `json:"fields"`
+	}
+	if err := decodeObject(raw, &issue); err != nil {
+		return err
+	}
+	if !strings.EqualFold(issue.Key, ref.ID) ||
+		(issue.Fields.Project.Key != "" && !strings.EqualFold(issue.Fields.Project.Key, ref.Scope)) {
+		return fmt.Errorf("jira returned a different issue or project: %w", provider.ErrConflict)
+	}
+	return nil
+}
+
 type JiraIssueSnapshot struct {
 	Title     string
 	Status    atlassian.Status

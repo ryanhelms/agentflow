@@ -19,7 +19,7 @@ const testSite = "https://example.atlassian.net"
 
 const jiraRead = `{"data":[{"key":"ENG-42","url":"https://example.atlassian.net/browse/ENG-42",
   "summary":"Bound task","description":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Task details"}]}]},
-  "status":{"id":"10000","name":"Closed","statusCategory":{"key":"done"}},"issueType":"Task",
+  "status":{"id":"10000","name":"Closed","statusCategory":{"id":3,"key":"done"}},"issueType":"Task",
   "priority":{"name":"High"},"assignee":{"displayName":"Person"},"labels":["fixture"],
   "updated":"2026-11-18T01:00:00.000+0000","parent":{"key":"ENG-2","summary":"Parent task"}}]}`
 
@@ -273,6 +273,7 @@ func TestClassifiesToolErrors(t *testing.T) {
 		want         error
 	}{
 		{"missing oauth", printJSON(`{"error":{"code":"AUTH_REQUIRED","message":"`+diagnostic+`"}}`) + "; exit 77", ErrAuthRequired},
+		{"missing site profile", printJSON(`{"error":{"code":"AUTH_PROFILE_MISSING","message":"`+diagnostic+`"}}`) + "; exit 77", ErrAuthRequired},
 		{"expired oauth via stderr", printJSON(`{"error":{"code":"AUTH_INVALID"}}`) + " >&2; exit 1", ErrAuthRequired},
 		{"documented auth exit", "exit 77", ErrAuthRequired},
 		{"denied", printJSON(`{"error":{"code":"FORBIDDEN"}}`) + "; exit 1", ErrAccessDenied},

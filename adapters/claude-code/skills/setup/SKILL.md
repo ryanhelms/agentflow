@@ -44,3 +44,11 @@ Request separate approval for the same ID with the user's explicit target
 and managed entry with `devflow_setup_plan`. For a custom integration that
 requires an environment credential, offer the vendor's interactive connector
 or CLI when available.
+
+For the Jira web-link pilot in Claude Code Desktop, launch
+`devflow setup login --provider jira --client devflow` if the user has selected
+the Devflow Rovo connection. This opens Atlassian consent in the browser.
+Wait for the user to finish consent before requesting a new write preview.
+
+When asked to disconnect the Devflow Rovo connection, use
+`devflow setup logout --provider jira --client devflow`.

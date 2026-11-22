@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
-| **Current release** | <!-- devflow:version -->`v0.25.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.26.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -198,7 +198,10 @@ writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery. [Slack destination configuration](docs/notifications.md)
+for delivery. The Claude Code Desktop Jira web-link pilot uses a separately
+enrolled Devflow Rovo connection with browser OAuth and OS credential storage.
+[Provider setup](docs/providers.md#interactive-provider-setup) ·
+[Slack destination configuration](docs/notifications.md)
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

@@ -291,8 +291,10 @@ approval to the exact operation, arguments and host. If the provider needs
 sign-in, the setup agent launches its OAuth flow. After consent, request a
 fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
-Code and other clients. Direct OAuth session binding for writes is currently
-provided by Codex App Server.
+Code and other clients. Codex App Server binds writes to the provider connection it owns. The
+Jira web-link pilot also supports a separately enrolled Devflow connection
+from Claude Code Desktop. Its preview identifies Devflow as the connection
+owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -314,6 +316,22 @@ Atlassian's full catalog endpoint, `https://mcp.atlassian.com/v2/mcp?tools=all`,
 exposes the named Jira remote-link write capability. If that capability is
 unavailable, Devflow can use the signed-in Teamwork Graph CLI with a stable
 remote link ID. A matching existing link returns `already_applied`.
+
+For the Claude Code Desktop pilot, launch Devflow's Atlassian OAuth setup from
+the enrolled workspace and complete consent in the browser:
+
+```bash
+devflow setup login --provider jira --client devflow
+```
+
+The OS credential store holds the grant. The workspace configuration continues
+to specify the Jira site and allowed projects. Reopen the session if it uses a
+previous Devflow binary. Run `devflow_jira_remote_link` to preview the exact
+target and connected owner before confirming. When no Devflow enrollment
+exists, the Jira link tool can use the signed-in CLI. To disconnect the local
+Devflow Rovo grant, run `devflow setup logout --provider jira --client devflow`.
+Use Atlassian account settings if you also want to revoke the vendor's grant.
+
 [Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
 
 ### Claude Code Desktop

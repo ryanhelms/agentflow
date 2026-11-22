@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.26.0](https://github.com/nscaledev/devflow/compare/v0.25.0...v0.26.0) - 2026-11-22
+
+### Features
+
+- add cli commands for every mcp tool (#65) ([d43dacf](https://github.com/nscaledev/devflow/commit/d43dacff997c8517540f216f908fc6329709b97a))
+
 ## [0.25.0](https://github.com/nscaledev/devflow/compare/v0.24.0...v0.25.0) - 2026-11-22
 
 ### Features

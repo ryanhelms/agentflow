@@ -14,6 +14,7 @@ import (
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -37,7 +38,7 @@ type Server struct {
 	blocked   error
 	updater   *update.Updater
 	updateMsg string
-	writer    *codexhost.Writer
+	writer    *native.SessionWriter
 }
 
 // New builds a server for the repo in dir.
@@ -47,8 +48,11 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{app: a}
-	if a.Client == "codex" {
+	switch a.Client {
+	case "codex":
 		s.writer = codexhost.NewWriter(a.Repo.Dir)
+	case "claude", "claude-desktop":
+		s.writer = rovohost.NewWriter()
 	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: Instructions})
 	s.register()
