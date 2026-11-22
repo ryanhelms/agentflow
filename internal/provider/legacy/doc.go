@@ -7,8 +7,8 @@
 // Jira transitions recheck status before sending the write. The client's
 // transition request has no atomic status precondition.
 //
-// Confluence only exposes search excerpts. Reading a page by ID and publishing
-// return provider.ErrUnsupported.
+// Confluence searches pages, reads qualified references and replaces existing
+// pages with an expected version and a receipt in the version message.
 //
 // GitHub supports GitHub.com pull requests and unresolved review threads.
 package legacy

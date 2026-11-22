@@ -287,11 +287,12 @@ func (c *Client) StatusChanges(ctx context.Context, key string) ([]ChangelogEntr
 
 // Page is a Confluence search hit.
 type Page struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Excerpt string `json:"excerpt"`
-	Space   string `json:"space"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	Excerpt  string `json:"excerpt"`
+	Space    string `json:"space"`
+	Revision string `json:"revision,omitempty"`
 }
 
 // SearchConfluence runs a CQL text search over pages.
@@ -308,18 +309,23 @@ func (c *Client) SearchConfluence(ctx context.Context, text, space string, limit
 				Space struct {
 					Key string `json:"key"`
 				} `json:"space"`
+				Version PageVersion `json:"version"`
 			} `json:"content"`
 			Excerpt string `json:"excerpt"`
 			URL     string `json:"url"`
 		} `json:"results"`
 	}
-	q := url.Values{"cql": {cql}, "limit": {strconv.Itoa(limit)}, "expand": {"content.space"}}
+	q := url.Values{"cql": {cql}, "limit": {strconv.Itoa(limit)}, "expand": {"content.space,content.version"}}
 	if err := c.do(ctx, "GET", "/wiki/rest/api/search?"+q.Encode(), nil, &out); err != nil {
 		return nil, err
 	}
 	var pages []Page
 	for _, r := range out.Results {
-		pages = append(pages, Page{ID: r.Content.ID, Title: r.Content.Title, URL: c.Base + "/wiki" + r.URL,
+		var revision string
+		if r.Content.Version.Number > 0 {
+			revision = strconv.FormatInt(r.Content.Version.Number, 10)
+		}
+		pages = append(pages, Page{Revision: revision, ID: r.Content.ID, Title: r.Content.Title, URL: c.Base + "/wiki" + r.URL,
 			Excerpt: cleanExcerpt(r.Excerpt), Space: r.Content.Space.Key})
 	}
 	return pages, nil
