@@ -152,3 +152,29 @@ func TestRouterCannotAddTargetToRepositorySignal(t *testing.T) {
 		t.Fatalf("widened route: %v, %v", pending, err)
 	}
 }
+
+func TestRepositoryRemoteBoundsResolvedIssueTarget(t *testing.T) {
+	dir := newRepo(t)
+	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "code_hosting: {settings: {target_remote: upstream}}\ntask_management: {provider: github-issues}"
+	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+		t.Fatal(err)
+	}
+	writeUserDefinition(t, "auto: {code_hosting: {settings: {target_remote: origin}}}")
+	a, err := Open(t.Context(), dir, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/personal/fork.git")
+	mustGit(t, a.Repo, "remote", "add", "upstream", "https://github.com/org/project.git")
+	host := &taskWriteFixture{}
+	ctx := taskWriteContext(t, host)
+	if out, err := a.CreateTicket(ctx, "", "", "Follow up", "", "", ""); !errors.Is(err, native.ErrDenied) || out != nil || host.preparations != 0 {
+		t.Fatalf("user-selected remote: %v, %v", out, err)
+	}
+	if err := a.taskWriteScope(t.Context(), "org/project"); err != nil {
+		t.Fatal(err)
+	}
+}

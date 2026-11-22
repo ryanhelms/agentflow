@@ -199,7 +199,7 @@ func checkNotificationScope(selection config.Selection, signal string, targets [
 	case *config.SlackSettings:
 		for _, dst := range targets {
 			if selection.RepositorySettings("native") != nil && !withinSlackScope(dst.Native, s.Native) ||
-				selection.RepositorySettings("credential_ref") != nil && s.CredentialRef != nil && (dst.Native != nil || dst.CredentialRef != *s.CredentialRef) {
+				selection.RepositorySettings("credential_ref") != nil && s.CredentialRef != nil && *s.CredentialRef != "" && (dst.Native != nil || dst.CredentialRef != *s.CredentialRef) {
 				return fmt.Errorf("slack delivery differs from the repository destination: %w", native.ErrDenied)
 			}
 		}
