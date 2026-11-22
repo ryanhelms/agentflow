@@ -11,8 +11,8 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Provider architecture accepted for the devflow pilot. This repository is piloting GitHub Issues and Repository knowledge. Consumer rollout follows compatibility and rollback testing. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). |
-| **Current release** | <!-- devflow:version -->`v0.12.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Status** | The GitHub Issues and Repository provider pilot completed in this repository. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
+| **Current release** | <!-- devflow:version -->`v0.13.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
