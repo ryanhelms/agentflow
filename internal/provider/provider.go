@@ -47,6 +47,9 @@ type WriteResult struct {
 type WriteOptions struct {
 	OperationID      string
 	ExpectedRevision string
+	// CheckTask validates the latest task read before a comment or transition.
+	// It is a read-time check, not an atomic server-side revision precondition.
+	CheckTask func(Task) error `json:"-"`
 }
 
 type Link struct {
@@ -62,17 +65,19 @@ type TaskState struct {
 }
 
 type Task struct {
-	Ref         Ref       `json:"ref"`
-	Key         string    `json:"key,omitempty"`
-	URL         string    `json:"url,omitempty"`
-	Title       string    `json:"title"`
-	Description string    `json:"description,omitempty"`
-	Type        string    `json:"type,omitempty"`
-	State       TaskState `json:"state"`
-	Priority    string    `json:"priority,omitempty"`
-	Assignee    string    `json:"assignee,omitempty"`
-	Links       []Link    `json:"links,omitempty"`
-	Revision    string    `json:"revision,omitempty"`
+	Template    *TaskTemplateRef `json:"template,omitempty"`
+	Labels      []string         `json:"labels,omitempty"`
+	Ref         Ref              `json:"ref"`
+	Key         string           `json:"key,omitempty"`
+	URL         string           `json:"url,omitempty"`
+	Title       string           `json:"title"`
+	Description string           `json:"description,omitempty"`
+	Type        string           `json:"type,omitempty"`
+	State       TaskState        `json:"state"`
+	Priority    string           `json:"priority,omitempty"`
+	Assignee    string           `json:"assignee,omitempty"`
+	Links       []Link           `json:"links,omitempty"`
+	Revision    string           `json:"revision,omitempty"`
 }
 
 type TaskQuery struct {
@@ -84,6 +89,7 @@ type TaskQuery struct {
 }
 
 type TaskDraft struct {
+	Template    *TaskTemplateRef
 	Scope       string
 	Title       string
 	Description string

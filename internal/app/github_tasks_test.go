@@ -43,6 +43,11 @@ func (f *fakeIssues) Transition(_ context.Context, r provider.Ref, target provid
 	if r != f.task.Ref || target.ID != "closed" {
 		return provider.WriteResult{}, errors.New("unexpected transition")
 	}
+	if o.CheckTask != nil {
+		if err := o.CheckTask(f.task); err != nil {
+			return provider.WriteResult{}, err
+		}
+	}
 	f.writes = append(f.writes, o.OperationID)
 	f.task.State = target
 	return provider.WriteResult{Ref: r, Status: provider.Applied}, nil
@@ -57,6 +62,11 @@ func (f *fakeIssues) AssignToMe(_ context.Context, r provider.Ref, o provider.Wr
 func (f *fakeIssues) Comment(_ context.Context, r provider.Ref, _ string, o provider.WriteOptions) (provider.WriteResult, error) {
 	if r != f.task.Ref {
 		return provider.WriteResult{}, errors.New("unexpected comment target")
+	}
+	if o.CheckTask != nil {
+		if err := o.CheckTask(f.task); err != nil {
+			return provider.WriteResult{}, err
+		}
 	}
 	f.writes = append(f.writes, o.OperationID)
 	return provider.WriteResult{Ref: r, Status: provider.Applied}, nil
@@ -158,9 +168,11 @@ func TestIssueWriteConfirmationAndRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok := confirmation(t, v)
+	f.task.Ref.Scope = "fork/repo"
 	if _, err := a.Comment(ctx, "fork/repo#42", "progress", tok); !errors.Is(err, policy.ErrToken) {
 		t.Fatalf("target change: %v", err)
 	}
+	f.task.Ref.Scope = "org/repo"
 	if len(f.writes) != 0 {
 		t.Fatal("preview wrote a comment")
 	}

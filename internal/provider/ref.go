@@ -57,6 +57,20 @@ func (r Ref) StorageKey() string {
 	return hex.EncodeToString(sum[:])
 }
 
+// TaskTemplateRef identifies an exact task template in the repository catalog.
+type TaskTemplateRef struct {
+	Name     string `yaml:"name" json:"name"`
+	Revision string `yaml:"revision" json:"revision"`
+}
+
+// Validate requires both parts of an exact reference.
+func (r TaskTemplateRef) Validate() error {
+	if strings.TrimSpace(r.Name) == "" || strings.TrimSpace(r.Revision) == "" {
+		return fmt.Errorf("template requires a name and revision")
+	}
+	return nil
+}
+
 const TaskTrailer = "Task-Ref: "
 
 // TaskRefs reads explicit task references from a commit or PR body. In commit
