@@ -22,7 +22,7 @@ func TestResolvePortableRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ref := Ref{"bug", "1"}
+	ref := Ref{Name: "bug", Revision: "1"}
 	template, err := catalog.Select(ref)
 	if err != nil {
 		t.Fatal(err)
@@ -68,13 +68,13 @@ func TestResolvePortableRevision(t *testing.T) {
 }
 
 func TestInvalidSelection(t *testing.T) {
-	base := Template{Ref: Ref{"incident", "1"}}
+	base := Template{Ref: Ref{Name: "incident", Revision: "1"}}
 	for _, tc := range []struct {
 		c   Catalog
 		ref Ref
 	}{
-		{Catalog{base}, Ref{"incident", "2"}},
-		{Catalog{base}, Ref{"incident", ""}},
+		{Catalog{base}, Ref{Name: "incident", Revision: "2"}},
+		{Catalog{base}, Ref{Name: "incident", Revision: ""}},
 		{Catalog{base, base}, base.Ref},
 		{Catalog{{}}, Ref{}},
 	} {
@@ -87,7 +87,7 @@ func TestInvalidSelection(t *testing.T) {
 func TestRequiredFields(t *testing.T) {
 	for _, field := range []string{"scope", "title", "description", "type", "priority", "labels", "links", "assignee"} {
 		t.Run(field, func(t *testing.T) {
-			template := Template{Ref: Ref{"bug", "1"}, Required: []string{field}}
+			template := Template{Ref: Ref{Name: "bug", Revision: "1"}, Required: []string{field}}
 			blank := " "
 			defaultTitle := "default title"
 			template.Defaults.Title = &defaultTitle
@@ -103,7 +103,7 @@ func TestRequiredFields(t *testing.T) {
 }
 
 func TestRequiredBody(t *testing.T) {
-	template := Template{Ref: Ref{"review", "2"}, Sections: []Section{{Heading: "Impact"}}, Checklist: []string{"Verify"}}
+	template := Template{Ref: Ref{Name: "review", Revision: "2"}, Sections: []Section{{Heading: "Impact"}}, Checklist: []string{"Verify"}}
 	for _, body := range []string{"- [ ] Verify", "## Impact\n\n## Next\n- [x] Verify", "## Impact\nReported\n~~~\n- [ ] Verify\n~~~"} {
 		if err := template.Validate(provider.TaskDraft{Description: body}); err == nil {
 			t.Errorf("accepted incomplete body %q", body)
@@ -120,7 +120,7 @@ func TestRequiredBody(t *testing.T) {
 }
 
 func TestAdapterSupport(t *testing.T) {
-	template := Template{Ref: Ref{"bug", "1"}, Required: []string{"priority"}, Checklist: []string{"Verify"}}
+	template := Template{Ref: Ref{Name: "bug", Revision: "1"}, Required: []string{"priority"}, Checklist: []string{"Verify"}}
 	for _, fields := range [][]string{{"description"}, {"priority"}} {
 		if err := template.CheckSupport(fields); !errors.Is(err, provider.ErrUnsupported) {
 			t.Errorf("support for %v = %v", fields, err)
