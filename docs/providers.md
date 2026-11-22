@@ -70,3 +70,32 @@ is absent from the current shell.
 as errors. Use provider credentials in the environment where the command runs.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
+## Search a local knowledge directory
+
+Choose a dedicated directory for knowledge records. Relative roots resolve from
+the repository checkout. Use `devflow docs search quota --space engineering` to
+search the scope in the following example.
+
+```yaml
+knowledge_base:
+  provider: filesystem
+  settings:
+    root: handbook
+```
+
+Place a Markdown document in `handbook/` with devflow front matter.
+
+```markdown
+---
+version: 1
+kind: document
+instance: filesystem
+scope: engineering
+id: quota
+title: Quota design
+---
+The decision and its rationale.
+```
+
+The document's qualified reference survives a rename. Generated setup files
+and authored records have separate lifecycles during removal.
