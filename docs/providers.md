@@ -129,6 +129,19 @@ effective Jira site, so switching sites requires fresh approval.
 
 ## Check workstation and runner readiness
 
+`devflow setup providers` lists every provider each role accepts, marks the
+default and the provider this workspace selects, and describes the available readiness checks.
+It reads local configuration only. `--json` and the `devflow_setup_providers` MCP
+tool return the same list.
+
+| Readiness | How to verify |
+| --- | --- |
+| `built-in` | Setup checks the provider directly. |
+| `client` | Use the client's Atlassian MCP for Jira or Confluence, or its Slack MCP for Slack. Jira and Confluence also support the signed-in Teamwork Graph CLI. Setup checks a matching declared companion when present. |
+| `client-or-headless` | For Asana, configure a project and verify with the client's Asana MCP or a declared companion. Headless setup with an explicit `ASANA_ACCESS_TOKEN` probes the project directly. |
+| `companion` | Setup needs a declared MCP companion for this provider. |
+| `none` | The role is disabled. |
+
 `devflow setup plan --json` reports the selected roles, detected forge, installed
 tools, and prerequisite checks. `devflow_setup_plan` presents the same plan to an
 MCP client. Use `--client NAME` to select a desktop client even if its executable

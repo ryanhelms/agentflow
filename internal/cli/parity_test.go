@@ -51,6 +51,7 @@ var mcpToCLI = map[string]string{
 	"devflow_collisions":       "collisions",
 	"devflow_release_plan":     "release plan",
 	"devflow_release_preview":  "release preview",
+	"devflow_setup_providers":  "setup providers",
 	"devflow_setup_plan":       "setup",
 	"devflow_setup_apply":      "setup apply",
 }
