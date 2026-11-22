@@ -49,6 +49,7 @@ func TestDeclaredMCPSetup(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
 	t.Chdir(root)
 	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("DEVFLOW_NO_UPDATE", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	if b, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
