@@ -185,6 +185,19 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 				return nil, err
 			}
 		}
+		if a.Client == "claude" || a.Client == "claude-desktop" {
+			client, err := a.GitHub(ctx)
+			if err != nil {
+				return nil, err
+			}
+			account, err := client.SignedInCLIAccount(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if account != nil {
+				s["backend"], s["github_account"] = "gh", account
+			}
+		}
 	}
 	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
 		return p, err

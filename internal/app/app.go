@@ -84,14 +84,11 @@ func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
 			return a.ghc, nil
 		}
 	}
-	selection, err := managedgh.Inspect(ctx, a.Repo.Dir)
+	command, err := managedgh.Command(ctx, a.Repo.Dir)
 	if err != nil {
 		return nil, err
 	}
-	if selection.Command == "" {
-		return nil, fmt.Errorf("GitHub CLI unavailable: %s", selection.Detail)
-	}
-	a.ghc = gh.NewCLI(selection.Command, a.Repo.Dir, "github.com")
+	a.ghc = gh.NewCLI(command, a.Repo.Dir, "github.com")
 	return a.ghc, nil
 }
 

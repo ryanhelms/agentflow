@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"slices"
 
+	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 )
 
@@ -57,10 +59,14 @@ var githubCLI = CLITool{
 }
 
 var providerTools = map[string]ProviderTooling{
-	"jira":          {MCP: atlassianMCP, CLI: &atlassianCLI},
-	"confluence":    {MCP: atlassianMCP, CLI: &atlassianCLI},
-	"github":        {MCP: githubMCP, CLI: &githubCLI},
-	"github-issues": {MCP: githubMCP, CLI: &githubCLI},
+	"jira":       {MCP: atlassianMCP, CLI: &atlassianCLI},
+	"confluence": {MCP: atlassianMCP, CLI: &atlassianCLI},
+	"github":     {MCP: githubMCP, CLI: &githubCLI},
+	"github-issues": {MCP: githubMCP, CLI: &CLITool{
+		Command:   "gh",
+		LoginArgs: []string{"auth", "login", "--web", "--hostname", "github.com"},
+		Guide:     githubCLI.Guide,
+	}},
 	"asana": {MCP: MCPTool{
 		Name:     "asana",
 		Endpoint: "https://mcp.asana.com/v2/mcp",
@@ -73,7 +79,7 @@ var providerTools = map[string]ProviderTooling{
 	}},
 }
 
-func (p *ProviderSetupPlan) addProviderTooling(role, provider string) {
+func (p *ProviderSetupPlan) addProviderTooling(role, provider string, ghSelection *managedgh.Selection) {
 	tools, ok := providerTools[provider]
 	if !ok {
 		return
@@ -87,8 +93,12 @@ func (p *ProviderSetupPlan) addProviderTooling(role, provider string) {
 	tools.Provider, tools.Roles = provider, []string{role}
 	if tools.CLI != nil {
 		cli := *tools.CLI
-		_, err := exec.LookPath(cli.Command)
-		cli.Installed = err == nil
+		if cli.Command == "gh" && ghSelection != nil {
+			cli.Installed = ghSelection.Command != ""
+		} else {
+			_, err := exec.LookPath(cli.Command)
+			cli.Installed = err == nil
+		}
 		tools.CLI = &cli
 	}
 	p.Tooling = append(p.Tooling, tools)
@@ -147,6 +157,16 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	args, err := providerLoginCommand(provider, client, server)
 	if err != nil {
 		return err
+	}
+	if args[0] == "gh" {
+		// Outside a checkout, login still works with the user's ordinary PATH.
+		// A managed pin must be resolved against the entire checkout.
+		if repo, err := gitx.Open(ctx, dir); err == nil {
+			args[0], err = managedgh.Command(ctx, repo.Dir)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, input, output, diagnostics
