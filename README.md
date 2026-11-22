@@ -202,6 +202,10 @@ session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
 for delivery. The Claude Code Desktop Jira web-link pilot uses a separately
 enrolled Devflow Rovo connection with browser OAuth and OS credential storage.
+In a regular Claude Code Desktop session, `devflow_ticket_create` can create a
+GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
+account and repository. If sign-in is needed, run
+`devflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·
 [Slack destination configuration](docs/notifications.md)
 
