@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.18.0](https://github.com/nscaledev/devflow/compare/v0.17.0...v0.18.0) - 2026-11-22
+
+### Features
+
+- add asana and shared task operations ([5fbf40a](https://github.com/nscaledev/devflow/commit/5fbf40a701ab7ab0806ca88416cf42a6eb5288bc))
+
 ## [0.17.0](https://github.com/nscaledev/devflow/compare/v0.16.0...v0.17.0) - 2026-11-22
 
 ### Features
