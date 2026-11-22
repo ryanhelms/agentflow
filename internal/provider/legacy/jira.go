@@ -48,13 +48,25 @@ var (
 	_ provider.TaskAssignment = (*Jira)(nil)
 )
 
-var jiraKey = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$`)
+const jiraProjectKey = `[A-Za-z][A-Za-z0-9_-]*`
 
-func (j *Jira) ref(key string) (provider.Ref, error) {
+var jiraKey = regexp.MustCompile("^" + jiraProjectKey + `-[0-9]+$`)
+var jiraProject = regexp.MustCompile("^" + jiraProjectKey + "$")
+
+// ValidateJiraProject checks a Jira project key before it is used in a draft or a query.
+func ValidateJiraProject(key string) error {
+	if !jiraProject.MatchString(key) {
+		return fmt.Errorf("invalid Jira project %q", key)
+	}
+	return nil
+}
+
+// JiraRef constructs a validated reference from a caller-facing Jira key.
+func JiraRef(instance, key string) (provider.Ref, error) {
 	if !jiraKey.MatchString(key) {
 		return provider.Ref{}, fmt.Errorf("invalid jira issue key %q", key)
 	}
-	ref := provider.Ref{Instance: j.instance, Scope: key[:strings.LastIndexByte(key, '-')], ID: key}
+	ref := provider.Ref{Instance: instance, Scope: key[:strings.LastIndexByte(key, '-')], ID: key}
 	return ref, ref.Validate()
 }
 
@@ -65,7 +77,7 @@ func (j *Jira) validateRef(ref provider.Ref) error {
 	if ref.Instance != j.instance {
 		return fmt.Errorf("jira reference %s belongs to a different instance", ref)
 	}
-	want, err := j.ref(ref.ID)
+	want, err := JiraRef(j.instance, ref.ID)
 	if err != nil {
 		return err
 	}
@@ -80,11 +92,11 @@ func (j *Jira) issue(ctx context.Context, ref provider.Ref) (*atlassian.Issue, p
 	if err != nil {
 		return nil, provider.Ref{}, fmt.Errorf("get jira issue %s: %w", ref.ID, atlassianError(err))
 	}
-	actual, err := j.ref(issue.Key)
+	actual, err := JiraRef(j.instance, issue.Key)
 	if err != nil {
 		return nil, provider.Ref{}, err
 	}
-	if !strings.EqualFold(ref.Scope, actual.Scope) {
+	if !strings.EqualFold(ref.ID, actual.ID) {
 		return nil, provider.Ref{}, fmt.Errorf("jira issue %s moved to %s: %w", ref.ID, actual.ID, provider.ErrConflict)
 	}
 	return issue, actual, nil
@@ -99,7 +111,7 @@ func (j *Jira) task(issue *atlassian.Issue, ref provider.Ref) provider.Task {
 	task := provider.Task{
 		Ref: ref, Key: issue.Key, URL: j.browseURL(issue.Key), Title: f.Summary,
 		Description: issue.DescriptionText(), Type: f.IssueType.Name, Revision: f.Updated,
-		State: provider.TaskState{ID: f.Status.Name, Name: f.Status.Name, Terminal: f.Status.Category.Key == "done"},
+		State: provider.TaskState{ID: f.Status.Name, Name: f.Status.Name, Category: f.Status.Category.Key, Terminal: f.Status.Category.Key == "done"},
 	}
 	if f.Priority != nil {
 		task.Priority = f.Priority.Name
@@ -108,14 +120,15 @@ func (j *Jira) task(issue *atlassian.Issue, ref provider.Ref) provider.Task {
 		task.Assignee = f.Assignee.DisplayName
 	}
 	if f.Parent != nil {
-		if parent, err := j.ref(f.Parent.Key); err == nil {
+		if parent, err := JiraRef(j.instance, f.Parent.Key); err == nil {
 			task.Links = append(task.Links, provider.Link{Title: f.Parent.Fields.Summary, URL: j.browseURL(parent.ID), Ref: &parent})
 		}
 	}
 	return task
 }
 
-func (j *Jira) Get(ctx context.Context, ref provider.Ref) (provider.Task, error) {
+// GetFields reads the issue without requiring permission to read remote links.
+func (j *Jira) GetFields(ctx context.Context, ref provider.Ref) (provider.Task, error) {
 	if err := j.validateRef(ref); err != nil {
 		return provider.Task{}, err
 	}
@@ -123,11 +136,18 @@ func (j *Jira) Get(ctx context.Context, ref provider.Ref) (provider.Task, error)
 	if err != nil {
 		return provider.Task{}, err
 	}
-	links, err := j.client.RemoteLinks(ctx, actual.ID)
+	return j.task(issue, actual), nil
+}
+
+func (j *Jira) Get(ctx context.Context, ref provider.Ref) (provider.Task, error) {
+	task, err := j.GetFields(ctx, ref)
 	if err != nil {
-		return provider.Task{}, fmt.Errorf("get links for jira issue %s: %w", actual.ID, atlassianError(err))
+		return provider.Task{}, err
 	}
-	task := j.task(issue, actual)
+	links, err := j.client.RemoteLinks(ctx, task.Ref.ID)
+	if err != nil {
+		return provider.Task{}, fmt.Errorf("get links for jira issue %s: %w", task.Ref.ID, atlassianError(err))
+	}
 	for _, link := range links {
 		task.Links = append(task.Links, provider.Link{Title: link.Title, URL: link.URL})
 	}
@@ -158,6 +178,11 @@ func (j *Jira) Find(ctx context.Context, query provider.TaskQuery) ([]provider.T
 	if limit <= 0 {
 		limit = 30
 	}
+	return j.Search(ctx, jql, limit)
+}
+
+// Search maps a Jira-specific JQL query to task results.
+func (j *Jira) Search(ctx context.Context, jql string, limit int) ([]provider.Task, error) {
 	issues, err := j.client.Search(ctx, jql, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search jira issues: %w", atlassianError(err))
@@ -165,7 +190,7 @@ func (j *Jira) Find(ctx context.Context, query provider.TaskQuery) ([]provider.T
 	tasks := make([]provider.Task, 0, len(issues))
 	for i := range issues {
 		issue := &issues[i]
-		ref, err := j.ref(issue.Key)
+		ref, err := JiraRef(j.instance, issue.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -180,6 +205,9 @@ func (j *Jira) Create(ctx context.Context, draft provider.TaskDraft, options pro
 	}
 	if strings.TrimSpace(draft.Scope) == "" || strings.TrimSpace(draft.Title) == "" {
 		return provider.WriteResult{}, errors.New("jira issue creation requires a project and title")
+	}
+	if err := ValidateJiraProject(draft.Scope); err != nil {
+		return provider.WriteResult{}, err
 	}
 	if draft.Priority != "" {
 		return provider.WriteResult{}, provider.Unsupported(j.instance, "set priority when creating a jira issue")
@@ -207,7 +235,7 @@ func (j *Jira) Create(ctx context.Context, draft provider.TaskDraft, options pro
 	if key == "" && err != nil {
 		return provider.WriteResult{}, fmt.Errorf("create jira issue: %w", atlassianError(err))
 	}
-	ref, refErr := j.ref(key)
+	ref, refErr := JiraRef(j.instance, key)
 	if refErr != nil {
 		return provider.WriteResult{}, errors.Join(refErr, err)
 	}

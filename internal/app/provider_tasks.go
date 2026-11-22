@@ -14,6 +14,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/asana"
 )
 
 func (a *App) usesFileTasks() bool {
@@ -22,9 +23,16 @@ func (a *App) usesFileTasks() bool {
 }
 
 // UsesTaskRefs reports whether task identity is carried in explicit Task-Ref trailers.
-func (a *App) UsesTaskRefs() bool { return a.usesIssues() || a.usesFileTasks() }
+func (a *App) UsesTaskRefs() bool { return a.usesIssues() || a.usesFileTasks() || a.usesAsana() }
 
 func (a *App) workQuery(ctx context.Context) (provider.TaskQuery, error) {
+	if a.usesAsana() {
+		scope := a.asanaSettings().Project
+		if scope == "" {
+			return provider.TaskQuery{}, errors.New("set task_management.settings.project to the Asana project GID")
+		}
+		return provider.TaskQuery{Scope: scope, OpenOnly: true, Limit: 30}, nil
+	}
 	if a.usesFileTasks() {
 		return provider.TaskQuery{Scope: a.fileScope(), OpenOnly: true, Limit: 30}, nil
 	}
@@ -33,7 +41,10 @@ func (a *App) workQuery(ctx context.Context) (provider.TaskQuery, error) {
 	return provider.TaskQuery{Scope: scope, AssignedToMe: true, OpenOnly: search.OpenOnly, Limit: search.Limit}, err
 }
 
-func (a *App) taskTransitions() map[string]string {
+func (a *App) taskTransitions(scope string) map[string]string {
+	if a.usesAsana() {
+		return a.asanaSettings().Transitions[scope]
+	}
 	if a.usesFileTasks() {
 		return a.fileTaskSettings().Transitions
 	}
@@ -54,6 +65,10 @@ func (a *App) openTaskStore(ctx context.Context) (provider.Tasks, func(), error)
 			return nil, nil, err
 		}
 		return target.open()
+	}
+	if a.usesAsana() {
+		tasks, err := a.asanaTasks()
+		return tasks, func() {}, err
 	}
 	tasks, err := a.issueTasks(ctx)
 	return tasks, func() {}, err
@@ -107,7 +122,7 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 	}
 	if ref.ID == "" {
 		tc.Text = "devflow · no issue bound to branch " + tc.Branch + ". Call devflow_my_work to pick an issue, then devflow_start."
-		if a.usesFileTasks() {
+		if !a.usesIssues() {
 			tc.Text = "devflow · no task bound to branch " + tc.Branch + ". Pick a task from devflow_my_work and run devflow_start, or add a Task-Ref trailer to a branch commit."
 		}
 		return tc, nil
@@ -124,6 +139,9 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 		} else if len(cl.Items) > 0 {
 			tc.Criteria = cl
 		}
+		if a.usesAsana() {
+			a.addAsanaDocuments(ctx, tc, t.Links)
+		}
 		tc.FlowNext = a.nextTaskStates(t)
 	}
 	tc.Text = a.renderContext(tc)
@@ -132,7 +150,10 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 
 func (a *App) nextTaskStates(t provider.Task) map[string]string {
 	next := map[string]string{}
-	for event, state := range a.taskTransitions() {
+	for event, state := range a.taskTransitions(t.Ref.Scope) {
+		if a.usesAsana() && !t.State.Terminal && state != "none" && state != t.State.ID {
+			next[event] = state
+		}
 		if t.State.ID == "open" && !t.State.Terminal && state == "closed" {
 			next[event] = state
 		}
@@ -155,9 +176,9 @@ func (a *App) planTaskTransition(ctx context.Context, key, event string, task *p
 		return plan, err
 	}
 	plan.Key = taskKey(ref)
-	target := a.taskTransitions()[event]
+	target := a.taskTransitions(ref.Scope)[event]
 	if target == "" || target == "none" {
-		plan.Note = "no issue state mapping for this event"
+		plan.Note = "no task state mapping for this event"
 		return plan, nil
 	}
 	if task == nil {
@@ -174,7 +195,9 @@ func (a *App) planTaskTransition(ctx context.Context, key, event string, task *p
 	switch {
 	case plan.From == target:
 		plan.Note = "already " + target
-	case task.State.Terminal || plan.From != "open" || target != "closed":
+	case a.usesAsana() && task.State.Terminal:
+		plan.Note = "completed Asana tasks are terminal"
+	case !a.usesAsana() && (task.State.Terminal || plan.From != "open" || target != "closed"):
 		plan.Note = "only open issues can move forward to closed"
 	default:
 		plan.Template, err = a.validateTaskTemplate(*task)
@@ -182,6 +205,9 @@ func (a *App) planTaskTransition(ctx context.Context, key, event string, task *p
 			return plan, err
 		}
 		plan.To = target
+		if a.usesAsana() && target == asana.StateCompleted {
+			plan.Note = "completes this task across all its Asana projects"
+		}
 	}
 	return plan, nil
 }
@@ -234,11 +260,18 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		if !ok {
 			return nil, provider.Unsupported(ref.Instance, "assignment")
 		}
+		s["assign_to_me"] = true
+	} else if a.usesAsana() {
+		s["assign_to_me"] = false
+	}
+	if a.usesIssues() || a.usesAsana() {
 		plan, err = a.planTaskTransition(ctx, res.Key, flowmap.BranchCreated, &task)
 		if err != nil {
 			return nil, err
 		}
-		s["assign_to_me"], s["transition"] = true, plan
+		s["transition"] = plan
+	}
+	if assignment != nil || plan.To != "" {
 		level := a.Gate.Autonomy
 		if config.Min(level.Local, level.Remote) == level.Remote {
 			class = policy.Remote
@@ -252,15 +285,14 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		return nil, err
 	}
 	a.audit(policy.Local, "branch", s, nil)
-	if assignment == nil {
-		return res, nil
+	if assignment != nil {
+		_, err = assignment.AssignToMe(ctx, ref, provider.WriteOptions{OperationID: ref.String() + "/start/assign"})
+		a.audit(policy.Remote, "assign_to_me", s, err)
+		if err != nil {
+			return res, err
+		}
+		res.Assigned = true
 	}
-	_, err = assignment.AssignToMe(ctx, ref, provider.WriteOptions{OperationID: ref.String() + "/start/assign"})
-	a.audit(policy.Remote, "assign_to_me", s, err)
-	if err != nil {
-		return res, err
-	}
-	res.Assigned = true
 	if plan.To != "" {
 		tr, err := a.ApplyTransition(ctx, plan)
 		res.Transition = &tr

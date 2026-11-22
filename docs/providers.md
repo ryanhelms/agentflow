@@ -11,7 +11,7 @@ The migration of commands and workflows to these selections is tracked separatel
 | Section | Default provider | Other schema selections |
 | --- | --- | --- |
 | `code_hosting` | `auto` | `github`, `none` |
-| `task_management` | `jira` | `github-issues`, `filesystem`, `repository`, `none` |
+| `task_management` | `jira` | `asana`, `github-issues`, `filesystem`, `repository`, `none` |
 | `knowledge_base` | `confluence` | `filesystem`, `repository`, `github-wiki`, `none` |
 | `devops.checks` | `github` | `none` |
 | `devops.deployments` | `github` | `none` |
@@ -28,6 +28,7 @@ settings object. Validation errors identify the property to correct.
 | --- | --- |
 | Code hosting | `hosts` defaults to an empty hostname-to-forge map. `source_remote` and `target_remote` default to unset, so detection can select Git remotes. |
 | Jira | `site` and `projects` inherit the legacy Jira settings and defaults. |
+| Asana | `project` is the default project GID. `transitions` maps each project GID to its events and destination section GIDs. Both start unset. |
 | Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. |
 | GitHub | An unset `repository` defers to Git remote detection. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
@@ -59,6 +60,28 @@ Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
 values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
+
+## Jira, Confluence and GitHub
+
+Jira task operations use `task_management.settings.site`. The project list in
+`task_management.settings.projects` scopes My Work, which looks in active sprints
+first. Existing Jira keys, acceptance checklists, and per-project event and verb
+mappings in `flow-map.yml` continue to work. A transition uses the destination
+status name and rechecks the current status before writing. When a provider
+overrides the legacy Jira site, pass its URL to `devflow login --site URL` to
+store the credential for that site.
+
+Confluence search uses `knowledge_base.settings.site` and returns page IDs, space
+keys, titles, URLs and excerpts. Set `CONFLUENCE_USER` and `CONFLUENCE_TOKEN`
+together to supply knowledge credentials. With those variables unset, a separate
+site uses its own Atlassian keychain entry. A shared site also accepts the existing
+`JIRA_USER` and `JIRA_TOKEN` environment pair.
+
+For GitHub pull requests, forge detection selects the source remote for the
+push and the target repository for the PR. The source must have one GitHub.com
+push destination matching its repository. Review thread replies verify the PR
+repository before requesting approval. Jira write confirmations include the
+effective Jira site, so switching sites requires fresh approval.
 
 ## Check workstation and runner readiness
 
@@ -133,9 +156,70 @@ explicitly requires Jira-style subject scopes.
 Set an event to `none` to disable its effect. Devflow previews transitions and
 only attempts to move open issues forward.
 
+## Asana project tasks
+
+Supply `ASANA_ACCESS_TOKEN` in the environment that runs the CLI or MCP server.
+Quote GIDs in YAML. A task can belong to several projects, each with its own
+current section and event mappings.
+
+```yaml
+task_management:
+  provider: asana
+  settings:
+    project: "100"
+    transitions:
+      "100":
+        branch.created: "101"
+        pr.opened: "102"
+      "200":
+        pr.opened: "202"
+knowledge_base:
+  provider: filesystem
+  settings: {root: docs}
+```
+
+`devflow work` lists up to 30 incomplete tasks in the default project, including
+unassigned work. Use `devflow context 900` for task GID `900` in that project,
+or `devflow context asana/200/900` for its membership in project `200`. The
+default project and the keys in `transitions` identify configured projects.
+An empty event map enables a project for lookup and creation. Branch bindings,
+PR bodies and commit trailers use the qualified form, e.g. `Task-Ref: asana/100/900`.
+
+`devflow start 900` creates a branch or worktree and applies the project's
+`branch.created` mapping if configured. Preview a later move with
+`devflow transition 900 pr.opened --dry-run`. The adapter checks task and
+destination section memberships before moving the task. Unmapped events and
+`none` have no effect. Mapping an event to `completed` completes the **whole
+task across all its projects**. Completion is terminal. Section GIDs have
+no inherent order. Assignment, authenticated-user filtering, comments,
+operation-ID deduplication and conditional writes are unsupported. After an
+uncertain create response, check the project before trying again.
+
+`devflow setup verify` probes read access to each configured project's task
+list and checks that each destination section belongs to the intended project.
+Write access depends on the Asana identity's permissions.
+
+Asana maps template scope to project, title to name, and description,
+sections and checklist items to plain-text notes. Qualified links and the
+exact template pin occupy a reserved `devflow-task-v1: ` JSON line at the
+start of the notes. Keep this line when editing task content. Before a state
+change devflow rereads and validates the stored revision and current fields.
+A task without a pin keeps its native behavior. Asana rejects templates that
+require provider-specific types, priority or labels, and rejects populated
+defaults that its adapter cannot carry.
+
+To link a managed document, pass `--link-to filesystem/design/capacity` or
+set a template default such as
+`"links":[{"ref":{"instance":"filesystem","scope":"design","id":"capacity"}}]`.
+An explicit link takes precedence over template defaults. Context resolves
+the qualified reference through the selected knowledge provider. FileSystem,
+Repository and GitHub Wiki support that lookup. When lookup fails, context
+includes the reference and a warning. Link resolution uses the provider,
+scope and ID, independent of the document's URL.
+
 ## Task templates
 
-GitHub Issues, FileSystem and Repository support task templates. Configure a
+Asana, GitHub Issues, FileSystem and Repository support task templates. Configure a
 JSON catalog file relative to the checkout and an optional default template.
 Use an exact name and revision for a reproducible task definition.
 
@@ -153,8 +237,42 @@ required and `default` may be omitted. The catalog defines each revision's
 required fields, defaults, body sections, and acceptance checklist. See the
 [task template format](../internal/tasktemplate/README.md).
 
-GitHub Issues resolves the configured default when creating an issue. Application
-callers can select another exact revision with `App.CreateTicketWithTemplate`.
+Use the same create operation from a terminal, a runner or an MCP client.
+
+```sh
+body='## Objective
+Check remaining cluster capacity.
+
+## Scope
+Review the production pool.
+
+## Acceptance Criteria
+- [ ] Record available GPUs.
+
+## Verification
+Compare the inventory against scheduler metrics.'
+
+devflow task create --summary "Review capacity" --description "$body" \
+  --template engineering-task --template-revision 1 --dry-run
+devflow task create --summary "Review capacity" --description "$body" \
+  --template engineering-task --template-revision 1 --yes
+```
+
+Supply required section content with `--description`. The preview shows the
+resolved draft and its pin. For MCP, call `devflow_ticket_create` with
+`summary`, `description`, `template` and `template_revision`. Review the
+returned summary, then repeat the call with the same inputs and its
+`confirm_token` after approval. Omit both template fields to use the repository
+default. A template can supply the title. Existing Jira creation accepts its
+usual project, type, summary, description and linked key. It reports template
+selection as unsupported.
+
+Headless CLI writes require `--yes` even at `auto` autonomy. With `suggest`
+autonomy the CLI prints the draft and exits with an error on a create request.
+`--dry-run` succeeds for a valid preview at any autonomy level. Use the
+provider's retry behavior when resubmitting an interrupted create.
+
+GitHub Issues resolves the configured default when creating an issue.
 The confirmation shows the selected revision, repository, title, Markdown body
 and labels. A template can require any of those four issue fields. Type,
 priority and structured links are unsupported. Template defaults for repository

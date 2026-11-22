@@ -136,9 +136,12 @@ type PR struct {
 
 // PRForBranch returns the open PR whose head is branch, if any.
 func (c *Client) PRForBranch(ctx context.Context, repo, branch string) (*PR, error) {
-	owner := strings.Split(repo, "/")[0]
+	if !strings.Contains(branch, ":") {
+		owner, _, _ := strings.Cut(repo, "/")
+		branch = owner + ":" + branch
+	}
 	var prs []PR
-	if err := c.Do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls?state=open&head=%s", repo, url.QueryEscape(owner+":"+branch)), nil, &prs); err != nil {
+	if err := c.Do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls?state=open&head=%s", repo, url.QueryEscape(branch)), nil, &prs); err != nil {
 		return nil, err
 	}
 	if len(prs) == 0 {
@@ -244,6 +247,21 @@ func (c *Client) ReviewThreads(ctx context.Context, repo string, number int) ([]
 		threads = append(threads, Thread{ID: n.ID, Path: n.Path, Line: n.Line, Author: cm.Author.Login, Body: cm.Body, Outdated: n.IsOutdated})
 	}
 	return threads, nil
+}
+
+// ThreadTarget resolves the repository and pull request of a GitHub thread node.
+func (c *Client) ThreadTarget(ctx context.Context, threadID string) (string, int, error) {
+	const query = `query($id:ID!){node(id:$id){... on PullRequestReviewThread{pullRequest{number repository{nameWithOwner}}}}}`
+	var out struct {
+		Node struct {
+			PullRequest struct {
+				Number     int
+				Repository struct{ NameWithOwner string }
+			}
+		}
+	}
+	err := c.GraphQL(ctx, query, map[string]any{"id": threadID}, &out)
+	return out.Node.PullRequest.Repository.NameWithOwner, out.Node.PullRequest.Number, err
 }
 
 // ReplyToThread posts a reply on a review thread.
