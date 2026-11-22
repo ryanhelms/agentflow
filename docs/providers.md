@@ -80,3 +80,32 @@ variable. It applies `pr.merged` to that issue after a same-repository PR
 with a qualified `Task-Ref` merges into the default branch.
 
 The pilot uses the repository's existing GoReleaser release process.
+## Search a local knowledge directory
+
+Choose a dedicated directory for knowledge records. Relative roots resolve from
+the repository checkout. Use `devflow docs search quota --space engineering` to
+search the scope in the following example.
+
+```yaml
+knowledge_base:
+  provider: filesystem
+  settings:
+    root: handbook
+```
+
+Place a Markdown document in `handbook/` with devflow front matter.
+
+```markdown
+---
+version: 1
+kind: document
+instance: filesystem
+scope: engineering
+id: quota
+title: Quota design
+---
+The decision and its rationale.
+```
+
+The document's qualified reference survives a rename. Generated setup files
+and authored records have separate lifecycles during removal.
