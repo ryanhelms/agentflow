@@ -14,7 +14,6 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
-	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/provider/repository"
 )
 
@@ -87,25 +86,7 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 
 	summary := map[string]any{"document": in}
 	if name == "confluence" {
-		if _, err := legacy.ConfluenceReplacementVersion(in.Ref, in.ExpectedRevision, in.Links); err != nil {
-			return nil, err
-		}
-		site, err := a.confluenceSite()
-		if err != nil {
-			return nil, err
-		}
-		summary["site"] = site
-		if p, err := a.gate(policy.Remote, "docs_publish", summary, token, false, nil); p != nil || err != nil {
-			return p, err
-		}
-		k, err := a.confluenceKnowledge(site)
-		if err != nil {
-			a.audit(policy.Remote, "docs_publish", summary, err)
-			return nil, err
-		}
-		out, err := in.publish(ctx, k)
-		a.audit(policy.Remote, "docs_publish", summary, err)
-		return out, err
+		return a.publishConfluence(ctx, in, summary, token)
 	}
 	if name == "filesystem" {
 		root := a.knowledgeDirectory()
@@ -177,7 +158,11 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 }
 
 func (in DocsPublishInput) publish(ctx context.Context, knowledge provider.Knowledge) (provider.WriteResult, error) {
-	draft := provider.DocumentDraft{Title: in.Title, Body: in.Body, Links: in.Links}
-	opts := provider.WriteOptions{OperationID: in.OperationID, ExpectedRevision: in.ExpectedRevision}
+	draft, opts := in.replacement()
 	return knowledge.Publish(ctx, in.Ref, draft, opts)
+}
+
+func (in DocsPublishInput) replacement() (provider.DocumentDraft, provider.WriteOptions) {
+	return provider.DocumentDraft{Title: in.Title, Body: in.Body, Links: in.Links},
+		provider.WriteOptions{OperationID: in.OperationID, ExpectedRevision: in.ExpectedRevision}
 }
