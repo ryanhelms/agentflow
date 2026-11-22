@@ -67,4 +67,7 @@ uses the same tool with `client` and its own confirmation.
 For a declared provider MCP server, inspect `companion` through the same
 plan tool. Use `companion` with `install: true` to approve its pinned
 executable and a separate `companion` plus `client` request to register it.
-Use credential variable names in the conversation and check readiness again.
+Use the setup skill to discover the provider's MCP and launch its native sign-in
+when required. Prefer the connected provider MCP for direct reads, with the
+vendor CLI as fallback for supported operations. Keep devflow-managed writes
+behind devflow's previews and confirmations.

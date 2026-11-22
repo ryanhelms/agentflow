@@ -22,16 +22,18 @@ import (
 )
 
 type ProviderRequirement struct {
-	Role     string `json:"role"`
-	Provider string `json:"provider"`
-	Ready    bool   `json:"ready"`
-	Detail   string `json:"detail"`
+	Role           string `json:"role"`
+	Provider       string `json:"provider"`
+	Ready          bool   `json:"ready"`
+	Detail         string `json:"detail"`
+	VerifyInClient bool   `json:"verify_in_client,omitempty"`
 }
 
 type ProviderSetupPlan struct {
 	Root         string                  `json:"root"`
 	Platform     provision.Platform      `json:"platform"`
 	Requirements []ProviderRequirement   `json:"requirements"`
+	Tooling      []ProviderTooling       `json:"provider_tools"`
 	Companions   []managedmcp.Status     `json:"companions,omitempty"`
 	InstallGH    *managedgh.Installation `json:"install_gh,omitempty"`
 	Registration *ClientRegistration     `json:"registration,omitempty"`
@@ -39,7 +41,7 @@ type ProviderSetupPlan struct {
 }
 
 func (p *ProviderSetupPlan) check(role, provider string, ready bool, detail string) {
-	p.Requirements = append(p.Requirements, ProviderRequirement{role, provider, ready, detail})
+	p.Requirements = append(p.Requirements, ProviderRequirement{Role: role, Provider: provider, Ready: ready, Detail: detail})
 	p.Ready = p.Ready && ready
 }
 
@@ -79,7 +81,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 	if err != nil {
 		return nil, err
 	}
-	p := &ProviderSetupPlan{Root: root, Platform: provision.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}, Ready: true, Requirements: []ProviderRequirement{}}
+	p := &ProviderSetupPlan{Root: root, Platform: provision.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}, Ready: true, Requirements: []ProviderRequirement{}, Tooling: []ProviderTooling{}}
 	if !found {
 		p.check("configuration", "devflow", false, "create .devflow/config.yml with the provider sections for this workspace")
 		return p, nil
@@ -170,6 +172,11 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		}
 	}
 	for _, role := range roles {
+		toolProvider := role.Provider
+		if role.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
+			toolProvider = "github"
+		}
+		p.addProviderTooling(role.name, toolProvider)
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue
@@ -178,15 +185,24 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 				p.check(role.name, role.Provider, false, "set task_management.settings.project to the default Asana project GID")
 				continue
 			}
-			adapter, err := asana.FromEnvironment(settings.AdapterConfig())
-			if err == nil {
-				err = adapter.CheckAccess(ctx)
+			// Retain the direct probe for existing headless service jobs with explicit authentication.
+			if client == "" && os.Getenv("ASANA_ACCESS_TOKEN") != "" {
+				adapter, err := asana.FromEnvironment(settings.AdapterConfig())
+				if err == nil {
+					err = adapter.CheckAccess(ctx)
+				}
+				if err != nil {
+					p.check(role.name, role.Provider, false, err.Error())
+				} else {
+					p.check(role.name, role.Provider, true, "can list project tasks and read configured destination sections")
+				}
+				continue
 			}
-			if err != nil {
-				p.check(role.name, role.Provider, false, err.Error())
-			} else {
-				p.check(role.name, role.Provider, true, "can list project tasks and read configured destination sections")
-			}
+			p.checkProviderTool(role, "check configured Asana project access with the client's Asana MCP")
+		case *config.JiraSettings, *config.ConfluenceSettings:
+			p.checkProviderTool(role, "check the Atlassian MCP in the client or use signed-in Teamwork Graph CLI")
+		case *config.SlackSettings:
+			p.checkProviderTool(role, "check the Slack MCP in the client")
 		case *config.FileSystemSettings:
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
@@ -242,14 +258,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 				p.checkWiki(ctx, role, settings, detection)
 			}
 		default:
-			declared := false
-			for _, s := range p.Companions {
-				if slices.Contains(s.Providers, role.Provider) {
-					declared = true
-					p.check(role.name, role.Provider, s.Ready, s.ID+": "+s.Detail)
-				}
-			}
-			if !declared {
+			if !p.checkProviderCompanions(role) {
 				p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))
 			}
 		}
@@ -263,6 +272,24 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		p.Ready = p.Ready && p.Registration.State == "configured"
 	}
 	return p, ctx.Err()
+}
+
+func (p *ProviderSetupPlan) checkProviderCompanions(role selectedRole) bool {
+	declared := false
+	for _, s := range p.Companions {
+		if slices.Contains(s.Providers, role.Provider) {
+			declared = true
+			p.check(role.name, role.Provider, s.Ready, s.ID+": "+s.Detail)
+		}
+	}
+	return declared
+}
+
+func (p *ProviderSetupPlan) checkProviderTool(role selectedRole, detail string) {
+	if !p.checkProviderCompanions(role) {
+		p.check(role.name, role.Provider, false, detail)
+		p.Requirements[len(p.Requirements)-1].VerifyInClient = true
+	}
 }
 
 func checkDevOpsFixture(root, role, path string) error {
