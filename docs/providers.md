@@ -104,6 +104,25 @@ Keep that marker and the corresponding catalog revision when editing the issue.
 Before posting a comment or changing state, devflow validates the current issue
 against that revision. Issues without a template marker keep their existing
 workflow even when a default is configured later.
+Use the `github-issues` task provider with the detected GitHub repository or set
+`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
+GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
+trailers. Existing commit rules still apply, including when the repository
+explicitly requires Jira-style subject scopes.
+
+`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
+Set an event to `none` to disable its effect. Devflow previews transitions and
+only attempts to move open issues forward.
+
+## Devflow repository pilot
+
+This repository uses GitHub Issues for task management and the Repository
+provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
+enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
+variable. It applies `pr.merged` to that issue after a same-repository PR
+with a qualified `Task-Ref` merges into the default branch.
+
+The pilot uses the repository's existing GoReleaser release process.
 ## Search a local knowledge directory
 
 Choose a dedicated directory for knowledge records. Relative roots resolve from
@@ -133,3 +152,22 @@ The decision and its rationale.
 
 The document's qualified reference survives a rename. Generated setup files
 and authored records have separate lifecycles during removal.
+
+## Publish a Repository document
+
+Select `knowledge_base.provider: repository` and configure the destination
+directory. Supply a Git origin when publishing outside the current repository.
+Use `publication: pull-request` for GitHub review or `publication: push` for
+an explicitly selected unprotected branch.
+
+```bash
+devflow docs publish repository/engineering/quota \
+  --title "Quota policy" --body "The policy and its rationale." \
+  --operation-id quota-policy-1
+```
+
+Pass the revision from search when updating an existing document. Reuse the
+operation ID for retries. The CLI and `devflow_docs_publish` present the
+resolved destination and document for approval and record the outcome.
+
+Use `devflow docs search QUERY --json` to check a qualified document in CI.

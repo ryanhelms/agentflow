@@ -35,6 +35,9 @@ type Config struct {
 	Directory   string
 	Publication string // "push" or "pull-request" (default)
 	Publisher   Publisher
+	// BeforeWrite checks the resolved base and actual push target before any
+	// record mutation, push or PR reconciliation. Reads never invoke it.
+	BeforeWrite func(base, target string) error
 }
 
 // Publisher ensures a change request exists for Head targeting Base. Implementations

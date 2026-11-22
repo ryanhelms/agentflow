@@ -6,21 +6,17 @@ import (
 
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/filesystem"
 )
 
-func (a *App) searchFileSystemDocs(ctx context.Context, query, scope string) (map[string]any, error) {
-	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemSettings)
-	root := cfg.Root
+func (a *App) knowledgeDirectory() string {
+	root := a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemSettings).Root
 	if root != "" && !filepath.IsAbs(root) {
-		root = filepath.Join(a.Repo.Dir, root)
+		return filepath.Join(a.Repo.Dir, root)
 	}
-	knowledge, err := filesystem.NewKnowledge("filesystem", root)
-	if err != nil {
-		return nil, err
-	}
-	defer knowledge.Close()
+	return root
+}
 
+func searchDocuments(ctx context.Context, knowledge provider.Knowledge, query, scope string) (map[string]any, error) {
 	pages, err := knowledge.Find(ctx, provider.DocumentQuery{Scope: scope, Text: query, Limit: 10})
 	if err != nil {
 		return nil, err

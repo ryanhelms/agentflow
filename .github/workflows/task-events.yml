@@ -1,0 +1,32 @@
+# Reusable previews for provider-backed GitHub Issues transitions.
+name: task-events
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  transitions:
+    if: vars.DEVFLOW_ENABLED != 'false' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: devflow-task-events-${{ github.repository_id }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Read trusted repository configuration
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - name: Preview linked task transitions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-task-events
+          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: devflow transition --github-event --dry-run

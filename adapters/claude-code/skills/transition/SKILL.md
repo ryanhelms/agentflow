@@ -1,7 +1,7 @@
 ---
 name: transition
-description: Move a Jira ticket by flow-map event or verb (for example pr.merged or #qa)
-argument-hint: "[JIRA-KEY] EVENT"
+description: Move a work item by a configured event or verb (for example pr.merged or #qa)
+argument-hint: "[TASK] EVENT"
 ---
 Call devflow_transition with the key and event from "$ARGUMENTS" (key defaults to the
 current branch's ticket). Do a dry run first and tell me the from and to status. If it
