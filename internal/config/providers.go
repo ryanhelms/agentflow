@@ -1,12 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 
+	"github.com/nscaledev/devflow/internal/contract"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +30,8 @@ type Providers struct {
 	DevOps         DevOps
 	SecOps         Selection
 	Notifications  Selection
+	// Definitions lists the provider definition files loaded, in layer order.
+	Definitions []Source
 }
 
 type DevOps struct {
@@ -44,6 +49,59 @@ type Selection struct {
 	Provider   string
 	Settings   any
 	Configured bool
+	// Contract is the role contract the selection implements, e.g. tasks/v1.
+	Contract string
+	// Sources maps each settings path a layer set to that layer. Paths not
+	// listed keep the provider default.
+	Sources map[string]Source
+	// Constraints are the release layer's limits on settings paths.
+	Constraints map[string]Constraint
+	// The pre-user snapshot supplies the write ceiling for targets explicitly
+	// set by the repository. User defaults still participate in Settings.
+	repositorySettings any
+	repositorySources  map[string]Source
+}
+
+// RepositorySettings returns the pre-user settings if the repository supplied
+// this property or any of its children, or the release locked the property.
+func (s Selection) RepositorySettings(property string) any {
+	if c := s.Constraints[property]; c.Lock == true {
+		return s.repositorySettings
+	}
+	for path, source := range s.repositorySources {
+		if source.Layer == LayerProject && (property == "" || path == property || strings.HasPrefix(path, property+".")) {
+			return s.repositorySettings
+		}
+	}
+	return nil
+}
+
+// CheckTarget applies release allow and pattern restrictions to a concrete
+// operation target, including targets resolved from Git or supplied as input.
+// Locks and append minima govern the setting itself during layer resolution.
+func (s Selection) CheckTarget(property, value string) error {
+	c, ok := s.Constraints[property]
+	if !ok {
+		return nil
+	}
+	c.Lock = nil
+	return c.check(value, nil)
+}
+
+// settingError reports the last layer that supplied the invalid property.
+func (s Selection) settingError(role, path string, err error) error {
+	problem := fmt.Errorf("%s.settings.%s: %w", role, path, err)
+	// An omitted required member belongs to the containing object.
+	var closest string
+	for p := range s.Sources {
+		if len(p) > len(closest) && (p == path || strings.HasPrefix(path, p+".")) {
+			closest = p
+		}
+	}
+	if source, ok := s.Sources[closest]; ok && source != configSource {
+		return &DefinitionError{Source: source, Err: problem}
+	}
+	return problem
 }
 
 type DisabledSettings struct{}
@@ -169,7 +227,7 @@ type RoleProviders struct {
 // ProviderCatalog lists the providers each role accepts, from the same
 // registry that validates .devflow/config.yml.
 func ProviderCatalog() []RoleProviders {
-	schemas := providerSchemas(&Repo{})
+	schemas := providerSchemas()
 	out := make([]RoleProviders, 0, len(ProviderRoles))
 	for _, role := range ProviderRoles {
 		s := schemas[role]
@@ -182,9 +240,8 @@ func (s roleSchema) choices() []string {
 	return append(slices.Sorted(maps.Keys(s.providers)), "none")
 }
 
-// providerSchemas is the provider registry, keyed by role path. Repo supplies
-// defaults that legacy top-level settings still carry.
-func providerSchemas(repo *Repo) map[string]roleSchema {
+// providerSchemas is the provider registry, keyed by role path.
+func providerSchemas() map[string]roleSchema {
 	const taskDir = ".devflow/tasks"
 	fileDefaults := func() FileTaskSettings {
 		return FileTaskSettings{Scope: "default", Transitions: defaultTransitions()}
@@ -204,7 +261,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 	}
 	tasks["asana"] = func() any { return &AsanaSettings{} }
 	tasks["jira"] = func() any {
-		return &JiraSettings{Site: repo.Jira.Site, Projects: append([]string{}, repo.Jira.Projects...)}
+		return &JiraSettings{Site: DefaultSite, Projects: []string{}}
 	}
 	tasks["github-issues"] = func() any {
 		return &GitHubIssuesSettings{
@@ -217,7 +274,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 		"filesystem": func() any { return &FileSystemSettings{Root: "docs"} },
 		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
 	}
-	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
+	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: DefaultSite} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
 	devOpsFixture := roleSchema{"github", map[string]settingsFactory{
@@ -245,7 +302,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 	}
 }
 
-func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error) {
+func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Providers, error) {
 	// Decode only the reserved sections. Unrelated top-level extensions keep
 	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
 	raw := map[string]any{}
@@ -258,19 +315,23 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 			raw[key] = value
 		}
 	}
-	schemas := providerSchemas(repo)
+	schemas := providerSchemas()
+	defs, err := loadDefinitions(root, schemas)
+	if err != nil {
+		return Providers{}, err
+	}
 
-	var p Providers
+	p := Providers{Definitions: defs.files}
 	taskManagement, present, err := section(raw, "task_management", "task_management", "version", "provider", "settings", "templates")
 	if err != nil {
 		return Providers{}, err
 	}
-	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management")
+	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management", defs, repo)
 	if err != nil {
 		return Providers{}, err
 	}
 	if settings, ok := p.TaskManagement.Settings.(*AsanaSettings); ok {
-		if err := settings.validate(); err != nil {
+		if err := settings.validate(p.TaskManagement); err != nil {
 			return Providers{}, err
 		}
 	}
@@ -306,23 +367,23 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		if err != nil {
 			return Providers{}, err
 		}
-		*role.out, err = schemas[role.path].resolve(fields, present, role.path)
+		*role.out, err = schemas[role.path].resolve(fields, present, role.path, defs, repo)
 		if err != nil {
 			return Providers{}, err
 		}
 	}
 	if wiki, ok := p.KnowledgeBase.Settings.(*GitHubWikiSettings); ok && wiki.Repository != nil {
 		if err := gitx.ValidateGitHubSlug(*wiki.Repository); err != nil {
-			return Providers{}, fmt.Errorf("knowledge_base.settings.repository: %w", err)
+			return Providers{}, p.KnowledgeBase.settingError("knowledge_base", "repository", err)
 		}
 	}
 	if settings, ok := p.SecOps.Settings.(*GitHubSecOpsSettings); ok && settings.Incidents != nil {
 		fixture := settings.Incidents
 		if !filepath.IsLocal(fixture.Fixture) || filepath.Clean(fixture.Fixture) == "." {
-			return Providers{}, fmt.Errorf("secops.settings.incidents.fixture: expected a path within the checkout")
+			return Providers{}, p.SecOps.settingError("secops", "incidents.fixture", errors.New("expected a path within the checkout"))
 		}
 		if strings.TrimSpace(fixture.Scope) == "" {
-			return Providers{}, fmt.Errorf("secops.settings.incidents.scope: expected a stable source scope")
+			return Providers{}, p.SecOps.settingError("secops", "incidents.scope", errors.New("expected a stable source scope"))
 		}
 	}
 	return p, validateNotificationSettings(p.Notifications)
@@ -352,7 +413,7 @@ func sectionVersion(fields map[string]any, path string) (int, error) {
 	return ProviderSchemaVersion, nil
 }
 
-func (s roleSchema) resolve(fields map[string]any, present bool, path string) (Selection, error) {
+func (s roleSchema) resolve(fields map[string]any, present bool, path string, defs *definitions, repo *Repo) (Selection, error) {
 	version, err := sectionVersion(fields, path)
 	if err != nil {
 		return Selection{}, err
@@ -369,10 +430,177 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string) (S
 	} else {
 		return Selection{}, fmt.Errorf("%s.provider: expected one of %s", path, strings.Join(s.choices(), ", "))
 	}
-	if overrides, ok := fields["settings"]; ok {
-		if err := applySettings(settings, overrides, path+".settings"); err != nil {
-			return Selection{}, err
+	sel := Selection{Version: version, Provider: id, Settings: settings, Configured: present}
+	if id == "none" {
+		// A disabled role accepts no settings; this reports any it is given.
+		if overrides, ok := fields["settings"]; ok {
+			return sel, applySettings(settings, overrides, path+".settings")
+		}
+		return sel, nil
+	}
+	err = sel.applyLayers(fields, path, defs, repo)
+	return sel, err
+}
+
+var configSource = Source{Layer: LayerProject, File: ".devflow/config.yml"}
+
+// Legacy fields seed the role before the release defaults. Preserve their
+// provenance even when the value happens to equal a compiled default.
+func (repo *Repo) legacySettings(id string) map[string]any {
+	values := map[string]any{}
+	switch id {
+	case "jira":
+		if repo.legacyJiraSite {
+			values["site"] = repo.Jira.Site
+		}
+		if repo.Jira.Projects != nil {
+			items := make([]any, len(repo.Jira.Projects))
+			for i, project := range repo.Jira.Projects {
+				items[i] = project
+			}
+			values["projects"] = items
+		}
+	case "confluence":
+		if repo.legacyConfluenceSite {
+			values["site"] = repo.Confluence.Site
 		}
 	}
-	return Selection{Version: version, Provider: id, Settings: settings, Configured: present}, nil
+	return values
+}
+
+func (sel *Selection) applyLayers(fields map[string]any, path string, defs *definitions, repo *Repo) error {
+	sel.Sources = map[string]Source{}
+	c, err := contract.Resolve(path, "")
+	if err != nil {
+		return err
+	}
+	sel.Contract = c.ID()
+	release, _ := defs.get(LayerRelease, sel.Provider, path)
+	sel.Constraints = release.Constraints
+	var baseline, previous map[string]any
+	if len(sel.Constraints) != 0 {
+		// Locks bind the compiled and release values, independent of legacy
+		// repository settings used to seed the effective configuration.
+		settings := copySettings(sel.Settings)
+		if release.settings != nil {
+			if err := applySettings(settings, release.settings, path+".settings"); err != nil {
+				return err
+			}
+		}
+		if baseline, err = plain(settings); err != nil {
+			return err
+		}
+	}
+	check := func() error {
+		if baseline == nil {
+			return nil
+		}
+		current, err := plain(sel.Settings)
+		if err != nil {
+			return err
+		}
+		err = sel.checkConstraints(baseline, previous, current, path)
+		previous = current
+		return err
+	}
+	fromDefinition := func(layer string) error {
+		def, ok := defs.get(layer, sel.Provider, path)
+		if !ok {
+			return nil
+		}
+		if def.Contract != "" {
+			sel.Contract = def.Contract
+		}
+		if def.settings == nil {
+			return nil
+		}
+		if err := sel.applyLayer(def.settings, def.source, path); err != nil {
+			return &DefinitionError{Source: def.source, Err: err}
+		}
+		if layer != LayerRelease {
+			if err := check(); err != nil {
+				return &DefinitionError{Source: def.source, Err: err}
+			}
+		}
+		return nil
+	}
+	legacy := repo.legacySettings(sel.Provider)
+	if err := sel.applyLayer(legacy, configSource, path); err != nil {
+		return err
+	}
+	if err := fromDefinition(LayerRelease); err != nil {
+		return err
+	}
+	if err := check(); err != nil {
+		return err
+	}
+	if err := fromDefinition(LayerProject); err != nil {
+		return err
+	}
+	if overrides, ok := fields["settings"]; ok {
+		if err := sel.applyLayer(overrides, configSource, path); err != nil {
+			return err
+		}
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	// A release default can supersede an old top-level field for preferences.
+	// The explicit repository target still bounds writes until the repository
+	// specifies a new target in a project file or inline role setting.
+	sel.repositorySettings = copySettings(sel.Settings)
+	sel.repositorySources = maps.Clone(sel.Sources)
+	for key, value := range legacy {
+		if sel.Sources[key].Layer == LayerRelease {
+			if err := applySettings(sel.repositorySettings, map[string]any{key: value}, path+".settings"); err != nil {
+				return err
+			}
+			sel.repositorySources[key] = configSource
+		}
+	}
+	return fromDefinition(LayerUser)
+}
+
+// mergeSetting replaces modified maps, pointers and slices, so untouched
+// branches can be shared by these read-only snapshots.
+func copySettings(settings any) any {
+	current := reflect.ValueOf(settings).Elem()
+	copy := reflect.New(current.Type())
+	copy.Elem().Set(current)
+	return copy.Interface()
+}
+
+func (sel *Selection) applyLayer(raw any, src Source, path string) error {
+	if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
+		return err
+	}
+	fields := raw.(map[string]any) // checked by applySettings above
+	visitSettings("", fields, func(property string, value any) {
+		sel.Sources[property] = src
+		if value == nil {
+			// Clearing an optional object also clears its children's provenance.
+			maps.DeleteFunc(sel.Sources, func(p string, _ Source) bool { return strings.HasPrefix(p, property+".") })
+		}
+	})
+	return nil
+}
+
+func (sel Selection) checkConstraints(baseline, previous, current map[string]any, path string) error {
+	for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
+		con := sel.Constraints[name]
+		value, present := lookup(current, con.parts)
+		base, wasPresent := lookup(baseline, con.parts)
+		if con.Lock == true && present != wasPresent {
+			return fmt.Errorf("%s.settings.%s is locked by %s", path, name, con.source)
+		}
+		prior, _ := lookup(previous, con.parts)
+		_, supplied := sel.Sources[name]
+		if value == nil && base == nil && prior == nil && !supplied {
+			continue // an optional property has never been configured
+		}
+		if err := con.check(value, base); err != nil {
+			return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
+		}
+	}
+	return nil
 }

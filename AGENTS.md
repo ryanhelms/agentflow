@@ -157,7 +157,8 @@ These are used by other repos and clients. Changing them is a breaking change:
 - `bin/next-version.sh` must give the same result as `internal/release` (`devflow release
   version`). Change both together and test both.
 - Config schemas: `.devflow/config.yml`, `.devflow/releases.yml`, `flow-map.yml`,
-  `policy/versions.json`.
+  `policy/versions.json`, and provider definitions (`.devflow/providers/*.yml`,
+  `~/.devflow/providers/*.yml`, `internal/config/release/*.yml`).
 
 ## Keep these in sync
 

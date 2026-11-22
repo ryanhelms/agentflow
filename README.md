@@ -175,9 +175,13 @@ and the [provider authoring guide](docs/provider-authoring.md). Use the
 `devflow docs search` or `devflow_docs_search`.
 
 Run `devflow setup providers` (MCP: `devflow_setup_providers`) to list every provider
-each role accepts, its default, which one this repo selects, and how to verify readiness. Jira, Confluence, Slack
-and Asana support client verification. Headless setup can also probe Asana directly
-with an explicit `ASANA_ACCESS_TOKEN`.
+each role accepts, its default, which one this repo selects, and how to verify
+readiness. Jira, Confluence, Slack, and Asana support client verification. Headless
+setup can also probe Asana directly with an explicit `ASANA_ACCESS_TOKEN`.
+Add `--explain` to see the selected providers' effective settings and which layer
+set them. Personal defaults can narrow the repository’s configured write targets.
+Both native and fallback writes enforce the repository scope. Restart the MCP
+server to pick up configuration edits. [Provider definitions](docs/providers.md#provider-definitions).
 Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`

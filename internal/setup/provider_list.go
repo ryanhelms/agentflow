@@ -32,19 +32,24 @@ type RoleOptions struct {
 	Role       string           `json:"role"`
 	Selected   string           `json:"selected,omitempty"`
 	Configured bool             `json:"configured"`
+	Contract   string           `json:"contract,omitempty"`
 	Options    []ProviderOption `json:"options"`
+	// Settings is filled only when explaining a selected provider.
+	Settings []config.Setting `json:"settings,omitempty"`
 }
 
 type ProviderList struct {
-	Root        string        `json:"root"`
-	ConfigFound bool          `json:"config_found"`
-	Roles       []RoleOptions `json:"roles"`
+	Root        string          `json:"root"`
+	ConfigFound bool            `json:"config_found"`
+	Definitions []config.Source `json:"definitions"`
+	Roles       []RoleOptions   `json:"roles"`
 }
 
 // ListProviders reports every provider each role accepts and, when the
 // workspace has .devflow/config.yml, which one it selects. It reads local
-// configuration only and never contacts a provider.
-func ListProviders(ctx context.Context, dir string) (*ProviderList, error) {
+// configuration only and never contacts a provider. Explain adds each selected
+// provider's effective settings and the layer that set them.
+func ListProviders(ctx context.Context, dir string, explain bool) (*ProviderList, error) {
 	root, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
@@ -56,16 +61,31 @@ func ListProviders(ctx context.Context, dir string) (*ProviderList, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ListConfiguredProviders(ctx, root, cfg, found, explain)
+}
+
+// ListConfiguredProviders describes the caller's active provider snapshot.
+func ListConfiguredProviders(ctx context.Context, root string, cfg *config.Repo, found, explain bool) (*ProviderList, error) {
 	selected := map[string]config.Selection{}
 	if found {
 		for _, r := range selectedRoles(cfg.Providers) {
 			selected[r.name] = r.Selection
 		}
 	}
-	out := &ProviderList{Root: root, ConfigFound: found, Roles: []RoleOptions{}}
+	out := &ProviderList{Root: root, ConfigFound: found, Definitions: cfg.Providers.Definitions, Roles: []RoleOptions{}}
+	if out.Definitions == nil {
+		out.Definitions = []config.Source{}
+	}
 	for _, role := range config.ProviderCatalog() {
 		sel, ok := selected[role.Role]
-		ro := RoleOptions{Role: role.Role, Selected: sel.Provider, Configured: ok && sel.Configured}
+		ro := RoleOptions{Role: role.Role, Selected: sel.Provider, Configured: ok && sel.Configured, Contract: sel.Contract}
+		if explain && ok {
+			settings, err := sel.Explain()
+			if err != nil {
+				return nil, err
+			}
+			ro.Settings = settings
+		}
 		for _, id := range role.Providers {
 			ro.Options = append(ro.Options, ProviderOption{
 				ID: id, Default: id == role.Default, Selected: ok && id == sel.Provider, Readiness: readiness(id),

@@ -48,7 +48,8 @@ Setup
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
-  setup providers [--json]       list every provider each role accepts and which one is selected
+  setup providers [--explain] [--json]   list every provider each role accepts and which one is selected;
+                                 --explain shows effective settings and the layer that set each
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
@@ -500,7 +501,7 @@ func runLogin(ctx context.Context, args []string) error {
 	cfgSite := config.DefaultSite
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			cfgSite = cfg.Jira.Site
 		}
 		if *email == "" {
@@ -861,7 +862,7 @@ func newUpdater(ctx context.Context) (*update.Updater, error) {
 	opts := update.Options{Channel: "stable"}
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
-		if cfg, _, err := config.LoadRepo(repo.Dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			opts.Channel, opts.Track, opts.Pin, opts.CheckEvery = cfg.Update.Channel, cfg.Update.Track, cfg.Update.Pin, cfg.CheckEvery()
 		}
 	}

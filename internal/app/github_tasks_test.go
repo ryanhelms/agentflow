@@ -82,9 +82,12 @@ func issueApp(t *testing.T) (*App, *fakeIssues) {
 	if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(full, []byte("task_management:\n  provider: github-issues\n  settings:\n    repository: Org/Repo\n    labels: [triage]\n    search: {limit: 4}\n"), 0600); err != nil {
+	if err := os.WriteFile(full, []byte("task_management:\n  provider: github-issues\n  settings:\n    labels: [triage]\n    search: {limit: 4}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	// These fixtures exercise explicit cross-repository inputs and confirmation.
+	// A personal default supplies shorthand without setting a repository ceiling.
+	writeUserDefinition(t, "github-issues: {task_management: {settings: {repository: Org/Repo}}}")
 	mustGit(t, r, "add", ".devflow/config.yml")
 	mustGit(t, r, "commit", "-qm", "chore: use github issues")
 	mustGit(t, r, "switch", "-c", "feature")

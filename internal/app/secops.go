@@ -278,6 +278,9 @@ func (a *App) writeSecOpsTask(ctx context.Context, plan SecOpsTaskPlan, token st
 		}
 		return result, nil
 	}
+	if err := a.taskWriteScope(ctx, plan.Task.Scope); err != nil {
+		return nil, err
+	}
 	if pending, err := a.gate(policy.Remote, action, summary, token, true, nil); pending != nil || err != nil {
 		return pending, err
 	}

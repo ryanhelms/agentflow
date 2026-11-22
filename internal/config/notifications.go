@@ -52,11 +52,11 @@ func ValidNotificationName(name string) bool { return notificationName.MatchStri
 func validateNotificationSettings(selection Selection) error {
 	switch settings := selection.Settings.(type) {
 	case *SlackSettings:
-		return validateSingleNotification(settings.Destination, settings.CredentialRef, NotificationDestination{
+		return selection.validateSingleNotification(settings.Destination, settings.CredentialRef, NotificationDestination{
 			Provider: "slack", Native: settings.Native,
 		})
 	case *WebhookSettings:
-		return validateSingleNotification(settings.Destination, settings.CredentialRef, NotificationDestination{
+		return selection.validateSingleNotification(settings.Destination, settings.CredentialRef, NotificationDestination{
 			Provider:   "webhook",
 			HeaderRefs: settings.HeaderRefs, RejectedStatuses: settings.RejectedStatuses,
 		})
@@ -64,30 +64,32 @@ func validateNotificationSettings(selection Selection) error {
 		nativeScopes := map[[2]string]string{}
 		for _, name := range slices.Sorted(maps.Keys(settings.Destinations)) {
 			destination := settings.Destinations[name]
+			path := "destinations." + escapeSettingKey.Replace(name)
 			if !ValidNotificationName(name) {
-				return errors.New("notifications.settings.destinations: invalid destination name")
+				return selection.settingError("notifications", path, errors.New("invalid destination name"))
 			}
 			if destination.Provider == "" || (destination.Native == nil && destination.CredentialRef == "") {
-				return fmt.Errorf("notifications.settings.destinations.%s: provider and either native scope or credential_ref are required", name)
+				return selection.settingError("notifications", path, errors.New("provider and either native scope or credential_ref are required"))
 			}
-			if err := validateNotificationDestination(destination); err != nil {
-				return fmt.Errorf("notifications.settings.destinations.%s: %w", name, err)
+			if err := selection.validateNotificationDestination(path+".", destination); err != nil {
+				return err
 			}
 			if scope := destination.Native; scope != nil {
 				key := [2]string{scope.WorkspaceID, scope.ChannelID}
 				if first, exists := nativeScopes[key]; exists {
-					return fmt.Errorf("notifications.settings.destinations.%s: native scope already used by %s", name, first)
+					return selection.settingError("notifications", path+".native", fmt.Errorf("native scope already used by %s", first))
 				}
 				nativeScopes[key] = name
 			}
 		}
 		for _, signal := range slices.Sorted(maps.Keys(settings.Routes)) {
+			path := "routes." + escapeSettingKey.Replace(signal)
 			if !ValidNotificationName(signal) {
-				return errors.New("notifications.settings.routes: invalid signal name")
+				return selection.settingError("notifications", path, errors.New("invalid signal name"))
 			}
 			for _, name := range settings.Routes[signal] {
 				if _, ok := settings.Destinations[name]; !ok {
-					return fmt.Errorf("notifications.settings.routes.%s: destination is not defined", signal)
+					return selection.settingError("notifications", path, errors.New("destination is not defined"))
 				}
 			}
 		}
@@ -95,57 +97,51 @@ func validateNotificationSettings(selection Selection) error {
 	return nil
 }
 
-func validateSingleNotification(name, credentialRef *string, destination NotificationDestination) error {
+func (sel Selection) validateSingleNotification(name, credentialRef *string, destination NotificationDestination) error {
 	if credentialRef != nil {
 		destination.CredentialRef = *credentialRef
 	}
 	if destination.Native != nil && name != nil && !ValidNotificationName(*name) {
-		return errors.New("notifications.settings.destination: invalid destination name")
+		return sel.settingError("notifications", "destination", errors.New("invalid destination name"))
 	}
-	if err := validateNotificationDestination(destination); err != nil {
-		return fmt.Errorf("notifications.settings: %w", err)
-	}
-	return nil
+	return sel.validateNotificationDestination("", destination)
 }
 
-func validateNotificationDestination(destination NotificationDestination) error {
+func (sel Selection) validateNotificationDestination(prefix string, destination NotificationDestination) error {
+	invalid := func(property, reason string) error {
+		return sel.settingError("notifications", prefix+property, errors.New(reason))
+	}
 	if scope := destination.Native; scope != nil {
 		if destination.Provider != "slack" {
-			return errors.New("native: only the slack provider supports native delivery")
+			return invalid("native", "only the slack provider supports native delivery")
 		}
 		if destination.CredentialRef != "" || len(destination.HeaderRefs) != 0 || len(destination.RejectedStatuses) != 0 {
-			return errors.New("native: webhook settings cannot be used with native slack delivery")
+			return invalid("native", "webhook settings cannot be used with native slack delivery")
 		}
-		return scope.validate()
+		switch {
+		case !slackWorkspaceID.MatchString(scope.WorkspaceID):
+			return invalid("native.workspace_id", "expected a Slack workspace ID")
+		case !slackChannelID.MatchString(scope.ChannelID):
+			return invalid("native.channel_id", "expected a Slack conversation ID")
+		case scope.Server != "" && !ValidNotificationName(scope.Server):
+			return invalid("native.server", "expected an MCP registration name")
+		case scope.ActorID != "" && !slackActorID.MatchString(scope.ActorID):
+			return invalid("native.actor_id", "expected a Slack user ID")
+		}
+		return nil
 	}
 	if destination.CredentialRef != "" && !environmentName.MatchString(destination.CredentialRef) {
-		return errors.New("credential_ref: expected an environment variable name")
+		return invalid("credential_ref", "expected an environment variable name")
 	}
-	for _, ref := range destination.HeaderRefs {
+	for name, ref := range destination.HeaderRefs {
 		if !environmentName.MatchString(ref) {
-			return errors.New("header_refs: expected environment variable names")
+			return invalid("header_refs."+escapeSettingKey.Replace(name), "expected environment variable names")
 		}
 	}
 	for _, status := range destination.RejectedStatuses {
 		if status < 400 || status >= 500 || status == http.StatusRequestTimeout {
-			return errors.New("rejected_statuses: expected a 4xx status other than 408")
+			return invalid("rejected_statuses", "expected a 4xx status other than 408")
 		}
-	}
-	return nil
-}
-
-func (s SlackNativeSettings) validate() error {
-	if !slackWorkspaceID.MatchString(s.WorkspaceID) {
-		return errors.New("native.workspace_id: expected a Slack workspace ID")
-	}
-	if !slackChannelID.MatchString(s.ChannelID) {
-		return errors.New("native.channel_id: expected a Slack conversation ID")
-	}
-	if s.Server != "" && !ValidNotificationName(s.Server) {
-		return errors.New("native.server: expected an MCP registration name")
-	}
-	if s.ActorID != "" && !slackActorID.MatchString(s.ActorID) {
-		return errors.New("native.actor_id: expected a Slack user ID")
 	}
 	return nil
 }
