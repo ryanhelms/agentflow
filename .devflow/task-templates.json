@@ -1,0 +1,14 @@
+[
+  {
+    "name": "engineering-task",
+    "revision": "1",
+    "required": ["title", "description"],
+    "sections": [
+      {"heading": "Objective"},
+      {"heading": "Scope"},
+      {"heading": "Dependencies", "body": "None identified."},
+      {"heading": "Acceptance Criteria"},
+      {"heading": "Verification"}
+    ]
+  }
+]
