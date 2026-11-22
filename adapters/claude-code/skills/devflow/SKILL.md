@@ -76,3 +76,8 @@ Resume the same Devflow tool with the request's ID, status, and JSON result in
 Use `access_denied` for permission failures. If the provider needs sign-in,
 start its native OAuth flow and retry the read after the user completes
 consent. Keep devflow-managed writes behind Devflow's previews and confirmations.
+
+
+Use `devflow_jira_remote_link` to preview and add a web link to an existing Jira
+issue when its native write capability is present. Read the issue context to see
+its web links.

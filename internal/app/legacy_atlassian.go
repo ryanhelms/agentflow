@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -13,6 +14,9 @@ import (
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/devflow/internal/provider/twg"
 )
 
 func (a *App) jiraSettings() config.JiraSettings {
@@ -81,6 +85,90 @@ func (a *App) jiraTask(ctx context.Context, key string) (provider.Task, error) {
 		return provider.Task{}, err
 	}
 	return j.GetFields(ctx, ref)
+}
+
+type jiraRemoteLinksRead func(provider.Ref) ([]atlassian.Page, error)
+
+// jiraContextTask chooses the issue and remote-link route together so links
+// inherit the identity used to read the ticket and its parent.
+func (a *App) jiraContextTask(ctx context.Context, ref provider.Ref) (provider.Task, jiraRemoteLinksRead, error) {
+	site, err := a.jiraSite()
+	if err != nil {
+		return provider.Task{}, nil, err
+	}
+	var links jiraRemoteLinksRead
+	legacyRead := func() (provider.Task, error) {
+		api, err := a.Jira()
+		if err != nil {
+			return provider.Task{}, err
+		}
+		links = func(target provider.Ref) ([]atlassian.Page, error) {
+			return api.RemoteLinks(ctx, target.ID)
+		}
+		return legacy.NewJira("jira", api.Base, api, nil).GetFields(ctx, ref)
+	}
+	if !strings.HasPrefix(site, "https://") {
+		task, err := legacyRead()
+		return task, links, err
+	}
+	mapped, err := nativemap.JiraIssue(ref, site)
+	if err != nil {
+		return provider.Task{}, nil, err
+	}
+	links = func(target provider.Ref) ([]atlassian.Page, error) {
+		call, err := nativemap.JiraRemoteLinks(site, target)
+		if err != nil {
+			return nil, err
+		}
+		decode := func(raw json.RawMessage) ([]atlassian.Page, error) {
+			payload, err := native.Payload(raw)
+			if err != nil {
+				return nil, err
+			}
+			return nativemap.DecodeJiraRemoteLinks(payload)
+		}
+		unavailable := func() ([]atlassian.Page, error) {
+			return nil, native.ErrUnavailable
+		}
+		pages, err := native.Read(ctx, call, decode, unavailable)
+		var request *native.Request
+		if errors.Is(err, native.ErrUnavailable) || errors.As(err, &request) {
+			return native.Read(ctx, nativemap.JiraDeferredRead(call), decode, unavailable)
+		}
+		return pages, err
+	}
+	task, err := mappedNativeRead(ctx, "atlassian", mapped, func() (provider.Task, error) {
+		if !useAtlassianCLI(ctx, site, "jira") {
+			return legacyRead()
+		}
+		cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
+		if err != nil {
+			return provider.Task{}, err
+		}
+		task, err := cli.GetWithRemoteLinks(ctx, ref)
+		if errors.Is(err, twg.ErrToolAbsent) {
+			return legacyRead()
+		}
+		links = func(target provider.Ref) ([]atlassian.Page, error) {
+			linked := task
+			if !strings.EqualFold(target.ID, ref.ID) {
+				var err error
+				linked, err = cli.GetWithRemoteLinks(ctx, target)
+				if err != nil {
+					return nil, atlCLIError("jira", err)
+				}
+			}
+			var pages []atlassian.Page
+			for _, link := range linked.Links {
+				if link.Ref == nil {
+					pages = append(pages, atlassian.Page{Title: link.Title, URL: link.URL})
+				}
+			}
+			return pages, nil
+		}
+		return task, atlCLIError("jira", err)
+	})
+	return task, links, err
 }
 
 func (a *App) confluenceSite() (string, error) {

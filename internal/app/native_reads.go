@@ -262,34 +262,6 @@ func mappedNativeRead[T any](ctx context.Context, server string, read nativemap.
 	}, fallback)
 }
 
-func (a *App) nativeJiraTask(ctx context.Context, ref provider.Ref, fallback func() (provider.Task, error)) (provider.Task, error) {
-	site, err := a.jiraSite()
-	if err != nil {
-		return provider.Task{}, err
-	}
-	if !strings.HasPrefix(site, "https://") {
-		return fallback()
-	}
-	read, err := nativemap.JiraIssue(ref, site)
-	if err != nil {
-		return provider.Task{}, err
-	}
-	return mappedNativeRead(ctx, "atlassian", read, func() (provider.Task, error) {
-		if !useAtlassianCLI(ctx, site, "jira") {
-			return fallback()
-		}
-		cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
-		if err != nil {
-			return provider.Task{}, err
-		}
-		task, err := cli.Get(ctx, ref)
-		if errors.Is(err, twg.ErrToolAbsent) {
-			return fallback()
-		}
-		return task, atlCLIError("jira", err)
-	})
-}
-
 func useAtlassianCLI(ctx context.Context, site, name string) bool {
 	if !strings.HasPrefix(site, "https://") {
 		return false

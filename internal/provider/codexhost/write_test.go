@@ -10,7 +10,7 @@ import (
 )
 
 const writeInventory = `{"id":3,"method":"mcpServerStatus/list","params":{"threadId":"scratch","serverName":"slack","detail":"toolsAndAuthOnly"}}`
-const slackTools = `{"id":3,"result":{"data":[{"name":"slack","httpOrigin":"https://mcp.slack.com","authStatus":"oAuth","runtimeStatus":"connected","tools":{"slack_send_message":{},"slack_read_user_profile":{}}}]}}`
+const slackTools = `{"id":3,"result":{"data":[{"name":"slack","httpOrigin":"https://mcp.slack.com","authStatus":"oAuth","runtimeStatus":"connected","tools":{"slack_send_message":{"inputSchema":{"type":"object","properties":{"channel_id":{"type":"string"},"message":{"type":"string"}},"required":["channel_id","message"]}},"slack_read_user_profile":{"inputSchema":{"type":"object"}}}}]}}`
 const slackSend = `{"id":5,"method":"mcpServer/tool/call","params":{"threadId":"scratch","server":"slack","tool":"slack_send_message","arguments":{"channel_id":"C123","message":"fixture"}}}`
 
 func TestNativeWritePinsApprovedConnectionAndPayload(t *testing.T) {
@@ -20,6 +20,8 @@ func TestNativeWritePinsApprovedConnectionAndPayload(t *testing.T) {
 		exchange{`{"id":4,"method":"mcpServer/tool/call","params":{"threadId":"scratch","server":"slack","tool":"slack_read_user_profile","arguments":{}}}`,
 			[]string{`{"id":4,"result":{"content":[],"structuredContent":{"workspace_id":"T123"}}}`}},
 		exchange{slackSend, []string{`{"id":5,"result":{"content":[],"structuredContent":{"sent":true}}}`}},
+		exchange{`{"id":6,"method":"mcpServer/tool/call","params":{"threadId":"scratch","server":"slack","tool":"slack_read_user_profile","arguments":{}}}`,
+			[]string{`{"id":6,"result":{"content":[],"structuredContent":{"workspace_id":"T123"}}}`, ""}},
 	))
 	host := NewWriter(dir)
 	t.Cleanup(host.Close)
@@ -44,12 +46,18 @@ func TestNativeWritePinsApprovedConnectionAndPayload(t *testing.T) {
 	if _, err := host.ReadBound(t.Context(), binding, call); !errors.Is(err, native.ErrDenied) {
 		t.Fatalf("write through scope probe: %v", err)
 	}
+	if _, err := host.ReadBound(t.Context(), binding, native.Call{Provider: "slack", Server: "slack", Tool: "slack_read_channel"}); !errors.Is(err, native.ErrUnavailable) {
+		t.Fatalf("missing capability: %v", err)
+	}
 	if got, err := host.ReadBound(t.Context(), binding, native.Call{Provider: "slack", Server: "slack", Tool: "slack_read_user_profile"}); err != nil ||
 		!strings.Contains(string(got), "T123") {
 		t.Fatalf("scope probe: %v", err)
 	}
 	if _, err := host.Write(t.Context(), binding, call); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := host.ReadBound(t.Context(), binding, native.Call{Provider: "slack", Server: "slack", Tool: "slack_read_user_profile"}); err != nil {
+		t.Fatalf("verified readback: %v", err)
 	}
 	if _, err := host.Write(t.Context(), binding, call); !errors.Is(err, native.ErrDenied) {
 		t.Fatalf("replay: %v", err)
@@ -65,7 +73,8 @@ func TestNativeWriteRequiresOfficialAuthenticatedEndpoint(t *testing.T) {
 		{"different origin", strings.Replace(slackTools, "https://mcp.slack.com", "https://wrong.example", 1), native.ErrDenied},
 		{"no origin", strings.Replace(slackTools, `"https://mcp.slack.com"`, "null", 1), native.ErrUnavailable},
 		{"unsigned", strings.Replace(slackTools, "oAuth", "notLoggedIn", 1), native.ErrSignIn},
-		{"missing capability", strings.Replace(slackTools, `"slack_send_message":{},`, "", 1), native.ErrUnavailable},
+		{"schema mismatch", slackTools, native.ErrUnavailable},
+		{"missing capability", strings.Replace(slackTools, `"slack_send_message":`, `"unknown":`, 1), native.ErrUnavailable},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()

@@ -62,6 +62,7 @@ Work
   work                           list work from the selected task provider
   task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
               [--template NAME --template-revision REV] [--dry-run] [--yes]
+  task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
   start KEY [--worktree]         branch or worktree for KEY; apply supported start effects
   context [KEY]                  ticket bundle for the current branch
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
@@ -73,7 +74,7 @@ Work
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
-  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--yes]
+  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
                [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document

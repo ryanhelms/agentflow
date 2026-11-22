@@ -185,9 +185,12 @@ the supported vendor CLI's browser login when no MCP is available. See
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian
 reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
-use the signed-in GitHub CLI. Supported native writes reuse a connected Codex
-provider MCP and keep their approval bound to its session. Use
-`devflow_notify` or `devflow notify` for delivery notifications.
+use the signed-in GitHub CLI. A connected Codex MCP can also handle Jira issue
+writes and web links, Confluence page replacement, selected Asana and GitHub
+Issues writes, and Slack delivery. Devflow binds approval to the authenticated
+session and exact operation. Use `devflow --native-client codex` for supported
+CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
+for delivery. [Slack destination configuration](docs/notifications.md)
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

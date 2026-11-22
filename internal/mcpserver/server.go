@@ -21,7 +21,7 @@ import (
 
 // Instructions are sent to every MCP client at initialisation.
 const Instructions = `devflow links this repo's work to Jira, Confluence and GitHub.
-- For native_read_required, use the named operation and exact arguments with the connected provider MCP. Call the original devflow tool again with native_results containing the request ID, status, and provider JSON from that read. Use unavailable only when the client lacks the operation, and report access_denied for permission denials. If OAuth is required, start the client sign-in and resume after consent.
+- For native_read_required, use the named operation and exact arguments with the connected provider MCP. Call the original devflow tool again with native_results containing the request ID, status, and provider JSON from that read. Use unavailable only when the client lacks the operation, and report access_denied for permission denials. If OAuth is required, launch the client’s native sign-in or run devflow setup login --provider NAME --client CLIENT --server SERVER for Claude Code or Codex. For a vendor CLI, run devflow setup login --provider NAME. Wait for user consent and request a fresh preview for writes. For a product or resource permission denial, report the denied scope.
 - At the start of a task call devflow_context. If there is no ticket, call devflow_my_work, ask the user which ticket, then devflow_start.
 - Commit only through devflow_commit, never raw "git commit". Call devflow_commit_plan first and make one commit per logical change; for each, call devflow_commit_context and write: type(KEY): imperative summary, blank line, body explaining why. No AI attribution trailers.
 - Call devflow_commit_preview to show the user what will change in Jira.
@@ -292,6 +292,7 @@ func (s *Server) register() {
 		func(ctx context.Context, in commentIn) (any, error) {
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})
+	s.registerJiraRemoteLink()
 
 	// Commit messaging
 	add(s, "devflow_commit_plan", "Group the working tree into logical commits (code with tests per area, then docs, CI, build).", readOnly,
@@ -342,7 +343,7 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_docs_publish", "Publish a document to the selected knowledge base. For Confluence, replace an existing page with literal text and supply expected_revision. Use the same operation_id on retry.", remote,
 		func(ctx context.Context, in docsPublishIn) (any, error) {
-			return a.DocsPublish(ctx, in.DocsPublishInput, in.ConfirmToken)
+			return a.DocsPublish(app.WithConfluenceCLI(ctx), in.DocsPublishInput, in.ConfirmToken)
 		})
 	add(s, "devflow_adr_draft", "Write a new ADR under docs/adr from the standard template.", local,
 		func(ctx context.Context, in adrIn) (any, error) {

@@ -2,18 +2,27 @@ package twg
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/confluence"
 )
 
-// Confluence reads pages and live docs on one Atlassian site. References use
+// Confluence reads pages and replaces published pages on one Atlassian site. References use
 // the Confluence space key as scope and the decimal page ID as ID.
-type Confluence struct{ binding }
+type Confluence struct {
+	binding
+	receiptSite string
+}
 
 var _ provider.Knowledge = (*Confluence)(nil)
 
@@ -24,11 +33,12 @@ func NewConfluence(instance, site string, spaces []string) (*Confluence, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &Confluence{binding: b}, nil
+	return &Confluence{binding: b, receiptSite: site}, nil
 }
 
 type confluenceVersion struct {
-	Number int64 `json:"number"`
+	Number  int64   `json:"number"`
+	Message *string `json:"message"`
 }
 
 func (v *confluenceVersion) UnmarshalJSON(raw []byte) error {
@@ -61,17 +71,25 @@ func (s *confluenceSpace) UnmarshalJSON(raw []byte) error {
 }
 
 type confluencePage struct {
-	ID          json.Number       `json:"id"`
-	ContentID   json.Number       `json:"contentId"`
-	Title       string            `json:"title"`
-	Type        string            `json:"type"`
-	ContentType string            `json:"contentType"`
-	SpaceKey    string            `json:"spaceKey"`
-	Space       confluenceSpace   `json:"space"`
-	URL         string            `json:"url"`
-	WebURL      string            `json:"webUrl"`
-	Version     confluenceVersion `json:"version"`
-	Links       struct {
+	ID          json.Number     `json:"id"`
+	ContentID   json.Number     `json:"contentId"`
+	Title       string          `json:"title"`
+	Type        string          `json:"type"`
+	ContentType string          `json:"contentType"`
+	SpaceKey    string          `json:"spaceKey"`
+	Space       confluenceSpace `json:"space"`
+	SpaceID     json.Number     `json:"spaceId"`
+	Status      string          `json:"status"`
+	Snapshot    string          `json:"snapshotToken"`
+	Operation   string          `json:"operationPerformed"`
+	Metadata    struct {
+		SpaceID  json.Number `json:"spaceId"`
+		SpaceKey string      `json:"spaceKey"`
+	} `json:"metadata"`
+	URL     string            `json:"url"`
+	WebURL  string            `json:"webUrl"`
+	Version confluenceVersion `json:"version"`
+	Links   struct {
 		WebUI string `json:"webui"`
 	} `json:"_links"`
 	Body struct {
@@ -197,6 +215,236 @@ func (c *Confluence) document(page confluencePage, scopes []string, resultURLs .
 	return doc, nil
 }
 
-func (c *Confluence) Publish(context.Context, provider.Ref, provider.DocumentDraft, provider.WriteOptions) (provider.WriteResult, error) {
-	return provider.WriteResult{}, provider.Unsupported(c.instance, "publish a confluence page through twg")
+type ConfluencePublishIntent struct {
+	Site          string `json:"site"`
+	SpaceID       string `json:"space_id"`
+	PayloadSHA256 string `json:"payload_sha256"`
+}
+
+// PreparedConfluencePublish is a same-site, revision-bound update or a
+// verified replay. PreparePublish does not modify the page.
+type PreparedConfluencePublish struct {
+	client      *Confluence
+	replacement confluence.Replacement
+	intent      ConfluencePublishIntent
+	snapshot    string
+	replay      provider.WriteResult
+}
+
+func (p PreparedConfluencePublish) Intent() ConfluencePublishIntent { return p.intent }
+
+func (c *Confluence) PreparePublish(ctx context.Context, ref provider.Ref, draft provider.DocumentDraft, opts provider.WriteOptions) (PreparedConfluencePublish, error) {
+	var zero PreparedConfluencePublish
+	if err := c.checkRef(ref); err != nil {
+		return zero, err
+	}
+	if opts.CheckTask != nil {
+		return zero, provider.Unsupported(ref.Instance, "confluence replacement with a task precondition")
+	}
+	replacement, err := confluence.NewReplacement(confluence.PageURL(c.receiptSite, ref.ID), ref, draft, opts)
+	if err != nil {
+		return zero, err
+	}
+	if _, err := exec.LookPath("twg"); err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return zero, ErrToolAbsent
+		}
+		return zero, fmt.Errorf("find twg executable: %w", err)
+	}
+	page, spaceID, err := c.publishedPage(ctx, ref)
+	if err != nil {
+		// Only executable lookup above can select another backend.
+		if errors.Is(err, ErrToolAbsent) {
+			err = ErrFailure
+		}
+		return zero, fmt.Errorf("verify published confluence page through twg: %w", err)
+	}
+	replay, err := c.replay(ctx, replacement, page)
+	if err != nil {
+		if errors.Is(err, ErrToolAbsent) {
+			err = fmt.Errorf("twg became unavailable during confluence replay: %w", ErrFailure)
+		}
+		return zero, err
+	}
+	snapshot := page.Snapshot
+	if replay.Status != "" {
+		snapshot = ""
+	} else if strings.TrimSpace(snapshot) == "" || strings.ContainsRune(snapshot, '\x00') {
+		return zero, fmt.Errorf("confluence page response omitted a usable snapshot token: %w", ErrFailure)
+	}
+	prepared := PreparedConfluencePublish{client: c, replacement: replacement, snapshot: snapshot, replay: replay}
+	// The temporary path varies at dispatch. Bind the exact command and file
+	// contents using a fixed placeholder for that local path.
+	payload, err := json.Marshal(append(prepared.updateArgs(""), replacement.HTML))
+	if err != nil {
+		return zero, err
+	}
+	prepared.intent = ConfluencePublishIntent{Site: c.site, SpaceID: spaceID, PayloadSHA256: fmt.Sprintf("%x", sha256.Sum256(payload))}
+	return prepared, nil
+}
+
+func (c *Confluence) publishedPage(ctx context.Context, ref provider.Ref) (confluencePage, string, error) {
+	var page confluencePage
+	args := []string{"confluence", "content", "get", ref.ID, "--detail", "full", "--format", "html", "--include-metadata"}
+	if err := c.read(ctx, "read confluence page for publication", args, &page); err != nil {
+		return confluencePage{}, "", err
+	}
+	if page.Status != "current" || page.Version.Number < 1 ||
+		first(page.ContentType, page.Type) != "page" || (page.Type != "" && page.Type != "page") {
+		return confluencePage{}, "", fmt.Errorf("confluence result lacks published page or version metadata: %w", ErrFailure)
+	}
+	if page.SpaceKey == "" {
+		page.SpaceKey = page.Metadata.SpaceKey
+	}
+	spaceID := first(page.SpaceID.String(), page.Metadata.SpaceID.String())
+	if !atlassian.ValidConfluenceID(spaceID) ||
+		(page.Metadata.SpaceID != "" && page.Metadata.SpaceID.String() != spaceID) ||
+		(page.Metadata.SpaceKey != "" && page.Metadata.SpaceKey != ref.Scope) {
+		return confluencePage{}, "", fmt.Errorf("confluence result lacks matching space metadata: %w", ErrFailure)
+	}
+	doc, err := c.document(page, []string{ref.Scope})
+	if err != nil {
+		return confluencePage{}, "", err
+	}
+	if doc.Ref != ref {
+		return confluencePage{}, "", fmt.Errorf("confluence result is outside the requested page or space: %w", ErrFailure)
+	}
+	return page, spaceID, nil
+}
+
+func (c *Confluence) replay(ctx context.Context, replacement confluence.Replacement, page confluencePage) (provider.WriteResult, error) {
+	current := atlassian.PageVersion{Number: page.Version.Number}
+	if page.Version.Message != nil {
+		current.Message = *page.Version.Message
+	}
+	return replacement.Replay(current, page.Version.Message != nil, func(number int64) (atlassian.PageVersion, error) {
+		return c.historicalVersion(ctx, replacement.Ref, number)
+	})
+}
+
+func (c *Confluence) historicalVersion(ctx context.Context, ref provider.Ref, number int64) (atlassian.PageVersion, error) {
+	cursor := ""
+	seen := make(map[string]bool)
+	for range 5 {
+		var result struct {
+			Results    []confluenceVersion `json:"results"`
+			Versions   []confluenceVersion `json:"versions"`
+			NextCursor string              `json:"nextCursor"`
+			ContentID  json.Number         `json:"contentId"`
+		}
+		args := []string{"confluence", "content", "versions", "list", "--id", ref.ID, "--limit", "100"}
+		if cursor != "" {
+			args = append(args, "--cursor="+cursor)
+		}
+		if err := c.read(ctx, "read confluence version history", args, &result); err != nil {
+			return atlassian.PageVersion{}, err
+		}
+		if (result.Results == nil) == (result.Versions == nil) ||
+			(result.ContentID != "" && result.ContentID.String() != ref.ID) {
+			return atlassian.PageVersion{}, fmt.Errorf("invalid confluence version history: %w", ErrFailure)
+		}
+		var receipt *string
+		for _, version := range append(result.Results, result.Versions...) {
+			if version.Number == number {
+				if receipt != nil || version.Message == nil {
+					return atlassian.PageVersion{}, fmt.Errorf("ambiguous confluence successor version: %w", ErrFailure)
+				}
+				receipt = version.Message
+			}
+		}
+		if receipt != nil {
+			return atlassian.PageVersion{Number: number, Message: *receipt}, nil
+		}
+		cursor = result.NextCursor
+		if cursor == "" || seen[cursor] {
+			break
+		}
+		seen[cursor] = true
+	}
+	return atlassian.PageVersion{}, fmt.Errorf("confluence history did not prove the requested version: %w", ErrFailure)
+}
+
+func (p PreparedConfluencePublish) updateArgs(bodyFile string) []string {
+	return []string{"confluence", "content", "update", p.replacement.Ref.ID,
+		"--snapshot-token=" + p.snapshot, "--title=" + p.replacement.Title, "--body-file", bodyFile,
+		"--format", "html", "--ack-body-formats", "--version-message", p.replacement.Successor.Message, "--content-type", "page", "--yes"}
+}
+
+// Apply dispatches the approved replacement once per invocation. Reconcile an
+// ambiguous result through PreparePublish before invoking another update.
+func (p PreparedConfluencePublish) Apply(ctx context.Context) (provider.WriteResult, error) {
+	var zero provider.WriteResult
+	if p.replay.Status != "" {
+		return p.replay, nil
+	}
+	if p.client == nil || p.snapshot == "" {
+		return zero, fmt.Errorf("confluence publication was not prepared: %w", ErrFailure)
+	}
+	body, err := os.CreateTemp("", "devflow-confluence-*.html")
+	if err != nil {
+		return zero, fmt.Errorf("create confluence body file: %w", err)
+	}
+	defer os.Remove(body.Name())
+	_, err = body.WriteString(p.replacement.HTML)
+	if err := errors.Join(err, body.Close()); err != nil {
+		return zero, fmt.Errorf("write confluence body file: %w", err)
+	}
+	var ack confluencePage
+	if err := p.client.read(ctx, "replace confluence page", p.updateArgs(body.Name()), &ack); err != nil {
+		return zero, err
+	}
+	if err := p.checkAcknowledgement(ack); err != nil {
+		return zero, err
+	}
+	page, spaceID, err := p.client.publishedPage(ctx, p.replacement.Ref)
+	if err != nil || spaceID != p.intent.SpaceID {
+		return zero, fmt.Errorf("cannot confirm the confluence update in the approved space: %w", errors.Join(ErrFailure, err))
+	}
+	status, err := p.client.replay(ctx, p.replacement, page)
+	if err != nil || status.Status != provider.AlreadyApplied ||
+		(page.Version.Number == p.replacement.Successor.Number && page.Title != p.replacement.Title) {
+		return zero, fmt.Errorf("cannot confirm the requested confluence successor: %w", errors.Join(ErrFailure, err))
+	}
+	return p.replacement.Result(provider.Applied), nil
+}
+
+func (p PreparedConfluencePublish) checkAcknowledgement(ack confluencePage) error {
+	switch strings.ToLower(ack.Status) {
+	case "snapshot_stale":
+		return fmt.Errorf("confluence snapshot is stale: %w", provider.ErrConflict)
+	case "", "current", "success", "updated":
+	default:
+		return fmt.Errorf("confluence update reported an unconfirmed status: %w", ErrFailure)
+	}
+	id := first(ack.ID.String(), ack.ContentID.String())
+	spaceID := p.intent.SpaceID
+	scope := p.replacement.Ref.Scope
+	if id != p.replacement.Ref.ID || (ack.ContentID != "" && ack.ContentID.String() != id) ||
+		(ack.Title != "" && ack.Title != p.replacement.Title) ||
+		(ack.SpaceID != "" && ack.SpaceID.String() != spaceID) ||
+		(ack.Metadata.SpaceID != "" && ack.Metadata.SpaceID.String() != spaceID) ||
+		(ack.SpaceKey != "" && ack.SpaceKey != scope) || (ack.Space.Key != "" && ack.Space.Key != scope) ||
+		(ack.Metadata.SpaceKey != "" && ack.Metadata.SpaceKey != scope) ||
+		(ack.ContentType != "" && ack.ContentType != "page") || (ack.Type != "" && ack.Type != "page") ||
+		(ack.Operation != "" && !strings.EqualFold(ack.Operation, "updated")) ||
+		(ack.Version.Number != 0 && ack.Version.Number != p.replacement.Successor.Number) ||
+		(ack.Version.Message != nil && *ack.Version.Message != p.replacement.Successor.Message) {
+		return fmt.Errorf("confluence update acknowledgement does not match the requested replacement: %w", ErrFailure)
+	}
+	for _, raw := range []string{ack.URL, ack.WebURL, ack.Links.WebUI} {
+		if raw != "" {
+			if _, err := p.client.sameSiteURL(raw); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Confluence) Publish(ctx context.Context, ref provider.Ref, draft provider.DocumentDraft, opts provider.WriteOptions) (provider.WriteResult, error) {
+	publish, err := c.PreparePublish(ctx, ref, draft, opts)
+	if err != nil {
+		return provider.WriteResult{}, err
+	}
+	return publish.Apply(ctx)
 }

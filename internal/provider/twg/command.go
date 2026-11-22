@@ -53,10 +53,17 @@ type envelope struct {
 }
 
 func (b binding) read(ctx context.Context, name string, args []string, dest any) error {
+	_, err := b.run(ctx, name, args, dest)
+	return err
+}
+
+// run reports whether the subprocess started, the point after which a mutation
+// may have reached Jira even if TWG fails to return an acknowledgement.
+func (b binding) run(ctx context.Context, name string, args []string, dest any) (started bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
+		return false, fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
 	}
 
 	cmd := exec.CommandContext(ctx, "twg", append(args, "--site", b.site, "--output", "json", "--output-summary", "none")...)
@@ -65,13 +72,17 @@ func (b binding) read(ctx context.Context, name string, args []string, dest any)
 	stdout, stderr := output{limit: stdoutLimit}, output{limit: stderrLimit}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	runErr := cmd.Run()
+	started = cmd.Process != nil
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
+		return started, fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
 	}
 	if errors.Is(runErr, exec.ErrNotFound) {
-		return fmt.Errorf("%s: %w", name, ErrToolAbsent)
+		return started, fmt.Errorf("%s: %w", name, ErrToolAbsent)
 	}
+	return started, decodeResult(name, dest, &stdout, &stderr, runErr)
+}
 
+func decodeResult(name string, dest any, stdout, stderr *output, runErr error) error {
 	var result envelope
 	validJSON := !stdout.truncated && json.Unmarshal(stdout.buffer.Bytes(), &result) == nil
 	if validJSON && (present(result.Error) || len(result.Errors) > 0) {

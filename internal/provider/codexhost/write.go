@@ -15,17 +15,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
-const maxWriteLeases = 8
+const (
+	maxWriteLeases   = 8
+	writeReadbackTTL = 30 * time.Second
+)
 
 // Writer pins one live app-server session during each Devflow confirmation.
 type Writer struct {
-	dir    string
-	mu     sync.Mutex
-	leases map[[sha256.Size]byte]*writeLease
+	dir      string
+	mu       sync.Mutex
+	leases   map[[sha256.Size]byte]*writeLease
+	readback map[string]*writeLease
 }
 
 type writeLease struct {
@@ -35,10 +40,11 @@ type writeLease struct {
 	target  *serverStatus
 	cancel  context.CancelFunc
 	timer   *time.Timer
+	payload [sha256.Size]byte
 }
 
 func NewWriter(dir string) *Writer {
-	return &Writer{dir: dir, leases: make(map[[sha256.Size]byte]*writeLease)}
+	return &Writer{dir: dir, leases: make(map[[sha256.Size]byte]*writeLease), readback: make(map[string]*writeLease)}
 }
 
 var _ native.WriteHost = (*Writer)(nil)
@@ -50,6 +56,10 @@ func (w *Writer) Close() {
 	defer w.mu.Unlock()
 	for key, lease := range w.leases {
 		delete(w.leases, key)
+		lease.close()
+	}
+	for connection, lease := range w.readback {
+		delete(w.readback, connection)
 		lease.close()
 	}
 }
@@ -102,7 +112,7 @@ func (w *Writer) Prepare(ctx context.Context, call native.Call) (native.WriteBin
 		}
 		return existing.binding, nil
 	}
-	if len(w.leases) >= maxWriteLeases {
+	if len(w.leases)+len(w.readback) >= maxWriteLeases {
 		return zero, errors.New("too many outstanding native write previews")
 	}
 
@@ -131,18 +141,11 @@ func (w *Writer) Prepare(ctx context.Context, call native.Call) (native.WriteBin
 	if err != nil {
 		return zero, writeTransportError(call.Provider, err, false)
 	}
-	if lease.target.HTTPOrigin == "" {
-		return zero, fmt.Errorf("%w: the MCP host did not attest the provider origin", native.ErrUnavailable)
+	if err := verifyWriteHost(call.Provider, lease.target); err != nil {
+		return zero, err
 	}
-	if !trustedWriteOrigin(call.Provider, lease.target.HTTPOrigin) {
-		return zero, fmt.Errorf("%w: MCP server does not match the official provider origin", native.ErrDenied)
-	}
-	switch lease.target.AuthStatus {
-	case "oAuth":
-	case "notLoggedIn":
-		return zero, fmt.Errorf("%s: %w; start the MCP client's OAuth flow", call.Provider, native.ErrSignIn)
-	default:
-		return zero, fmt.Errorf("%w: the host did not verify an OAuth session", native.ErrUnavailable)
+	if err := lease.target.validateArguments(call); err != nil {
+		return zero, err
 	}
 	if err := ctx.Err(); err != nil {
 		return zero, err
@@ -154,7 +157,9 @@ func (w *Writer) Prepare(ctx context.Context, call native.Call) (native.WriteBin
 	lease.binding = native.WriteBinding{
 		Provider: call.Provider, Server: call.Server, Tool: call.Tool,
 		Origin: lease.target.HTTPOrigin, Connection: hex.EncodeToString(nonce[:]),
+		Payload: hex.EncodeToString(key[:]),
 	}
+	lease.payload = key
 	lease.timer = time.AfterFunc(policy.TokenTTL, func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
@@ -171,14 +176,27 @@ func (w *Writer) Write(ctx context.Context, binding native.WriteBinding, call na
 		return nil, err
 	}
 	w.mu.Lock()
-	lease := w.leases[key]
-	if lease == nil || lease.binding != binding {
-		w.mu.Unlock()
+	defer w.mu.Unlock()
+	var lease *writeLease
+	for lookup, candidate := range w.leases {
+		if candidate.binding == binding && candidate.payload == key {
+			lease = candidate
+			delete(w.leases, lookup)
+			break
+		}
+	}
+	if lease == nil {
 		return nil, fmt.Errorf("%w: write binding expired, changed, or was consumed", native.ErrDenied)
 	}
-	delete(w.leases, key)
-	w.mu.Unlock()
-	defer lease.close()
+	if lease.timer != nil {
+		lease.timer.Stop()
+	}
+	retain := false
+	defer func() {
+		if !retain {
+			lease.close()
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -190,20 +208,150 @@ func (w *Writer) Write(ctx context.Context, binding native.WriteBinding, call na
 	stop := context.AfterFunc(limit, lease.cancel)
 	defer stop()
 	raw, err := lease.host.callTool(lease.thread, call.Server, call.Tool, call.Arguments, lease.target)
-	return raw, writeTransportError(call.Provider, err, true)
+	if err != nil {
+		return nil, writeTransportError(call.Provider, err, true)
+	}
+	// Receipt verification may need one or more bounded reads on this same
+	// connection. It remains consumed for all writes.
+	w.readback[binding.Connection] = lease
+	lease.timer = time.AfterFunc(writeReadbackTTL, func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.dropReadback(binding.Connection, lease)
+	})
+	retain = true
+	return raw, nil
+}
+
+func (w *Writer) Rebind(ctx context.Context, binding native.WriteBinding, call native.Call) (native.WriteBinding, error) {
+	var zero native.WriteBinding
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	if binding.Provider != call.Provider || binding.Server != call.Server || binding.Tool != call.Tool {
+		return zero, native.ErrDenied
+	}
+	key, err := writeKey(call)
+	if err != nil {
+		return zero, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, lease := range w.leases {
+		if lease.binding == binding && lease.host.ctx.Err() == nil {
+			if err := lease.target.validateArguments(call); err != nil {
+				return zero, err
+			}
+			lease.payload = key
+			lease.binding.Payload = hex.EncodeToString(key[:])
+			return lease.binding, nil
+		}
+	}
+	return zero, fmt.Errorf("%w: no live provider write binding", native.ErrDenied)
+}
+
+func (w *Writer) ReadForWrite(ctx context.Context, call native.Call) (json.RawMessage, error) {
+	if !allowedBoundRead(call) {
+		return nil, native.ErrDenied
+	}
+	// The catalogue resolves the server with the client's own OAuth login.
+	// Unlike a read continuation, no input results are accepted here.
+	return verifiedRead(ctx, w.dir, call)
+}
+
+func verifiedRead(ctx context.Context, dir string, call native.Call) (json.RawMessage, error) {
+	if os.Getenv(activeEnvKey) != "" || strings.EqualFold(call.Server, "devflow") {
+		return nil, native.ErrDenied
+	}
+	ctx, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	h, err := startHost(ctx, dir)
+	if err != nil {
+		return nil, writeTransportError(call.Provider, err, false)
+	}
+	defer h.close()
+	thread, err := h.startThread(dir)
+	if err != nil {
+		return nil, writeTransportError(call.Provider, err, false)
+	}
+	target, err := h.findTool(thread, call.Server, call.Tool)
+	if err != nil {
+		return nil, writeTransportError(call.Provider, err, false)
+	}
+	if err := verifyWriteHost(call.Provider, target); err != nil {
+		return nil, err
+	}
+	if err := target.validateArguments(call); err != nil {
+		return nil, err
+	}
+	raw, err := h.callTool(thread, call.Server, call.Tool, call.Arguments, target)
+	return raw, writeTransportError(call.Provider, err, false)
+}
+
+func verifyWriteHost(provider string, target *serverStatus) error {
+	if target.HTTPOrigin == "" {
+		return fmt.Errorf("%w: the MCP host did not attest the provider origin", native.ErrUnavailable)
+	}
+	if !trustedWriteOrigin(provider, target.HTTPOrigin) {
+		return fmt.Errorf("%w: MCP server does not match the official provider origin", native.ErrDenied)
+	}
+	switch target.AuthStatus {
+	case "oAuth":
+		return nil
+	case "notLoggedIn":
+		return fmt.Errorf("%s: %w; start the MCP client's OAuth flow", provider, native.ErrSignIn)
+	default:
+		return fmt.Errorf("%w: the host did not verify an OAuth session", native.ErrUnavailable)
+	}
 }
 
 var boundReads = map[string][]string{
-	"jira":          {"atlassianUserInfo", "getAccessibleAtlassianResources", "getJiraIssue", "getTransitionsForJiraIssue", "listJiraIssueComments"},
-	"confluence":    {"atlassianUserInfo", "getAccessibleAtlassianResources", "getConfluenceContent"},
+	"jira":          {"atlassianUserInfo", "getAccessibleAtlassianResources", "getJiraIssue", "listJiraIssueTransitions", "listJiraIssueRemoteIssueLinks", "getJiraCurrentUser", "listJiraIssueComments"},
+	"confluence":    {"atlassianUserInfo", "getAccessibleAtlassianResources", "getConfluenceContent", "getConfluenceContentVersion"},
 	"asana":         {"get_task", "get_user", "get_project"},
-	"github":        {"get_me", "issue_read"},
-	"github-issues": {"get_me", "issue_read"},
+	"github":        {"get_me", "issue_read", "search_repositories"},
+	"github-issues": {"get_me", "issue_read", "search_repositories"},
 	"slack":         {"slack_read_user_profile", "slack_list_user_channels", "slack_read_channel", "slack_read_thread"},
 }
 
+func allowedBoundRead(call native.Call) bool {
+	if slices.Contains(boundReads[call.Provider], call.Tool) {
+		return true
+	}
+	if call.Tool != "executeRead" {
+		return false
+	}
+	name, _ := call.Arguments["name"].(string)
+	switch call.Provider {
+	case "jira":
+		return name == "listJiraIssueRemoteIssueLinks" || name == "listJiraIssueTransitions" || name == "getJiraCurrentUser"
+	case "confluence":
+		return name == "getConfluenceContentVersion"
+	default:
+		return false
+	}
+}
+
+func (s *serverStatus) validateArguments(call native.Call) error {
+	var spec struct {
+		InputSchema *jsonschema.Schema `json:"inputSchema"`
+	}
+	if err := json.Unmarshal(s.Tools[call.Tool], &spec); err != nil || spec.InputSchema == nil {
+		return fmt.Errorf("%w: the provider tool did not supply an input schema", native.ErrUnavailable)
+	}
+	resolved, err := spec.InputSchema.Resolve(nil)
+	args := call.Arguments
+	if args == nil {
+		args = map[string]any{}
+	}
+	if err != nil || resolved.Validate(args) != nil {
+		return fmt.Errorf("%w: provider schema rejected the prepared arguments", native.ErrUnavailable)
+	}
+	return nil
+}
+
 func (w *Writer) ReadBound(ctx context.Context, binding native.WriteBinding, call native.Call) (json.RawMessage, error) {
-	if binding.Provider != call.Provider || binding.Server != call.Server || !slices.Contains(boundReads[call.Provider], call.Tool) {
+	if binding.Provider != call.Provider || binding.Server != call.Server || !allowedBoundRead(call) {
 		return nil, native.ErrDenied
 	}
 	if err := ctx.Err(); err != nil {
@@ -211,24 +359,47 @@ func (w *Writer) ReadBound(ctx context.Context, binding native.WriteBinding, cal
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if lease := w.readback[binding.Connection]; lease != nil && lease.binding == binding {
+		raw, err := lease.read(ctx, call)
+		if err != nil && !errors.Is(err, native.ErrUnavailable) {
+			w.dropReadback(binding.Connection, lease)
+		}
+		return raw, err
+	}
 	for key, lease := range w.leases {
 		if lease.binding != binding {
 			continue
 		}
-		if err := lease.target.checkTool(call.Tool); err != nil {
-			return nil, writeTransportError(call.Provider, err, false)
-		}
-		limit, cancel := context.WithTimeout(ctx, callTimeout)
-		defer cancel()
-		stop := context.AfterFunc(limit, lease.cancel)
-		defer stop()
-		raw, err := lease.host.callTool(lease.thread, call.Server, call.Tool, call.Arguments, lease.target)
-		if err != nil {
+		raw, err := lease.read(ctx, call)
+		if err != nil && !errors.Is(err, native.ErrUnavailable) {
 			w.drop(key, lease)
 		}
-		return raw, writeTransportError(call.Provider, err, false)
+		return raw, err
 	}
 	return nil, fmt.Errorf("%w: no live provider write binding", native.ErrDenied)
+}
+
+func (l *writeLease) read(ctx context.Context, call native.Call) (json.RawMessage, error) {
+	if err := l.target.checkTool(call.Tool); err != nil {
+		return nil, writeTransportError(call.Provider, err, false)
+	}
+	if err := l.target.validateArguments(call); err != nil {
+		return nil, err
+	}
+	limit, cancel := context.WithTimeout(ctx, callTimeout)
+	defer cancel()
+	stop := context.AfterFunc(limit, l.cancel)
+	defer stop()
+	raw, err := l.host.callTool(l.thread, call.Server, call.Tool, call.Arguments, l.target)
+	return raw, writeTransportError(call.Provider, err, false)
+}
+
+func (w *Writer) dropReadback(connection string, lease *writeLease) {
+	if w.readback[connection] != lease {
+		return
+	}
+	delete(w.readback, connection)
+	lease.close()
 }
 
 func (w *Writer) drop(key [sha256.Size]byte, lease *writeLease) {
@@ -255,9 +426,9 @@ func writeTransportError(provider string, err error, dispatched bool) error {
 	if errors.As(err, &hostErr) {
 		switch hostErr.Kind {
 		case Authentication:
-			return fmt.Errorf("%s: %w; start the MCP client's OAuth flow", provider, native.ErrSignIn)
+			err = fmt.Errorf("%s: %w; start the MCP client's OAuth flow", provider, native.ErrSignIn)
 		case Permission:
-			return fmt.Errorf("%s: %w", provider, native.ErrDenied)
+			err = fmt.Errorf("%s: %w", provider, native.ErrDenied)
 		case Unavailable:
 			if !dispatched {
 				return native.ErrUnavailable

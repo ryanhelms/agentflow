@@ -18,6 +18,7 @@ type WriteBinding struct {
 	Tool       string `json:"tool"`
 	Origin     string `json:"origin"`
 	Connection string `json:"connection"`
+	Payload    string `json:"payload_sha256,omitempty"`
 }
 
 // WriteHost owns the authenticated connection and must enforce bindings on
@@ -58,4 +59,29 @@ func ReadBound(ctx context.Context, binding WriteBinding, call Call) (json.RawMe
 		return nil, ErrDenied
 	}
 	return host.ReadBound(ctx, binding, call)
+}
+
+// RebindWrite prepares the final payload on the same authenticated connection.
+// This is used before approval when a trusted scope read supplies a revision
+// or a provider-specific ID needed in the write arguments.
+func RebindWrite(ctx context.Context, binding WriteBinding, call Call) (WriteBinding, error) {
+	host, ok := ctx.Value(writeHostKey{}).(interface {
+		Rebind(context.Context, WriteBinding, Call) (WriteBinding, error)
+	})
+	if !ok {
+		return WriteBinding{}, ErrUnavailable
+	}
+	return host.Rebind(ctx, binding, call)
+}
+
+// ReadForWrite performs a trusted discovery read before preparing the final
+// tool call. Callers recheck write preconditions using ReadBound.
+func ReadForWrite(ctx context.Context, call Call) (json.RawMessage, error) {
+	host, ok := ctx.Value(writeHostKey{}).(interface {
+		ReadForWrite(context.Context, Call) (json.RawMessage, error)
+	})
+	if !ok {
+		return nil, ErrUnavailable
+	}
+	return host.ReadForWrite(ctx, call)
 }

@@ -34,19 +34,21 @@ type asanaResource struct {
 	Name string `json:"name"`
 }
 
+type asanaMembership struct {
+	Project asanaResource `json:"project"`
+	Section asanaResource `json:"section"`
+}
+
 type asanaTaskFields struct {
-	GID         string        `json:"gid"`
-	Name        string        `json:"name"`
-	Notes       string        `json:"notes"`
-	Permalink   string        `json:"permalink_url"`
-	Subtype     string        `json:"resource_subtype"`
-	Completed   *bool         `json:"completed"`
-	ModifiedAt  string        `json:"modified_at"`
-	Assignee    asanaResource `json:"assignee"`
-	Memberships []struct {
-		Project asanaResource `json:"project"`
-		Section asanaResource `json:"section"`
-	} `json:"memberships"`
+	GID         string            `json:"gid"`
+	Name        string            `json:"name"`
+	Notes       string            `json:"notes"`
+	Permalink   string            `json:"permalink_url"`
+	Subtype     string            `json:"resource_subtype"`
+	Completed   *bool             `json:"completed"`
+	ModifiedAt  string            `json:"modified_at"`
+	Assignee    asanaResource     `json:"assignee"`
+	Memberships []asanaMembership `json:"memberships"`
 }
 
 func asanaTask(ref provider.Ref, raw json.RawMessage) (provider.Task, error) {

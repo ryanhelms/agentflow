@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/notifications"
 )
 
@@ -28,18 +29,18 @@ const (
 // SlackDestination is the trusted routing configuration for a named
 // conversation. An instance selects a session bound to WorkspaceID.
 type SlackDestination struct {
-	Name        string
-	Instance    string
-	WorkspaceID string
-	ChannelID   string
+	Name        string `json:"name"`
+	Instance    string `json:"instance"`
+	WorkspaceID string `json:"workspace_id"`
+	ChannelID   string `json:"channel_id"`
 }
 
 // SlackIntent is the exact target and payload to be bound by the app's
 // confirmation and audit.
 type SlackIntent struct {
-	Destination SlackDestination
-	OperationID string
-	Message     string
+	Destination SlackDestination `json:"destination"`
+	OperationID string           `json:"operation_id"`
+	Message     string           `json:"message"`
 }
 
 type SlackNotification struct {
@@ -48,6 +49,7 @@ type SlackNotification struct {
 }
 
 func (n SlackNotification) Intent() SlackIntent { return n.intent }
+func (n SlackNotification) Call() Call          { return n.call }
 
 // PrepareSlackNotification maps one top-level send. The destination is
 // resolved by the caller from trusted configuration.
@@ -136,8 +138,9 @@ func slackNotificationMessage(n provider.Notification) (string, error) {
 // store shared with retries. authorize must verify the selected session's
 // workspace and its live tool schema, and approve this exact intent. send
 // must dispatch that call at most once on the verified session and return a
-// successful result's JSON or an error. Tool errors and ambiguous outcomes
-// leave a durable unconfirmed claim. The caller audits the resulting outcome.
+// successful result's JSON or an error. ErrUnavailable can only be returned
+// before dispatch. Other tool errors and ambiguous outcomes leave a durable
+// unconfirmed claim. The caller audits the resulting outcome.
 func (n SlackNotification) Deliver(
 	ctx context.Context,
 	store notifications.ReceiptStore,
@@ -196,6 +199,9 @@ func (n SlackNotification) deliverClaimed(
 		return receipt, errors.Join(err, finishSlackClaim(ctx, store, key, notifications.Retryable))
 	}
 	raw, err := send(ctx, n.call)
+	if errors.Is(err, native.ErrUnavailable) && !errors.Is(err, native.ErrWriteUncertain) {
+		return receipt, errors.Join(native.ErrUnavailable, finishSlackClaim(ctx, store, key, notifications.Retryable))
+	}
 	if err != nil {
 		return receipt, fmt.Errorf("%w: native slack send failed", notifications.ErrUnconfirmed)
 	}

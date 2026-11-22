@@ -10,9 +10,10 @@ import (
 
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
-// Jira reads work items on one Atlassian site. References use the Jira project
+// Jira operates on work items on one Atlassian site. References use the Jira project
 // key as scope and the issue key as ID.
 type Jira struct{ binding }
 
@@ -62,6 +63,7 @@ type jiraFieldsJSON struct {
 	ProjectKey     string          `json:"projectKey"`
 	Labels         []string        `json:"labels"`
 	Updated        string          `json:"updated"`
+	RemoteLinks    json.RawMessage `json:"remoteLinks"`
 	Parent         *struct {
 		Key     string `json:"key"`
 		Summary string `json:"summary"`
@@ -80,16 +82,24 @@ type jiraIssue struct {
 }
 
 func (j *Jira) Get(ctx context.Context, ref provider.Ref) (provider.Task, error) {
-	ref.Scope = strings.ToUpper(ref.Scope)
-	ref.ID = strings.ToUpper(ref.ID)
-	if err := j.checkRef(ref); err != nil {
+	return j.get(ctx, ref, false)
+}
+
+// GetWithRemoteLinks hydrates Jira's Web links with the same saved OAuth login.
+func (j *Jira) GetWithRemoteLinks(ctx context.Context, ref provider.Ref) (provider.Task, error) {
+	return j.get(ctx, ref, true)
+}
+
+func (j *Jira) get(ctx context.Context, ref provider.Ref, remoteLinks bool) (provider.Task, error) {
+	ref, err := j.issueRef(ref)
+	if err != nil {
 		return provider.Task{}, err
-	}
-	if jiraScope(ref.ID) != ref.Scope {
-		return provider.Task{}, fmt.Errorf("issue key is outside the requested jira project: %w", ErrAccessDenied)
 	}
 	var issues []jiraIssue
 	args := []string{"jira", "workitem", "get", ref.ID, "--fields", jiraFields}
+	if remoteLinks {
+		args = append(args, "--remote-links")
+	}
 	if err := j.read(ctx, "read jira work item", args, &issues); err != nil {
 		return provider.Task{}, err
 	}
@@ -102,6 +112,19 @@ func (j *Jira) Get(ctx context.Context, ref provider.Ref) (provider.Task, error)
 	}
 	if task.Ref.ID != ref.ID {
 		return provider.Task{}, fmt.Errorf("jira read returned a different work item: %w", ErrFailure)
+	}
+	if remoteLinks {
+		raw := issues[0].RemoteLinks
+		if len(raw) == 0 && issues[0].Fields != nil {
+			raw = issues[0].Fields.RemoteLinks
+		}
+		pages, err := nativemap.DecodeJiraRemoteLinks(raw)
+		if err != nil {
+			return provider.Task{}, fmt.Errorf("read jira remote links: %w", err)
+		}
+		for _, page := range pages {
+			task.Links = append(task.Links, provider.Link{URL: page.URL, Title: page.Title})
+		}
 	}
 	return task, nil
 }
@@ -157,6 +180,18 @@ func (j *Jira) find(ctx context.Context, q provider.TaskQuery, activeSprint bool
 		}
 	}
 	return tasks, nil
+}
+
+func (j *Jira) issueRef(ref provider.Ref) (provider.Ref, error) {
+	ref.Scope = strings.ToUpper(ref.Scope)
+	ref.ID = strings.ToUpper(ref.ID)
+	if err := j.checkRef(ref); err != nil {
+		return provider.Ref{}, err
+	}
+	if jiraScope(ref.ID) != ref.Scope {
+		return provider.Ref{}, fmt.Errorf("issue key is outside the requested jira project: %w", ErrAccessDenied)
+	}
+	return ref, nil
 }
 
 func jiraScope(key string) string {

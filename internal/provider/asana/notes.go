@@ -46,7 +46,8 @@ func ValidateDraft(instance string, draft provider.TaskDraft) error {
 	return (metadata{draft.Template, draft.Links}).validate()
 }
 
-func encodeNotes(draft provider.TaskDraft) (string, error) {
+// EncodeTaskNotes preserves Devflow template and link metadata in plain notes.
+func EncodeTaskNotes(draft provider.TaskDraft) (string, error) {
 	if draft.Template == nil && len(draft.Links) == 0 && !strings.HasPrefix(draft.Description, notesPrefix) {
 		return draft.Description, nil
 	}
