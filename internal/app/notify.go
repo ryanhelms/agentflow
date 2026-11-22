@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/notifications"
 )
 
@@ -94,7 +95,11 @@ func (a *App) notify(ctx context.Context, input NotifyInput, token string, trans
 	if strings.TrimSpace(input.Title) == "" && strings.TrimSpace(input.Body) == "" && len(input.Links) == 0 {
 		return result, nil, errors.New("notification requires a title, body or link")
 	}
-	targets := notificationTargets(a.Cfg.Providers.Notifications, input.Signal)
+	selection := a.Cfg.Providers.Notifications
+	targets := notificationTargets(selection, input.Signal)
+	if err := checkNotificationScope(selection, input.Signal, targets); err != nil {
+		return result, nil, err
+	}
 	if len(targets) == 0 {
 		result.Reason = "notifications disabled or no destinations routed for this signal"
 		return result, nil, nil
@@ -184,6 +189,43 @@ func notificationTargets(selection config.Selection, signal string) []notificati
 	default:
 		return nil
 	}
+}
+
+// Resolve the trusted route for the same signal before preparing any of a
+// batch's deliveries. A user may narrow a route or supply a missing default.
+func checkNotificationScope(selection config.Selection, signal string, targets []notificationTarget) error {
+	repo := selection.RepositorySettings("")
+	switch s := repo.(type) {
+	case *config.SlackSettings:
+		for _, dst := range targets {
+			if selection.RepositorySettings("native") != nil && !withinSlackScope(dst.Native, s.Native) ||
+				selection.RepositorySettings("credential_ref") != nil && s.CredentialRef != nil && (dst.Native != nil || dst.CredentialRef != *s.CredentialRef) {
+				return fmt.Errorf("slack delivery differs from the repository destination: %w", native.ErrDenied)
+			}
+		}
+	case *config.NotificationRoutes:
+		allowed := notificationTargets(config.Selection{Settings: s}, signal)
+		for _, dst := range targets {
+			if !slices.ContainsFunc(allowed, func(trusted notificationTarget) bool {
+				return dst.name == trusted.name && (trusted.Provider == "" || trusted.Provider == dst.Provider) &&
+					(trusted.CredentialRef == "" || (dst.Native == nil && trusted.CredentialRef == dst.CredentialRef)) &&
+					(trusted.Native == nil || withinSlackScope(dst.Native, trusted.Native))
+			}) {
+				return fmt.Errorf("notification target %q is outside the repository route for %q: %w", dst.name, signal, native.ErrDenied)
+			}
+		}
+	}
+	return nil
+}
+
+func withinSlackScope(dst, trusted *config.SlackNativeSettings) bool {
+	if dst == nil || trusted == nil {
+		return dst == trusted
+	}
+	return (trusted.WorkspaceID == "" || dst.WorkspaceID == trusted.WorkspaceID) &&
+		(trusted.ChannelID == "" || dst.ChannelID == trusted.ChannelID) &&
+		(trusted.ActorID == "" || dst.ActorID == trusted.ActorID) &&
+		(trusted.Server == "" || dst.Server == trusted.Server)
 }
 
 func singleNotificationTarget(kind, env string, dest, credential *string) notificationTarget {

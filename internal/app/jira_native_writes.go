@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
+	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
@@ -67,11 +68,27 @@ func jiraRemoteSummary(summary any, write *jiraWrite) any {
 }
 
 func (a *App) jiraWriteScope(scope string) error {
-	projects := a.jiraSettings().Projects
-	if len(projects) != 0 && !slices.ContainsFunc(projects, func(project string) bool {
-		return strings.EqualFold(project, scope)
-	}) {
+	sel := a.Cfg.Providers.TaskManagement
+	settings := a.jiraSettings()
+	projectScope, _ := sel.RepositorySettings("projects").(*config.JiraSettings)
+	siteScope, _ := sel.RepositorySettings("site").(*config.JiraSettings)
+	if projectScope != nil {
+		// Project keys are meaningful only at the site that scopes them.
+		siteScope = projectScope
+	}
+	if siteScope != nil && strings.TrimRight(siteScope.Site, "/") != strings.TrimRight(settings.Site, "/") {
+		return fmt.Errorf("jira site differs from the configured repository site: %w", native.ErrDenied)
+	}
+	contains := func(projects []string) bool {
+		return slices.ContainsFunc(projects, func(project string) bool { return strings.EqualFold(project, scope) })
+	}
+	_, configured := sel.Sources["projects"]
+	if projectScope != nil && !contains(projectScope.Projects) ||
+		(configured || len(settings.Projects) != 0) && !contains(settings.Projects) {
 		return fmt.Errorf("jira project %q is outside task_management.settings.projects: %w", scope, native.ErrDenied)
+	}
+	if err := sel.CheckTarget("projects", scope); err != nil {
+		return fmt.Errorf("jira project %q: %w", scope, errors.Join(native.ErrDenied, err))
 	}
 	return nil
 }
@@ -120,6 +137,9 @@ func jiraNativeAccount(ctx context.Context, write *jiraWrite, site string) (stri
 }
 
 func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.Ref, body string) (*jiraWrite, error) {
+	if err := a.jiraWriteScope(ref.Scope); err != nil {
+		return nil, err
+	}
 	if !jiraMCPOrigin(site) {
 		return nil, nil
 	}
@@ -134,9 +154,6 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 	if err != nil {
 		return nil, err
 	}
-	if err := a.jiraWriteScope(ref.Scope); err != nil {
-		return nil, err
-	}
 	if _, err := jiraNativeIssue(ctx, write, site, ref); err != nil {
 		return nil, err
 	}
@@ -144,6 +161,16 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 }
 
 func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider.TaskDraft) (*jiraWrite, error) {
+	if err := a.jiraWriteScope(draft.Scope); err != nil {
+		return nil, err
+	}
+	for _, link := range draft.Links {
+		if link.Ref != nil {
+			if err := a.jiraWriteScope(link.Ref.Scope); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if !jiraMCPOrigin(site) || len(draft.Links) != 0 {
 		return nil, nil
 	}
@@ -158,7 +185,7 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 	if err != nil {
 		return nil, err
 	}
-	return write, a.jiraWriteScope(draft.Scope)
+	return write, nil
 }
 
 type jiraTransition struct {
@@ -248,6 +275,9 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 	if err != nil {
 		return nil, true, err
 	}
+	if err := a.jiraWriteScope(ref.Scope); err != nil {
+		return nil, true, err
+	}
 	if !jiraMCPOrigin(site) {
 		return nil, false, nil
 	}
@@ -256,9 +286,6 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 		return nil, false, nil
 	}
 	if err != nil {
-		return nil, true, err
-	}
-	if err := a.jiraWriteScope(ref.Scope); err != nil {
 		return nil, true, err
 	}
 	fm, err := a.FlowMap(ctx)
@@ -296,6 +323,9 @@ type jiraStartWrites struct {
 
 func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Ref) (string, TransitionResult, *jiraStartWrites, error) {
 	var plan TransitionResult
+	if err := a.jiraWriteScope(ref.Scope); err != nil {
+		return "", plan, nil, err
+	}
 	if !jiraMCPOrigin(site) {
 		return "", plan, nil, nil
 	}
@@ -304,9 +334,6 @@ func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Re
 		return "", plan, nil, nil
 	}
 	if err != nil {
-		return "", plan, nil, err
-	}
-	if err := a.jiraWriteScope(ref.Scope); err != nil {
 		return "", plan, nil, err
 	}
 	account, err := jiraNativeAccount(ctx, nil, site)
