@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
@@ -36,6 +37,7 @@ type Server struct {
 	blocked   error
 	updater   *update.Updater
 	updateMsg string
+	writer    *codexhost.Writer
 }
 
 // New builds a server for the repo in dir.
@@ -45,6 +47,9 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{app: a}
+	if a.Client == "codex" {
+		s.writer = codexhost.NewWriter(a.Repo.Dir)
+	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: Instructions})
 	s.register()
 	return s, nil
@@ -58,6 +63,9 @@ func (s *Server) SetUpdater(u *update.Updater) { s.updater = u }
 
 // Run serves over stdio until the client disconnects.
 func (s *Server) Run(ctx context.Context) error {
+	if s.writer != nil {
+		defer s.writer.Close()
+	}
 	if s.updater != nil {
 		ectx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		if err := s.updater.Enforce(ectx); err != nil {
@@ -103,6 +111,9 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 			if s.blocked != nil {
 				return errResult(s.blocked), nil, nil
+			}
+			if s.writer != nil {
+				ctx = native.WithWriteHost(ctx, s.writer)
 			}
 			out, err := fn(ctx, in)
 			var providerRequest *native.Request
@@ -245,6 +256,7 @@ func (c contextOut) ContextText() string { return c.Text }
 
 func (s *Server) register() {
 	s.registerProviderSetup()
+	s.registerNotifications()
 	a := s.app
 	// Task awareness
 	add(s, "devflow_context", "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.", readOnly,

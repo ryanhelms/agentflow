@@ -49,11 +49,15 @@ func Call(ctx context.Context, dir, server, tool string, args map[string]any) (j
 		return nil, err
 	}
 
+	return host.callTool(threadID, server, tool, args, status)
+}
+
+func (h *host) callTool(threadID, server, tool string, args map[string]any, status *serverStatus) (json.RawMessage, error) {
 	if args == nil {
 		args = map[string]any{}
 	}
 	const method = "mcpServer/tool/call"
-	result, err := host.request(method, toolCall{
+	result, err := h.request(method, toolCall{
 		ThreadID: threadID, Server: server, Tool: tool, Arguments: args, EnvironmentID: status.EnvironmentID,
 	})
 	if err != nil {
@@ -117,6 +121,7 @@ func (h *host) startThread(dir string) (string, error) {
 
 type serverStatus struct {
 	Name          string                     `json:"name"`
+	HTTPOrigin    string                     `json:"httpOrigin"`
 	EnvironmentID *string                    `json:"environmentId"`
 	AuthStatus    string                     `json:"authStatus"`
 	RuntimeStatus string                     `json:"runtimeStatus"`

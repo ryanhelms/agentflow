@@ -187,6 +187,14 @@ client's sign-in and retry after consent. Other existing REST or webhook
 operations retain their current credential behavior during migration.
 Devflow-managed writes continue through its confirmation and audit policy.
 
+Supported native writes use a connected Codex MCP client. On the CLI, use
+`devflow --native-client codex COMMAND` to select its provider connections.
+Devflow retains the OAuth session from preview until dispatch and binds the
+approval to the exact operation, arguments, and host. A sign-in failure
+starts the setup agent's native OAuth flow. After consent, request a fresh
+preview. A provider that denies access or returns an uncertain write outcome
+does not trigger a backend switch.
+
 ### Claude Code Desktop
 
 The `claude` setup mode configures the Claude Code plugin marketplace. If a

@@ -27,6 +27,8 @@ import (
 	"github.com/nscaledev/devflow/internal/hooks"
 	"github.com/nscaledev/devflow/internal/mcpserver"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -89,6 +91,7 @@ Work
   lint-msg FILE | --github-event validate a commit file or runner PR and its task references
 
 Runtime
+  --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -98,6 +101,21 @@ Runtime
 // Main runs the CLI and returns the process exit code.
 func Main(args []string) int {
 	ctx := context.Background()
+	if len(args) > 0 && args[0] == "--native-client" {
+		if len(args) < 3 || args[1] != "codex" {
+			fmt.Fprintln(os.Stderr, "usage: devflow --native-client codex COMMAND")
+			return 1
+		}
+		dir, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "devflow:", err)
+			return 1
+		}
+		writer := codexhost.NewWriter(dir)
+		defer writer.Close()
+		ctx = native.WithWriteHost(ctx, writer)
+		args = args[2:]
+	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Print(usage)
 		return 0
