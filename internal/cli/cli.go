@@ -46,6 +46,7 @@ Setup
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
+  setup providers [--json]       list every provider each role accepts and which one is selected
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion

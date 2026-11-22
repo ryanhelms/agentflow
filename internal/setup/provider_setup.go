@@ -48,6 +48,16 @@ type selectedRole struct {
 	config.Selection
 }
 
+// selectedRoles follows the order of config.ProviderRoles.
+func selectedRoles(providers config.Providers) []selectedRole {
+	return []selectedRole{
+		{"code_hosting", providers.CodeHosting}, {"task_management", providers.TaskManagement},
+		{"knowledge_base", providers.KnowledgeBase}, {"devops.checks", providers.DevOps.Checks},
+		{"devops.deployments", providers.DevOps.Deployments}, {"devops.releases", providers.DevOps.Releases},
+		{"secops", providers.SecOps}, {"notifications", providers.Notifications},
+	}
+}
+
 const claudeDesktop = "claude-desktop"
 
 // SetupClients includes the explicit desktop mode alongside the installable adapters.
@@ -85,12 +95,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		return p, nil
 	}
 	providers := cfg.Providers
-	roles := []selectedRole{
-		{"code_hosting", providers.CodeHosting}, {"task_management", providers.TaskManagement},
-		{"knowledge_base", providers.KnowledgeBase}, {"devops.checks", providers.DevOps.Checks},
-		{"devops.deployments", providers.DevOps.Deployments}, {"devops.releases", providers.DevOps.Releases},
-		{"secops", providers.SecOps}, {"notifications", providers.Notifications},
-	}
+	roles := selectedRoles(providers)
 	var detection gitx.Detection
 	needsDetection := false
 	for _, role := range roles {

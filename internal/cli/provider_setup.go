@@ -20,6 +20,9 @@ func runProviderSetup(ctx context.Context, args []string) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		op, args = args[0], args[1:]
 	}
+	if op == "providers" {
+		return runProviderList(ctx, args)
+	}
 	fs := flag.NewFlagSet("setup "+op, flag.ContinueOnError)
 	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.SetupClients, ", "))
 	asJSON := fs.Bool("json", false, "print the typed setup plan as JSON")
@@ -125,5 +128,47 @@ func runProviderSetup(ctx context.Context, args []string) error {
 	if op != "plan" && !plan.Ready {
 		return &hooks.ExitError{Code: 1}
 	}
+	return nil
+}
+
+func runProviderList(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("setup providers", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the provider list as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: devflow setup providers [--json]")
+	}
+	list, err := setup.ListProviders(ctx, ".")
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(list)
+	}
+	if !list.ConfigFound {
+		fmt.Printf("No .devflow/config.yml in %s; showing defaults.\n", list.Root)
+	}
+	for _, r := range list.Roles {
+		fmt.Println(r.Role)
+		for _, o := range r.Options {
+			mark := " "
+			if o.Selected {
+				mark = "*"
+			}
+			var tags []string
+			if o.Default {
+				tags = append(tags, "default")
+			}
+			if o.Readiness != setup.ReadinessNone {
+				tags = append(tags, o.Readiness+" readiness")
+			} else {
+				tags = append(tags, "disables the role")
+			}
+			fmt.Printf("  %s %-14s %s\n", mark, o.ID, strings.Join(tags, ", "))
+		}
+	}
+	fmt.Println("\n* selected. Companion providers need a declared MCP companion before devflow setup plan reports them ready.")
 	return nil
 }

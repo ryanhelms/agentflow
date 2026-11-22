@@ -129,6 +129,12 @@ effective Jira site, so switching sites requires fresh approval.
 
 ## Check workstation and runner readiness
 
+`devflow setup providers` lists every provider each role accepts, marks the
+default and the provider this workspace selects, and says whether devflow checks
+its readiness itself (`built-in`) or needs a declared MCP companion
+(`companion`). It reads local configuration only. `--json` and the
+`devflow_setup_providers` MCP tool return the same list.
+
 `devflow setup plan --json` reports the selected roles, detected forge, installed
 tools, and prerequisite checks. `devflow_setup_plan` presents the same plan to an
 MCP client. Use `--client NAME` to select a desktop client even if its executable
