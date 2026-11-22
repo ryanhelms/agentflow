@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/hooks"
 	"github.com/nscaledev/devflow/internal/setup"
 )
@@ -134,13 +136,14 @@ func runProviderSetup(ctx context.Context, args []string) error {
 func runProviderList(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("setup providers", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the provider list as JSON")
+	explain := fs.Bool("explain", false, "show each selected provider's effective settings and the layer that set them")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: devflow setup providers [--json]")
+		return errors.New("usage: devflow setup providers [--explain] [--json]")
 	}
-	list, err := setup.ListProviders(ctx, ".")
+	list, err := setup.ListProviders(ctx, ".", *explain)
 	if err != nil {
 		return err
 	}
@@ -150,8 +153,15 @@ func runProviderList(ctx context.Context, args []string) error {
 	if !list.ConfigFound {
 		fmt.Printf("No .devflow/config.yml in %s; showing defaults.\n", list.Root)
 	}
+	for _, d := range list.Definitions {
+		fmt.Printf("definition  %s\n", d)
+	}
 	for _, r := range list.Roles {
-		fmt.Println(r.Role)
+		if r.Contract != "" {
+			fmt.Printf("%s (%s)\n", r.Role, r.Contract)
+		} else {
+			fmt.Println(r.Role)
+		}
 		for _, o := range r.Options {
 			mark := " "
 			if o.Selected {
@@ -168,7 +178,39 @@ func runProviderList(ctx context.Context, args []string) error {
 			}
 			fmt.Printf("  %s %-14s %s\n", mark, o.ID, strings.Join(tags, ", "))
 		}
+		for _, s := range r.Settings {
+			line := fmt.Sprintf("      %s = %s  [%s]", s.Path, settingValue(s.Value), s.Source)
+			if c := s.Constraint; c != nil {
+				line += "  " + constraintText(*c)
+			}
+			fmt.Println(line)
+		}
 	}
 	fmt.Println("\n* selected. Companion providers need a declared MCP companion before devflow setup plan reports them ready.")
 	return nil
+}
+
+func settingValue(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprint(v)
+	}
+	return string(b)
+}
+
+func constraintText(c config.Constraint) string {
+	var parts []string
+	switch c.Lock {
+	case true:
+		parts = append(parts, "locked")
+	case "append":
+		parts = append(parts, "append only")
+	}
+	if c.Allow != nil {
+		parts = append(parts, "allow "+settingValue(c.Allow))
+	}
+	if c.Pattern != "" {
+		parts = append(parts, "pattern "+c.Pattern)
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }

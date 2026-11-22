@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nscaledev/devflow/internal/contract"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +28,8 @@ type Providers struct {
 	DevOps         DevOps
 	SecOps         Selection
 	Notifications  Selection
+	// Definitions lists the provider definition files loaded, in layer order.
+	Definitions []Source
 }
 
 type DevOps struct {
@@ -44,6 +47,13 @@ type Selection struct {
 	Provider   string
 	Settings   any
 	Configured bool
+	// Contract is the role contract the selection implements, e.g. tasks/v1.
+	Contract string
+	// Sources maps each settings path a layer set to that layer. Paths not
+	// listed keep the provider default.
+	Sources map[string]Source
+	// Constraints are the release layer's limits on settings paths.
+	Constraints map[string]Constraint
 }
 
 type DisabledSettings struct{}
@@ -244,7 +254,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 	}
 }
 
-func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error) {
+func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Providers, error) {
 	// Decode only the reserved sections. Unrelated top-level extensions keep
 	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
 	raw := map[string]any{}
@@ -258,13 +268,17 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		}
 	}
 	schemas := providerSchemas(repo)
+	defs, err := loadDefinitions(root, schemas)
+	if err != nil {
+		return Providers{}, err
+	}
 
-	var p Providers
+	p := Providers{Definitions: defs.files}
 	taskManagement, present, err := section(raw, "task_management", "task_management", "version", "provider", "settings", "templates")
 	if err != nil {
 		return Providers{}, err
 	}
-	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management")
+	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management", defs)
 	if err != nil {
 		return Providers{}, err
 	}
@@ -305,7 +319,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		if err != nil {
 			return Providers{}, err
 		}
-		*role.out, err = schemas[role.path].resolve(fields, present, role.path)
+		*role.out, err = schemas[role.path].resolve(fields, present, role.path, defs)
 		if err != nil {
 			return Providers{}, err
 		}
@@ -351,7 +365,7 @@ func sectionVersion(fields map[string]any, path string) (int, error) {
 	return ProviderSchemaVersion, nil
 }
 
-func (s roleSchema) resolve(fields map[string]any, present bool, path string) (Selection, error) {
+func (s roleSchema) resolve(fields map[string]any, present bool, path string, defs *definitions) (Selection, error) {
 	version, err := sectionVersion(fields, path)
 	if err != nil {
 		return Selection{}, err
@@ -368,10 +382,93 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string) (S
 	} else {
 		return Selection{}, fmt.Errorf("%s.provider: expected one of %s", path, strings.Join(s.choices(), ", "))
 	}
+	sel := Selection{Version: version, Provider: id, Settings: settings, Configured: present}
+	if id == "none" {
+		// A disabled role accepts no settings; this reports any it is given.
+		if overrides, ok := fields["settings"]; ok {
+			return sel, applySettings(settings, overrides, path+".settings")
+		}
+		return sel, nil
+	}
+	return sel, sel.applyLayers(fields, path, defs)
+}
+
+// applyLayers merges release, project, config.yml and user settings in that
+// order. Release constraints are checked against every later layer.
+func (sel *Selection) applyLayers(fields map[string]any, path string, defs *definitions) error {
+	sel.Sources = map[string]Source{}
+	c, err := contract.Resolve(path, "")
+	if err != nil {
+		return err
+	}
+	sel.Contract = c.ID()
+	release, _ := defs.get(LayerRelease, sel.Provider, path)
+	sel.Constraints = release.Constraints
+	var baseline map[string]any
+	apply := func(raw any, src Source, contractID string) error {
+		if contractID != "" {
+			c, err := contract.Resolve(path, contractID)
+			if err != nil {
+				return err
+			}
+			sel.Contract = c.ID()
+		}
+		if raw == nil {
+			return nil
+		}
+		if src.Layer != LayerRelease {
+			if baseline == nil {
+				var err error
+				if baseline, err = plain(sel.Settings); err != nil {
+					return err
+				}
+			}
+			for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
+				value, set := lookup(raw, name)
+				if !set {
+					continue
+				}
+				base, _ := lookup(baseline, name)
+				con := sel.Constraints[name]
+				if err := con.check(value, base); err != nil {
+					return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
+				}
+			}
+		}
+		if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
+			return err
+		}
+		leaves := map[string]any{}
+		flatten("", raw, leaves)
+		for leaf := range leaves {
+			sel.Sources[leaf] = src
+		}
+		return nil
+	}
+	fromDefinition := func(layer string) error {
+		def, ok := defs.get(layer, sel.Provider, path)
+		if !ok {
+			return nil
+		}
+		var raw any
+		if def.Settings != nil {
+			raw = def.Settings
+		}
+		if err := apply(raw, def.source, def.Contract); err != nil {
+			return &DefinitionError{Source: def.source, Err: err}
+		}
+		return nil
+	}
+	if err := fromDefinition(LayerRelease); err != nil {
+		return err
+	}
+	if err := fromDefinition(LayerProject); err != nil {
+		return err
+	}
 	if overrides, ok := fields["settings"]; ok {
-		if err := applySettings(settings, overrides, path+".settings"); err != nil {
-			return Selection{}, err
+		if err := apply(overrides, Source{Layer: LayerProject, File: ".devflow/config.yml"}, ""); err != nil {
+			return err
 		}
 	}
-	return Selection{Version: version, Provider: id, Settings: settings, Configured: present}, nil
+	return fromDefinition(LayerUser)
 }

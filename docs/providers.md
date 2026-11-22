@@ -105,6 +105,63 @@ The release file is a JSON array with unique `tag` values, each with a `revision
 and optional `title`, `notes`, `url` and `assets`. Use `devflow release get TAG` to read a
 record. Setup readiness checks that both selected files can be read and decoded.
 
+## Provider definitions
+
+Provider settings can also come from layered definition files. Each layer
+sets settings for a provider and role. Later layers win:
+
+| Layer | Location | May set |
+| --- | --- | --- |
+| release | embedded in the devflow binary | settings and constraints |
+| project | `.devflow/providers/*.yml` | settings |
+| project | `.devflow/config.yml` role `settings` | settings |
+| user | `~/.devflow/providers/*.yml` (or `$DEVFLOW_HOME/providers`) | settings |
+
+`.devflow/config.yml` still selects the provider for each role. A definition
+only applies when its provider is the one selected for that role.
+
+```yaml
+# .devflow/providers/issues.yml
+version: 1
+providers:
+  github-issues:
+    task_management:
+      contract: tasks/v1          # optional; defaults to the current contract
+      settings:
+        labels: [devflow]
+        search: {limit: 50}
+```
+
+Settings merge the same way as `config.yml` settings: object keys merge one at
+a time, and a list replaces the whole list. Each definition declares the role
+contract it targets. devflow accepts the current version of a contract and the
+one before it.
+
+The release layer can constrain any settings property for every later layer:
+
+```yaml
+providers:
+  jira:
+    task_management:
+      settings: {site: nscale.atlassian.net, projects: [PLAT]}
+      constraints:
+        site: {lock: true}                  # no later change
+        projects: {allow: [PLAT, INFRA]}    # values from this set only
+  github-issues:
+    task_management:
+      constraints:
+        labels: {lock: append}              # may add, never remove
+        repository: {pattern: '^nscaledev/'}
+```
+
+An invalid definition, or a later layer that breaks a constraint, stops
+configuration from loading. The error names the file and the constraint.
+`devflow setup providers --explain` (MCP: `devflow_setup_providers` with
+`explain: true`) lists the definition files loaded and every effective
+setting of the selected providers, with the layer that set it and any
+constraint. Definitions cannot add new providers yet. That arrives with the
+operation engine described in the [design](design/provider-definitions.md).
+
 ## Jira, Confluence and GitHub
 
 Jira task operations use `task_management.settings.site`. The project list in

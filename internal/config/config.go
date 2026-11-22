@@ -139,7 +139,11 @@ func LoadRepo(root string) (*Repo, bool, error) {
 	}
 	c := &file.Repo
 	c.applyDefaults()
-	providers, err := resolveProviders(c, file.Extra)
+	providers, err := resolveProviders(c, file.Extra, root)
+	var defErr *DefinitionError
+	if errors.As(err, &defErr) {
+		return nil, found, err
+	}
 	if err != nil {
 		return nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
 	}

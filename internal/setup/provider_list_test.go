@@ -11,7 +11,7 @@ import (
 func TestListProviders(t *testing.T) {
 	dir := t.TempDir()
 	setupFile(t, dir, ".devflow/config.yml", headlessConfig, 0o644)
-	list, err := ListProviders(context.Background(), dir)
+	list, err := ListProviders(context.Background(), dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestListProviders(t *testing.T) {
 }
 
 func TestListProvidersWithoutConfig(t *testing.T) {
-	list, err := ListProviders(context.Background(), t.TempDir())
+	list, err := ListProviders(context.Background(), t.TempDir(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,6 +73,51 @@ func TestBuiltInReadinessIDsExist(t *testing.T) {
 	for _, id := range builtInReadiness {
 		if !slices.Contains(all, id) {
 			t.Errorf("built-in readiness provider %q is not in the catalog", id)
+		}
+	}
+}
+
+func TestListProvidersExplain(t *testing.T) {
+	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	dir := t.TempDir()
+	setupFile(t, dir, ".devflow/config.yml", headlessConfig, 0o644)
+	setupFile(t, dir, ".devflow/providers/issues.yml", "version: 1\nproviders:\n  github-issues:\n    task_management:\n      settings: {labels: [devflow]}\n", 0o644)
+	list, err := ListProviders(context.Background(), dir, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Definitions) != 2 || list.Definitions[1].File != ".devflow/providers/issues.yml" {
+		t.Fatalf("definitions = %v", list.Definitions)
+	}
+	var tasks RoleOptions
+	for _, r := range list.Roles {
+		if r.Role == "task_management" {
+			tasks = r
+		}
+	}
+	if tasks.Contract != "tasks/v1" {
+		t.Errorf("contract = %q", tasks.Contract)
+	}
+	sources := map[string]string{}
+	for _, s := range tasks.Settings {
+		sources[s.Path] = s.Source.String()
+	}
+	for path, want := range map[string]string{
+		"repository":   "project:.devflow/config.yml",
+		"labels":       "project:.devflow/providers/issues.yml",
+		"search.limit": "default",
+	} {
+		if sources[path] != want {
+			t.Errorf("%s source = %q, want %q", path, sources[path], want)
+		}
+	}
+	plain, err := ListProviders(context.Background(), dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range plain.Roles {
+		if r.Settings != nil {
+			t.Errorf("%s has settings without explain", r.Role)
 		}
 	}
 }

@@ -4,7 +4,8 @@ description: Check provider readiness, verify provider MCP servers, install pinn
 argument-hint: "[providers | plan | verify | apply] [--companion ID] [--client NAME] [--install | --install-gh]"
 ---
 To list the providers each role can use, run `devflow setup providers` or call
-`devflow_setup_providers`. Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
+`devflow_setup_providers`. Add `--explain` (or `explain: true`) to show which definition
+file or config set each provider setting and any release constraint. Run `devflow setup plan` or call `devflow_setup_plan` to inspect the selected
 provider requirements. Use the current client or the one requested by the user.
 Explain any missing prerequisites. If the plan offers `install_gh`, show the
 pinned artifact details. On request, use `devflow_setup_apply` with

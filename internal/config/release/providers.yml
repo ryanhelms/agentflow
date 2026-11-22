@@ -1,0 +1,6 @@
+# Release-layer provider definitions, embedded in the devflow binary.
+# Settings here are defaults for every repository; constraints limit what
+# project (.devflow/providers/) and user (~/.devflow/providers/) layers may set.
+# See docs/providers.md#provider-definitions.
+version: 1
+providers: {}

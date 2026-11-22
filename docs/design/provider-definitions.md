@@ -1,6 +1,8 @@
 # Configuration-driven providers
 
-Status: draft for review. Nothing here is implemented yet.
+Status: phase 1 (contracts, layers and constraints for compiled providers) is
+implemented. Later phases are a design for review. User-facing documentation is
+in [provider definitions](../providers.md#provider-definitions).
 
 ## Goal
 
@@ -53,73 +55,86 @@ constraint:
 | `lock: append` | Later layers may add list entries but not remove release entries. | required labels, reviewers |
 | `pattern: <regex>` | Later string values must match. | `base_url` restricted to `*.nscale.com` |
 
-If a project or user layer breaks a constraint, load fails for that provider
-with a validation error naming the constraint and the layer that broke it. Load
-does not fail for the other providers.
+Constraints live in a `constraints` block next to `settings`, keyed by the
+settings path (`search.limit`). A separate block keeps a constraint from being
+mistaken for a map-valued setting such as `hosts` or `transitions`.
 
-The effective definition records where each value came from, so
-`devflow setup providers --explain jira` can show which layer set each
-property and which properties are locked.
+If a project or user layer breaks a constraint, the load fails with a
+validation error naming the file, the constraint and the release file that set
+it. In phase 1, any invalid definition stops configuration from loading, so
+every command sees the same effective settings. Phase 4 isolates failures to
+the affected provider: the reload snapshot keeps that provider's last good
+version and reports the error.
+
+The effective selection records where each value came from.
+`devflow setup providers --explain` shows the layer that set each property
+and any constraint on it. `.devflow/config.yml` role settings apply after the
+project definition files and before the user layer.
 
 ## Definition shape
+
+A definition file is keyed by provider, then role. Most providers (`github`
+for example) use different settings types in different roles, so every block
+is scoped to one role. Named transports and credentials are declared once per
+file, and any role block in that file can use them.
+
+Phase 1 accepts `contract`, `settings` and `constraints` for compiled
+providers. Everything else below is the phase 2+ design.
 
 ```yaml
 # .devflow/providers/linear.yml
 version: 1
+credentials:
+  linear: {description: Linear API key}
+transports:
+  linear-api:
+    http: {base_url: https://api.linear.app, auth: {bearer: linear}}
+  linear-mcp:
+    mcp: {command: [linear-mcp], env: {LINEAR_API_KEY: {credential: linear}}}
 providers:
   linear:
-    roles: [task_management]
-    contracts:
-      task_management: tasks/v1
-    credentials:
-      linear: {description: Linear API key}
-    settings:
-      schema:                       # JSON Schema subset, validated on load
+    task_management:
+      contract: tasks/v1
+      settings_schema:                # config-only providers declare their settings
         team: {type: string, required: true}
-      values:
+      settings:
         team: PLAT
-    transports:
-      api:
-        http: {base_url: https://api.linear.app, auth: {bearer: linear}}
-      mcp:
-        mcp: {command: [linear-mcp], env: {LINEAR_API_KEY: {credential: linear}}}
-    operations:
-      task.get:
-        driver: http
-        transport: api
-        request:
-          method: POST
-          path: /graphql
-          body: '{"query": "...", "variables": {"id": ref.id}}'      # CEL
-        output: |                                                    # CEL -> provider.Task
-          {"ref": ref, "summary": body.data.issue.title,
-           "status": body.data.issue.state.name}
-      task.transition:
-        driver: mcp
-        transport: mcp
-        tool: update_issue
-        input: '{"id": ref.id, "stateId": settings.states[target]}'
-        effects: remote               # drives the policy/approval gate
-        idempotent: true              # setting the same state twice is harmless
-      task.create:
-        driver: http
-        transport: api
-        request: {method: POST, path: /graphql, body: '...'}
-        output: '...'
-        effects: remote
-        idempotency:                  # required for every write
-          lookup: task.find
-          query: '{"text": "devflow-op:" + operation_id}'
-          match: 'result.size() == 1'
-    extras:                           # become devflow_linear_<op> and devflow linear <op>
-      cycle_current:
-        driver: http
-        transport: api
-        description: Current cycle for the team
-        input_schema: {}
-        effects: read
+      operations:
+        task.get:
+          driver: http
+          transport: linear-api
+          request:
+            method: POST
+            path: /graphql
+            body: '{"query": "...", "variables": {"id": ref.id}}'      # CEL
+          output: |                                                    # CEL -> provider.Task
+            {"ref": ref, "summary": body.data.issue.title,
+             "status": body.data.issue.state.name}
+        task.transition:
+          driver: mcp
+          transport: linear-mcp
+          tool: update_issue
+          input: '{"id": ref.id, "stateId": settings.states[target]}'
+          effects: remote             # drives the policy/approval gate
+          idempotent: true            # setting the same state twice is harmless
+        task.create:
+          driver: http
+          transport: linear-api
+          request: {method: POST, path: /graphql, body: '...'}
+          output: '...'
+          effects: remote
+          idempotency:                # required for every write
+            lookup: task.find
+            query: '{"text": "devflow-op:" + operation_id}'
+            match: 'result.size() == 1'
+      extras:                         # become devflow_linear_<op> and devflow linear <op>
+        cycle_current:
+          driver: http
+          transport: linear-api
+          description: Current cycle for the team
+          input_schema: {}
+          effects: read
 ```
-
 Role operations (`task.get`, `task.find`, `task.create`, `task.transition`,
 `task.comment`, `task.assign`, `docs.search`, `docs.publish`, `notify.send`,
 `checks.list`, ...) are the existing Go interfaces in `internal/provider`.
@@ -242,11 +257,13 @@ Results are identical either way.
 
 ## Phases
 
-1. **Contracts and layers.** Turn the role interfaces into versioned contract
-   schemas (`tasks/v1`, ...). Add the layered loader, the merge and all four
-   constraint kinds, and use them for today's compiled providers, with settings
-   only and no new drivers. Extend `setup providers` with `--explain`.
-2. **Operation engine.** Add CEL and the `http`, `cli` and `mcp` drivers, with
+1. **Contracts and layers** (done). A versioned contract registry
+   (`internal/contract`: `tasks/v1`, ... with each role's operation names and
+   effects), the layered loader, the merge and all four constraint kinds,
+   used for today's compiled providers with settings only and no new drivers.
+   `setup providers --explain` shows effective settings and their sources.
+2. **Operation engine.** Add input and output type schemas to the contracts,
+   so CEL mappings can be type-checked. Add CEL and the `http`, `cli` and `mcp` drivers, with
    the idempotency and revision rules, all routed through `internal/app` and
    policy. Rebuild one compiled provider (proposal: `github-issues`) as a
    definition and compare its results with the compiled adapter's on the same
