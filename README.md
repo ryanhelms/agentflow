@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
-| **Current release** | <!-- devflow:version -->`v0.31.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.33.1`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -211,14 +211,27 @@ The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
 and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
 route adds one comment after approval and returns its verified comment ID.
 The CLI equivalent is `devflow --native-client claude-desktop comment [KEY] TEXT`.
-An uncertain result requires inspection of the issue before another approval.
+If the MCP comment capability is unavailable, interactive clients can use the
+Teamwork Graph CLI’s saved OAuth login. Run `devflow setup login --provider jira`
+to sign in. The preview shows the profile, site, project, issue and comment.
+Each approval permits one post. If the outcome is uncertain, inspect the issue
+before approving again. Unattended Jira REST workflows keep their configured identity.
+
+With the same Jira enrollment, `devflow_transition` previews a forward move
+and `devflow_start` creates the branch or worktree, assigns the issue to the
+signed-in Jira user and applies the configured start transition. Both require
+approval. Devflow reads the issue on the write connection to verify each change.
+Hosted Jira canaries verified forward transitions and self-assignment.
+
 For Confluence, use `devflow setup login --provider confluence --client devflow`
 and preview the update with `devflow_docs_publish`. Desktop verifies the page’s
 space ID and key on the same site before it can publish. Repositories can limit
 publication to space keys in `knowledge_base.settings.publish_spaces`.
 
-In a regular Claude Code Desktop session, `devflow_ticket_create` can create a
-GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
+In a regular Claude Code Desktop session, `devflow_ticket_create` can create an
+unlinked Jira issue through the Devflow Rovo enrollment. Devflow checks the Jira
+project and issue type, then requests approval for the exact issue. The same
+tool can create a GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
 account and repository. If sign-in is needed, run
 `devflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·
@@ -327,12 +340,19 @@ Deployments and release lookup also support local JSON fixtures.
 | Check for overlapping PRs | `devflow collisions` | `/devflow:collisions` |
 | Commit | `devflow commit` (or plain `git commit`) | `/devflow:commit` |
 | Preview Jira effects | `devflow preview` | shown before every commit |
+| Check PR readiness | `devflow pr --check` | `devflow_pr_ready` |
 | Open a PR | `devflow pr` | `/devflow:pr` |
 | Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
 | Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
 | Standup | `devflow standup` | `/devflow:standup` |
 | End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
 | Next release version | `devflow release plan` | "what version will this ship as?" |
+
+PR readiness requires a Jira key in the branch name by default. With
+`commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
+readiness if its other checks pass. To open a PR from that branch, supply a
+conventional title with `devflow pr --title "feat: add quota"` or the
+`devflow_pr_open` tool's `title` input.
 
 Each developer chooses an autonomy level per action class (`suggest`, `confirm` or
 `auto`) in `~/.devflow/config.yml`, capped by the repo's `policy.max_autonomy`. The

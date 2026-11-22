@@ -293,7 +293,8 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if col != nil && len(col.OthersOnTicket) > 0 {
 		summary["warning"] = "others already have work on this ticket: " + strings.Join(col.OthersOnTicket, ", ")
 	}
-	if p, err := a.gate(policy.Remote, "start", summary, token, false, []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
+	desktop := writes != nil && writes.Assignment.Binding.Owner == "devflow"
+	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
 		return p, err
 	}
 	_, _ = a.Repo.Git(ctx, "fetch", "--quiet", "origin")
@@ -320,6 +321,9 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	a.audit(policy.Remote, "assign_to_me", summary, assignErr)
 	if writes != nil {
 		if assignErr != nil {
+			if desktop {
+				return res, fmt.Errorf("created branch %s. Jira self-assignment is unverified and the start transition was skipped: %w", branch, assignErr)
+			}
 			return res, assignErr
 		}
 		if writes.Transition == nil {
@@ -330,6 +334,13 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 		}
 		tr, err := a.runJiraTransition(ctx, site, ref, plan, writes.Transition)
 		res.Transition = &tr
+		if errors.Is(err, errJiraStartAssigneeChanged) {
+			res.Assigned = false
+			return res, fmt.Errorf("created branch %s. Transition applied=%t: %w", branch, tr.Applied, err)
+		}
+		if err != nil && desktop {
+			return res, fmt.Errorf("created branch %s and verified self-assignment. Jira start transition is unverified: %w", branch, err)
+		}
 		return res, err
 	}
 	if plan.To != "" {
@@ -507,14 +518,18 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 		return p, err
 	}
 	if write != nil {
-		payload, err := write.run(ctx)
-		var created provider.Ref
-		if err == nil {
-			created, err = nativemap.DecodeJiraCreated(payload, "jira", project)
+		apply := func() (provider.Ref, error) {
+			payload, err := write.run(ctx)
 			if err != nil {
-				err = errors.Join(native.ErrWriteUncertain, err)
+				return provider.Ref{}, err
 			}
+			created, err := nativemap.DecodeJiraCreated(payload, "jira", project)
+			if err != nil {
+				return provider.Ref{}, errors.Join(native.ErrWriteUncertain, err)
+			}
+			return created, nil
 		}
+		created, err := applyTaskAppend(ctx, a.Home, token, write.Call.Provider, taskWritePreview(*write), apply)
 		a.audit(policy.Remote, "ticket_create", s, err)
 		return map[string]string{"key": created.ID}, err
 	}

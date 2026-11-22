@@ -1,0 +1,282 @@
+{
+  "editJiraIssue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "actionSource": {
+        "description": "Optional invocation attribution. Jira MCP cards set jira_mcp_card; omit for model/tool-loop calls.",
+        "enum": [
+          "jira_mcp_card",
+          "model_tool_call"
+        ],
+        "type": "string"
+      },
+      "additional_fields": {
+        "additionalProperties": {},
+        "description": "Additional Jira fields. Keys can be human-readable field names or raw customfield_* IDs. Values can be human-readable (resolved automatically) or already-correct Jira shapes. Examples:\n  {\"Story Points\": 8}                          ← number field by name\n  {\"Team\": \"Backend\"}                          ← option/select by name\n  {\"Reviewers\": [\"alice@acme.com\", \"bob@acme.com\"]}  ← multi-user field by email,\n                                                   display name, or accountId\n  {\"Component Area\": \"Platform / Auth\"}        ← cascading select as \"Parent / Child\"\n  {\"customfield_10010\": 8}                     ← raw ID (no resolution needed, fastest)\n  {\"components\": [{\"name\": \"Backend\"}]}        ← system array field (raw shape)\n  {\"fixVersions\": [{\"name\": \"v2.0\"}]}          ← system array field (raw shape)\nAn ambiguous or unknown user value returns an error with candidates rather than being silently dropped. On error, the response includes allowedValues and a repairHint for self-correction.\n",
+        "type": "object"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "contentFormat": {
+        "description": "Body format for rich-text fields (description/environment). Defaults to markdown. html preserves inline media across a read-modify-write; a body fetched as HTML can be written straight back (Jira resolves media collection/filename server-side and omits them on read — not data loss). Requires the HTML content-format feature; when it is disabled the call is rejected rather than downgraded, because markdown would store the HTML tags as literal text and drop the media.\n",
+        "enum": [
+          "markdown",
+          "html"
+        ],
+        "type": "string"
+      },
+      "fields": {
+        "additionalProperties": {},
+        "description": "Jira fields payload to set, keyed by field name or customfield_* ID. To clear a field, pass explicit null (e.g. {\"resolution\": null}). assignee and reporter accept an email, display name, or accountId; an ambiguous or unknown value returns an error with candidates rather than being silently dropped. Rich-text fields (description/environment) default to markdown; set contentFormat: html to author them in HTML. Editing a body that already contains inline media must use contentFormat: html — markdown drops it. For HTML body shapes (inline media, panels, tables), first get the format guide via the generic operation runner (execute) as name=getContentFormatGuide, inputs={toolName: \"editJiraIssue\"}.\n",
+        "type": "object"
+      },
+      "inlineFileCollection": {
+        "description": "Media collection(s) from the upload step, paired to inlineFileId by index (a single value applies to all). Required whenever inlineFileId is set.\n",
+        "items": {},
+        "type": "array"
+      },
+      "inlineFileId": {
+        "description": "Media file ID(s) from uploadAttachmentToJiraIssue to append inline to the description, e.g. [\"id1\",\"id2\"]. Requires contentFormat: html and a matching inlineFileCollection (paired by index). Appends at the end, keeping existing content; for exact placement, author the media node in the HTML description instead. A file already embedded in the body is rejected (would duplicate).\n",
+        "items": {},
+        "type": "array"
+      },
+      "inlineFileName": {
+        "description": "Optional file name(s) (from the upload step's fileName), paired to inlineFileId by index. Only selects the render shape: images render as a block image, other files as an inline chip. Omit to default to the image shape.\n",
+        "items": {},
+        "type": "array"
+      },
+      "issueIdOrKey": {
+        "description": "Issue key (e.g. PROJ-123).",
+        "type": "string"
+      },
+      "rankAfterIssue": {
+        "description": "Optional. Rank this issue immediately after the given issue key or ID (LexoRank relative anchor). Mutually exclusive with rankBeforeIssue. When omitted, editJiraIssue does not make ranking calls.\n",
+        "type": "string"
+      },
+      "rankBeforeIssue": {
+        "description": "Optional. Rank this issue immediately before the given issue key or ID (LexoRank relative anchor). Mutually exclusive with rankAfterIssue. When omitted, editJiraIssue does not make ranking calls.\n",
+        "type": "string"
+      },
+      "rankCustomFieldId": {
+        "description": "Optional. Numeric Rank field id for this rank call (e.g. 10020). Pass only when the user explicitly provides a Rank field id, or asks to reorder on a specific board's Rank field. For a named board, call getJiraBoardConfig first and use ranking.rankCustomFieldId. Do not invent or guess this id. Omit for ordinary reorders so Jira uses its default Rank field. Ignored unless rankBeforeIssue or rankAfterIssue is also set.\n",
+        "minimum": 1,
+        "type": "integer"
+      },
+      "responseContentFormat": {
+        "description": "Output format for rich-text fields in the returned issue. Defaults to markdown. Bodies markdown cannot represent (media, panels, expands, statuses, @mentions) are always returned as HTML, so a follow-up edit does not destroy them. An explicit markdown request is overridden for those bodies, with a warning saying so; appliedContentFormat in the response reports the format you actually got.\n",
+        "enum": [
+          "markdown",
+          "html"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId",
+      "issueIdOrKey"
+    ],
+    "type": "object"
+  },
+  "getJiraCurrentUser": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "expand": {
+        "description": "Comma-separated list of extra data to include. Options: groups (all groups you belong to) and applicationRoles (application roles you are assigned). Example: \"groups,applicationRoles\". Both are omitted from the response unless requested here.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId"
+    ],
+    "type": "object"
+  },
+  "getJiraIssue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "actionSource": {
+        "description": "Optional invocation attribution. Jira MCP cards set jira_mcp_card; omit for model/tool-loop calls.",
+        "enum": [
+          "jira_mcp_card",
+          "model_tool_call"
+        ],
+        "type": "string"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "expand": {
+        "description": "Additional Jira expand tokens (comma-separated), e.g. \"renderedFields,changelog\". Merged with any expand the server adds for custom-field mapping (e.g. \"names\"); duplicate tokens removed. Note \"changelog\" here returns only the newest page, sorted newest-first, and it accepts startAt/maxResults then ignores them — so it cannot be paged and reports a longer history as complete. Use listJiraIssueChangelogs to read all of it (oldest-first); do not mix their orderings.\n",
+        "type": "string"
+      },
+      "failFast": {
+        "description": "When true, forwards Jira's `failFast` query flag for this GET. Omit for Jira default behavior.\n",
+        "type": "boolean"
+      },
+      "fields": {
+        "description": "Custom Jira field IDs to fetch (e.g. [\"customfield_10010\", \"customfield_10020\"]). Overrides the view's fetch strategy. For custom fields in normal use, prefer view: \"evidence\", which fetches and maps them automatically. Use [\"*all\"] to fetch every field (expensive — prefer view: \"full\" instead).\n",
+        "items": {},
+        "type": "array"
+      },
+      "fieldsByKeys": {
+        "description": "When true, each entry in `fields` is interpreted as a Jira field key (e.g. \"summary\", \"description\") instead of a field id. Matches the Jira REST `fieldsByKeys` query parameter. Ignored when `fields` is omitted (default field list uses ids).\n",
+        "type": "boolean"
+      },
+      "includeEditableFields": {
+        "description": "When true, also return compact metadata for fields the authenticated user can edit on this issue, including type, allowed values, and operations. Omit unless preparing an edit: this makes an extra Jira REST call.\n",
+        "type": "boolean"
+      },
+      "issueIdOrKey": {
+        "description": "Issue key (PROJ-123), numeric ID, or a Jira issue URL",
+        "type": "string"
+      },
+      "properties": {
+        "description": "Issue entity property keys to return (Jira `properties` query param, repeated per key). Omit unless you rely on app-specific issue properties.\n",
+        "items": {},
+        "type": "array"
+      },
+      "responseContentFormat": {
+        "description": "Format for rich-text bodies — description and environment, plus any comment bodies the view returns. Defaults to markdown. Set html to receive HTML, which is lossless, so you can pass it straight back to editJiraIssue/addOrEditJiraIssueComment with contentFormat: html. Bodies holding anything markdown cannot represent — inline media, panels, expands, layouts, statuses, @mentions, dates, emoji — are returned as HTML automatically, because markdown would drop those nodes or turn them into literal text on write-back. An explicit markdown request is overridden for those bodies, with a warning saying so; appliedContentFormat in the response reports the format you actually got.\n",
+        "enum": [
+          "markdown",
+          "html"
+        ],
+        "type": "string"
+      },
+      "view": {
+        "description": "Output view preset. Default: \"compact\". Options: \"compact\", \"evidence\", \"full\". compact = minimal fields for scanning; evidence = decision-relevant detail; full = complete response.",
+        "enum": [
+          "compact",
+          "evidence",
+          "full"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId",
+      "issueIdOrKey"
+    ],
+    "type": "object"
+  },
+  "listJiraIssueTransitions": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "actionSource": {
+        "description": "Optional invocation attribution. Jira MCP cards set jira_mcp_card; omit for model/tool-loop calls.",
+        "enum": [
+          "jira_mcp_card",
+          "model_tool_call"
+        ],
+        "type": "string"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "expand": {
+        "description": "Comma-separated expand tokens for extra detail. Use \"transitions.fields\" to include the fields shown on each transition's screen (for use with transitionJiraIssue).\n",
+        "type": "string"
+      },
+      "includeUnavailableTransitions": {
+        "description": "When true, include transitions that currently fail a condition (default false)",
+        "type": "boolean"
+      },
+      "issueIdOrKey": {
+        "description": "Issue key (e.g. PROJ-123) or numeric ID",
+        "type": "string"
+      },
+      "skipRemoteOnlyCondition": {
+        "description": "When true, include transitions hidden by the \"Hide From User\" condition (default false)",
+        "type": "boolean"
+      },
+      "sortByOpsBarAndStatus": {
+        "description": "When true, sort by ops-bar sequence then status category (Todo, In Progress, Done); otherwise by ops-bar sequence only (default false)\n",
+        "type": "boolean"
+      },
+      "transitionId": {
+        "description": "Return only the transition with this ID",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId",
+      "issueIdOrKey"
+    ],
+    "type": "object"
+  },
+  "transitionJiraIssue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "actionSource": {
+        "description": "Optional invocation attribution. Jira MCP cards set jira_mcp_card; omit for model/tool-loop calls.",
+        "enum": [
+          "jira_mcp_card",
+          "model_tool_call"
+        ],
+        "type": "string"
+      },
+      "assignToBacklog": {
+        "description": "Set true to assign the issue to the backlog, mutually exclusive with sprintId. Optionally use boardId to target a specific board's backlog.",
+        "type": "boolean"
+      },
+      "boardId": {
+        "description": "Only used when assignToBacklog is true: targets this specific board's backlog (board IDs from listJiraBoards). Ignored otherwise.",
+        "minimum": 1,
+        "type": "integer"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "fields": {
+        "additionalProperties": {},
+        "description": "Optional Jira field values to apply during the workflow transition.",
+        "type": "object"
+      },
+      "historyMetadata": {
+        "additionalProperties": {},
+        "description": "Optional issue history metadata to attach to the workflow transition.",
+        "type": "object"
+      },
+      "issueIdOrKey": {
+        "description": "Issue key like PROJ-123",
+        "type": "string"
+      },
+      "sprintId": {
+        "description": "Assign the issue into this sprint. Mutually exclusive with assignToBacklog.",
+        "minimum": 1,
+        "type": "integer"
+      },
+      "transitionId": {
+        "description": "Transition ID (get from listJiraIssueTransitions). Provide either transitionId or transitionName.",
+        "type": "string"
+      },
+      "transitionName": {
+        "description": "Name of the transition itself, not the target status — the two often differ, so \"Done\" does not match a transition named \"Review->Done\". Provide either transitionId or transitionName.",
+        "type": "string"
+      },
+      "update": {
+        "additionalProperties": {},
+        "description": "Optional Jira field update operations to apply during the workflow transition. A comment passed here may be dropped without error — the transition reports success and no comment is created. Use addOrEditJiraIssueComment instead.",
+        "type": "object"
+      }
+    },
+    "required": [
+      "cloudId",
+      "issueIdOrKey"
+    ],
+    "type": "object"
+  }
+}

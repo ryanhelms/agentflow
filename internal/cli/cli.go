@@ -108,8 +108,9 @@ Work
 
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
-  --native-client claude-desktop comment [KEY] TEXT [--yes]
-                                 use the separately enrolled Rovo connection for a Jira comment
+  --native-client claude-desktop COMMAND
+                                 use the enrolled Jira connection for comment, start or transition
+                                 comments can fall back to the signed-in Teamwork Graph CLI
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
@@ -133,6 +134,9 @@ func Main(args []string) int {
 		}
 		defer writer.Close()
 		ctx = native.WithWriteHost(ctx, writer)
+		if args[2] == "comment" {
+			ctx = app.WithJiraCommentCLI(ctx)
+		}
 		args = args[2:]
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -171,12 +175,12 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
 		switch command {
-		case "comment":
+		case "comment", "start", "transition":
 			return rovohost.NewWriter(), nil
 		case "notify":
 			return slackhost.NewWriter(), nil
 		default:
-			return nil, errors.New("claude-desktop native writes support comment and notify")
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition or notify)")
 		}
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)

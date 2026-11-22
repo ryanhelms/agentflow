@@ -5,6 +5,24 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.33.1](https://github.com/nscaledev/devflow/compare/v0.33.0...v0.33.1) - 2026-11-22
+
+### Fixes
+
+- **jira:** honor optional keys in pr readiness (#78) ([b93b8f6](https://github.com/nscaledev/devflow/commit/b93b8f61bf43a8ee2d8e04f1dced1d5313d81f1f))
+
+## [0.33.0](https://github.com/nscaledev/devflow/compare/v0.32.0...v0.33.0) - 2026-11-22
+
+### Features
+
+- **jira:** use signed-in teamwork graph for comments (#76) ([aabcbf3](https://github.com/nscaledev/devflow/commit/aabcbf3f3adacf18cc42e2d5fd6161bd141c110f))
+
+## [0.32.0](https://github.com/nscaledev/devflow/compare/v0.31.0...v0.32.0) - 2026-11-22
+
+### Features
+
+- **jira:** create issues from claude code desktop (#75) ([3fba552](https://github.com/nscaledev/devflow/commit/3fba552c4646b103ec4c26216bb8e796b07efa9f))
+
 ## [0.31.0](https://github.com/nscaledev/devflow/compare/v0.30.0...v0.31.0) - 2026-11-22
 
 ### Features

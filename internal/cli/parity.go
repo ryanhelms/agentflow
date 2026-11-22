@@ -5,8 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
+	"golang.org/x/term"
+
+	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/gh"
 )
 
@@ -162,6 +166,9 @@ func runComment(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		ctx = app.WithJiraCommentCLI(ctx)
 	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.Comment(ctx, key, text, tok) })
 }

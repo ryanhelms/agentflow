@@ -283,7 +283,7 @@ func checkWriteSession(session WriteSession, call Call) error {
 }
 
 var boundReads = map[string][]string{
-	"jira":          {"atlassianUserInfo", "getAccessibleAtlassianResources", "getJiraIssue", "listJiraIssueTransitions", "listJiraIssueRemoteIssueLinks", "getJiraCurrentUser", "listJiraIssueComments"},
+	"jira":          {"atlassianUserInfo", "getAccessibleAtlassianResources", "getJiraIssue", "listJiraIssueTransitions", "listJiraIssueRemoteIssueLinks", "getJiraCurrentUser", "listJiraIssueComments", "listJiraProjectIssueTypesMetadata"},
 	"confluence":    {"atlassianUserInfo", "getAccessibleAtlassianResources", "getConfluenceContent", "getConfluenceContentVersion"},
 	"asana":         {"get_task", "get_user", "get_project"},
 	"github":        {"get_me", "issue_read", "search_repositories"},

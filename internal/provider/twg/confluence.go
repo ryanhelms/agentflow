@@ -107,7 +107,7 @@ func (c *Confluence) Get(ctx context.Context, ref provider.Ref) (provider.Docume
 	if err := c.checkRef(ref); err != nil {
 		return provider.Document{}, err
 	}
-	if !pageID.MatchString(ref.ID) {
+	if !decimalID.MatchString(ref.ID) {
 		return provider.Document{}, fmt.Errorf("confluence requires a positive decimal page id: %w", ErrAccessDenied)
 	}
 	var page confluencePage
@@ -172,7 +172,7 @@ func (c *Confluence) Find(ctx context.Context, q provider.DocumentQuery) ([]prov
 
 func (c *Confluence) document(page confluencePage, scopes []string, resultURLs ...string) (provider.Document, error) {
 	id := first(page.ID.String(), page.ContentID.String())
-	if !pageID.MatchString(id) || strings.TrimSpace(page.Title) == "" {
+	if !decimalID.MatchString(id) || strings.TrimSpace(page.Title) == "" {
 		return provider.Document{}, fmt.Errorf("confluence result is missing a valid page id or title: %w", ErrFailure)
 	}
 	if page.ContentID != "" && page.ContentID.String() != id {

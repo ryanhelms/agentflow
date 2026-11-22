@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -182,6 +184,36 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 	return write, err
 }
 
+type jiraCommentCLIKey struct{}
+
+// WithJiraCommentCLI opts a single interactive comment entry point into the
+// saved workstation login. CI and configured service identities keep their route.
+func WithJiraCommentCLI(ctx context.Context) context.Context {
+	ci, _ := strconv.ParseBool(os.Getenv("CI"))
+	actions, _ := strconv.ParseBool(os.Getenv("GITHUB_ACTIONS"))
+	if ci || actions || os.Getenv("DEVFLOW_OPERATION_ID") != "" ||
+		(os.Getenv("JIRA_USER") != "" && os.Getenv("JIRA_TOKEN") != "") {
+		return ctx
+	}
+	return context.WithValue(ctx, jiraCommentCLIKey{}, true)
+}
+
+func (a *App) prepareCLIComment(ctx context.Context, site string, ref provider.Ref, body string) (*twg.PreparedJiraComment, error) {
+	enabled, _ := ctx.Value(jiraCommentCLIKey{}).(bool)
+	if !enabled || !jiraMCPOrigin(site) {
+		return nil, nil
+	}
+	cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := cli.PrepareComment(ctx, ref, body)
+	if errors.Is(err, twg.ErrToolAbsent) {
+		return nil, nil
+	}
+	return prepared, atlCLIError("jira", err)
+}
+
 func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider.TaskDraft) (*jiraWrite, error) {
 	if err := a.jiraWriteScope(draft.Scope); err != nil {
 		return nil, err
@@ -207,13 +239,27 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 	if err != nil {
 		return nil, err
 	}
+	if write.Binding.Owner == "devflow" {
+		read, err := nativemap.JiraProjectIssueTypes(site, draft.Scope)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := jiraNativeRead(ctx, write, read, func(raw json.RawMessage) (struct{}, error) {
+			return struct{}{}, nativemap.CheckJiraCreateType(raw, draft.Type)
+		}); err != nil {
+			return nil, err
+		}
+	}
 	return write, nil
 }
 
+var errJiraStartAssigneeChanged = fmt.Errorf("jira issue is no longer assigned to the approved account: %w", provider.ErrConflict)
+
 type jiraTransition struct {
-	Write *jiraWrite `json:"write"`
-	from  nativemap.JiraIssueSnapshot
-	toID  string
+	Write     *jiraWrite       `json:"write"`
+	From      atlassian.Status `json:"from_status"`
+	Target    atlassian.Status `json:"to_status"`
+	accountID string           // For start, assignment must still be verified on the transition lease.
 }
 
 func (a *App) prepareJiraTransition(ctx context.Context, site string, ref provider.Ref, fm *flowmap.Map, plan TransitionResult, issue nativemap.JiraIssueSnapshot) (TransitionResult, *jiraTransition, error) {
@@ -221,7 +267,7 @@ func (a *App) prepareJiraTransition(ctx context.Context, site string, ref provid
 	if plan.To == "" {
 		return plan, nil, nil
 	}
-	selected, err := jiraTransitionID(ctx, nil, site, ref, issue.Status.Category.Key, plan.To)
+	selected, err := jiraTransitionForStatus(ctx, nil, site, ref, issue.Status.Category.Key, plan.To)
 	if errors.Is(err, legacy.ErrNoTransition) {
 		plan.Note = fmt.Sprintf("no transition from %q to %q in this workflow", plan.From, plan.To)
 		return plan, nil, nil
@@ -229,7 +275,7 @@ func (a *App) prepareJiraTransition(ctx context.Context, site string, ref provid
 	if err != nil {
 		return plan, nil, err
 	}
-	call, err := nativemap.JiraMove(site, ref, selected)
+	call, err := nativemap.JiraMove(site, ref, selected.ID)
 	if err != nil {
 		return plan, nil, err
 	}
@@ -237,19 +283,30 @@ func (a *App) prepareJiraTransition(ctx context.Context, site string, ref provid
 	if err != nil {
 		return plan, nil, err
 	}
-	return plan, &jiraTransition{Write: write, from: issue, toID: selected}, nil
+	prepared := &jiraTransition{Write: write, From: issue.Status, Target: selected.To}
+	if write.Binding.Owner == "devflow" {
+		current, err := jiraNativeIssue(ctx, write, site, ref)
+		if err != nil {
+			return plan, nil, err
+		}
+		if err := prepared.checkWorkflow(ctx, site, ref, current); err != nil {
+			return plan, nil, err
+		}
+	}
+	return plan, prepared, nil
 }
 
-func jiraTransitionID(ctx context.Context, write *jiraWrite, site string, ref provider.Ref, category, target string) (string, error) {
+func jiraTransitionForStatus(ctx context.Context, write *jiraWrite, site string, ref provider.Ref, category, target string) (atlassian.Transition, error) {
 	call, err := nativemap.JiraAvailableTransitions(site, ref)
 	if err != nil {
-		return "", err
+		return atlassian.Transition{}, err
 	}
 	transitions, err := jiraNativeRead(ctx, write, call, nativemap.DecodeJiraTransitions)
 	if err != nil {
-		return "", err
+		return atlassian.Transition{}, err
 	}
 	fromRank := jiraCategoryRank(category)
+	var match atlassian.Transition
 	for _, transition := range transitions {
 		if transition.ID == "" || !strings.EqualFold(transition.To.Name, target) ||
 			(transition.Available != nil && !*transition.Available) {
@@ -257,36 +314,62 @@ func jiraTransitionID(ctx context.Context, write *jiraWrite, site string, ref pr
 		}
 		toRank := jiraCategoryRank(transition.To.Category.Key)
 		if fromRank < 0 || toRank < fromRank {
-			return "", fmt.Errorf("jira transition to %q is not verifiably forward: %w", target, provider.ErrConflict)
+			return atlassian.Transition{}, fmt.Errorf("jira transition to %q is not verifiably forward: %w", target, provider.ErrConflict)
 		}
-		return transition.ID, nil
+		if write == nil || write.Binding.Owner != "devflow" {
+			return transition.Transition, nil
+		}
+		if match.ID != "" {
+			return atlassian.Transition{}, fmt.Errorf("multiple jira transitions to %q: %w", target, provider.ErrConflict)
+		}
+		match = transition.Transition
 	}
-	return "", legacy.ErrNoTransition
+	if match.ID != "" {
+		return match, nil
+	}
+	return atlassian.Transition{}, legacy.ErrNoTransition
 }
 
 func jiraCategoryRank(category string) int {
 	return slices.Index([]string{"new", "indeterminate", "done"}, category)
 }
 
+func (p *jiraTransition) checkWorkflow(ctx context.Context, site string, ref provider.Ref, current nativemap.JiraIssueSnapshot) error {
+	if current.Status != p.From {
+		return fmt.Errorf("jira issue changed status before the transition: %w", provider.ErrConflict)
+	}
+	selected, err := jiraTransitionForStatus(ctx, p.Write, site, ref, current.Status.Category.Key, p.Target.Name)
+	if err == nil && (selected.ID != p.Write.Call.Arguments["transitionId"] || selected.To != p.Target) {
+		return fmt.Errorf("jira workflow changed before the transition: %w", provider.ErrConflict)
+	}
+	return err
+}
+
 func (a *App) runJiraTransition(ctx context.Context, site string, ref provider.Ref, plan TransitionResult, prepared *jiraTransition) (TransitionResult, error) {
 	current, err := jiraNativeIssue(ctx, prepared.Write, site, ref)
-	if err == nil && strings.EqualFold(current.Status.Name, plan.To) {
+	if err == nil && prepared.accountID != "" && current.AccountID != prepared.accountID {
+		err = errJiraStartAssigneeChanged
+	}
+	if err == nil && current.Status == prepared.Target {
 		plan.Note = "already in " + plan.To
 		return plan, nil
 	}
-	if err == nil && current.Status != prepared.from.Status {
-		err = fmt.Errorf("jira issue changed status before the transition: %w", provider.ErrConflict)
-	}
 	if err == nil {
-		var selected string
-		selected, err = jiraTransitionID(ctx, prepared.Write, site, ref, current.Status.Category.Key, plan.To)
-		if err == nil && selected != prepared.toID {
-			err = fmt.Errorf("jira workflow changed before the transition: %w", provider.ErrConflict)
-		}
+		err = prepared.checkWorkflow(ctx, site, ref, current)
 	}
 	if err == nil {
 		_, err = prepared.Write.run(ctx)
 		plan.Applied = err == nil
+		if plan.Applied && prepared.Write.Binding.Owner == "devflow" {
+			after, readErr := jiraNativeIssue(ctx, prepared.Write, site, ref)
+			if readErr != nil || after.Status != prepared.Target {
+				plan.Applied = false
+				err = errors.Join(native.ErrWriteUncertain, errors.New("could not verify the approved Jira target status"), readErr)
+			}
+			if readErr == nil && prepared.accountID != "" && after.AccountID != prepared.accountID {
+				err = errors.Join(err, errJiraStartAssigneeChanged)
+			}
+		}
 	}
 	a.audit(policy.Remote, "transition", map[string]any{"site": site, "transition": plan, "native": prepared.Write}, err)
 	return plan, err
@@ -322,15 +405,26 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 		return jiraPlanFromStatus(fm, ref.Scope, plan, issue.Status.Name, issue.Status.Category.Key == "done"), true, nil
 	}
 	plan, prepared, err := a.prepareJiraTransition(ctx, site, ref, fm, plan, issue)
+	if err == nil && prepared == nil && token != "" {
+		return plan, true, policy.ErrToken
+	}
 	if err != nil || prepared == nil {
 		return plan, true, err
 	}
-	summary := jiraRemoteSummary(struct {
+	intent := struct {
 		TransitionResult
-		Site string `json:"site"`
-	}{plan, site}, prepared.Write)
+		Site         string `json:"site"`
+		FromCategory string `json:"from_category,omitempty"`
+		ToCategory   string `json:"to_category,omitempty"`
+	}{TransitionResult: plan, Site: site}
+	desktop := prepared.Write.Binding.Owner == "devflow"
+	if desktop {
+		intent.FromCategory = prepared.From.Category.Key
+		intent.ToCategory = prepared.Target.Category.Key
+	}
+	summary := jiraRemoteSummary(intent, prepared.Write)
 	commands := []string{"devflow transition " + ref.ID + " " + shellQuote(event)}
-	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "transition", summary, token, desktop || token != "", commands); p != nil || err != nil {
 		return p, true, err
 	}
 	result, err := a.runJiraTransition(ctx, site, ref, plan, prepared)
@@ -338,9 +432,10 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 }
 
 type jiraStartWrites struct {
-	Assignment *jiraWrite      `json:"assignment"`
-	Transition *jiraTransition `json:"transition,omitempty"`
-	accountID  string
+	Assignment       *jiraWrite      `json:"assignment"`
+	Transition       *jiraTransition `json:"transition,omitempty"`
+	accountID        string
+	PreviousAssignee *string `json:"previous_assignee,omitempty"`
 }
 
 func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Ref) (string, TransitionResult, *jiraStartWrites, error) {
@@ -378,6 +473,9 @@ func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Re
 	if err != nil {
 		return "", plan, nil, err
 	}
+	if assignment.Binding.Owner == "devflow" {
+		writes.PreviousAssignee = &issue.AccountID
+	}
 	fm, err := a.FlowMap(ctx)
 	if err != nil {
 		// Starting without a flow map still creates and assigns the branch.
@@ -391,6 +489,9 @@ func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Re
 			return "", plan, nil, err
 		}
 		if writes.Transition != nil {
+			if assignment.Binding.Owner == "devflow" {
+				writes.Transition.accountID = account
+			}
 			if err := checkJiraAccount(ctx, writes.Transition.Write, site, account); err != nil {
 				return "", plan, nil, err
 			}
@@ -419,7 +520,16 @@ func (w *jiraStartWrites) assign(ctx context.Context, site string, ref provider.
 	if err != nil || issue.AccountID == w.accountID {
 		return err
 	}
+	if w.PreviousAssignee != nil && issue.AccountID != *w.PreviousAssignee {
+		return fmt.Errorf("jira assignee changed before self-assignment: %w", provider.ErrConflict)
+	}
 	_, err = w.Assignment.run(ctx)
+	if err == nil && w.Assignment.Binding.Owner == "devflow" {
+		after, readErr := jiraNativeIssue(ctx, w.Assignment, site, ref)
+		if readErr != nil || after.AccountID != w.accountID {
+			return errors.Join(native.ErrWriteUncertain, errors.New("could not verify Jira self-assignment"), readErr)
+		}
+	}
 	return err
 }
 

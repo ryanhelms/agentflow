@@ -111,6 +111,41 @@ func JiraCreate(site string, draft provider.TaskDraft) (native.Call, error) {
 	return jiraCall(site, "createJiraIssue", args)
 }
 
+const JiraProjectIssueTypesTool = "listJiraProjectIssueTypesMetadata"
+
+func JiraProjectIssueTypes(site, project string) (native.Call, error) {
+	return jiraCall(site, JiraProjectIssueTypesTool, map[string]any{
+		"projectIdOrKey": project, "maxResults": 200,
+	})
+}
+
+func CheckJiraCreateType(raw json.RawMessage, issueType string) error {
+	var result struct {
+		IssueTypes []struct {
+			Name    string `json:"name"`
+			Subtask *bool  `json:"subtask"`
+		} `json:"issueTypes"`
+		StartAt int  `json:"startAt"`
+		Total   *int `json:"total"`
+	}
+	if err := decodeObject(raw, &result); err != nil {
+		return err
+	}
+	if result.IssueTypes == nil || result.Total == nil || result.StartAt != 0 || *result.Total != len(result.IssueTypes) {
+		return fmt.Errorf("%w: jira returned incomplete issue type metadata", ErrInvalidResult)
+	}
+	matches := 0
+	for _, candidate := range result.IssueTypes {
+		if strings.EqualFold(candidate.Name, issueType) && candidate.Subtask != nil && !*candidate.Subtask {
+			matches++
+		}
+	}
+	if matches != 1 {
+		return fmt.Errorf("%w: issue type %q is not uniquely available as a standard issue in the requested jira project", native.ErrDenied, issueType)
+	}
+	return nil
+}
+
 func JiraComment(site string, ref provider.Ref, body string) (native.Call, error) {
 	return jiraIssueCall(site, "addOrEditJiraIssueComment", ref, map[string]any{"commentBody": jiraTextHTML(body), "contentFormat": "html"})
 }

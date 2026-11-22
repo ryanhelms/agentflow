@@ -79,6 +79,42 @@ Atlassian catalog where their named tools are listed directly.
 [Atlassian transition contract](https://www.atlassian.com/blog/how-we-build/jira-depth-on-demand) ·
 [TWG work item command reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md#reads)
 
+### Claude Code Desktop issue creation
+
+The [Rovo catalog fixture](../rovohost/testdata/jira-create-flat-schema.json)
+covers `listJiraProjectIssueTypesMetadata` and `createJiraIssue`. The Desktop
+connection restricts both tools to the configured site and project. Complete
+metadata must establish exactly one matching standard issue type. Creation
+sends `cloudId`, `projectKey`, `issueType` and `summary`, plus any approved
+labels and escaped HTML description. Devflow requires an issue key in the
+requested project in the acknowledgement and claims the approval before calling
+the provider.
+
+### Claude Code Desktop forward transitions and start
+
+The Desktop writer checks each wire argument against the enrolled flat catalog.
+Its five authenticated input schemas are retained in the
+[offline state fixture](../rovohost/testdata/jira-state-flat-schemas.json).
+
+| Tool | Fields sent to Rovo | Evidence Devflow uses |
+| --- | --- | --- |
+| `getJiraIssue` | `cloudId`, `issueIdOrKey`, `view: "full"`, `fieldsByKeys: true` and `fields: ["summary","status","project","assignee"]` | Matching issue and project keys, summary, status name and category, and an explicit null assignee or its account ID |
+| `listJiraIssueTransitions` | `cloudId`, `issueIdOrKey` | A unique available ID leading to the mapped target status with a forward category |
+| `getJiraCurrentUser` | `cloudId` | The authenticated account ID, rechecked on each start write lease |
+| `editJiraIssue` | `cloudId`, `issueIdOrKey`, top-level `assignee` if advertised, or `fields: {"assignee":{"accountId":"<accountId>"}}` | Same-lease issue readback verifies the account ID |
+| `transitionJiraIssue` | `cloudId`, `issueIdOrKey`, `transitionId` | Same-lease issue readback verifies the target status name and category |
+
+Discovery prepares exact single-use leases for the two separate writes.
+The App compares the source state, available transition and approved account
+on the relevant connection. Start verifies the assigned account on the
+transition connection before moving the issue. A successful MCP response
+with a JSON `data` object allows readback. A failed call, an unrecognized
+envelope or an unverifiable postcondition leaves the dispatched step uncertain.
+The authenticated catalog describes inputs. Offline fixtures exercise the
+Jira read projections and postconditions. Hosted canaries verified numeric
+transition receipts, issue status readback and self-assignment through the
+nested Jira account ID. Replays needed no additional provider mutation.
+
 ### Claude Code Desktop issue comments
 
 The flat input schemas for `addOrEditJiraIssueComment` and `getJiraIssue` are

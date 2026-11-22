@@ -122,7 +122,7 @@ func (s *Server) writerForTool(name string) *native.SessionWriter {
 		return s.writer
 	}
 	switch name {
-	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link":
+	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link", "devflow_ticket_create", "devflow_start", "devflow_transition":
 		return s.writer
 	case "devflow_notify":
 		return s.slackWriter
@@ -316,6 +316,9 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_comment", "Comment on a task when its provider supports comments.", remote,
 		func(ctx context.Context, in commentIn) (any, error) {
+			if s.interactiveClient() {
+				ctx = app.WithJiraCommentCLI(ctx)
+			}
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})
 	s.registerJiraRemoteLink()

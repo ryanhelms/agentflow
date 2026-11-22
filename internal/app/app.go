@@ -359,7 +359,7 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 		Site string `json:"site"`
 	}{plan, a.jiraSettings().Site}
 	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
-	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "transition", summary, token, token != "", commands); p != nil || err != nil {
 		return p, err
 	}
 	return a.ApplyTransition(ctx, plan)
@@ -394,18 +394,30 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 		return nil, err
 	}
 	summary := jiraRemoteSummary(map[string]string{"site": site, "key": key, "comment": body}, write)
-	desktop := write != nil && write.Binding.Owner == "devflow"
-	// Always redeem a supplied approval, including if the native route disappeared under auto.
-	if p, err := a.gate(policy.Remote, "comment", summary, token, desktop || token != "", nil); p != nil || err != nil {
+	var appendComment func() (string, error)
+	switch {
+	case write == nil:
+		cli, err := a.prepareCLIComment(ctx, site, ref, body)
+		if err != nil {
+			a.audit(policy.Remote, "comment", summary, err)
+			return nil, err
+		}
+		if cli != nil {
+			summary = cli.Intent()
+			appendComment = func() (string, error) { return cli.Apply(ctx) }
+		}
+	case write.Binding.Owner == "devflow":
+		appendComment = func() (string, error) { return write.commentID(ctx, ref, body) }
+	}
+	// Always redeem a supplied approval, including if its route disappeared under auto.
+	if p, err := a.gate(policy.Remote, "comment", summary, token, appendComment != nil || token != "", nil); p != nil || err != nil {
 		return p, err
 	}
 	result := map[string]any{"key": key}
 	switch {
-	case desktop:
+	case appendComment != nil:
 		var id string
-		id, err = applyTaskAppend(ctx, a.Home, token, taskWritePreview(*write), func() (string, error) {
-			return write.commentID(ctx, ref, body)
-		})
+		id, err = applyTaskAppend(ctx, a.Home, token, ref.Instance, summary, appendComment)
 		if err == nil {
 			result["comment_id"] = id
 		}

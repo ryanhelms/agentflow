@@ -10,13 +10,18 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
+func (s *Server) interactiveClient() bool {
+	switch s.app.Client {
+	case "claude", "claude-desktop", "codex", "cursor", "gemini", "grok", "vscode":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Server) providerContext(ctx context.Context, input nativeReadIn) context.Context {
-	if !input.ProviderMCP && len(input.NativeResults) == 0 {
-		switch s.app.Client {
-		case "claude", "claude-desktop", "codex", "cursor", "gemini", "grok", "vscode":
-		default:
-			return ctx
-		}
+	if !input.ProviderMCP && len(input.NativeResults) == 0 && !s.interactiveClient() {
+		return ctx
 	}
 	client := native.Client{Replies: input.NativeResults}
 	if s.app.Client == "codex" {
