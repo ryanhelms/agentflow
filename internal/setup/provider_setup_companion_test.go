@@ -65,13 +65,20 @@ func TestRegisterReviewedCompanion(t *testing.T) {
 
 func TestCompanionProjectClientFormats(t *testing.T) {
 	for client, shape := range map[string]struct{ path, urlKey, ref string }{
-		"claude": {".mcp.json", "url", "${MCP_TOKEN}"},
-		"gemini": {".gemini/settings.json", "httpUrl", "${MCP_TOKEN}"},
-		"cursor": {".cursor/mcp.json", "url", "${env:MCP_TOKEN}"},
-		"vscode": {".vscode/mcp.json", "url", "${env:MCP_TOKEN}"},
+		"claude":         {".mcp.json", "url", "${MCP_TOKEN}"},
+		"claude-desktop": {".mcp.json", "url", "${MCP_TOKEN}"},
+		"gemini":         {".gemini/settings.json", "httpUrl", "${MCP_TOKEN}"},
+		"cursor":         {".cursor/mcp.json", "url", "${env:MCP_TOKEN}"},
+		"vscode":         {".vscode/mcp.json", "url", "${env:MCP_TOKEN}"},
 	} {
 		t.Run(client, func(t *testing.T) {
 			root := t.TempDir()
+			if client == claudeDesktop {
+				// Both registrations share a receipt. Remove must find both keys.
+				if err := RegisterProviderClient(root, client); err != nil {
+					t.Fatal(err)
+				}
+			}
 			s := managedmcp.Status{ID: "catalog", Kind: provision.RemoteMCP, Endpoint: "https://fixture.invalid/mcp", AuthEnv: "MCP_TOKEN", Ready: true}
 			r, _, err := companionOverlay(root, client, s)
 			if err != nil || r.State != "pending" {

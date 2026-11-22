@@ -161,6 +161,37 @@ notifications: {provider: none}
 		t.Fatalf("registration not verified: %+v, MCP %+v", plan, mcpPlan)
 	}
 	capture(0, "setup", "apply", "--json", "--client", "vscode", "--yes")
+	t.Run("Claude Code Desktop", func(t *testing.T) {
+		// Marketplace enrollment alone does not configure the project server.
+		capture(0, "setup", "apply", "--client", "claude", "--yes", "--json")
+		marketplace, err := os.ReadFile(".claude/settings.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		preview := capture(1, "doctor", "--providers", "--client", "claude-desktop", "--json")
+		args := map[string]any{"client": "claude-desktop"}
+		var plan setup.ProviderSetupPlan
+		call("devflow_setup_plan", args, &plan)
+		if !reflect.DeepEqual(preview, plan) || plan.Registration == nil || plan.Registration.State != "pending" || plan.Registration.Path != ".mcp.json" {
+			t.Fatalf("unexpected desktop plan: %+v", plan)
+		}
+		var consent app.Pending
+		call("devflow_setup_apply", args, &consent)
+		if consent.ConfirmToken == "" {
+			t.Fatal("desktop registration requires confirmation")
+		}
+		args["confirm_token"] = consent.ConfirmToken
+		call("devflow_setup_apply", args, &plan)
+		verified := capture(0, "setup", "verify", "--client", "claude-desktop", "--json")
+		if !plan.Ready || !reflect.DeepEqual(verified, plan) {
+			t.Fatalf("desktop registration not verified: %+v", plan)
+		}
+		capture(0, "setup", "apply", "--client", "claude-desktop", "--yes", "--json")
+		capture(0, "doctor", "--providers", "--client", "claude-desktop", "--json")
+		if after, err := os.ReadFile(".claude/settings.json"); err != nil || !bytes.Equal(after, marketplace) {
+			t.Fatal("desktop registration changed marketplace enrollment")
+		}
+	})
 	t.Run("managed gh", func(t *testing.T) {
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			t.Skip("local installer requires macOS or Linux")

@@ -31,7 +31,51 @@ func inspectRegistration(dir, client string) (*ClientRegistration, error) {
 	return r, err
 }
 
+// Desktop uses the Claude runtime identity with the project launcher from init.
+func runtimeClient(client string) string {
+	if client == claudeDesktop {
+		return "claude"
+	}
+	return client
+}
+
+func desktopLauncherEntry() map[string]any {
+	return map[string]any{
+		"type": "stdio", "command": "sh",
+		"args": []any{"-c", `root=$(git rev-parse --show-toplevel) && exec "$root/.devflow/bin/devflow" mcp --client claude`},
+	}
+}
+
+// A project launcher can only be added to an unused key. An identical user
+// entry is already configured and keeps its original ownership.
+func inspectDesktopLauncher(r *ClientRegistration, entries, wanted map[string]any) {
+	for name, value := range entries {
+		server, _ := value.(map[string]any)
+		if name != r.Entry && server["command"] == wanted["command"] && reflect.DeepEqual(server["args"], wanted["args"]) {
+			r.State, r.Detail = "blocked", "the desktop launcher already has another server name in "+r.Path+". Review it before registering devflow"
+			return
+		}
+	}
+	if prev, exists := entries[r.Entry]; exists {
+		server, _ := prev.(map[string]any)
+		if _, explicit := server["type"]; !explicit {
+			// Claude defaults command entries to stdio.
+			wanted = maps.Clone(wanted)
+			delete(wanted, "type")
+		}
+		if reflect.DeepEqual(server, wanted) {
+			r.State, r.Detail = "configured", "project launcher present. Restart Claude Code Desktop, approve the project server and check for devflow_setup_plan"
+		} else {
+			r.State, r.Detail = "blocked", "inspect the existing devflow entry in "+r.Path+" before registering the desktop launcher"
+		}
+	}
+}
+
 func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
+	if client == claudeDesktop {
+		r := &ClientRegistration{Client: client, Path: ".mcp.json", Entry: "devflow", State: "blocked"}
+		return serverOverlay(dir, r, "mcpServers", desktopLauncherEntry())
+	}
 	file := map[string]string{
 		"claude": "settings.json", "codex": "config.toml", "cursor": "mcp.json",
 		"vscode": "mcp.json", "grok": "settings.json", "gemini": "settings.json",
@@ -164,10 +208,14 @@ func registrationJSON(current []byte, r *ClientRegistration) map[string]any {
 // plan must have passed before calling. Re-read the overlay under a writer
 // lock so two setup processes cannot overwrite one another's changes.
 func RegisterProviderClient(dir, client string) error {
-	return registerOverlay(dir, nil, func() (*ClientRegistration, []byte, error) { return clientOverlay(dir, client) })
+	var tracked map[string]any
+	if client == claudeDesktop {
+		tracked = desktopLauncherEntry()
+	}
+	return registerOverlay(dir, tracked, func() (*ClientRegistration, []byte, error) { return clientOverlay(dir, client) })
 }
 
-func registerOverlay(dir string, companion map[string]any, overlay func() (*ClientRegistration, []byte, error)) error {
+func registerOverlay(dir string, tracked map[string]any, overlay func() (*ClientRegistration, []byte, error)) error {
 	r, _, err := overlay()
 	if err != nil {
 		return err
@@ -205,10 +253,10 @@ func registerOverlay(dir string, companion map[string]any, overlay func() (*Clie
 			return nil
 		}
 		writeConfig := func() error { return publishAfter(clientDir, name, next, nil) }
-		if companion == nil {
+		if tracked == nil {
 			return writeConfig()
 		}
-		return recordCompanion(clientDir, name, now.Entry, companion, writeConfig)
+		return recordCompanion(clientDir, name, now.Entry, tracked, writeConfig)
 	})
 }
 
@@ -287,7 +335,7 @@ func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, ha
 		return
 	}
 	if runtime.GOOS == "windows" {
-		check(false, "the bundled project adapter requires a POSIX launcher environment. Configure the client to run the verified Windows devflow.exe mcp --client "+client+" in this workspace")
+		check(false, "the bundled project adapter requires a POSIX launcher environment. Configure the client to run the verified Windows devflow.exe mcp --client "+runtimeClient(client)+" in this workspace")
 		return
 	}
 	if _, err := exec.LookPath("sh"); err != nil {

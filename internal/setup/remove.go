@@ -301,7 +301,7 @@ func removeCompanionEntries(res *Result, doc map[string]any, rel, group string, 
 	entries, _ := doc[group].(map[string]any)
 	changed := false
 	for _, key := range slices.Sorted(maps.Keys(entries)) {
-		if !strings.HasPrefix(key, "devflow-") {
+		if !receiptedKey(rel, key) {
 			continue
 		}
 		id := fmt.Sprintf("%s %q", rel, key)
@@ -319,7 +319,11 @@ func removeCompanionEntries(res *Result, doc map[string]any, rel, group string, 
 			continue
 		}
 		delete(entries, key)
-		res.Notes = append(res.Notes, "remove companion "+id)
+		if key == "devflow" {
+			res.Notes = append(res.Notes, "remove project launcher "+id)
+		} else {
+			res.Notes = append(res.Notes, "remove companion "+id)
+		}
 		changed = true
 	}
 	if changed && len(entries) == 0 {

@@ -48,6 +48,11 @@ type selectedRole struct {
 	config.Selection
 }
 
+const claudeDesktop = "claude-desktop"
+
+// SetupClients includes the explicit desktop mode alongside the installable adapters.
+var SetupClients = append(slices.Clone(Clients), claudeDesktop)
+
 // PlanProviderSetup loads a fresh effective configuration on every invocation.
 // An empty client asks only about providers, suitable for terminal and CI use.
 func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupPlan, error) {
@@ -56,8 +61,8 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 
 // PlanSetup optionally scopes the plan to one declared provider companion.
 func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSetupPlan, error) {
-	if client != "" && !slices.Contains(Clients, client) {
-		return nil, fmt.Errorf("unknown client %q: select a project adapter (%s) or omit the client for headless checks", client, strings.Join(Clients, ", "))
+	if client != "" && !slices.Contains(SetupClients, client) {
+		return nil, fmt.Errorf("unknown client %q: select a project adapter (%s) or omit the client for headless checks", client, strings.Join(SetupClients, ", "))
 	}
 	root, err := filepath.Abs(dir)
 	if err != nil {

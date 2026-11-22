@@ -21,7 +21,7 @@ func runProviderSetup(ctx context.Context, args []string) error {
 		op, args = args[0], args[1:]
 	}
 	fs := flag.NewFlagSet("setup "+op, flag.ContinueOnError)
-	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.Clients, ", "))
+	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.SetupClients, ", "))
 	asJSON := fs.Bool("json", false, "print the typed setup plan as JSON")
 	companion := fs.String("companion", "", "scope setup to one user-declared provider MCP companion")
 	var yes, installGH, installMCP bool
