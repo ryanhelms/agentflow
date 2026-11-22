@@ -72,7 +72,11 @@ entries retain `environment`, `ref`, `sha`, `created_at`, `state` and numeric `i
 Select `none` to omit deployments from status.
 
 `devflow release get TAG` reads a published release from `devops.releases`.
-Set `settings.repository` on either GitHub role to choose a specific GitHub.com
+Compare its `revision` with the deployment commit to correlate a release with
+status across providers. GitHub lookup returns an `assets` array when the release
+has attached files. Each entry has a `name`, `download_url`, `size` in bytes
+and a `digest` when GitHub supplies one.
+Set `settings.repository` on each GitHub role to choose a specific GitHub.com
 `owner/name`. With the setting unset, devflow uses the detected GitHub.com target.
 
 This configuration uses two read-only fixtures in the local checkout. The
@@ -98,7 +102,7 @@ The deployment file is a JSON array ordered newest first. Each record needs
 `environment` and `revision` and can include `state` and `url`. Use the full
 commit ID from `git rev-parse HEAD` as `revision` to see a record in `devflow status`.
 The release file is a JSON array with unique `tag` values, each with a `revision`
-and optional `title`, `notes` and `url`. Use `devflow release get TAG` to read a
+and optional `title`, `notes`, `url` and `assets`. Use `devflow release get TAG` to read a
 record. Setup readiness checks that both selected files can be read and decoded.
 
 ## Jira, Confluence and GitHub

@@ -306,8 +306,11 @@ func testPublishRelease(t *testing.T, tc publishCase) {
 		got, err := adapter.PublishRelease(t.Context(), repo, draft, opts)
 		requireReleaseResult(t, got, err, provider.AlreadyApplied)
 		observed, err := adapter.GetRelease(t.Context(), repo, tag)
-		want := provider.Release{Tag: tag, Revision: commit, Title: draft.Title, Notes: draft.Notes, URL: releaseURL}
-		if err != nil || observed != want {
+		want := provider.Release{
+			Tag: tag, Revision: commit, Title: draft.Title, Notes: draft.Notes, URL: releaseURL,
+			Assets: []provider.ReleaseAsset{{Name: "cli.tar.gz", DownloadURL: releaseURL + "/cli.tar.gz"}},
+		}
+		if err != nil || !reflect.DeepEqual(observed, want) {
 			t.Fatalf("get release = %+v, %v, want %+v", observed, err, want)
 		}
 		changed := draft
