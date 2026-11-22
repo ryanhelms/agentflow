@@ -263,6 +263,27 @@ command. Retry the original operation in the chosen tool after sign-in. Jira and
 Confluence require separate product access checks even with the same connector.
 A permission denial calls for access to the affected product, project or space.
 
+For Slack in Claude Code Desktop, run this from the workspace directory when
+you want to register the connector and sign in.
+
+```bash
+devflow setup login --provider slack --client claude-desktop --register
+```
+
+Devflow checks `claude mcp list` for the server named `slack` or the official
+endpoint. Use `--server NAME` to select an existing custom registration.
+A connected entry is ready to reuse. An entry requiring authentication uses
+Claude’s sign-in flow. If Claude reports a broken registration, inspect it
+with `/mcp`. For an access denial, check workspace approval and access to
+the requested Slack resource.
+
+When the connector is absent, Devflow registers `slack` with Claude’s local
+workspace scope using the public OAuth client ID and callback port 3118.
+Claude manages browser consent and credentials. If sign-in is deferred
+because the command has no terminal, open `/mcp` in the same workspace or
+rerun the command in a terminal. A connected status verifies the host
+connection only. [Slack’s Claude Code configuration](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/#connect-to-claude-code).
+
 A standalone plan cannot list the tools or sign-in state of a sibling MCP
 server owned by the host. Validate the available read capabilities in the
 agent session. Interactive setup works without exporting personal credentials.

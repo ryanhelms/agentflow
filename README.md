@@ -188,7 +188,9 @@ registers a supported project adapter after approval. `devflow setup verify`
 checks provider readiness and returns an error for missing requirements.
 In an agent session, use the setup skill to reuse the provider's connected MCP
 or start its OAuth flow. Use `devflow setup login --provider NAME` to start
-the supported vendor CLI's browser login when no MCP is available. See
+the supported vendor CLI's browser login when no MCP is available. In a Claude Code
+Desktop workspace, `devflow setup login --provider slack --client claude-desktop --register`
+can register the official Slack connector locally and start Claude’s sign-in flow. See
 [interactive provider setup](docs/providers.md#interactive-provider-setup).
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian

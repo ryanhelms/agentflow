@@ -20,6 +20,12 @@ requires authentication. With Claude Code, run
 `devflow setup login --provider NAME --client claude --server SERVER` using
 the registered MCP server name. Use `claude-desktop` for Claude Code Desktop.
 Allow the user to complete consent in the browser, then retry the read.
+For Slack in Claude Code Desktop, when the user opts into workspace registration,
+run `devflow setup login --provider slack --client claude-desktop --register` from
+that workspace. Reuse an existing Slack connector. If sign-in is deferred, direct
+the user to Claude’s `/mcp` action. Report a workspace or channel access denial
+to the user. A connected status alone verifies only the host connection.
+
 If the MCP is unavailable for the operation, use the provider's installed CLI,
 or offer to install it. To start its sign-in, use
 `devflow setup login --provider NAME` when the plan lists a CLI. Use the

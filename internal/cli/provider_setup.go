@@ -236,12 +236,16 @@ func runProviderLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("setup login", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider to authenticate")
 	client := fs.String("client", "", "MCP client, such as claude-desktop or codex")
+	register := fs.Bool("register", false, "register the official Slack connector if absent in this Claude Code Desktop workspace")
 	server := fs.String("server", "", "existing MCP server name if different from the provider default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *provider == "" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME]")
+		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register]")
+	}
+	if *register {
+		return setup.RegisterProviderLogin(ctx, ".", *provider, *client, *server, term.IsTerminal(int(os.Stdin.Fd())), os.Stdin, os.Stdout, os.Stderr)
 	}
 	return setup.LoginProvider(ctx, ".", *provider, *client, *server, os.Stdin, os.Stdout, os.Stderr)
 }
