@@ -70,3 +70,37 @@ explicitly requires Jira-style subject scopes.
 `settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
 Set an event to `none` to disable its effect. Devflow previews transitions and
 only attempts to move open issues forward.
+
+## Task templates
+
+Task object templates apply independently of the task provider. Configure a
+JSON catalog file relative to the checkout and an optional default template.
+Use an exact name and revision for a reproducible task definition.
+
+```yaml
+task_management:
+  templates:
+    catalog: .devflow/task-templates.json
+    default:
+      name: engineering-task
+      revision: "1"
+```
+
+The templates section is unset by default. If it is present, `catalog` is
+required and `default` may be omitted. The catalog defines each revision's
+required fields, defaults, body sections, and acceptance checklist. See the
+[task template format](../internal/tasktemplate/README.md).
+
+GitHub Issues resolves the configured default when creating an issue. Application
+callers can select another exact revision with `App.CreateTicketWithTemplate`.
+The confirmation shows the selected revision, repository, title, Markdown body
+and labels. A template can require any of those four issue fields. Type,
+priority and structured links are unsupported. Template defaults for repository
+and labels take precedence over the provider settings. An explicit repository,
+title or description takes precedence over the template default.
+
+Devflow stores the exact template name and revision in a leading HTML comment.
+Keep that marker and the corresponding catalog revision when editing the issue.
+Before posting a comment or changing state, devflow validates the current issue
+against that revision. Issues without a template marker keep their existing
+workflow even when a default is configured later.

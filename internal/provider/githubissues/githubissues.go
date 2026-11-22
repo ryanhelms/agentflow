@@ -90,7 +90,12 @@ type account struct {
 	Login string `json:"login"`
 }
 
+type issueLabel struct {
+	Name string `json:"name"`
+}
+
 type issue struct {
+	Labels      []issueLabel    `json:"labels"`
 	Number      int64           `json:"number"`
 	Title       string          `json:"title"`
 	Body        string          `json:"body"`
@@ -134,9 +139,17 @@ func (a *Adapter) task(repo string, i issue) (provider.Task, error) {
 	if assignee == "" && len(i.Assignees) > 0 {
 		assignee = i.Assignees[0].Login
 	}
+	body, template, err := issueBody(i.Body)
+	if err != nil {
+		return provider.Task{}, fmt.Errorf("%s#%d: %w", repo, i.Number, err)
+	}
+	var labels []string
+	for _, label := range i.Labels {
+		labels = append(labels, label.Name)
+	}
 	return provider.Task{
 		Ref: ref, Key: ref.Scope + "#" + ref.ID, URL: i.HTMLURL, Title: i.Title,
-		Description: plainBody(i.Body), State: state, Assignee: assignee,
+		Description: body, Template: template, Labels: labels, State: state, Assignee: assignee,
 	}, nil
 }
 

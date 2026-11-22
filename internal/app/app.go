@@ -191,12 +191,13 @@ func (a *App) audit(class policy.Class, action string, payload any, err error) {
 // Transition moves key to the status mapped for event ("pr.merged", "#qa").
 // It only moves forward: done-category issues and no-op mappings are skipped.
 type TransitionResult struct {
-	Key     string `json:"key"`
-	Event   string `json:"event"`
-	From    string `json:"from"`
-	To      string `json:"to,omitempty"`
-	Applied bool   `json:"applied"`
-	Note    string `json:"note,omitempty"`
+	Template *IssueTemplateSnapshot `json:"template,omitempty"`
+	Key      string                 `json:"key"`
+	Event    string                 `json:"event"`
+	From     string                 `json:"from"`
+	To       string                 `json:"to,omitempty"`
+	Applied  bool                   `json:"applied"`
+	Note     string                 `json:"note,omitempty"`
 }
 
 // PlanTransition works out what event would do to key without changing anything.
