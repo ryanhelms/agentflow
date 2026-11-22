@@ -58,3 +58,15 @@ Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
 values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
+
+## Check workstation and runner readiness
+
+`devflow setup plan --json` reports the selected roles, detected forge, installed
+tools, and prerequisite checks. `devflow_setup_plan` presents the same plan to an
+MCP client. Use `--client NAME` to select a desktop client even if its executable
+is absent from the current shell.
+
+`devflow setup verify` and `devflow doctor --providers` report failed checks
+as errors. Use provider credentials in the environment where the command runs.
+`devflow setup apply --client NAME` adds the project client entry after approval.
+Readiness diagnostics identify missing companions and hosted MCP prerequisites.

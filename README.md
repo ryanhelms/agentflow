@@ -61,7 +61,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack notifications, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
-| **AI assist** | 26 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **AI assist** | 28 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -163,6 +163,11 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 The [provider configuration reference](docs/providers.md) documents independent
 service sections, versioned settings, defaults, and their override rules.
 
+Run `devflow setup plan --client NAME` to see which providers and companions
+are ready in the current environment. `devflow setup apply --client NAME`
+registers a supported project adapter after approval. `devflow setup verify`
+checks provider readiness and returns an error for missing requirements.
+
 ## Day-to-day use
 
 | Task | Terminal | AI client |
@@ -233,7 +238,7 @@ Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `k
 CI.
 
 The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
-`install`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`,
+`install`, `setup`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`,
 `transition`, `pr`, `review`, `status`, `standup`, `docs`, `adr`, `release`, `update` and
 `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos devflow has not set up yet. Skills that
