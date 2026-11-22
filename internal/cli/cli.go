@@ -50,6 +50,8 @@ Setup
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
+  setup login --provider NAME [--client NAME] [--server NAME]
+                                 start sign-in through a provider CLI or MCP client
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
@@ -1003,7 +1005,7 @@ func runDoctor(ctx context.Context, args []string) error {
 	name, login, err := a.LoginCheck(ctx)
 	switch {
 	case errors.Is(err, auth.ErrNoCredentials):
-		report(false, "Atlassian login", "run devflow login")
+		report(false, "Atlassian legacy API login", "interactive setup uses the Atlassian MCP; see devflow setup plan")
 	case err != nil && name == "":
 		report(false, "Atlassian login", err.Error())
 	default:
