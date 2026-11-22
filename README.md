@@ -182,6 +182,8 @@ The job reads trusted base-branch configuration and uses an explicit qualified
 task reference in the PR body. Apply a previewed transition with the usual
 confirmation flow in `devflow transition`.
 
+The status command reads checks from the configured `devops.checks` provider.
+
 ## Day-to-day use
 
 | Task | Terminal | AI client |

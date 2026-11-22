@@ -1,0 +1,40 @@
+[
+  {
+    "number": 7,
+    "state": "open",
+    "created_at": "2026-01-10T00:00:00Z",
+    "updated_at": "2026-02-01T00:00:00Z",
+    "url": "https://api.github.com/repos/Example/Project/dependabot/alerts/7",
+    "html_url": " HTTPS://GITHUB.COM:443/Example/Project/security/dependabot/7 ",
+    "security_advisory": {"severity": " HIGH ", "summary": " Update the\n parser dependency "}
+  },
+  {
+    "number": 9,
+    "state": "open",
+    "created_at": "2026-01-15T00:00:00Z",
+    "html_url": "https://github.com/Example/Project/security/dependabot/9",
+    "security_advisory": {"severity": "moderate", "summary": "Update the test dependency"}
+  },
+  {
+    "number": 4,
+    "state": "fixed",
+    "html_url": "https://github.com/Example/Project/security/dependabot/4",
+    "security_advisory": {"severity": "critical", "summary": "Fixed alert"}
+  },
+  {
+    "number": 5,
+    "html_url": "/security/dependabot/5",
+    "security_advisory": {"severity": "high", "summary": "Invalid link"}
+  },
+  {
+    "number": 6,
+    "html_url": "https://github.com/Example/Project/security/dependabot/6",
+    "security_advisory": {"severity": null, "summary": "Missing severity"}
+  },
+  {
+    "number": "8",
+    "html_url": "https://github.com/Example/Project/security/dependabot/8",
+    "security_advisory": {"severity": "low", "summary": "Invalid alert number"}
+  },
+  null
+]
