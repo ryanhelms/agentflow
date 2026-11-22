@@ -28,7 +28,16 @@ func (a *App) prepareWorkflowTasks() error {
 				return fmt.Errorf("Jira task reads require %s in the workflow environment", key)
 			}
 		}
-		a.jira = atlassian.New(auth.Atlassian{Site: os.Getenv("JIRA_BASE"), Email: os.Getenv("JIRA_USER"), Token: os.Getenv("JIRA_TOKEN")})
+		site := os.Getenv("JIRA_BASE")
+		if err := validateSite(site); err != nil {
+			return fmt.Errorf("JIRA_BASE: %w", err)
+		}
+		settings := a.jiraSettings()
+		settings.Site = site
+		a.Cfg.Providers.TaskManagement.Settings = &settings
+		a.jiraMu.Lock()
+		a.jira = atlassian.New(auth.Atlassian{Site: site, Email: os.Getenv("JIRA_USER"), Token: os.Getenv("JIRA_TOKEN")})
+		a.jiraMu.Unlock()
 		if path := os.Getenv("FLOW_MAP"); path != "" && a.Cfg.FlowMap == config.DefaultFlowMap {
 			a.Cfg.FlowMap = path
 		}
@@ -86,8 +95,15 @@ func (a *App) ValidateWorkflowMessage(ctx context.Context, msg string, pr, skipL
 
 func (a *App) checkWorkflowTask(ctx context.Context, key string) error {
 	if a.Cfg.Providers.TaskManagement.Provider == "jira" {
-		tasks := legacy.NewJira("jira", a.jira.Base, a.jira, nil)
-		_, err := tasks.Get(ctx, provider.Ref{Instance: "jira", Scope: projectOf(key), ID: key})
+		ref, err := legacy.JiraRef("jira", key)
+		if err != nil {
+			return err
+		}
+		tasks, err := a.jiraTasks(nil)
+		if err != nil {
+			return err
+		}
+		_, err = tasks.Get(ctx, ref)
 		return err
 	}
 	ref, err := a.workflowTaskRef(ctx, key)
