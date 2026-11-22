@@ -51,3 +51,14 @@ func TestReadFallbackOnlyBeforeDispatch(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeRawProviderContent(t *testing.T) {
+	var raw struct {
+		Content struct {
+			ID string `json:"id"`
+		} `json:"content"`
+	}
+	if err := Decode(json.RawMessage(`{"content":{"id":"123"}}`), &raw); err != nil || raw.Content.ID != "123" {
+		t.Fatalf("decoded raw provider object %+v: %v", raw, err)
+	}
+}

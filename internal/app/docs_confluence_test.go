@@ -96,7 +96,9 @@ func TestConfluenceLookupAndApprovedReplacement(t *testing.T) {
 		t.Fatalf("lookup: %+v, %v", doc, err)
 	}
 	var tc TicketContext
-	a.addAsanaDocuments(ctx, &tc, []provider.Link{{Ref: &in.Ref, URL: "https://stale.example", Title: "Old"}})
+	if err := a.addAsanaDocuments(ctx, &tc, []provider.Link{{Ref: &in.Ref, URL: "https://stale.example", Title: "Old"}}); err != nil {
+		t.Fatal(err)
+	}
 	if len(tc.Warnings) != 0 || len(tc.Docs) != 1 || tc.Docs[0].URL != pageURL || tc.Docs[0].Title != doc.Title || tc.Docs[0].Revision != doc.Revision {
 		t.Fatalf("linked page: %+v, %v", tc.Docs, tc.Warnings)
 	}

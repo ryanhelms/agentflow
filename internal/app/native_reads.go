@@ -188,7 +188,7 @@ func (a *App) legacyConfluencePages(ctx context.Context, site, query, space stri
 	}
 	k, err := a.confluenceKnowledge(site)
 	if errors.Is(err, auth.ErrNoCredentials) {
-		return nil, fmt.Errorf("Confluence needs a connected Atlassian MCP or the signed-in Teamwork Graph CLI: %w", native.ErrUnavailable)
+		return nil, fmt.Errorf("the Confluence provider needs a connected Atlassian MCP or the signed-in Teamwork Graph CLI: %w", native.ErrUnavailable)
 	}
 	if err != nil {
 		return nil, err

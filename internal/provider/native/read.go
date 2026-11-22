@@ -134,11 +134,8 @@ func Payload(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	var envelope struct {
 		StructuredContent json.RawMessage `json:"structuredContent"`
-		Content           []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
-		IsError bool `json:"isError"`
+		Content           json.RawMessage `json:"content"`
+		IsError           bool            `json:"isError"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil, err
@@ -148,8 +145,15 @@ func Payload(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, errors.New("provider MCP reported a tool error")
 	case len(envelope.StructuredContent) > 0:
 		raw = envelope.StructuredContent
-	case len(envelope.Content) == 1 && envelope.Content[0].Type == "text":
-		raw = json.RawMessage(envelope.Content[0].Text)
+	case len(envelope.Content) > 0:
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(envelope.Content, &blocks); err == nil && len(blocks) == 1 &&
+			blocks[0].Type == "text" && json.Valid([]byte(blocks[0].Text)) {
+			raw = json.RawMessage(blocks[0].Text)
+		}
 	}
 	return raw, nil
 }
