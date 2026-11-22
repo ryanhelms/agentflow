@@ -13,6 +13,10 @@ import (
 
 func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	a, fake := issueApp(t)
+	t.Setenv("GH_TOKEN", "fixture")
+	t.Setenv("GITHUB_SERVER_URL", "https://github.com")
+	fake.task.Ref.Scope, fake.task.Ref.ID = "nscaledev/devflow", "25"
+	*a.issueSettings().Repository = fake.task.Ref.Scope
 	a.Gate.Autonomy.Remote = config.Auto
 	metadata := event.GitHubActionsContext{
 		Repository:   provider.RepositoryRef{Host: "github.com", Path: fake.task.Ref.Scope},
@@ -22,7 +26,7 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := strings.ReplaceAll(string(raw), "acme/widget", "org/repo")
+	body := strings.ReplaceAll(string(raw), "acme/widget", fake.task.Ref.Scope)
 	body = strings.ReplaceAll(body, "issues/acme%2Fwidget/42", fake.task.Ref.String())
 	payload := filepath.Join(t.TempDir(), "pull-request.json")
 	if err := os.WriteFile(payload, []byte(body), 0o600); err != nil {
@@ -47,5 +51,24 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	replay, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, false)
 	if err != nil || len(replay.Effects) != 1 || replay.Effects[0].Applied || len(fake.writes) != 1 {
 		t.Fatalf("replay = %+v, writes = %v, err = %v", replay, fake.writes, err)
+	}
+}
+
+func TestConsumerTaskEventCannotApply(t *testing.T) {
+	a, f := issueApp(t)
+	a.Gate.Autonomy.Remote = config.Auto
+	metadata := event.GitHubActionsContext{Repository: provider.RepositoryRef{Host: "github.com", Path: f.task.Ref.Scope}, RepositoryID: 100, DefaultBranch: "main", EventName: "pull_request", EventID: "10", ApprovedIssue: f.task.Ref.ID}
+	raw, err := os.ReadFile("../event/testdata/pr-merged.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := strings.ReplaceAll(string(raw), "acme/widget", f.task.Ref.Scope)
+	body = strings.ReplaceAll(body, "issues/acme%2Fwidget/42", f.task.Ref.String())
+	path := filepath.Join(t.TempDir(), "pr.json")
+	if err = os.WriteFile(path, []byte(body), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.ApplyGitHubTaskEvent(t.Context(), metadata, path, false); err == nil || !strings.Contains(err.Error(), "approved nscaledev/devflow") || len(f.writes) > 0 {
+		t.Fatalf("consumer apply: writes=%v, err=%v", f.writes, err)
 	}
 }

@@ -1,20 +1,20 @@
-# Reusable: check the PR title and every commit against the repo's commit convention
-# (.devflow/config.yml, the same rules as the local commit-msg hook), then check that
-# the Jira keys in the title exist. Keys are required unless the repo sets
-# commit.require_key: false.
+# Historical workflow name used by SHA-pinned consumers.
 name: jira-key
 
 on:
   workflow_call:
     inputs:
       warn-only:
-        description: Report problems as warnings instead of failing (rollout phase P2 start)
+        description: Report problems as warnings instead of failing
         type: boolean
         default: false
     secrets:
       JIRA_USER:
         required: false
       JIRA_TOKEN:
+        required: false
+      TASK_READ_TOKEN:
+        description: Optional repository-scoped token with Issues read access
         required: false
 
 permissions:
@@ -23,54 +23,42 @@ permissions:
 
 jobs:
   validate:
+    if: vars.DEVFLOW_ENABLED != 'false'
     runs-on: ubuntu-latest
     steps:
+      # Fetch the merge ref so both parents (including a fork's head) are available.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - name: Select trusted base configuration
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: git -c core.hooksPath=/dev/null checkout --detach "$BASE"
       - uses: nscaledev/devflow/actions/setup@v0
         with:
           binary: true
-      - name: PR title, every commit and Jira keys
+      - id: task
+        continue-on-error: ${{ inputs.warn-only }}
+        name: Resolve task provider
+        run: |
+          provider=$(devflow keys --provider)
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+      - name: Validate PR title, commits and task references
         env:
-          TITLE: ${{ github.event.pull_request.title }}
-          PR: ${{ github.event.pull_request.number }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
+          DEVFLOW_HOME: ${{ runner.temp }}/devflow-key-check
           WARN_ONLY: ${{ inputs.warn-only }}
           JIRA_BASE: ${{ vars.JIRA_BASE }}
-          JIRA_USER: ${{ secrets.JIRA_USER }}
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_USER: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_USER || '' }}
+          JIRA_TOKEN: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_TOKEN || '' }}
+          PROVIDER: ${{ steps.task.outputs.provider }}
+          GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || steps.task.outputs.provider == 'repository' && github.token || '' }}
         run: |
-          set -euo pipefail
-          level=error
-          [ "$WARN_ONLY" = true ] && level=warning
-          status=0
-          problem() { echo "::$level::$1"; status=1; }
-
-          # The title becomes the squash commit "<title> (#<number>)": check exactly that.
-          printf '%s (#%s)\n' "$TITLE" "$PR" > "$RUNNER_TEMP/title.txt"
-          devflow lint-msg "$RUNNER_TEMP/title.txt" || problem "PR title does not follow the commit convention"
-
-          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
-            git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg.txt"
-            devflow lint-msg "$RUNNER_TEMP/msg.txt" || problem "commit ${sha:0:7} does not follow the commit convention"
-          done
-
-          keys=$(grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' <<<"$TITLE" | sort -u || true)
-          if [ -n "$keys" ] && { [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; }; then
-            echo "::notice::JIRA_BASE or JIRA_TOKEN not set; skipping key existence check"
-          elif [ -n "$keys" ]; then
-            while read -r k; do
-              code=$(curl -s -o /dev/null -w '%{http_code}' -u "$JIRA_USER:$JIRA_TOKEN" \
-                     "$JIRA_BASE/rest/api/3/issue/$k?fields=status")
-              [ "$code" = 200 ] || problem "$k not found in Jira (HTTP $code)"
-            done <<<"$keys"
+          if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
+          if ! devflow lint-msg --github-event; then
+            if [ "$WARN_ONLY" = true ]; then
+              echo "::warning::Task validation failed. See the commit or reference diagnostic above."
+            else
+              exit 1
+            fi
           fi
-
-          if [ "$status" -ne 0 ] && [ "$level" = warning ]; then
-            echo "warn-only: problems reported as warnings, not failing"
-            exit 0
-          fi
-          [ "$status" -eq 0 ] && echo "Convention and Jira keys OK"
-          exit "$status"

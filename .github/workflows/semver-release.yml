@@ -8,7 +8,7 @@
 #   image   - container image tagged X.Y.Z, X.Y, X (from 1.0) and sha, with attestation
 #   helm    - chart packaged at the release version, pushed to OCI and attached
 #   library - Go submodule tag (path/vX.Y.Z), npm or PyPI publish, Terraform tag
-# and finally sets the Jira Fix Version "<unit> X.Y.Z" on every ticket in the release.
+# and previews released task references and Jira Fix Versions for review.
 #
 # Units come from .devflow/releases.yml (devflow release init). Works with the
 # workflow's own token: the `releases` output feeds the caller's release-notes job, so
@@ -291,30 +291,30 @@ jobs:
     needs: [release, build]
     if: always() && needs.release.outputs.created == 'true'
     runs-on: ubuntu-latest
-    env:
-      JIRA_BASE: ${{ vars.JIRA_BASE }}
-      JIRA_USER: ${{ secrets.JIRA_USER }}
-      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-      MATRIX: ${{ needs.release.outputs.matrix }}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: nscaledev/devflow/actions/setup@v0
-      - name: Set Jira fix versions
+        with:
+          binary: true
+      - name: Preview released task references
+        env:
+          MATRIX: ${{ needs.release.outputs.matrix }}
         run: |
           set -euo pipefail
-          if [ -z "$JIRA_TOKEN" ]; then echo "::notice::No Jira credentials; skipping fix versions"; exit 0; fi
+          provider=$(devflow keys --provider)
           jq -c '.[]' <<<"$MATRIX" | while read -r unit; do
             name=$(jq -r .name <<<"$unit"); tag=$(jq -r .tag <<<"$unit")
             version=$(jq -r .version <<<"$unit"); path=$(jq -r .path <<<"$unit")
             prefix=${tag%"$version"}
             prev=$(git describe --tags --abbrev=0 --match "${prefix}[0-9]*.[0-9]*.[0-9]*" "$tag^" 2>/dev/null || true)
             range=${prev:+$prev..}$tag
-            pathspec=()
-            [ "$path" != "." ] && pathspec=(-- "$path")
-            keys=$(git log --format='%B' "$range" ${pathspec[@]+"${pathspec[@]}"} | grep -Eo '[A-Z][A-Z0-9]+-[0-9]+' | sort -u || true)
-            for key in $keys; do
-              jira-fix-version.sh "$key" "$name $version" || echo "::warning::$key: could not set fix version"
+            devflow keys --shipped --range "$range" --path "$path" | while IFS= read -r key; do
+              echo "Released task $key in $tag"
+              if [ "$provider" = jira ]; then echo "Planned Jira fix version: $key -> $name $version"; fi
             done
           done

@@ -74,7 +74,7 @@ Work
   release version --unit U       print the version a build of this branch gets
   release preview [--since TAG]  unreleased commits by type
   keys --range A..B              Jira keys in a commit range
-  lint-msg FILE                  validate a commit message file
+  lint-msg FILE | --github-event validate a commit file or runner PR and its task references
 
 Runtime
   mcp [--client NAME]            MCP server on stdio
@@ -134,25 +134,15 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "hook":
 		return runHook(ctx, args)
 	case "lint-msg":
+		if len(args) == 1 && args[0] == "--github-event" {
+			return validateWorkflowPR(ctx)
+		}
 		if len(args) != 1 {
 			return errors.New("usage: devflow lint-msg FILE")
 		}
 		return hooks.CommitMsg(ctx, args[0], os.Stderr)
 	case "keys":
-		fs := flag.NewFlagSet("keys", flag.ContinueOnError)
-		rng := fs.String("range", "", "revision range, e.g. v1.2.0..HEAD")
-		if err := fs.Parse(args); err != nil {
-			return err
-		}
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		keys, err := a.Keys(ctx, *rng)
-		for _, k := range keys {
-			fmt.Println(k)
-		}
-		return err
+		return runTaskKeys(ctx, args)
 	case "init":
 		return runInit(ctx, args)
 	case "remove":
@@ -673,13 +663,14 @@ func runPreview(ctx context.Context, args []string) error {
 func runTransition(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "preview only")
-	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions pull request event")
+	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions lifecycle event")
+	shipped := fs.Bool("shipped", false, "preview a shipped task with the runner identity")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	if err := fs.Parse(reorder(args)); err != nil {
 		return err
 	}
 	if *githubEvent {
-		if fs.NArg() != 0 || *yes {
+		if fs.NArg() != 0 || *yes || *shipped {
 			return errors.New("--github-event cannot be combined with a key, event, or --yes")
 		}
 		return runGitHubTaskEvent(ctx, *dry)
@@ -696,6 +687,16 @@ func runTransition(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	if *shipped {
+		if !*dry || *yes || key == "" {
+			return errors.New("--shipped requires an explicit key, event and --dry-run")
+		}
+		plan, err := a.PlanShippedTask(ctx, key, event)
+		if err != nil {
+			return err
+		}
+		return printJSON(plan)
 	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.Transition(ctx, key, event, *dry, tok) })
 }

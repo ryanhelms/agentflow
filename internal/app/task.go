@@ -14,7 +14,6 @@ import (
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/contextx"
 	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
@@ -462,25 +461,5 @@ func (a *App) Keys(ctx context.Context, rng string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
-	var keys []string
-	for _, m := range msgs {
-		var found []string
-		if a.UsesTaskRefs() {
-			_, body, _ := strings.Cut(m, "\n")
-			found, err = a.taskKeys(body)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			found = gitx.KeyRe.FindAllString(m, -1)
-		}
-		for _, k := range found {
-			if !seen[k] {
-				seen[k] = true
-				keys = append(keys, k)
-			}
-		}
-	}
-	return keys, nil
+	return a.keysInMessages(msgs, false)
 }

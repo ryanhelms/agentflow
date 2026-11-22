@@ -45,7 +45,7 @@ const (
 	NoTaskRefs         SkipReason = "no_task_refs"
 )
 
-// Plan contains transition intents for a single pull request delivery.
+// Plan contains transition intents for a single Actions delivery.
 // A skipped plan has a reason and no transitions.
 type Plan struct {
 	Repository   provider.RepositoryRef `json:"repository"`
@@ -60,6 +60,7 @@ type Plan struct {
 }
 
 type Transition struct {
+	Lifecycle   string       `json:"lifecycle,omitempty"` // per-intent verb for push events
 	Task        provider.Ref `json:"task"`
 	OperationID string       `json:"operation_id"`
 }
@@ -80,6 +81,7 @@ type pullRequestEvent struct {
 	Repository  githubRepository `json:"repository"`
 	PullRequest struct {
 		Number int64        `json:"number"`
+		Title  string       `json:"title"`
 		Body   string       `json:"body"`
 		Draft  *bool        `json:"draft"`
 		Merged *bool        `json:"merged"`
@@ -95,18 +97,14 @@ var (
 
 // PlanGitHubActions parses a GitHub Actions payload without reading files,
 // consulting providers, or applying transitions. It uses provider.TaskRefs
-// for explicit trailers in the PR body.
-//
-// A later app wrapper can expose
-// PlanGitHubActionsEvent(ctx context.Context, eventPath string, actions event.GitHubActionsContext) (event.Plan, error).
-// It should read GITHUB_EVENT_PATH, bind Actions metadata to the trusted repo
-// and selected task adapter, then pass the payload bytes here. The app owns
-// lifecycle-to-state mapping and passes OperationID in provider.WriteOptions
-// when applying an intent. The legacy Jira workflow still uses handle-event.sh.
+// for explicit trailers in PR bodies and commit messages.
 func PlanGitHubActions(actions GitHubActionsContext, payload []byte) (Plan, error) {
 	plan := Plan{
 		Repository: actions.Repository, RepositoryID: actions.RepositoryID,
 		EventName: actions.EventName, EventID: actions.EventID,
+	}
+	if actions.EventName == "create" || actions.EventName == "push" {
+		return plan.branchEvent(actions, payload)
 	}
 	if actions.EventName != "pull_request" && actions.EventName != "pull_request_target" {
 		plan.Skip = UnsupportedEvent
@@ -147,7 +145,7 @@ func PlanGitHubActions(actions GitHubActionsContext, payload []byte) (Plan, erro
 		return plan, nil
 	}
 
-	refs, err := provider.TaskRefs(pr.Body)
+	refs, err := actions.refs(pr.Body, pr.Title+" "+pr.Head.Ref)
 	if err != nil {
 		return Plan{}, fmt.Errorf("parse pull request task trailers: %w", err)
 	}
@@ -156,9 +154,6 @@ func PlanGitHubActions(actions GitHubActionsContext, payload []byte) (Plan, erro
 		return plan, nil
 	}
 	for _, ref := range refs {
-		if ref.Instance != actions.TaskInstance || ref.Scope != actions.TaskScope {
-			return Plan{}, errors.New("pull request task reference is outside the selected instance or scope")
-		}
 		plan.Transitions = append(plan.Transitions, Transition{Task: ref, OperationID: plan.operationID(ref)})
 	}
 	return plan, nil
@@ -174,6 +169,9 @@ func (actions GitHubActionsContext) validate() error {
 	if strings.TrimSpace(actions.EventID) == "" || strings.ContainsFunc(actions.EventID, unicode.IsControl) {
 		return errors.New("github event requires a trusted event id")
 	}
+	if actions.TaskInstance == "jira" {
+		return nil // Each legacy key supplies its own Jira project.
+	}
 	target := provider.Ref{Instance: actions.TaskInstance, Scope: actions.TaskScope, ID: "task"}
 	if err := target.Validate(); err != nil {
 		return fmt.Errorf("selected task destination: %w", err)
@@ -184,6 +182,9 @@ func (actions GitHubActionsContext) validate() error {
 func (actions GitHubActionsContext) matches(repo githubRepository) bool {
 	return repo.ID == actions.RepositoryID && strings.EqualFold(repo.FullName, actions.Repository.Path)
 }
+
+// OptedOutText recognizes the markers accepted by the reusable delivery workflows.
+func OptedOutText(text string) bool { return skipBody.MatchString(text) }
 
 func (e pullRequestEvent) lifecycle(defaultBranch string) (string, SkipReason, error) {
 	pr := e.PullRequest

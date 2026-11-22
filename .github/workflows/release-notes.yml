@@ -35,18 +35,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - id: task
+        run: |
+          provider=$(devflow keys --provider)
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Render notes
         env:
           TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          PROVIDER: ${{ steps.task.outputs.provider }}
           JIRA_BASE: ${{ vars.JIRA_BASE }}
-          JIRA_USER: ${{ secrets.JIRA_USER }}
-          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_USER: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_USER || '' }}
+          JIRA_TOKEN: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_TOKEN || '' }}
         run: |
           set -euo pipefail
           prev=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
           range="${prev:+$prev..}$TAG"
-          release-notes.sh "$range" "${GITHUB_REPOSITORY#*/} $TAG" > "$RUNNER_TEMP/notes.md"
+          release-notes.sh "$range" "${GITHUB_REPOSITORY#*/} $TAG" "$PROVIDER" > "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Append to the GitHub release
         env:
