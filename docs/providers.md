@@ -77,9 +77,12 @@ This repository uses GitHub Issues for task management and the Repository
 provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
 enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
 variable. It applies `pr.merged` to that issue after a same-repository PR
-with a qualified `Task-Ref` merges into the default branch.
+with a qualified `Task-Ref` merges into the default branch. The job builds
+devflow at that merge commit and uses it to find the published ADR before
+closing the enrolled issue.
 
 The pilot uses the repository's existing GoReleaser release process.
+
 ## Search a local knowledge directory
 
 Choose a dedicated directory for knowledge records. Relative roots resolve from
