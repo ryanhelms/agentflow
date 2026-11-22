@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.8.0](https://github.com/nscaledev/devflow/compare/v0.7.0...v0.8.0) - 2026-11-22
+
+### Features
+
+- implement the filesystem provider ([a1a82d8](https://github.com/nscaledev/devflow/commit/a1a82d841a9355f25ec18ffbb56e7d68faa720ad))
+
 ## [0.7.0](https://github.com/nscaledev/devflow/compare/v0.6.0...v0.7.0) - 2026-11-22
 
 ### Features
