@@ -107,8 +107,9 @@ Work
 
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
-  --native-client claude-desktop comment [KEY] TEXT [--yes]
-                                 use the enrolled Rovo connection or signed-in twg for a Jira comment
+  --native-client claude-desktop COMMAND
+                                 use the enrolled Jira connection for comment, start or transition
+                                 comments can fall back to the signed-in Teamwork Graph CLI
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -170,8 +171,8 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop comment [KEY] TEXT [--yes]")
+		if command != "comment" && command != "start" && command != "transition" {
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start or transition)")
 		}
 		return rovohost.NewWriter(), nil
 	default:
