@@ -1,0 +1,23 @@
+{
+  "repository": {
+    "id": 100,
+    "full_name": "acme/widget",
+    "default_branch": "main",
+    "html_url": "https://github.com/acme/widget"
+  },
+  "ref": "refs/heads/release",
+  "commits": [
+    {
+      "message": "fix(PLAT-12): work #done #review\n\nTask-Ref: issues/acme%2Fwidget/42",
+      "url": "https://github.com/acme/widget/commit/abc"
+    },
+    {
+      "message": "feat(OPS-3): work #start #block\n\nWaiting on access\n\nDevflow: ok",
+      "url": "https://github.com/acme/widget/commit/def"
+    },
+    {
+      "message": "fix(PLAT-13): work #start\n\n[devflow skip]",
+      "url": "https://github.com/acme/widget/commit/ghi"
+    }
+  ]
+}

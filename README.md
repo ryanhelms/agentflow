@@ -11,8 +11,10 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
+| **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). This repository is also piloting the GitHub Issues and Repository providers. |
+| **Current release** | <!-- devflow:version -->`v0.6.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). |
-| **Current release** | <!-- devflow:version -->`v0.9.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.12.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -61,7 +63,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack notifications, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
-| **AI assist** | 26 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **AI assist** | 27 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -166,10 +168,19 @@ service sections, versioned settings, defaults, and their override rules. Use th
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
+Choose the `repository` knowledge provider to search a Git destination and
+publish managed Markdown with `devflow docs publish`. A GitHub review
+publication returns the PR link and a pending review status.
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
 the qualified issue reference in the PR body and interactive commit message.
+
+GitHub Issues repositories can run the reusable `task-events.yml` workflow to
+preview configured pull-request transitions with read-only issue permissions.
+The job reads trusted base-branch configuration and uses an explicit qualified
+task reference in the PR body. Apply a previewed transition with the usual
+confirmation flow in `devflow transition`.
 
 The status command reads checks from the configured `devops.checks` provider.
 

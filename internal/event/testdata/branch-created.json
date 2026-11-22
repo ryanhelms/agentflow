@@ -1,0 +1,10 @@
+{
+  "repository": {
+    "id": 100,
+    "full_name": "acme/widget",
+    "default_branch": "main",
+    "html_url": "https://github.com/acme/widget"
+  },
+  "ref_type": "branch",
+  "ref": "work/PLAT-12"
+}
