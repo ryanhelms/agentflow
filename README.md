@@ -166,6 +166,11 @@ service sections, versioned settings, defaults, and their override rules. Use th
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
+Select `github-issues` in `task_management.provider` to work with GitHub issues
+through the existing task commands. Start an issue with `devflow start '#42'`
+when the issue repository is known, or specify `owner/repo#42`. Devflow carries
+the qualified issue reference in the PR body and interactive commit message.
+
 ## Day-to-day use
 
 | Task | Terminal | AI client |

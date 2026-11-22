@@ -59,6 +59,17 @@ values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
 
+## GitHub Issues task lifecycle
+
+Use the `github-issues` task provider with the detected GitHub repository or set
+`settings.repository` to `owner/repo`. The current GitHub Issues adapter uses
+GitHub.com. Task references appear in branch bindings and explicit `Task-Ref`
+trailers. Existing commit rules still apply, including when the repository
+explicitly requires Jira-style subject scopes.
+
+`settings.transitions` defaults to closing issues on `pr.merged` and `#done`.
+Set an event to `none` to disable its effect. Devflow previews transitions and
+only attempts to move open issues forward.
 ## Search a local knowledge directory
 
 Choose a dedicated directory for knowledge records. Relative roots resolve from
