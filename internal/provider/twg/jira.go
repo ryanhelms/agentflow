@@ -36,11 +36,11 @@ func NewJira(instance, site string, projects []string) (*Jira, error) {
 }
 
 type named struct {
-	ID          string `json:"id"`
-	Key         string `json:"key"`
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	Category    *named `json:"statusCategory"`
+	ID          string        `json:"id"`
+	Key         string        `json:"key"`
+	Name        string        `json:"name"`
+	DisplayName string        `json:"displayName"`
+	Category    *jiraCategory `json:"statusCategory"`
 }
 
 func (n *named) UnmarshalJSON(raw []byte) error {
@@ -51,11 +51,24 @@ func (n *named) UnmarshalJSON(raw []byte) error {
 	return json.Unmarshal(raw, (*object)(n))
 }
 
+type jiraCategory struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
+}
+
+func (c *jiraCategory) UnmarshalJSON(raw []byte) error {
+	if raw[0] == '"' {
+		return json.Unmarshal(raw, &c.Name)
+	}
+	type object jiraCategory
+	return json.Unmarshal(raw, (*object)(c))
+}
+
 type jiraFieldsJSON struct {
 	Summary        string          `json:"summary"`
 	Description    json.RawMessage `json:"description"`
 	Status         named           `json:"status"`
-	StatusCategory named           `json:"statusCategory"`
+	StatusCategory jiraCategory    `json:"statusCategory"`
 	IssueType      named           `json:"issuetype"`
 	Priority       named           `json:"priority"`
 	Assignee       named           `json:"assignee"`
