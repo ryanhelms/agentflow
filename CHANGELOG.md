@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.34.0](https://github.com/nscaledev/devflow/compare/v0.33.1...v0.34.0) - 2026-11-22
+
+### Features
+
+- **jira:** verify desktop workflow writes (#79) ([bb123f4](https://github.com/nscaledev/devflow/commit/bb123f4d59eb139d60aa2b878729eaf83edbc113))
+
 ## [0.33.1](https://github.com/nscaledev/devflow/compare/v0.33.0...v0.33.1) - 2026-11-22
 
 ### Fixes
