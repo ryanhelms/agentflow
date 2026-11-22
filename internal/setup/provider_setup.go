@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/nscaledev/devflow/internal/atlassian"
+	"github.com/nscaledev/devflow/internal/auth"
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
@@ -169,10 +171,28 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			p.check(role.name, role.Provider, github.command != "", selection.Detail)
 		}
 	}
+	jiraSite := cfg.Jira.Site
+	if jira, ok := providers.TaskManagement.Settings.(*config.JiraSettings); ok {
+		jiraSite = jira.Site
+	}
 	for _, role := range roles {
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue
+		case *config.JiraSettings:
+			p.checkAtlassian(ctx, role, settings.Site, auth.LoadAtlassian, (*atlassian.Client).CheckJiraAccess,
+				"run devflow login for the Jira site or supply JIRA_USER and JIRA_TOKEN",
+				"can read the authenticated Jira identity")
+		case *config.ConfluenceSettings:
+			load := func(site string) (auth.Atlassian, error) { return auth.LoadConfluence(site, jiraSite) }
+			hint := "supply CONFLUENCE_USER and CONFLUENCE_TOKEN for the Confluence site"
+			if strings.TrimRight(settings.Site, "/") == strings.TrimRight(jiraSite, "/") {
+				hint += " or run devflow login for the shared Atlassian site"
+			}
+			p.checkAtlassian(ctx, role, settings.Site, load, (*atlassian.Client).CheckConfluenceAccess,
+				hint, "can list visible Confluence spaces")
+		case *config.SlackSettings:
+			p.checkSlack(role, settings)
 		case *config.AsanaSettings:
 			if settings.Project == "" {
 				p.check(role.name, role.Provider, false, "set task_management.settings.project to the default Asana project GID")

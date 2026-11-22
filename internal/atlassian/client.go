@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,24 @@ func New(cred auth.Atlassian) *Client {
 		cred: cred,
 		http: &http.Client{Timeout: 20 * time.Second},
 	}
+}
+
+// ValidateSite checks an Atlassian site URL before credentials are loaded.
+func ValidateSite(site string) error {
+	u, err := url.Parse(site)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
+		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return errors.New("expected an absolute Atlassian site URL without credentials, query or fragment")
+	}
+	return nil
+}
+
+// Keep operations bound to the configured site and endpoint.
+func (c Client) siteRequest(ctx context.Context, method, path string, in, out any) error {
+	client := *c.http
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	c.http = &client
+	return c.do(ctx, method, path, in, out)
 }
 
 // APIError is a non-2xx response.
