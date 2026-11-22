@@ -115,6 +115,29 @@ func JiraComment(site string, ref provider.Ref, body string) (native.Call, error
 	return jiraIssueCall(site, "addOrEditJiraIssueComment", ref, map[string]any{"commentBody": jiraTextHTML(body), "contentFormat": "html"})
 }
 
+// DecodeJiraCommentReceipt verifies the flat Rovo acknowledgement for a
+// create-only call on an authenticated, issue-bound session.
+func DecodeJiraCommentReceipt(raw json.RawMessage, ref provider.Ref, text string) (string, error) {
+	var receipt struct {
+		CommentID    string `json:"commentId"`
+		IssueKey     string `json:"issueKey"`
+		IssueIDOrKey string `json:"issueIdOrKey"`
+		Body         string `json:"body"`
+		Format       string `json:"appliedContentFormat"`
+		OK           *bool  `json:"ok"`
+	}
+	if err := decodeObject(raw, &receipt); err != nil {
+		return "", err
+	}
+	if !decimalID.MatchString(receipt.CommentID) || receipt.Format != "html" || receipt.Body != jiraTextHTML(text) ||
+		receipt.OK != nil && !*receipt.OK ||
+		receipt.IssueKey != "" && !strings.EqualFold(receipt.IssueKey, ref.ID) ||
+		receipt.IssueIDOrKey != "" && !strings.EqualFold(receipt.IssueIDOrKey, ref.ID) {
+		return "", fmt.Errorf("%w: could not verify the Jira comment receipt; inspect the issue before approving another comment", ErrInvalidResult)
+	}
+	return receipt.CommentID, nil
+}
+
 // Preserve existing plain-text semantics when a native tool accepts rich text.
 func jiraTextHTML(body string) string {
 	return "<p>" + strings.ReplaceAll(html.EscapeString(body), "\n", "<br>") + "</p>"

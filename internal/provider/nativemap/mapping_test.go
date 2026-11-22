@@ -3,6 +3,7 @@ package nativemap
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
 	"strings"
 	"testing"
@@ -211,5 +212,24 @@ func assertDecodeError[T any](t *testing.T, read Read[T], raw string, want error
 	t.Helper()
 	if _, err := read.Decode(json.RawMessage(raw)); !errors.Is(err, want) {
 		t.Fatalf("decode = %v, want %v", err, want)
+	}
+}
+
+func TestJiraCommentReceipt(t *testing.T) {
+	ref := provider.Ref{Instance: "jira", Scope: "DEV", ID: "DEV-13"}
+	receipt := map[string]any{"commentId": "121", "issueKey": ref.ID, "body": "<p>&lt;ready&gt;</p>", "appliedContentFormat": "html"}
+	for field, value := range map[string]any{
+		"commentId": "0", "issueKey": "DEV-14", "issueIdOrKey": "OPS-13",
+		"body": "<p>different</p>", "appliedContentFormat": "markdown", "ok": false,
+	} {
+		bad := maps.Clone(receipt)
+		bad[field] = value
+		raw, err := json.Marshal(bad)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id, err := DecodeJiraCommentReceipt(raw, ref, "<ready>"); id != "" || !errors.Is(err, ErrInvalidResult) {
+			t.Errorf("accepted conflicting %s: %s, %v", field, id, err)
+		}
 	}
 }

@@ -65,32 +65,33 @@ func (w *boundTaskWrite) apply(ctx context.Context) (provider.WriteResult, error
 
 // applyTaskAppend makes the single-use approval survive process restarts.
 // Keep an uncertain attempt claimed, since a prior append may have succeeded.
-func (a *App) applyTaskAppend(ctx context.Context, token string, write *boundTaskWrite, apply func() (provider.WriteResult, error)) (provider.WriteResult, error) {
+func applyTaskAppend[T any](ctx context.Context, home, token string, write taskWritePreview, apply func() (T, error)) (T, error) {
+	var zero T
 	if token == "" {
-		return provider.WriteResult{}, policy.ErrToken
+		return zero, policy.ErrToken
 	}
-	encoded, err := json.Marshal(write.taskWritePreview)
+	encoded, err := json.Marshal(write)
 	if err != nil {
-		return provider.WriteResult{}, err
+		return zero, err
 	}
-	store := notifications.FileStore{Dir: filepath.Join(a.Home, "task-write-receipts")}
+	store := notifications.FileStore{Dir: filepath.Join(home, "task-write-receipts")}
 	key := notifications.ReceiptKey{
 		OperationID: fmt.Sprintf("%x", sha256.Sum256([]byte(token))),
 		Destination: write.Call.Provider,
 	}
 	state, err := store.Claim(ctx, key, sha256.Sum256(encoded))
 	if err != nil {
-		return provider.WriteResult{}, fmt.Errorf("claim native task append: %w", err)
+		return zero, fmt.Errorf("claim native task append: %w", err)
 	}
 	if state != notifications.Claimed {
-		return provider.WriteResult{}, policy.ErrToken
+		return zero, policy.ErrToken
 	}
 	result, err := apply()
 	if err != nil {
 		return result, err
 	}
 	if err := store.Finish(context.WithoutCancel(ctx), key, notifications.Delivered); err != nil {
-		return provider.WriteResult{}, fmt.Errorf("%w: record native task append: %w", native.ErrWriteUncertain, err)
+		return zero, fmt.Errorf("%w: record native task append: %w", native.ErrWriteUncertain, err)
 	}
 	return result, nil
 }
@@ -313,7 +314,7 @@ func (a *App) commentBoundTask(ctx context.Context, task provider.Task, body, to
 	if p, err := a.gate(policy.Remote, "comment", summary, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
-	_, err = a.applyTaskAppend(ctx, token, write, func() (provider.WriteResult, error) { return write.apply(ctx) })
+	_, err = applyTaskAppend(ctx, a.Home, token, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })
 	a.audit(policy.Remote, "comment", summary, err)
 	return map[string]any{"key": taskKey(ref), "commented": err == nil}, err
 }

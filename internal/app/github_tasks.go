@@ -233,7 +233,7 @@ func (a *App) createBoundIssue(ctx context.Context, summary map[string]any, toke
 	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
-	result, err := a.applyTaskAppend(ctx, token, write, func() (provider.WriteResult, error) { return write.apply(ctx) })
+	result, err := applyTaskAppend(ctx, a.Home, token, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })
 	a.audit(policy.Remote, "ticket_create", summary, err)
 	if err != nil {
 		return nil, err

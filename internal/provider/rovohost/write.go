@@ -22,6 +22,7 @@ import (
 const (
 	origin           = "https://mcp.atlassian.com"
 	catalogEndpoint  = rovooauth.Resource + "?tools=all"
+	commentTool      = "addOrEditJiraIssueComment"
 	remoteLinkTool   = "createJiraIssueRemoteIssueLink"
 	updateTool       = "updateConfluenceContent"
 	pageTool         = "getConfluenceContent"
@@ -43,7 +44,7 @@ func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWr
 			return nil, native.ErrUnavailable
 		}
 		switch {
-		case call.Provider == "jira" && call.Tool == remoteLinkTool,
+		case call.Provider == "jira" && (call.Tool == remoteLinkTool || call.Tool == commentTool),
 			call.Provider == "confluence" && call.Tool == updateTool:
 			return connect(ctx, call, token, transport)
 		}
@@ -54,6 +55,8 @@ func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWr
 type session struct {
 	provider         string
 	site             string
+	writeTool        string
+	issueKey         string
 	pageID           string
 	verifiedSnapshot string
 	client           *mcp.ClientSession
@@ -91,27 +94,31 @@ func connect(ctx context.Context, call native.Call, token tokenSource, transport
 	if err != nil {
 		return nil, transportError(call.Provider, err)
 	}
-	tools, err := listTools(ctx, connected, call.Provider)
+	tools, err := listTools(ctx, connected, call)
 	if err != nil {
 		_ = connected.Close()
 		return nil, err
 	}
 	site, _ := call.Arguments["cloudId"].(string)
 	pageID, _ := call.Arguments["contentId"].(string)
-	return &session{provider: call.Provider, site: site, pageID: pageID, client: connected, bearer: wire, tools: tools, token: token, generation: generation}, nil
+	issueKey, _ := call.Arguments["issueIdOrKey"].(string)
+	return &session{
+		provider: call.Provider, site: site, writeTool: call.Tool, issueKey: issueKey, pageID: pageID,
+		client: connected, bearer: wire, tools: tools, token: token, generation: generation,
+	}, nil
 }
 
-func listTools(ctx context.Context, client *mcp.ClientSession, provider string) (map[string]*jsonschema.Schema, error) {
+func listTools(ctx context.Context, client *mcp.ClientSession, call native.Call) (map[string]*jsonschema.Schema, error) {
 	tools := make(map[string]*jsonschema.Schema)
 	seenCursors := make(map[string]bool)
 	params := &mcp.ListToolsParams{}
 	for range maxToolPages {
 		page, err := client.ListTools(ctx, params)
 		if err != nil {
-			return nil, transportError(provider, err)
+			return nil, transportError(call.Provider, err)
 		}
 		for _, tool := range page.Tools {
-			if !relevantTool(provider, tool.Name) {
+			if !relevantTool(call.Tool, tool.Name) {
 				continue
 			}
 			if _, exists := tools[tool.Name]; exists {
@@ -144,13 +151,14 @@ func decodeCatalogSchema(input any) (*jsonschema.Schema, error) {
 	return schema, nil
 }
 
-func relevantTool(provider, name string) bool {
-	if provider == "confluence" {
+func relevantTool(writeTool, name string) bool {
+	switch writeTool {
+	case commentTool:
+		return name == commentTool || name == "getJiraIssue"
+	case updateTool:
 		return name == updateTool || name == pageTool || name == spaceTool || name == versionTool
-	}
-	switch name {
-	case remoteLinkTool, "getJiraIssue", "listJiraIssueRemoteIssueLinks", "executeRead":
-		return true
+	case remoteLinkTool:
+		return name == remoteLinkTool || name == "getJiraIssue" || name == "listJiraIssueRemoteIssueLinks" || name == "executeRead"
 	default:
 		return false
 	}
@@ -172,10 +180,40 @@ func (s *session) wireCall(call native.Call) (native.Call, error) {
 	if s.provider == "confluence" {
 		return s.confluenceCall(call)
 	}
-	if !relevantTool(s.provider, call.Tool) || call.Tool == "executeRead" && call.Arguments["name"] != "listJiraIssueRemoteIssueLinks" {
+	if !relevantTool(s.writeTool, call.Tool) {
+		return native.Call{}, native.ErrDenied
+	}
+	if s.writeTool == commentTool {
+		if s.site == "" || s.issueKey == "" ||
+			call.Arguments["cloudId"] != s.site || call.Arguments["issueIdOrKey"] != s.issueKey {
+			return native.Call{}, native.ErrDenied
+		}
+		if call.Tool == commentTool {
+			body, ok := call.Arguments["commentBody"].(string)
+			if len(call.Arguments) != 4 || !ok || body == "" || call.Arguments["contentFormat"] != "html" {
+				return native.Call{}, native.ErrDenied
+			}
+		}
+		return call, s.checkSchema(call.Tool, call.Arguments)
+	}
+	if call.Tool == "executeRead" && call.Arguments["name"] != "listJiraIssueRemoteIssueLinks" {
 		return native.Call{}, native.ErrDenied
 	}
 	return call, native.ValidateInputSchema(s.tools[call.Tool], call.Arguments)
+}
+
+func (s *session) checkSchema(name string, args map[string]any) error {
+	schema := s.tools[name]
+	for field := range args {
+		// An open schema can accept and silently ignore unknown safety fields.
+		if schema == nil || schema.Properties[field] == nil {
+			return fmt.Errorf("%w: Rovo did not advertise %s.%s", native.ErrDenied, name, field)
+		}
+	}
+	if err := native.ValidateInputSchema(schema, args); err != nil {
+		return fmt.Errorf("%w: incompatible Rovo schema for %s", native.ErrDenied, name)
+	}
+	return nil
 }
 
 func (s *session) Call(ctx context.Context, call native.Call) (json.RawMessage, error) {

@@ -21,9 +21,9 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
-func flatCatalog(t *testing.T) map[string]*jsonschema.Schema {
+func flatCatalog(t *testing.T, file string) map[string]*jsonschema.Schema {
 	t.Helper()
-	raw, err := os.ReadFile("testdata/confluence-flat-schemas.json")
+	raw, err := os.ReadFile(filepath.Join("testdata", file))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func flatCatalog(t *testing.T) map[string]*jsonschema.Schema {
 func TestConfluenceDesktopPublish(t *testing.T) {
 	const site = "https://fixture.atlassian.net"
 	t.Setenv("DEVFLOW_HOME", t.TempDir())
-	tools := flatCatalog(t)
+	tools := flatCatalog(t, "confluence-flat-schemas.json")
 	server := mcp.NewServer(&mcp.Implementation{Name: "confluence-fixture"}, nil)
 	version, writes, historyReads, spaceReads := 7, 0, 0, 0
 	generation := "fixture-generation"
@@ -208,7 +208,7 @@ func TestConfluenceDesktopPublish(t *testing.T) {
 }
 
 func TestConfluenceCatalogAndTargetRequired(t *testing.T) {
-	s := &session{provider: "confluence", site: "https://fixture.atlassian.net", pageID: "42", tools: flatCatalog(t)}
+	s := &session{provider: "confluence", site: "https://fixture.atlassian.net", pageID: "42", tools: flatCatalog(t, "confluence-flat-schemas.json")}
 	args := map[string]any{"cloudId": s.site, "contentId": s.pageID, "contentType": "page", "title": "Runbook",
 		"body": map[string]any{"format": "html", "value": "<p>replacement</p>"}, "snapshotToken": "s", "versionMessage": "receipt"}
 	call := native.Call{Provider: "confluence", Server: "atlassian", Tool: updateTool, Arguments: args}

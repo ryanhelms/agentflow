@@ -200,9 +200,14 @@ writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery. The Claude Code Desktop pilot supports Jira web links and
-revision-checked Confluence page replacement through separate Devflow Rovo
-enrollments. For Confluence, use `devflow setup login --provider confluence --client devflow`
+for delivery.
+
+The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
+and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
+route adds one comment after approval and returns its verified comment ID.
+The CLI equivalent is `devflow --native-client claude-desktop comment [KEY] TEXT`.
+An uncertain result requires inspection of the issue before another approval.
+For Confluence, use `devflow setup login --provider confluence --client devflow`
 and preview the update with `devflow_docs_publish`. Desktop verifies the page’s
 space ID and key on the same site before it can publish. Repositories can limit
 publication to space keys in `knowledge_base.settings.publish_spaces`.

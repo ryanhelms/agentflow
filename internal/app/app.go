@@ -394,12 +394,24 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 		return nil, err
 	}
 	summary := jiraRemoteSummary(map[string]string{"site": site, "key": key, "comment": body}, write)
-	if p, err := a.gate(policy.Remote, "comment", summary, token, false, nil); p != nil || err != nil {
+	desktop := write != nil && write.Binding.Owner == "devflow"
+	// Always redeem a supplied approval, including if the native route disappeared under auto.
+	if p, err := a.gate(policy.Remote, "comment", summary, token, desktop || token != "", nil); p != nil || err != nil {
 		return p, err
 	}
-	if write != nil {
+	result := map[string]any{"key": key}
+	switch {
+	case desktop:
+		var id string
+		id, err = applyTaskAppend(ctx, a.Home, token, taskWritePreview(*write), func() (string, error) {
+			return write.commentID(ctx, ref, body)
+		})
+		if err == nil {
+			result["comment_id"] = id
+		}
+	case write != nil:
 		_, err = write.run(ctx)
-	} else {
+	default:
 		j, loadErr := a.jiraTasks(nil)
 		if loadErr != nil {
 			return nil, loadErr
@@ -407,7 +419,8 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 		_, err = j.Comment(ctx, ref, body, provider.WriteOptions{})
 	}
 	a.audit(policy.Remote, "comment", summary, err)
-	return map[string]any{"key": key, "commented": err == nil}, err
+	result["commented"] = err == nil
+	return result, err
 }
 
 func viaNote(a *App) string {

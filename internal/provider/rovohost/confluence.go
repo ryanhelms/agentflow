@@ -38,7 +38,7 @@ func (s *session) confluenceCall(call native.Call) (native.Call, error) {
 			return native.Call{}, native.ErrDenied
 		}
 		// Later edits can require history to reconcile the approved successor.
-		if err := s.checkConfluenceSchema(versionTool, map[string]any{"cloudId": s.site, "contentId": s.pageID, "versionNumber": 1}); err != nil {
+		if err := s.checkSchema(versionTool, map[string]any{"cloudId": s.site, "contentId": s.pageID, "versionNumber": 1}); err != nil {
 			return native.Call{}, err
 		}
 		call.Arguments = maps.Clone(args)
@@ -53,21 +53,7 @@ func (s *session) confluenceCall(call native.Call) (native.Call, error) {
 	default:
 		return native.Call{}, native.ErrDenied
 	}
-	return call, s.checkConfluenceSchema(call.Tool, call.Arguments)
-}
-
-func (s *session) checkConfluenceSchema(name string, args map[string]any) error {
-	schema := s.tools[name]
-	for field := range args {
-		// An open schema can accept and silently ignore unknown safety fields.
-		if schema == nil || schema.Properties[field] == nil {
-			return fmt.Errorf("%w: Rovo did not advertise %s.%s", native.ErrDenied, name, field)
-		}
-	}
-	if err := native.ValidateInputSchema(schema, args); err != nil {
-		return fmt.Errorf("%w: incompatible Confluence schema for %s", native.ErrDenied, name)
-	}
-	return nil
+	return call, s.checkSchema(call.Tool, call.Arguments)
 }
 
 // The flat page read omits the space key. Join by the provider's numeric ID,
@@ -101,7 +87,7 @@ func (s *session) pageWithSpace(ctx context.Context, raw json.RawMessage) (json.
 	}
 
 	args := map[string]any{"cloudId": s.site, "spaceIdOrKey": page.SpaceID}
-	if err := s.checkConfluenceSchema(spaceTool, args); err != nil {
+	if err := s.checkSchema(spaceTool, args); err != nil {
 		return nil, err
 	}
 	result, err := s.invoke(ctx, spaceTool, args)

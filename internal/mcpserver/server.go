@@ -109,6 +109,20 @@ var (
 
 func ptr[T any](v T) *T { return &v }
 
+// The Desktop grant is opt-in per Devflow entry point. In particular, batch
+// EOD and checklist updates also call the Jira comment implementation.
+func (s *Server) writerForTool(name string) *native.SessionWriter {
+	if s.app.Client != "claude" && s.app.Client != "claude-desktop" {
+		return s.writer
+	}
+	switch name {
+	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link":
+		return s.writer
+	default:
+		return nil
+	}
+}
+
 // add registers a tool whose handler returns any JSON-serialisable value.
 func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (any, error)) {
 	mcp.AddTool(s.mcp, &mcp.Tool{Name: name, Description: desc, Annotations: ann},
@@ -116,8 +130,8 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 			if s.blocked != nil {
 				return errResult(s.blocked), nil, nil
 			}
-			if s.writer != nil {
-				ctx = native.WithWriteHost(ctx, s.writer)
+			if writer := s.writerForTool(name); writer != nil {
+				ctx = native.WithWriteHost(ctx, writer)
 			}
 			out, err := fn(ctx, in)
 			var providerRequest *native.Request

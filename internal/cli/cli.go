@@ -29,6 +29,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -106,6 +107,8 @@ Work
 
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
+  --native-client claude-desktop comment [KEY] TEXT [--yes]
+                                 use the separately enrolled Rovo connection for a Jira comment
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -116,16 +119,15 @@ Runtime
 func Main(args []string) int {
 	ctx := context.Background()
 	if len(args) > 0 && args[0] == "--native-client" {
-		if len(args) < 3 || args[1] != "codex" {
-			fmt.Fprintln(os.Stderr, "usage: devflow --native-client codex COMMAND")
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: devflow --native-client NAME COMMAND")
 			return 1
 		}
-		dir, err := os.Getwd()
+		writer, err := nativeWriter(args[1], args[2])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "devflow:", err)
 			return 1
 		}
-		writer := codexhost.NewWriter(dir)
 		defer writer.Close()
 		ctx = native.WithWriteHost(ctx, writer)
 		args = args[2:]
@@ -153,6 +155,24 @@ func Main(args []string) int {
 	default:
 		fmt.Fprintln(os.Stderr, "devflow:", err)
 		return 1
+	}
+}
+
+func nativeWriter(client, command string) (*native.SessionWriter, error) {
+	switch client {
+	case "codex":
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		return codexhost.NewWriter(dir), nil
+	case "claude-desktop":
+		if command != "comment" {
+			return nil, errors.New("usage: devflow --native-client claude-desktop comment [KEY] TEXT [--yes]")
+		}
+		return rovohost.NewWriter(), nil
+	default:
+		return nil, fmt.Errorf("unsupported native client %q", client)
 	}
 }
 
