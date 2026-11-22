@@ -17,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -61,9 +62,20 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	if jc, err := a.Jira(); err != nil {
-		tc.Warnings = append(tc.Warnings, err.Error())
-	} else if task, err := legacy.NewJira("jira", jc.Base, jc, nil).GetFields(ctx, ref); err != nil {
+	var api *atlassian.Client
+	task, err := a.nativeJiraTask(ctx, ref, func() (provider.Task, error) {
+		client, err := a.Jira()
+		if err != nil {
+			return provider.Task{}, err
+		}
+		api = client
+		return legacy.NewJira("jira", client.Base, client, nil).GetFields(ctx, ref)
+	})
+	if err != nil {
+		var request *native.Request
+		if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+			return nil, err
+		}
 		tc.Warnings = append(tc.Warnings, "Jira: "+err.Error())
 	} else {
 		tc.Summary, tc.Status, tc.Type, tc.Assignee = task.Title, task.State.Name, task.Type, task.Assignee
@@ -72,12 +84,16 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 				continue
 			}
 			tc.Epic = parent.Ref.ID + " " + parent.Title
-			if links, err := jc.RemoteLinks(ctx, parent.Ref.ID); err == nil {
-				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+			if api != nil {
+				if links, err := api.RemoteLinks(ctx, parent.Ref.ID); err == nil {
+					tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+				}
 			}
 		}
-		if links, err := jc.RemoteLinks(ctx, key); err == nil {
-			tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+		if api != nil {
+			if links, err := api.RemoteLinks(ctx, key); err == nil {
+				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+			}
 		}
 		if cl, err := a.Checklists(ctx).Sync(key, contextx.ParseCriteria(task.Description)); err == nil && len(cl.Items) > 0 {
 			tc.Criteria = cl

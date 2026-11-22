@@ -15,6 +15,8 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
 func (a *App) usesFileTasks() bool {
@@ -100,6 +102,29 @@ func (a *App) providerWork(ctx context.Context) ([]WorkItem, error) {
 }
 
 func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, error) {
+	switch {
+	case a.usesAsana():
+		read, err := nativemap.AsanaTask(ref)
+		if err != nil {
+			return provider.Task{}, err
+		}
+		return mappedNativeRead(ctx, "asana", read, func() (provider.Task, error) {
+			return a.readTaskStore(ctx, ref)
+		})
+	case a.usesIssues():
+		read, err := nativemap.GitHubIssue(ref)
+		if err != nil {
+			return provider.Task{}, err
+		}
+		return mappedNativeRead(ctx, "github", read, func() (provider.Task, error) {
+			return a.readTaskStore(ctx, ref)
+		})
+	default:
+		return a.readTaskStore(ctx, ref)
+	}
+}
+
+func (a *App) readTaskStore(ctx context.Context, ref provider.Ref) (provider.Task, error) {
 	tasks, closeStore, err := a.openTaskStore(ctx)
 	if err != nil {
 		return provider.Task{}, err
@@ -130,6 +155,10 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 	tc.Key = taskKey(ref)
 	t, err := a.getTask(ctx, ref)
 	if err != nil {
+		var request *native.Request
+		if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+			return nil, err
+		}
 		tc.Warnings = append(tc.Warnings, err.Error())
 	} else {
 		tc.Summary, tc.Type, tc.Assignee, tc.Status = t.Title, taskType(t), t.Assignee, t.State.Name
@@ -140,7 +169,9 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 			tc.Criteria = cl
 		}
 		if a.usesAsana() {
-			a.addAsanaDocuments(ctx, tc, t.Links)
+			if err := a.addAsanaDocuments(ctx, tc, t.Links); err != nil {
+				return nil, err
+			}
 		}
 		tc.FlowNext = a.nextTaskStates(t)
 	}

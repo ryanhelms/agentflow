@@ -2,15 +2,20 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/provider/repository"
+	"github.com/nscaledev/devflow/internal/provider/twg"
 )
 
-func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []provider.Link) {
+func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []provider.Link) error {
 	for _, link := range links {
 		ref := link.Ref
 		if ref == nil || ref.Instance == "asana" {
@@ -19,6 +24,10 @@ func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []
 		page := atlassian.Page{ID: ref.String(), Title: link.Title, URL: link.URL, Space: ref.Scope}
 		doc, err := a.linkedKnowledgeDocument(ctx, *ref)
 		if err != nil {
+			var request *native.Request
+			if errors.As(err, &request) {
+				return err
+			}
 			tc.Warnings = append(tc.Warnings, fmt.Sprintf("document %s: %v", ref, err))
 		} else {
 			page.Title = doc.Title
@@ -32,6 +41,7 @@ func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []
 		}
 		tc.Docs = append(tc.Docs, page)
 	}
+	return nil
 }
 
 func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (provider.Document, error) {
@@ -48,10 +58,31 @@ func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (pr
 		if err != nil {
 			return zero, err
 		}
-		knowledge, err = a.confluenceKnowledge(site)
+		legacyRead := func() (provider.Document, error) {
+			store, err := a.confluenceKnowledge(site)
+			if err != nil {
+				return zero, err
+			}
+			return store.Get(ctx, ref)
+		}
+		if !strings.HasPrefix(site, "https://") {
+			return legacyRead()
+		}
+		read, err := nativemap.ConfluencePage(ref, site)
 		if err != nil {
 			return zero, err
 		}
+		return mappedNativeRead(ctx, "atlassian", read, func() (provider.Document, error) {
+			cli, err := twg.NewConfluence(ref.Instance, site, []string{ref.Scope})
+			if err != nil {
+				return zero, err
+			}
+			doc, err := cli.Get(ctx, ref)
+			if errors.Is(err, twg.ErrToolAbsent) {
+				return legacyRead()
+			}
+			return doc, atlCLIError("confluence", err)
+		})
 	case "filesystem":
 		store, err := filesystem.NewKnowledge(name, a.knowledgeDirectory())
 		if err != nil {

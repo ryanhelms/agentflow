@@ -182,6 +182,10 @@ In an agent session, use the setup skill to reuse the provider's connected MCP
 or start its OAuth flow. Use `devflow setup login --provider NAME` to start
 the supported vendor CLI's browser login when no MCP is available. See
 [interactive provider setup](docs/providers.md#interactive-provider-setup).
+Jira work and issue context, Confluence search, and individual Asana and
+GitHub issue reads can use the client’s connected provider MCP. Atlassian
+reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
+use the signed-in GitHub CLI.
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

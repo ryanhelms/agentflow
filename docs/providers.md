@@ -166,13 +166,26 @@ command. Retry the original read in the chosen tool after sign-in. Jira and
 Confluence require separate product access checks even with the same connector.
 A permission denial calls for access to the affected product, project or space.
 
-A standalone plan cannot list the tools or sign-in state of another MCP
+A standalone plan cannot list the tools or sign-in state of a sibling MCP
 server owned by the host. Validate the available read capabilities in the
 agent session. Interactive setup works without exporting personal credentials.
-Operations that still use compiled REST or webhook adapters have their
-existing credential behavior until their transports are migrated. Use the
-provider MCP for direct reads where the host has it. Devflow-managed writes
-continue through devflow's preview and confirmation policy.
+
+Devflow routes Jira work and issue context, Confluence search, and individual
+Asana and GitHub issue reads through the selected provider's MCP where supported.
+Codex can call a provider tool directly through App Server. In Claude Code and
+other MCP hosts, the Devflow read can return `native_read_required`. The host
+uses its existing provider connection for the exact requested tool and inputs,
+then passes the result back to the original Devflow tool in `native_results`.
+Other clients can opt into the same flow with `provider_mcp: true`.
+
+Jira and Confluence can use the signed-in Teamwork Graph CLI when the MCP
+capability is missing. Interactive GitHub API calls use the signed-in `gh`
+client. Explicit GitHub workflow tokens retain the existing service-account
+path. When a provider rejects access, report the rejected site or scope and
+check its permissions. When authentication is required, start the provider
+client's sign-in and retry after consent. Other existing REST or webhook
+operations retain their current credential behavior during migration.
+Devflow-managed writes continue through its confirmation and audit policy.
 
 ### Claude Code Desktop
 

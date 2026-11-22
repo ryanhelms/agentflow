@@ -6,18 +6,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/auth"
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/contextx"
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
@@ -33,11 +34,12 @@ type App struct {
 	Client string
 	Home   string
 
-	jiraMu sync.Mutex
-	jira   *atlassian.Client
-	tasks  provider.Tasks
-	ghc    *gh.Client
-	fm     *flowmap.Map
+	jiraMu   sync.Mutex
+	jira     *atlassian.Client
+	tasks    provider.Tasks
+	githubMu sync.Mutex
+	ghc      *gh.Client
+	fm       *flowmap.Map
 }
 
 // Open opens the repo containing dir. client names the calling AI client.
@@ -68,16 +70,28 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	return &App{Repo: repo, Cfg: cfg, HasCfg: found, User: user, Gate: gate, Client: client, Home: home}, nil
 }
 
-// GitHub returns a client using the developer's gh token.
+// GitHub uses gh's own login for workstation access. An explicit token retains
+// the existing direct client used by callers such as unattended workflows.
 func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
+	a.githubMu.Lock()
+	defer a.githubMu.Unlock()
 	if a.ghc != nil {
 		return a.ghc, nil
 	}
-	tok, err := auth.GitHubToken(ctx, a.Repo.Dir)
+	for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if token := os.Getenv(name); token != "" {
+			a.ghc = gh.New(token)
+			return a.ghc, nil
+		}
+	}
+	selection, err := managedgh.Inspect(ctx, a.Repo.Dir)
 	if err != nil {
 		return nil, err
 	}
-	a.ghc = gh.New(tok)
+	if selection.Command == "" {
+		return nil, fmt.Errorf("GitHub CLI unavailable: %s", selection.Detail)
+	}
+	a.ghc = gh.NewCLI(selection.Command, a.Repo.Dir, "github.com")
 	return a.ghc, nil
 }
 

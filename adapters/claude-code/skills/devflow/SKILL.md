@@ -68,6 +68,11 @@ For a declared provider MCP server, inspect `companion` through the same
 plan tool. Use `companion` with `install: true` to approve its pinned
 executable and a separate `companion` plus `client` request to register it.
 Use the setup skill to discover the provider's MCP and launch its native sign-in
-when required. Prefer the connected provider MCP for direct reads, with the
-vendor CLI as fallback for supported operations. Keep devflow-managed writes
-behind devflow's previews and confirmations.
+when required. When a Devflow read returns `native_read_required`, call the
+named tool with its specified arguments through the connected provider MCP.
+Resume the same Devflow tool with the request's ID, status, and JSON result in
+`native_results`. Keep earlier replies if the next read needs them. Report
+`unavailable` only for a missing operation so Devflow can use its CLI fallback.
+Use `access_denied` for permission failures. If the provider needs sign-in,
+start its native OAuth flow and retry the read after the user completes
+consent. Keep devflow-managed writes behind Devflow's previews and confirmations.

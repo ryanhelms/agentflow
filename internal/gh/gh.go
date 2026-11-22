@@ -1,4 +1,4 @@
-// Package gh is a small GitHub REST/GraphQL client using the developer's gh token.
+// Package gh is a small GitHub REST and GraphQL client.
 package gh
 
 import (
@@ -14,16 +14,19 @@ import (
 	"time"
 )
 
-// Client calls api.github.com.
+const requestTimeout = 20 * time.Second
+
+// Client calls GitHub through HTTP or the GitHub CLI.
 type Client struct {
 	Token string
 	API   string
 	http  *http.Client
+	cli   *cliBackend
 }
 
 // New returns a client for token.
 func New(token string) *Client {
-	return &Client{Token: token, API: "https://api.github.com", http: &http.Client{Timeout: 20 * time.Second}}
+	return &Client{Token: token, API: "https://api.github.com", http: &http.Client{Timeout: requestTimeout}}
 }
 
 // Do performs a REST call. path may include a query string.
@@ -33,46 +36,42 @@ func (c *Client) Do(ctx context.Context, method, path string, in, out any) error
 }
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any, hdr map[string]string) (http.Header, error) {
-	var body io.Reader
+	var payload []byte
 	if in != nil {
 		b, err := json.Marshal(in)
 		if err != nil {
 			return nil, err
 		}
-		body = bytes.NewReader(b)
+		payload = b
+	}
+	headers := http.Header{}
+	headers.Set("Accept", "application/vnd.github+json")
+	headers.Set("X-GitHub-Api-Version", "2022-11-28")
+	if c.cli == nil && c.Token != "" {
+		headers.Set("Authorization", "Bearer "+c.Token)
+	}
+	for k, v := range hdr {
+		headers.Set(k, v)
+	}
+	if c.cli != nil {
+		return c.cli.do(ctx, method, path, payload, out, headers)
+	}
+	var body io.Reader
+	if payload != nil {
+		body = bytes.NewReader(payload)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.API+path, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
-	}
-	for k, v := range hdr {
-		req.Header.Set(k, v)
-	}
+	req.Header = headers
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusNotModified {
-		return resp.Header, ErrNotModified
-	}
-	if resp.StatusCode >= 300 {
-		msg := string(data)
-		if len(msg) > 400 {
-			msg = msg[:400]
-		}
-		return resp.Header, fmt.Errorf("github %s %s: HTTP %d: %s", method, path, resp.StatusCode, msg)
-	}
-	if out != nil && len(data) > 0 {
-		return resp.Header, json.Unmarshal(data, out)
-	}
-	return resp.Header, nil
+	return resp.Header, decodeResponse(method, path, resp.StatusCode, resp.Header, data, out)
 }
 
 // ErrNotModified is returned for a 304 on conditional requests.
@@ -80,19 +79,18 @@ var ErrNotModified = fmt.Errorf("not modified")
 
 // GraphQL runs a GraphQL query.
 func (c *Client) GraphQL(ctx context.Context, query string, vars map[string]any, out any) error {
-	var resp struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
+	var resp graphQLResponse
 	if err := c.Do(ctx, "POST", "/graphql", map[string]any{"query": query, "variables": vars}, &resp); err != nil {
 		return err
 	}
 	if len(resp.Errors) > 0 {
-		return fmt.Errorf("github graphql: %s", resp.Errors[0].Message)
+		return &resp.Errors[0]
 	}
-	return json.Unmarshal(resp.Data, out)
+	err := json.Unmarshal(resp.Data, out)
+	if err != nil && c.cli != nil {
+		return cliOutcomeError(http.MethodPost, err)
+	}
+	return err
 }
 
 // File fetches a file's content at ref, with an optional ETag for caching.
