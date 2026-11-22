@@ -116,6 +116,11 @@ only attempts to move open issues forward.
 
 ## Devflow repository pilot
 
+This repository selects the `engineering-task` template at revision `1`
+for task creation. Its catalog lives in [.devflow/task-templates.json](../.devflow/task-templates.json).
+The template requires Objective, Scope, Dependencies, Acceptance Criteria,
+and Verification sections. It supplies a default statement for Dependencies.
+
 This repository uses GitHub Issues for task management and the Repository
 provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
 enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
