@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
 )
@@ -133,11 +134,11 @@ func errResult(err error) *mcp.CallToolResult {
 // ---- inputs ----
 
 type keyIn struct {
-	Key string `json:"key,omitempty" jsonschema:"Jira key; defaults to the key in the current branch name"`
+	Key string `json:"key,omitempty" jsonschema:"task key or qualified reference; defaults to the branch task"`
 }
 type noIn struct{}
 type startIn struct {
-	Key          string `json:"key" jsonschema:"Jira key to start, e.g. PLAT-123"`
+	Key          string `json:"key" jsonschema:"task key or qualified reference to start"`
 	Worktree     bool   `json:"worktree,omitempty" jsonschema:"create a git worktree instead of switching branch (automatic when there are uncommitted changes)"`
 	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
 }
@@ -153,7 +154,7 @@ type commitIn struct {
 	ConfirmToken string   `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
 }
 type transitionIn struct {
-	Key          string `json:"key,omitempty" jsonschema:"Jira key; defaults to the branch key"`
+	Key          string `json:"key,omitempty" jsonschema:"task key or qualified reference; defaults to the branch task"`
 	Event        string `json:"event" jsonschema:"branch.created, pr.opened, pr.merged, deploy.staging, deploy.production, or a verb like #qa"`
 	DryRun       bool   `json:"dry_run,omitempty"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
@@ -172,12 +173,14 @@ type acUpdateIn struct {
 	ConfirmToken string `json:"confirm_token,omitempty"`
 }
 type ticketIn struct {
-	Project      string `json:"project,omitempty" jsonschema:"defaults to the current ticket's project"`
-	Type         string `json:"type,omitempty" jsonschema:"issue type, default Task"`
-	Summary      string `json:"summary"`
-	Description  string `json:"description,omitempty"`
-	LinkTo       string `json:"link_to,omitempty" jsonschema:"key to link with; defaults to the current ticket"`
-	ConfirmToken string `json:"confirm_token,omitempty"`
+	Template         string `json:"template,omitempty" jsonschema:"exact catalog template name; pair with template_revision"`
+	TemplateRevision string `json:"template_revision,omitempty"`
+	Project          string `json:"project,omitempty" jsonschema:"project or scope; may come from the template or provider"`
+	Type             string `json:"type,omitempty" jsonschema:"task type, when supported"`
+	Summary          string `json:"summary,omitempty" jsonschema:"task title; may come from a template"`
+	Description      string `json:"description,omitempty"`
+	LinkTo           string `json:"link_to,omitempty" jsonschema:"related task key or supported knowledge reference; defaults to the branch task"`
+	ConfirmToken     string `json:"confirm_token,omitempty"`
 }
 type prReadyIn struct {
 	Run bool `json:"run_checks,omitempty" jsonschema:"also run the repo's test and lint commands"`
@@ -235,7 +238,7 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_my_work", "List work from the configured task provider.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.MyWork(ctx) })
-	add(s, "devflow_start", "Start work on a task in a branch or worktree. File-backed tasks use a local branch binding.", remote,
+	add(s, "devflow_start", "Start work on a task in a branch or worktree. Assignment and start transitions depend on provider support and configuration.", remote,
 		func(ctx context.Context, in startIn) (any, error) {
 			return a.Start(ctx, in.Key, in.Worktree, in.ConfirmToken)
 		})
@@ -249,13 +252,13 @@ func (s *Server) register() {
 		func(ctx context.Context, _ noIn) (any, error) { return a.ScopeCheck(ctx) })
 	add(s, "devflow_ticket_create", "Create a linked task with confirmation. Repository publication can return a pending review PR.", remote,
 		func(ctx context.Context, in ticketIn) (any, error) {
-			return a.CreateTicket(ctx, in.Project, in.Type, in.Summary, in.Description, in.LinkTo, in.ConfirmToken)
+			return a.CreateTicketWithTemplate(ctx, in.Project, in.Type, in.Summary, in.Description, in.LinkTo, tasktemplate.Ref{Name: in.Template, Revision: in.TemplateRevision}, in.ConfirmToken)
 		})
 	add(s, "devflow_transition", "Move a task by configured event or verb. Use dry_run to preview. A pending_review result requires a PR merge.", remote,
 		func(ctx context.Context, in transitionIn) (any, error) {
 			return a.Transition(ctx, in.Key, in.Event, in.DryRun, in.ConfirmToken)
 		})
-	add(s, "devflow_comment", "Comment on a Jira ticket.", remote,
+	add(s, "devflow_comment", "Comment on a task when its provider supports comments.", remote,
 		func(ctx context.Context, in commentIn) (any, error) {
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})

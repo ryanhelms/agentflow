@@ -93,12 +93,10 @@ func (a *App) CommitContext(ctx context.Context, paths []string) (*CommitContext
 	}
 	cc.Key = a.CurrentKey(ctx)
 	if cc.Key != "" {
-		if jc, err := a.Jira(); err == nil {
-			if iss, err := jc.GetIssue(ctx, cc.Key); err == nil {
-				cc.Ticket = iss.Fields.Summary + " (status: " + iss.Fields.Status.Name + ")"
-				if iss.Fields.Status.Category.Key == "new" {
-					cc.SuggestVerb = "start"
-				}
+		if task, err := a.jiraTask(ctx, cc.Key); err == nil {
+			cc.Ticket = task.Title + " (status: " + task.State.Name + ")"
+			if task.State.Category == "new" {
+				cc.SuggestVerb = "start"
 			}
 		}
 	}
@@ -171,7 +169,7 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 		}
 		if m.Comment != "" || m.Time != "" {
 			name := "GitHub Issues"
-			if a.usesFileTasks() {
+			if !a.usesIssues() {
 				name = a.Cfg.Providers.TaskManagement.Provider
 			}
 			warnings = append(warnings, name+" does not apply Jira Smart Commit commands")

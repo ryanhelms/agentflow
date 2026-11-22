@@ -10,6 +10,5 @@
 // Confluence only exposes search excerpts. Reading a page by ID and publishing
 // return provider.ErrUnsupported.
 //
-// GitHub supports GitHub.com pull requests and unresolved review threads. The
-// legacy lookup is limited to heads owned by the target repository's owner.
+// GitHub supports GitHub.com pull requests and unresolved review threads.
 package legacy

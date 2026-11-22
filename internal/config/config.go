@@ -144,9 +144,9 @@ func LoadRepo(root string) (*Repo, bool, error) {
 		return nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
 	}
 	c.Providers = providers
-	// GitHub issue identity lives in a trailer. Keep an explicit Jira subject
+	// GitHub Issues and Asana use a trailer for task identity. Keep an explicit Jira subject
 	// convention when the repository has configured one.
-	if providers.TaskManagement.Provider == "github-issues" && c.Commit.RequireKey == nil {
+	if (providers.TaskManagement.Provider == "github-issues" || providers.TaskManagement.Provider == "asana") && c.Commit.RequireKey == nil {
 		optional := false
 		c.Commit.RequireKey = &optional
 	}
