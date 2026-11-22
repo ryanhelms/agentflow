@@ -18,7 +18,7 @@ import (
 
 var (
 	// ErrUnsupported identifies platforms where this cache implementation is unavailable.
-	ErrUnsupported = errors.New("local companion cache supports native macOS and Linux only")
+	ErrUnsupported = errors.New("local companion cache supports native macOS, Linux and Windows only")
 	// ErrDigestMismatch identifies source bytes that differ from the declared SHA256.
 	ErrDigestMismatch = errors.New("companion artifact sha256 mismatch")
 
@@ -48,12 +48,12 @@ var (
 
 // New opens an existing cache directory owned by the effective user and not
 // writable by group or others. Use a dedicated directory on a local filesystem
-// that supports flock, symlinks and atomic rename. The installer accepts a raw
+// that supports native file locks and atomic rename. The installer accepts a raw
 // executable (including a script), with no archive extraction or format parsing.
 // Installations are isolated by environment ID, platform and companion ID.
 func New(cacheDir string, env provision.Environment, open OpenArtifact) (*Cache, error) {
 	native := provision.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
-	if (native.OS != "darwin" && native.OS != "linux") || env.Platform != native {
+	if (native.OS != "darwin" && native.OS != "linux" && native.OS != "windows") || env.Platform != native {
 		return nil, ErrUnsupported
 	}
 	if cacheDir == "" || !identifier.MatchString(env.ID) || open == nil {

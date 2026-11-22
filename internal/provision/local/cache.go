@@ -10,14 +10,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provision"
-)
-
-const (
-	selectionName  = "current"
-	executableMode = 0o500
 )
 
 func openCache(path string) (*os.Root, error) {
@@ -25,7 +21,7 @@ func openCache(path string) (*os.Root, error) {
 	if err != nil {
 		return nil, fmt.Errorf("inspect cache directory: %w", err)
 	}
-	if err := checkDirectory(info); err != nil {
+	if err := checkDirectory(path, info); err != nil {
 		return nil, err
 	}
 	return openCheckedDirectory(os.OpenRoot, path, info)
@@ -63,14 +59,14 @@ func openChild(parent *os.Root, name string, create bool) (*os.Root, error) {
 	if err != nil {
 		return nil, fmt.Errorf("inspect cache directory: %w", err)
 	}
-	if err := checkDirectory(info); err != nil {
+	if err := checkDirectory(filepath.Join(parent.Name(), name), info); err != nil {
 		return nil, err
 	}
 	return openCheckedDirectory(parent.OpenRoot, name, info)
 }
 
-func checkDirectory(info fs.FileInfo) error {
-	if !info.IsDir() || !ownedByEffectiveUser(info) || info.Mode().Perm()&0o022 != 0 {
+func checkDirectory(path string, info fs.FileInfo) error {
+	if !info.IsDir() || !trustedOwner(path, info) || !privateMode(info.Mode()) {
 		return fmt.Errorf("unsafe cache directory %q", info.Name())
 	}
 	return nil
@@ -98,7 +94,7 @@ type artifactRef struct {
 }
 
 func (r artifactRef) name() string {
-	return fmt.Sprintf("%d.%d.%d-%s", r.version.Major, r.version.Minor, r.version.Patch, r.sha256)
+	return fmt.Sprintf("%d.%d.%d-%s%s", r.version.Major, r.version.Minor, r.version.Patch, r.sha256, exeSuffix)
 }
 
 type selection struct {
@@ -114,14 +110,14 @@ func (s selection) installation() provision.Installation {
 }
 
 func readSelection(ctx context.Context, dir *os.Root) (selection, error) {
-	name, err := dir.Readlink(selectionName)
+	name, err := readPointer(dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return selection{}, nil
 	}
 	if err != nil {
 		return selection{}, fmt.Errorf("read cache selection: %w", err)
 	}
-	version, sha, ok := strings.Cut(name, "-")
+	version, sha, ok := strings.Cut(strings.TrimSuffix(name, exeSuffix), "-")
 	ref := artifactRef{sha256: sha}
 	if !ok || !digest.MatchString(sha) {
 		return selection{}, errors.New("invalid cache selection")
@@ -151,7 +147,7 @@ func inspectObject(ctx context.Context, dir *os.Root, name string) (objectState,
 	if err != nil {
 		return objectState{}, fmt.Errorf("inspect cached executable: %w", err)
 	}
-	if !info.Mode().IsRegular() || !ownedByEffectiveUser(info) {
+	if !info.Mode().IsRegular() || !trustedOwner(filepath.Join(dir.Name(), name), info) {
 		return objectState{}, fmt.Errorf("unsafe cached executable %q", name)
 	}
 	state := objectState{present: true, mode: info.Mode()}
@@ -207,7 +203,7 @@ func (c *Cache) install(ctx context.Context, dir *os.Root, artifact provision.Ar
 	var link string
 	if before.ref != ref {
 		link = ".selection-" + rand.Text()
-		if err := dir.Symlink(name, link); err != nil {
+		if err := stagePointer(dir, name, link); err != nil {
 			return fmt.Errorf("stage cache selection: %w", err)
 		}
 		defer func() { _ = dir.Remove(link) }()

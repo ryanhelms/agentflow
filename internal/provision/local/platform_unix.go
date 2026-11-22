@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func ownedByEffectiveUser(info fs.FileInfo) bool {
+func trustedOwner(_ string, info fs.FileInfo) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	return ok && int(stat.Uid) == os.Geteuid()
 }

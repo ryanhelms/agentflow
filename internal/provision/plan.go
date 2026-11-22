@@ -137,7 +137,7 @@ func groupDeclarations(manifests []Manifest) (map[string][]declaration, error) {
 				return nil, fmt.Errorf("provider %q declares companion %q more than once", id, targetID)
 			}
 			seen[targetID] = true
-			if err := companion.validate(); err != nil {
+			if err := companion.Validate(); err != nil {
 				return nil, fmt.Errorf("provider %q companion %q: %w", id, targetID, err)
 			}
 			groups[targetID] = append(groups[targetID], declaration{id, companion})

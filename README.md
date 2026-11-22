@@ -177,6 +177,12 @@ copy fails its version check or is missing, you can pin a raw executable in
 Devflow verifies its SHA256 and uses the cached executable directly. See the
 [manifest format and MCP confirmation flow](docs/providers.md#install-a-pinned-gh-companion).
 
+To add a provider MCP server, declare its native executable pins or HTTPS
+endpoint in your user-owned `~/.devflow/mcp-companions.yml`. Run
+`devflow setup verify --companion ID` to check the MCP handshake and tool
+discovery headlessly. Approve installation and registration separately in
+VS Code, Cursor, Claude Code or Gemini CLI. [Provider MCP setup](docs/providers.md#register-a-provider-mcp-companion).
+
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.

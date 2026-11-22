@@ -18,10 +18,12 @@ import (
 // ClientRegistration describes only the devflow-owned project entry. Host
 // trust, plugin activation, and native vendor tools remain client operations.
 type ClientRegistration struct {
-	Client string `json:"client"`
-	Path   string `json:"path"`
-	State  string `json:"state"` // configured, pending, or blocked
-	Detail string `json:"detail"`
+	Entry          string `json:"entry,omitempty"`
+	PreviousSHA256 string `json:"previous_sha256,omitempty"`
+	Client         string `json:"client"`
+	Path           string `json:"path"`
+	State          string `json:"state"` // configured, pending, or blocked
+	Detail         string `json:"detail"`
 }
 
 func inspectRegistration(dir, client string) (*ClientRegistration, error) {
@@ -38,29 +40,9 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 		return nil, nil, fmt.Errorf("unknown client %q", client)
 	}
 	r := &ClientRegistration{Client: client, Path: filepath.Join("."+client, file), State: "blocked"}
-	dest := filepath.Join(dir, r.Path)
-	parent, err := os.Lstat(filepath.Dir(dest))
-	if err == nil && !parent.IsDir() {
-		r.Detail = "use an ordinary project directory for " + filepath.Dir(r.Path)
-		return r, nil, nil
-	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, err
-	}
-	info, err := os.Lstat(dest)
-	var current []byte
-	switch {
-	case err == nil:
-		if !info.Mode().IsRegular() {
-			r.Detail = "use a regular project file for " + r.Path
-			return r, nil, nil
-		}
-		current, err = os.ReadFile(dest)
-		if err != nil {
-			return nil, nil, err
-		}
-	case !errors.Is(err, os.ErrNotExist):
-		return nil, nil, err
+	current, err := registrationBytes(dir, r)
+	if err != nil || r.Detail != "" {
+		return r, nil, err
 	}
 	var next []byte
 	if client == "codex" {
@@ -90,14 +72,9 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 		// only installs the devflow endpoint or Claude plugin declaration.
 		delete(wanted, "includeCoAuthoredBy")
 		delete(wanted, "contextFileName")
-		cur := map[string]any{}
-		if info != nil {
-			decoder := json.NewDecoder(bytes.NewReader(current))
-			decoder.UseNumber()
-			if !json.Valid(current) || decoder.Decode(&cur) != nil || cur == nil {
-				r.Detail = "make " + r.Path + " a valid JSON object before merging the devflow adapter"
-				return r, nil, nil
-			}
+		cur := registrationJSON(current, r)
+		if cur == nil {
+			return r, nil, nil
 		}
 		missing := false
 		for _, key := range slices.Sorted(maps.Keys(wanted)) {
@@ -117,7 +94,7 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 				if exists && !reflect.DeepEqual(existing, val) {
 					r.Detail = "inspect the existing " + key + "." + name + " entry in " + r.Path + " before adopting the project adapter"
 					if endpoint, ok := existing.(map[string]any); ok && endpoint["url"] != nil {
-						r.Detail = "the existing remote MCP entry in " + r.Path + " requires a provider-declared endpoint, its authentication method and a read-only MCP handshake. This adapter verifies local stdio only"
+						r.Detail = "the existing remote MCP entry in " + r.Path + " occupies the devflow launcher key. Declare the hosted provider companion in mcp-companions.yml and use setup plan --companion ID --client " + client + " for a read-only MCP handshake and a separate managed entry"
 					}
 					return r, nil, nil
 				}
@@ -141,11 +118,57 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 	return r, next, nil
 }
 
+// Read only ordinary project files; readiness diagnostics never include contents.
+func registrationBytes(dir string, r *ClientRegistration) ([]byte, error) {
+	dest := filepath.Join(dir, r.Path)
+	parent, err := os.Lstat(filepath.Dir(dest))
+	if err == nil && !parent.IsDir() {
+		r.Detail = "use an ordinary project directory for " + filepath.Dir(r.Path)
+		return nil, nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	info, err := os.Lstat(dest)
+	var current []byte
+	switch {
+	case err == nil:
+		if !info.Mode().IsRegular() {
+			r.Detail = "use a regular project file for " + r.Path
+			return nil, nil
+		}
+		current, err = os.ReadFile(dest)
+		if err != nil {
+			return nil, err
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return nil, err
+	}
+	return current, nil
+}
+
+func registrationJSON(current []byte, r *ClientRegistration) map[string]any {
+	doc := map[string]any{}
+	if current != nil {
+		d := json.NewDecoder(bytes.NewReader(current))
+		d.UseNumber()
+		if !json.Valid(current) || d.Decode(&doc) != nil || doc == nil {
+			r.Detail = "make " + r.Path + " a valid JSON object before merging a client entry"
+			return nil
+		}
+	}
+	return doc
+}
+
 // RegisterProviderClient merges a single project adapter. A fresh provider
 // plan must have passed before calling. Re-read the overlay under a writer
 // lock so two setup processes cannot overwrite one another's changes.
 func RegisterProviderClient(dir, client string) error {
-	r, err := inspectRegistration(dir, client)
+	return registerOverlay(dir, func() (*ClientRegistration, []byte, error) { return clientOverlay(dir, client) })
+}
+
+func registerOverlay(dir string, overlay func() (*ClientRegistration, []byte, error)) error {
+	r, _, err := overlay()
 	if err != nil {
 		return err
 	}
@@ -185,7 +208,7 @@ func RegisterProviderClient(dir, client string) error {
 		}
 	}()
 	var next []byte
-	r, next, err = clientOverlay(dir, client)
+	r, next, err = overlay()
 	if err == nil && r.State == "blocked" {
 		err = errors.New(r.Detail)
 	}

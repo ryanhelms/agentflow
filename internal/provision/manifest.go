@@ -125,7 +125,7 @@ func validURL(raw string, allowFile bool) bool {
 	}
 }
 
-func (c Companion) validate() error {
+func (c Companion) Validate() error {
 	target := c.Target
 	if !identifier.MatchString(target.ID) || !identifier.MatchString(target.Health.Name) || target.Health.Timeout < 0 {
 		return errors.New("invalid companion id or health probe")
