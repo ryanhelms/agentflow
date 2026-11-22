@@ -6,18 +6,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/auth"
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/contextx"
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
@@ -33,11 +34,12 @@ type App struct {
 	Client string
 	Home   string
 
-	jiraMu sync.Mutex
-	jira   *atlassian.Client
-	tasks  provider.Tasks
-	ghc    *gh.Client
-	fm     *flowmap.Map
+	jiraMu   sync.Mutex
+	jira     *atlassian.Client
+	tasks    provider.Tasks
+	githubMu sync.Mutex
+	ghc      *gh.Client
+	fm       *flowmap.Map
 }
 
 // Open opens the repo containing dir. client names the calling AI client.
@@ -68,16 +70,28 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	return &App{Repo: repo, Cfg: cfg, HasCfg: found, User: user, Gate: gate, Client: client, Home: home}, nil
 }
 
-// GitHub returns a client using the developer's gh token.
+// GitHub uses gh's own login for workstation access. An explicit token retains
+// the existing direct client used by callers such as unattended workflows.
 func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
+	a.githubMu.Lock()
+	defer a.githubMu.Unlock()
 	if a.ghc != nil {
 		return a.ghc, nil
 	}
-	tok, err := auth.GitHubToken(ctx, a.Repo.Dir)
+	for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN"} {
+		if token := os.Getenv(name); token != "" {
+			a.ghc = gh.New(token)
+			return a.ghc, nil
+		}
+	}
+	selection, err := managedgh.Inspect(ctx, a.Repo.Dir)
 	if err != nil {
 		return nil, err
 	}
-	a.ghc = gh.New(tok)
+	if selection.Command == "" {
+		return nil, fmt.Errorf("GitHub CLI unavailable: %s", selection.Detail)
+	}
+	a.ghc = gh.NewCLI(selection.Command, a.Repo.Dir, "github.com")
 	return a.ghc, nil
 }
 
@@ -221,12 +235,10 @@ func (a *App) PlanTransition(ctx context.Context, key, event string) (Transition
 	if err != nil {
 		return res, err
 	}
-	target, ok := fm.Resolve(projectOf(key), event)
-	if !ok {
-		res.Note = "no mapping for this project; nothing happens"
+	res = jiraTransitionTarget(fm, key, event)
+	if res.To == "" {
 		return res, nil
 	}
-	res.To = target
 	j, err := a.jiraTasks(nil)
 	if err != nil {
 		res.Note = "Jira not reachable: " + err.Error()
@@ -236,19 +248,34 @@ func (a *App) PlanTransition(ctx context.Context, key, event string) (Transition
 	if err != nil {
 		return res, err
 	}
-	res.From = task.State.Name
+	return jiraPlanFromStatus(fm, ref.Scope, res, task.State.Name, task.State.Terminal), nil
+}
+
+func jiraTransitionTarget(fm *flowmap.Map, key, event string) TransitionResult {
+	res := TransitionResult{Key: key, Event: event}
+	if target, ok := fm.Resolve(projectOf(key), event); ok {
+		res.To = target
+	} else {
+		res.Note = "no mapping for this project; nothing happens"
+	}
+	return res
+}
+
+func jiraPlanFromStatus(fm *flowmap.Map, project string, res TransitionResult, status string, terminal bool) TransitionResult {
+	res.From = status
+	target := res.To
 	switch {
-	case fm.Backwards(projectOf(key), res.From, target):
+	case fm.Backwards(project, res.From, target):
 		res.Note = fmt.Sprintf("%s is before %s in the project's order; devflow only moves forward", target, res.From)
 		res.To = ""
 	case strings.EqualFold(res.From, target):
 		res.Note = "already in " + target
 		res.To = ""
-	case task.State.Terminal:
+	case terminal:
 		res.Note = "ticket is done; devflow never moves it back"
 		res.To = ""
 	}
-	return res, nil
+	return res
 }
 
 // ApplyTransition performs a planned transition (no gate; callers gate first).
@@ -303,6 +330,18 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 	if err != nil {
 		return nil, err
 	}
+	if !dryRun && (a.usesIssues() || a.usesAsana()) {
+		return a.transitionProviderTask(ctx, key, event, token, operationID)
+	}
+	if !a.UsesTaskRefs() && operationID == "" {
+		ref, err := legacy.JiraRef("jira", key)
+		if err != nil {
+			return nil, err
+		}
+		if result, selected, err := a.tryNativeJiraTransition(ctx, ref, event, dryRun, token); selected {
+			return result, err
+		}
+	}
 	plan, err := a.PlanTransition(ctx, key, event)
 	plan.operationID = operationID
 	if err != nil || dryRun || plan.To == "" {
@@ -316,17 +355,6 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 		Site string `json:"site"`
 	}{plan, a.jiraSettings().Site}
 	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
-	if a.usesIssues() || a.usesAsana() {
-		ref, err := a.taskRef(ctx, plan.Key)
-		if err != nil {
-			return nil, err
-		}
-		summary = struct {
-			TransitionResult
-			TaskRef string `json:"task_ref"`
-		}{plan, ref.String()}
-		commands = nil
-	}
 	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
 		return p, err
 	}
@@ -335,7 +363,10 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 
 // Comment posts a comment on a ticket.
 func (a *App) Comment(ctx context.Context, key, text, token string) (any, error) {
-	if a.usesFileTasks() || a.usesAsana() {
+	if a.usesAsana() {
+		return a.commentAsanaTask(ctx, key, text, token)
+	}
+	if a.usesFileTasks() {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "comments")
 	}
 	if a.usesIssues() {
@@ -354,15 +385,23 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 		return nil, err
 	}
 	body := text + viaNote(a)
-	summary := map[string]string{"site": site, "key": key, "comment": body}
-	if p, err := a.gate(policy.Remote, "comment", summary, token, false, nil); p != nil || err != nil {
-		return p, err
-	}
-	j, err := a.jiraTasks(nil)
+	write, err := a.prepareJiraComment(ctx, site, ref, body)
 	if err != nil {
 		return nil, err
 	}
-	_, err = j.Comment(ctx, ref, body, provider.WriteOptions{})
+	summary := jiraRemoteSummary(map[string]string{"site": site, "key": key, "comment": body}, write)
+	if p, err := a.gate(policy.Remote, "comment", summary, token, false, nil); p != nil || err != nil {
+		return p, err
+	}
+	if write != nil {
+		_, err = write.run(ctx)
+	} else {
+		j, loadErr := a.jiraTasks(nil)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		_, err = j.Comment(ctx, ref, body, provider.WriteOptions{})
+	}
 	a.audit(policy.Remote, "comment", summary, err)
 	return map[string]any{"key": key, "commented": err == nil}, err
 }

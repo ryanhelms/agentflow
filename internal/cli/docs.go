@@ -94,7 +94,7 @@ func runDocs(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		return confirmLoop(*yes, func(token string) (any, error) { return a.DocsPublish(ctx, in, token) })
+		return confirmLoop(*yes, func(token string) (any, error) { return a.DocsPublish(app.WithConfluenceCLI(ctx), in, token) })
 	}
 	return fmt.Errorf("unknown docs command %q", args[0])
 }

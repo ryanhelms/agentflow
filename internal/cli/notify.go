@@ -16,6 +16,7 @@ func runNotify(ctx context.Context, args []string) error {
 	flags.StringVar(&input.OperationID, "operation-id", "", "stable ID to reuse on replay")
 	flags.StringVar(&input.Title, "title", "", "notification title")
 	flags.StringVar(&input.Body, "body", "", "notification body (Slack supports mrkdwn)")
+	flags.BoolVar(&input.Automation, "automation", false, "allow configured Slack automation webhooks")
 	flags.BoolVar(&input.DryRun, "dry-run", false, "show the selected routes")
 	links := flags.String("links", "", "notification links as a JSON array")
 	yes := flags.Bool("yes", false, "accept the confirmation prompt")
@@ -26,7 +27,7 @@ func runNotify(ctx context.Context, args []string) error {
 		return err
 	}
 	if input.Signal == "" || flags.NArg() != 0 {
-		return errors.New("usage: devflow notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--yes]")
+		return errors.New("usage: devflow notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]")
 	}
 	if *links != "" {
 		if err := json.Unmarshal([]byte(*links), &input.Links); err != nil {

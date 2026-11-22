@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,35 +22,37 @@ import (
 // runs the same internal/app operation. A new static tool must add a CLI
 // command and a row here.
 var mcpToCLI = map[string]string{
-	"devflow_context":         "context",
-	"devflow_my_work":         "work",
-	"devflow_start":           "start",
-	"devflow_ac_checklist":    "ac",
-	"devflow_ac_update":       "ac done",
-	"devflow_scope_check":     "scope",
-	"devflow_ticket_create":   "task create",
-	"devflow_transition":      "transition",
-	"devflow_comment":         "comment",
-	"devflow_commit_plan":     "commit",
-	"devflow_commit_context":  "commit",
-	"devflow_commit_validate": "lint-msg",
-	"devflow_commit_preview":  "preview",
-	"devflow_commit":          "commit",
-	"devflow_pr_ready":        "pr",
-	"devflow_pr_open":         "pr",
-	"devflow_review_threads":  "review",
-	"devflow_review_reply":    "review reply",
-	"devflow_ship_status":     "status",
-	"devflow_standup":         "standup",
-	"devflow_eod_post":        "eod post",
-	"devflow_docs_search":     "docs search",
-	"devflow_docs_publish":    "docs publish",
-	"devflow_adr_draft":       "adr new",
-	"devflow_collisions":      "collisions",
-	"devflow_release_plan":    "release plan",
-	"devflow_release_preview": "release preview",
-	"devflow_setup_plan":      "setup",
-	"devflow_setup_apply":     "setup apply",
+	"devflow_context":          "context",
+	"devflow_my_work":          "work",
+	"devflow_start":            "start",
+	"devflow_ac_checklist":     "ac",
+	"devflow_ac_update":        "ac done",
+	"devflow_scope_check":      "scope",
+	"devflow_ticket_create":    "task create",
+	"devflow_jira_remote_link": "task link",
+	"devflow_notify":           "notify",
+	"devflow_transition":       "transition",
+	"devflow_comment":          "comment",
+	"devflow_commit_plan":      "commit",
+	"devflow_commit_context":   "commit",
+	"devflow_commit_validate":  "lint-msg",
+	"devflow_commit_preview":   "preview",
+	"devflow_commit":           "commit",
+	"devflow_pr_ready":         "pr",
+	"devflow_pr_open":          "pr",
+	"devflow_review_threads":   "review",
+	"devflow_review_reply":     "review reply",
+	"devflow_ship_status":      "status",
+	"devflow_standup":          "standup",
+	"devflow_eod_post":         "eod post",
+	"devflow_docs_search":      "docs search",
+	"devflow_docs_publish":     "docs publish",
+	"devflow_adr_draft":        "adr new",
+	"devflow_collisions":       "collisions",
+	"devflow_release_plan":     "release plan",
+	"devflow_release_preview":  "release preview",
+	"devflow_setup_plan":       "setup",
+	"devflow_setup_apply":      "setup apply",
 }
 
 // definitionTool reports whether a tool was generated at runtime from a
@@ -125,8 +129,22 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("DEVFLOW_HOME", filepath.Join(dir, "home"))
-	t.Setenv("JIRA_USER", "")
-	t.Setenv("JIRA_TOKEN", "")
+	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	t.Setenv("GH_TOKEN", "fixture")
+	t.Setenv("JIRA_USER", "dev@example.invalid")
+	t.Setenv("JIRA_TOKEN", "fixture")
+	posts := 0
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = taskTransport(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodPost && r.URL.String() == "https://fixture.invalid/rest/api/3/issue/PLAT-7/comment" {
+			posts++
+			return httptest.NewRecorder().Result(), nil
+		}
+		return nil, errors.New("offline fixture")
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
 	for _, args := range [][]string{
 		{"init", "-q", "-b", "main"},
 		{"config", "user.email", "dev@example.com"},
@@ -137,6 +155,12 @@ func TestParityCommandsRunLocally(t *testing.T) {
 		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
+	}
+	if err := os.Mkdir(".devflow", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 	if err := os.WriteFile("todo.go", []byte("package x\n// TODO: unrelated cleanup\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -163,6 +187,20 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	}
 	if _, code := capture("ac", "done", "missing item"); code == 0 {
 		t.Fatal("ac done on an empty checklist succeeded")
+	}
+	input, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	stdin := os.Stdin
+	os.Stdin = input
+	defer func() { os.Stdin = stdin }()
+	if out, code := capture("comment", "--", "PLAT-7", "--yes"); code == 0 || posts != 0 || !strings.Contains(out, `"comment": "--yes"`) {
+		t.Fatalf("literal comment body: exit %d, posts %d, output %q", code, posts, out)
+	}
+	if out, code := capture("comment", "PLAT-7", "fixture note", "--yes"); code != 0 || posts != 1 || !strings.Contains(out, `"commented": true`) {
+		t.Fatalf("approved comment: exit %d, posts %d, output %q", code, posts, out)
 	}
 	for _, bad := range [][]string{
 		{"eod", "post", "PLAT-7"},

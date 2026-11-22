@@ -12,6 +12,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -19,6 +21,7 @@ import (
 
 // Instructions are sent to every MCP client at initialisation.
 const Instructions = `devflow links this repo's work to Jira, Confluence and GitHub.
+- For native_read_required, use the named operation and exact arguments with the connected provider MCP. Call the original devflow tool again with native_results containing the request ID, status, and provider JSON from that read. Use unavailable only when the client lacks the operation, and report access_denied for permission denials. If OAuth is required, launch the client’s native sign-in or run devflow setup login --provider NAME --client CLIENT --server SERVER for Claude Code or Codex. For a vendor CLI, run devflow setup login --provider NAME. Wait for user consent and request a fresh preview for writes. For a product or resource permission denial, report the denied scope.
 - At the start of a task call devflow_context. If there is no ticket, call devflow_my_work, ask the user which ticket, then devflow_start.
 - Commit only through devflow_commit, never raw "git commit". Call devflow_commit_plan first and make one commit per logical change; for each, call devflow_commit_context and write: type(KEY): imperative summary, blank line, body explaining why. No AI attribution trailers.
 - Call devflow_commit_preview to show the user what will change in Jira.
@@ -34,6 +37,7 @@ type Server struct {
 	blocked   error
 	updater   *update.Updater
 	updateMsg string
+	writer    *codexhost.Writer
 }
 
 // New builds a server for the repo in dir.
@@ -43,6 +47,9 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		return nil, err
 	}
 	s := &Server{app: a}
+	if a.Client == "codex" {
+		s.writer = codexhost.NewWriter(a.Repo.Dir)
+	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: Instructions})
 	s.register()
 	return s, nil
@@ -56,6 +63,9 @@ func (s *Server) SetUpdater(u *update.Updater) { s.updater = u }
 
 // Run serves over stdio until the client disconnects.
 func (s *Server) Run(ctx context.Context) error {
+	if s.writer != nil {
+		defer s.writer.Close()
+	}
 	if s.updater != nil {
 		ectx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		if err := s.updater.Enforce(ectx); err != nil {
@@ -102,8 +112,15 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 			if s.blocked != nil {
 				return errResult(s.blocked), nil, nil
 			}
+			if s.writer != nil {
+				ctx = native.WithWriteHost(ctx, s.writer)
+			}
 			out, err := fn(ctx, in)
-			if err != nil {
+			var providerRequest *native.Request
+			switch {
+			case errors.As(err, &providerRequest):
+				out = providerRequest
+			case err != nil:
 				return errResult(err), nil, nil
 			}
 			b, err := json.MarshalIndent(out, "", "  ")
@@ -137,6 +154,15 @@ type keyIn struct {
 	Key string `json:"key,omitempty" jsonschema:"task key or qualified reference; defaults to the branch task"`
 }
 type noIn struct{}
+type nativeKeyIn struct {
+	keyIn
+	nativeReadIn
+}
+type nativeReadIn struct {
+	ProviderMCP   bool           `json:"provider_mcp,omitempty" jsonschema:"This client can complete provider MCP read requests"`
+	NativeResults []native.Reply `json:"native_results,omitempty" jsonschema:"Return results for native_read_required from the connected provider MCP"`
+}
+
 type startIn struct {
 	Key          string `json:"key" jsonschema:"task key or qualified reference to start"`
 	Worktree     bool   `json:"worktree,omitempty" jsonschema:"create a git worktree instead of switching branch (automatic when there are uncommitted changes)"`
@@ -202,6 +228,7 @@ type eodIn struct {
 	ConfirmToken string            `json:"confirm_token,omitempty"`
 }
 type docsIn struct {
+	nativeReadIn
 	Query string `json:"query"`
 	Space string `json:"space,omitempty"`
 }
@@ -229,15 +256,18 @@ func (c contextOut) ContextText() string { return c.Text }
 
 func (s *Server) register() {
 	s.registerProviderSetup()
+	s.registerNotifications()
 	a := s.app
 	// Task awareness
 	add(s, "devflow_context", "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.", readOnly,
-		func(ctx context.Context, in keyIn) (any, error) {
-			tc, err := a.Context(ctx, in.Key)
+		func(ctx context.Context, in nativeKeyIn) (any, error) {
+			tc, err := a.Context(s.providerContext(ctx, in.nativeReadIn), in.Key)
 			return contextOut{tc}, err
 		})
 	add(s, "devflow_my_work", "List work from the configured task provider.", readOnly,
-		func(ctx context.Context, _ noIn) (any, error) { return a.MyWork(ctx) })
+		func(ctx context.Context, in nativeReadIn) (any, error) {
+			return a.MyWork(s.providerContext(ctx, in))
+		})
 	add(s, "devflow_start", "Start work on a task in a branch or worktree. Assignment and start transitions depend on provider support and configuration.", remote,
 		func(ctx context.Context, in startIn) (any, error) {
 			return a.Start(ctx, in.Key, in.Worktree, in.ConfirmToken)
@@ -262,6 +292,7 @@ func (s *Server) register() {
 		func(ctx context.Context, in commentIn) (any, error) {
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})
+	s.registerJiraRemoteLink()
 
 	// Commit messaging
 	add(s, "devflow_commit_plan", "Group the working tree into logical commits (code with tests per area, then docs, CI, build).", readOnly,
@@ -307,10 +338,12 @@ func (s *Server) register() {
 	add(s, "devflow_eod_post", "Post end-of-day progress comments on tickets.", remote,
 		func(ctx context.Context, in eodIn) (any, error) { return a.PostEOD(ctx, in.Notes, in.ConfirmToken) })
 	add(s, "devflow_docs_search", "Search design docs and ADRs in the selected knowledge base.", readOnly,
-		func(ctx context.Context, in docsIn) (any, error) { return a.DocsSearch(ctx, in.Query, in.Space) })
+		func(ctx context.Context, in docsIn) (any, error) {
+			return a.DocsSearch(s.providerContext(ctx, in.nativeReadIn), in.Query, in.Space)
+		})
 	add(s, "devflow_docs_publish", "Publish a document to the selected knowledge base. For Confluence, replace an existing page with literal text and supply expected_revision. Use the same operation_id on retry.", remote,
 		func(ctx context.Context, in docsPublishIn) (any, error) {
-			return a.DocsPublish(ctx, in.DocsPublishInput, in.ConfirmToken)
+			return a.DocsPublish(app.WithConfluenceCLI(ctx), in.DocsPublishInput, in.ConfirmToken)
 		})
 	add(s, "devflow_adr_draft", "Write a new ADR under docs/adr from the standard template.", local,
 		func(ctx context.Context, in adrIn) (any, error) {

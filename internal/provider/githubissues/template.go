@@ -73,3 +73,11 @@ func checkTask(task provider.Task, options provider.WriteOptions) error {
 	}
 	return nil
 }
+
+// DecodeIssueBody extracts a task template from the provider body.
+func DecodeIssueBody(body string) (string, *provider.TaskTemplateRef, error) {
+	return issueBody(body)
+}
+
+// EncodeIssueBody protects user content that resembles an internal marker.
+func EncodeIssueBody(body string) string { return markedBody(body, "") }

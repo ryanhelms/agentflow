@@ -13,8 +13,11 @@ import (
 )
 
 func runTask(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "link" {
+		return runTaskLink(ctx, args[1:])
+	}
 	if len(args) == 0 || args[0] != "create" {
-		return errors.New("usage: devflow task create [flags]")
+		return errors.New("usage: devflow task create [flags] | devflow task link KEY --url URL [--title T] [--yes]")
 	}
 	fs := flag.NewFlagSet("task create", flag.ContinueOnError)
 	project := fs.String("project", "", "project or scope")
@@ -76,4 +79,27 @@ func runTask(ctx context.Context, args []string) error {
 		return err
 	}
 	return printJSON(out)
+}
+
+func runTaskLink(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: devflow task link KEY --url URL [--title T] [--yes]")
+	}
+	fs := flag.NewFlagSet("task link", flag.ContinueOnError)
+	url := fs.String("url", "", "external web link")
+	title := fs.String("title", "", "link title, defaults to the URL")
+	yes := fs.Bool("yes", false, "accept the confirmation prompt")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || *url == "" {
+		return errors.New("usage: devflow task link KEY --url URL [--title T] [--yes]")
+	}
+	a, err := open(ctx)
+	if err != nil {
+		return err
+	}
+	return confirmLoop(*yes, func(token string) (any, error) {
+		return a.LinkJiraRemote(ctx, args[0], *url, *title, token)
+	})
 }
