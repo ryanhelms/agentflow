@@ -153,10 +153,10 @@ func (r *Router) Deliver(ctx context.Context, notification provider.Notification
 	id := receiptID(key)
 	state, err := r.store.Claim(ctx, key, fingerprint)
 	if errors.Is(err, provider.ErrConflict) {
-		return provider.DeliveryReceipt{}, fmt.Errorf("notification operation ID was reused with a different payload: %w", provider.ErrConflict)
+		return provider.DeliveryReceipt{ID: id}, fmt.Errorf("notification operation ID was reused with a different payload: %w", provider.ErrConflict)
 	}
 	if err != nil {
-		return provider.DeliveryReceipt{}, fmt.Errorf("%w: claim delivery", ErrReceiptStore)
+		return provider.DeliveryReceipt{ID: id}, fmt.Errorf("%w: claim delivery", ErrReceiptStore)
 	}
 
 	switch state {

@@ -1,5 +1,5 @@
 # Reusable: weekday hygiene report. Flags idle PRs and merged branches that still exist,
-# writes a job summary and optionally posts a Slack digest. Never deletes anything.
+# writes a job summary and optionally routes a notification. Never deletes anything.
 name: hygiene
 
 on:
@@ -12,6 +12,8 @@ on:
     secrets:
       SLACK_WEBHOOK_URL:
         required: false
+      WEBHOOK_URL:
+        required: false
 
 permissions:
   contents: read
@@ -21,13 +23,14 @@ jobs:
   hygiene:
     if: vars.DEVFLOW_ENABLED != 'false'
     runs-on: ubuntu-latest
+    outputs:
+      report: ${{ steps.report.outputs.message }}
     steps:
-      - uses: nscaledev/devflow/actions/setup@v0
       - name: Build report
+        id: report
         env:
           GH_TOKEN: ${{ github.token }}
           IDLE: ${{ inputs.idle-days }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           set -euo pipefail
           cutoff=$(date -u -d "-$IDLE days" +%s)
@@ -49,7 +52,19 @@ jobs:
 
           printf '%s\n' "$report" | sed 's/<\([^|]*\)|\([^>]*\)>/[\2](\1)/g' >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$idle$stale" ]; then
-            slack.sh "$report"
+            marker=$(openssl rand -hex 16)
+            printf 'message<<%s\n%s\n%s\n' "$marker" "$report" "$marker" >> "$GITHUB_OUTPUT"
           else
             echo "Nothing to report"
           fi
+  notify:
+    needs: hygiene
+    if: needs.hygiene.outputs.report != ''
+    uses: ./.github/workflows/slack-notify.yml
+    with:
+      message: ${{ needs.hygiene.outputs.report }}
+      signal: hygiene
+      append-run-link: false
+    secrets:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
