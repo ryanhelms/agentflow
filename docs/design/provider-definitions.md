@@ -61,8 +61,8 @@ mistaken for a map-valued setting such as `hosts` or `transitions`.
 
 If a project or user layer breaks a constraint, the load fails with a
 validation error naming the file, the constraint and the release file that set
-it. In phase 1, any invalid definition stops configuration from loading, so
-every command sees the same effective settings. Phase 4 isolates failures to
+it. In phase 1, an invalid definition stops provider operations. Repository
+commit, branch protection and update policies load independently. Phase 4 isolates failures to
 the affected provider: the reload snapshot keeps that provider's last good
 version and reports the error.
 

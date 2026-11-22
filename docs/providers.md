@@ -118,7 +118,13 @@ sets settings for a provider and role. Later layers win:
 | user | `~/.devflow/providers/*.yml` (or `$DEVFLOW_HOME/providers`) | settings |
 
 `.devflow/config.yml` still selects the provider for each role. A definition
-only applies when its provider is the one selected for that role.
+only applies when its provider is the one selected for that role. The shipped
+release catalog is empty. Each layer accepts `.yml` and `.yaml` files, with one YAML
+document per file and one definition per provider and role in that layer.
+Legacy Jira projects and site seed Jira preferences before the release layer.
+Confluence inherits the legacy Jira site unless its own legacy site is set.
+Inline role settings take precedence over project definition files. The legacy
+login and doctor commands still consult the top-level Jira configuration.
 
 ```yaml
 # .devflow/providers/issues.yml
@@ -140,26 +146,47 @@ one before it.
 The release layer can constrain any settings property for every later layer:
 
 ```yaml
+# Embedded release definition
+version: 1
 providers:
   jira:
     task_management:
-      settings: {site: nscale.atlassian.net, projects: [PLAT]}
+      settings: {site: https://nscale.atlassian.net, projects: [PLAT]}
       constraints:
         site: {lock: true}                  # no later change
         projects: {allow: [PLAT, INFRA]}    # values from this set only
   github-issues:
     task_management:
+      settings: {labels: [triage]}
       constraints:
         labels: {lock: append}              # may add, never remove
         repository: {pattern: '^nscaledev/'}
 ```
 
-An invalid definition, or a later layer that breaks a constraint, stops
-configuration from loading. The error names the file and the constraint.
+Constraints apply to merged settings after each layer. Quote literal dots in
+map keys with a backslash, for example `'transitions.pr\.merged'` and
+`'hosts.forge\.example\.com'`. Use `\\` for a literal backslash.
+
+Write authorization also checks targets supplied by the repository. Jira
+requires the project to be in both the repository and effective project lists
+when specified. An explicit empty list allows zero write targets. Project keys
+are scoped to the repository's Jira site. Asana checks the default project
+and the project keys in its transition map. GitHub Issues checks the resolved
+repository, including template and qualified inputs. Confluence checks the
+repository site and validates the requested space and page. Slack checks the
+configured route, workspace, channel and optional actor before preparing
+delivery. User defaults can supply an otherwise unspecified target. The same
+checks apply when a native operation uses a CLI or REST fallback.
+
+An invalid definition or constraint violation stops provider operations.
+Core hooks and update policy still read the repository's commit rules,
+protected branches and version settings from `.devflow/config.yml`.
 `devflow setup providers --explain` (MCP: `devflow_setup_providers` with
 `explain: true`) lists the definition files loaded and every effective
 setting of the selected providers, with the layer that set it and any
-constraint. Definitions cannot add new providers yet. That arrives with the
+constraint. The MCP tool describes the running server’s configuration. Restart
+the server after editing a definition. Each CLI invocation reads the current
+files. Definitions cannot add new providers yet. That arrives with the
 operation engine described in the [design](design/provider-definitions.md).
 
 ## Jira, Confluence and GitHub
