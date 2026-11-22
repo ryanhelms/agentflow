@@ -457,7 +457,13 @@ func (a *App) prepareJiraRemoteLink(ctx context.Context, site string, ref provid
 	write, err := prepareJiraWrite(ctx, call)
 	switch {
 	case err == nil:
-		if _, err := jiraNativeIssue(ctx, write, site, ref); err != nil {
+		issue, err := nativemap.JiraWriteIssue(site, ref)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if _, err := jiraNativeRead(ctx, write, issue, func(raw json.RawMessage) (struct{}, error) {
+			return struct{}{}, nativemap.CheckJiraIssueIdentity(raw, ref)
+		}); err != nil {
 			return "", nil, nil, err
 		}
 		list, err := nativemap.JiraRemoteLinks(site, ref)

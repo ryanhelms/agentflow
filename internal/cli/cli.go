@@ -53,6 +53,7 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME]
                                  start sign-in through a provider CLI or MCP client
+                                 use --client devflow for the Jira web-link pilot
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials

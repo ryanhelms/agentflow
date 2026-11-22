@@ -14,6 +14,7 @@ var ErrWriteUncertain = errors.New("native provider write outcome is uncertain")
 // session. Include it in the Devflow approval summary before dispatching.
 type WriteBinding struct {
 	Provider   string `json:"provider"`
+	Owner      string `json:"connection_owner,omitempty"`
 	Server     string `json:"server"`
 	Tool       string `json:"tool"`
 	Origin     string `json:"origin"`

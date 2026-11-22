@@ -273,6 +273,7 @@ func TestClassifiesToolErrors(t *testing.T) {
 		want         error
 	}{
 		{"missing oauth", printJSON(`{"error":{"code":"AUTH_REQUIRED","message":"`+diagnostic+`"}}`) + "; exit 77", ErrAuthRequired},
+		{"missing site profile", printJSON(`{"error":{"code":"AUTH_PROFILE_MISSING","message":"`+diagnostic+`"}}`) + "; exit 77", ErrAuthRequired},
 		{"expired oauth via stderr", printJSON(`{"error":{"code":"AUTH_INVALID"}}`) + " >&2; exit 1", ErrAuthRequired},
 		{"documented auth exit", "exit 77", ErrAuthRequired},
 		{"denied", printJSON(`{"error":{"code":"FORBIDDEN"}}`) + "; exit 1", ErrAccessDenied},
