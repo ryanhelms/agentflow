@@ -168,7 +168,8 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 
 The [provider configuration reference](docs/providers.md) documents independent
 service sections, versioned settings, defaults, and their override rules. Jira tasks
-and Confluence search can use separate sites and credentials. Use the `filesystem` knowledge provider to search a local directory with
+and Confluence search can use separate sites and credentials. Use the
+`filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
 Run `devflow setup plan --client NAME` to see which providers and companions
