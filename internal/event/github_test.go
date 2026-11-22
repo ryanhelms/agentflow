@@ -212,8 +212,8 @@ func TestGitHubActionsIgnoresOtherEventsAndActions(t *testing.T) {
 		name, payload string
 		want          SkipReason
 	}{
-		{"create", "{}", UnsupportedEvent},
-		{"push", "{}", UnsupportedEvent},
+		{"schedule", "{}", UnsupportedEvent},
+
 		{"pull_request", `{"action":"edited"}`, UnsupportedAction},
 		{"pull_request", `{"action":"synchronize"}`, UnsupportedAction},
 	} {

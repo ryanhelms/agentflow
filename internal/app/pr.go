@@ -364,7 +364,8 @@ func (a *App) ReviewReply(ctx context.Context, threadID, body, token string) (an
 
 // ShipStatus combines PR, checks, deployments and ticket state.
 func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
-	out := map[string]any{"branch": a.Repo.Branch(ctx)}
+	branch := a.Repo.Branch(ctx)
+	out := map[string]any{"branch": branch}
 	key := a.CurrentKey(ctx)
 	if key != "" {
 		out["key"] = key
@@ -392,18 +393,42 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 			}
 		}
 	}
+	revision := a.shipPRStatus(ctx, branch, out)
+	selection := a.Cfg.Providers.DevOps.Deployments
+	if selection.Provider == "none" {
+		return out, nil
+	}
+	if revision == "" {
+		head, err := a.Repo.Git(ctx, "rev-parse", "--verify", "HEAD")
+		if err != nil {
+			return out, nil
+		}
+		revision = strings.TrimSpace(head)
+	}
+	if deployments, err := a.shipDeployments(ctx, selection, revision); err == nil {
+		out["deployments"] = deployments
+	} else if selection.Configured {
+		out["deployments_error"] = err.Error()
+	}
+	return out, nil
+}
+
+func (a *App) shipPRStatus(ctx context.Context, branch string, out map[string]any) string {
+	if branch == "" || a.Cfg.Providers.CodeHosting.Provider == "none" {
+		return ""
+	}
 	d, err := a.githubRemotes(ctx)
 	if err != nil {
-		return out, nil
+		return ""
 	}
 	c, err := a.GitHub(ctx)
 	if err != nil {
 		out["github"] = err.Error()
-		return out, nil
+		return ""
 	}
 	repo := d.Target.URL.Path
 	host := legacy.NewGitHub(c)
-	if pr, err := host.FindChange(ctx, githubTarget(d), githubHead(d, a.Repo.Branch(ctx))); err == nil {
+	if pr, err := host.FindChange(ctx, githubTarget(d), githubHead(d, branch)); err == nil {
 		number, _ := strconv.Atoi(pr.ID)
 		out["pr"] = map[string]any{"number": number, "url": pr.URL, "draft": pr.Draft}
 		if checks, err := a.changeChecks(ctx, c, repo, pr.HeadSHA); err == nil {
@@ -427,15 +452,7 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 		if threads, err := host.Reviews(ctx, pr); err == nil {
 			out["unresolved_threads"] = len(threads)
 		}
+		return pr.HeadSHA
 	}
-	if deps, err := c.Deployments(ctx, repo); err == nil {
-		latest := map[string]gh.Deployment{}
-		for _, d := range deps {
-			if _, seen := latest[d.Environment]; !seen {
-				latest[d.Environment] = d
-			}
-		}
-		out["deployments"] = latest
-	}
-	return out, nil
+	return ""
 }

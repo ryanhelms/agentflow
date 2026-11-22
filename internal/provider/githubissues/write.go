@@ -19,6 +19,24 @@ func taskResult(task provider.Task, status provider.WriteStatus) provider.WriteR
 // Create supports a title, Markdown description and labels. A stable operation
 // ID lets replays find an issue whose body still contains the operation marker.
 func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options provider.WriteOptions) (provider.WriteResult, error) {
+	return a.create(ctx, draft, options, nil)
+}
+
+// ErrWriteOutcomeUnknown means an issue may exist even though its operation
+// marker could not be confirmed. Retain any durable claim on this error.
+var ErrWriteOutcomeUnknown = errors.New("write outcome unknown")
+
+// CreateOnce reconciles an existing operation before calling claim. The caller
+// must record the claim durably and return false when another attempt owns it.
+// A previously claimed operation whose marker is still missing is read-only.
+func (a *Adapter) CreateOnce(ctx context.Context, draft provider.TaskDraft, options provider.WriteOptions, claim func() (bool, error)) (provider.WriteResult, error) {
+	if options.OperationID == "" || claim == nil {
+		return provider.WriteResult{}, errors.New("github issue create-once requires an operation id and claim")
+	}
+	return a.create(ctx, draft, options, claim)
+}
+
+func (a *Adapter) create(ctx context.Context, draft provider.TaskDraft, options provider.WriteOptions, claim func() (bool, error)) (provider.WriteResult, error) {
 	if options.ExpectedRevision != "" {
 		return provider.WriteResult{}, provider.Unsupported(a.instance, "github issue revision preconditions")
 	}
@@ -31,10 +49,18 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 	}
 	path := issuesPath(repo)
 	marker := a.bodyMarker(path, options.OperationID, draft.Template)
+	operationKey := a.operationKey(path, options.OperationID)
 	lookup := func() (provider.WriteResult, error) {
 		var result provider.WriteResult
 		err := listPages(ctx, a, path, issueListParams(), func(i issue) (bool, error) {
-			if i.PullRequest != nil || !hasMarker(i.Body, marker) {
+			if i.PullRequest != nil {
+				return false, nil
+			}
+			matched := hasMarker(i.Body, marker)
+			if claim != nil {
+				matched = hasOperationMarker(i.Body, operationKey)
+			}
+			if !matched {
 				return false, nil
 			}
 			task, err := a.task(repo, i)
@@ -63,9 +89,12 @@ func (a *Adapter) Create(ctx context.Context, draft provider.TaskDraft, options 
 		if draft.Template != nil && !hasMarker(i.Body, marker) {
 			return provider.WriteResult{}, errors.New("github did not confirm the selected issue template")
 		}
+		if claim != nil && !hasOperationMarker(i.Body, operationKey) {
+			return provider.WriteResult{}, errors.New("github did not confirm the issue operation marker")
+		}
 		return taskResult(task, provider.Applied), nil
 	}
-	result, err := postOnce(path, options.OperationID != "", lookup, post)
+	result, err := postOnce(path, options.OperationID != "", lookup, claim, post)
 	if err != nil {
 		return provider.WriteResult{}, fmt.Errorf("create github issue in %s: %w", repo, err)
 	}
@@ -152,7 +181,7 @@ func (a *Adapter) Comment(ctx context.Context, ref provider.Ref, body string, op
 		}
 		return provider.WriteResult{Ref: task.Ref, Status: provider.Applied, URL: c.HTMLURL}, nil
 	}
-	result, err := postOnce(path, options.OperationID != "", lookup, post)
+	result, err := postOnce(path, options.OperationID != "", lookup, nil, post)
 	if err != nil {
 		return provider.WriteResult{}, fmt.Errorf("comment on github issue %s: %w", task.Key, err)
 	}
@@ -202,10 +231,7 @@ const (
 )
 
 func (a *Adapter) bodyMarker(path, id string, template *provider.TaskTemplateRef) string {
-	var key string
-	if id != "" {
-		key = provider.Ref{Instance: a.instance, Scope: path, ID: id}.StorageKey()
-	}
+	key := a.operationKey(path, id)
 	if template != nil {
 		return templateMarker(*template, key)
 	}
@@ -213,6 +239,21 @@ func (a *Adapter) bodyMarker(path, id string, template *provider.TaskTemplateRef
 		return ""
 	}
 	return markerPrefix + key + markerSuffix
+}
+
+func (a *Adapter) operationKey(path, id string) string {
+	if id == "" {
+		return ""
+	}
+	return (provider.Ref{Instance: a.instance, Scope: path, ID: id}).StorageKey()
+}
+
+func hasOperationMarker(body, key string) bool {
+	if hasMarker(body, markerPrefix+key+markerSuffix) {
+		return true
+	}
+	matches := templateHeader.FindStringSubmatch(body)
+	return matches != nil && matches[3] == key
 }
 
 func markedBody(body, marker string) string {
@@ -258,10 +299,19 @@ func plainBody(body string) string {
 // GitHub provides no atomic check-and-create here. Concurrent calls with the
 // same ID, delayed visibility, and marker removal can allow duplicates. Callers
 // should serialize attempts for a given ID. Each invocation sends at most one POST.
-func postOnce(path string, reconcile bool, lookup, post func() (provider.WriteResult, error)) (provider.WriteResult, error) {
+func postOnce(path string, reconcile bool, lookup func() (provider.WriteResult, error), claim func() (bool, error), post func() (provider.WriteResult, error)) (provider.WriteResult, error) {
 	if reconcile {
 		if found, err := lookup(); err != nil || found.Status != "" {
 			return found, err
+		}
+	}
+	if claim != nil {
+		owned, err := claim()
+		if err != nil {
+			return provider.WriteResult{}, err
+		}
+		if !owned {
+			return provider.WriteResult{}, fmt.Errorf("%w: earlier attempt has no visible operation marker", ErrWriteOutcomeUnknown)
 		}
 	}
 	result, err := post()
@@ -275,11 +325,11 @@ func postOnce(path string, reconcile bool, lookup, post func() (provider.WriteRe
 	if reconcile {
 		found, lookupErr := lookup()
 		if lookupErr != nil {
-			return provider.WriteResult{}, fmt.Errorf("write outcome unknown: %w", errors.Join(err, fmt.Errorf("check operation marker: %w", lookupErr)))
+			return provider.WriteResult{}, fmt.Errorf("%w: %w", ErrWriteOutcomeUnknown, errors.Join(err, fmt.Errorf("check operation marker: %w", lookupErr)))
 		}
 		if found.Status != "" {
 			return found, nil
 		}
 	}
-	return provider.WriteResult{}, fmt.Errorf("write outcome unknown: %w", err)
+	return provider.WriteResult{}, fmt.Errorf("%w: %w", ErrWriteOutcomeUnknown, err)
 }

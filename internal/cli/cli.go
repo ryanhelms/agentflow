@@ -63,10 +63,13 @@ Work
   commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
   preview [MSG]                  Jira effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
+  secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
+                                 preview or create tasks from configured security events
   pr [--check] [--run] [--title T] [--draft] [--yes]   readiness check, then open the PR
   review                         unresolved review threads on this branch's PR
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
+  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
                [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
@@ -77,8 +80,11 @@ Work
   release plan [--unit U] [--json]   next version of each unit on this branch
   release version --unit U       print the version a build of this branch gets
   release preview [--since TAG]  unreleased commits by type
+  release get TAG                inspect a published release from the selected provider
+  release publish TAG --revision SHA [--title T] [--notes TEXT] [--dry-run] [--yes]
+                                 explicitly publish a stable release at a commit
   keys --range A..B              Jira keys in a commit range
-  lint-msg FILE                  validate a commit message file
+  lint-msg FILE | --github-event validate a commit file or runner PR and its task references
 
 Runtime
   mcp [--client NAME]            MCP server on stdio
@@ -119,7 +125,7 @@ func Main(args []string) int {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "setup", "update", "version", "help":
+	case "hook", "lint-msg", "keys", "mcp", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -138,25 +144,15 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "hook":
 		return runHook(ctx, args)
 	case "lint-msg":
+		if len(args) == 1 && args[0] == "--github-event" {
+			return validateWorkflowPR(ctx)
+		}
 		if len(args) != 1 {
 			return errors.New("usage: devflow lint-msg FILE")
 		}
 		return hooks.CommitMsg(ctx, args[0], os.Stderr)
 	case "keys":
-		fs := flag.NewFlagSet("keys", flag.ContinueOnError)
-		rng := fs.String("range", "", "revision range, e.g. v1.2.0..HEAD")
-		if err := fs.Parse(args); err != nil {
-			return err
-		}
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		keys, err := a.Keys(ctx, *rng)
-		for _, k := range keys {
-			fmt.Println(k)
-		}
-		return err
+		return runTaskKeys(ctx, args)
 	case "init":
 		return runInit(ctx, args)
 	case "remove":
@@ -165,6 +161,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runPin(ctx, args)
 	case "setup":
 		return runProviderSetup(ctx, args)
+	case "notify":
+		return runNotify(ctx, args)
 	case "install":
 		return runInstall(ctx, args)
 	case "login":
@@ -215,6 +213,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runPreview(ctx, args)
 	case "transition":
 		return runTransition(ctx, args)
+	case "secops":
+		return runSecOps(ctx, args)
 	case "pr":
 		return runPR(ctx, args)
 	case "review":
@@ -679,13 +679,14 @@ func runPreview(ctx context.Context, args []string) error {
 func runTransition(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
 	dry := fs.Bool("dry-run", false, "preview only")
-	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions pull request event")
+	githubEvent := fs.Bool("github-event", false, "process the current GitHub Actions lifecycle event")
+	shipped := fs.Bool("shipped", false, "preview a shipped task with the runner identity")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
 	if err := fs.Parse(reorder(args)); err != nil {
 		return err
 	}
 	if *githubEvent {
-		if fs.NArg() != 0 || *yes {
+		if fs.NArg() != 0 || *yes || *shipped {
 			return errors.New("--github-event cannot be combined with a key, event, or --yes")
 		}
 		return runGitHubTaskEvent(ctx, *dry)
@@ -702,6 +703,16 @@ func runTransition(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	if *shipped {
+		if !*dry || *yes || key == "" {
+			return errors.New("--shipped requires an explicit key, event and --dry-run")
+		}
+		plan, err := a.PlanShippedTask(ctx, key, event)
+		if err != nil {
+			return err
+		}
+		return printJSON(plan)
 	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.Transition(ctx, key, event, *dry, tok) })
 }
@@ -1020,9 +1031,15 @@ func runDoctor(ctx context.Context, args []string) error {
 
 func runRelease(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow release init|sync|plan|version|preview")
+		return errors.New("usage: devflow release init|sync|plan|version|preview|get|publish")
 	}
 	sub, rest := args[0], args[1:]
+	switch sub {
+	case "get":
+		return runReleaseGet(ctx, rest)
+	case "publish":
+		return runReleasePublish(ctx, rest)
+	}
 	fs := flag.NewFlagSet("release "+sub, flag.ContinueOnError)
 	strategy := fs.String("strategy", "", "branching strategy: trunk or gitflow (default: detect)")
 	force := fs.Bool("force", false, "re-detect units even if releases.yml exists")

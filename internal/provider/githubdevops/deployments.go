@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
@@ -28,10 +29,8 @@ func (a *Adapter) Deployments(ctx context.Context, repo provider.RepositoryRef, 
 		query.Set("page", strconv.Itoa(page))
 		path := base + "?" + query.Encode()
 		var response []struct {
-			ID          int64  `json:"id"`
-			Environment string `json:"environment"`
-			SHA         string `json:"sha"`
-			URL         string `json:"url"`
+			gh.Deployment
+			URL string `json:"url"`
 		}
 		if err := a.client.Do(ctx, http.MethodGet, path, nil, &response); err != nil {
 			return nil, fmt.Errorf("list github deployments: %w", githubReadError(err, path))
@@ -40,7 +39,10 @@ func (a *Adapter) Deployments(ctx context.Context, repo provider.RepositoryRef, 
 			if revision != "" && deployment.SHA != revision {
 				continue
 			}
-			fact := provider.Deployment{Environment: deployment.Environment, Revision: deployment.SHA, URL: deployment.URL}
+			fact := provider.Deployment{
+				Environment: deployment.Environment, Revision: deployment.SHA, URL: deployment.URL,
+				ID: strconv.FormatInt(deployment.ID, 10), Ref: deployment.Ref, CreatedAt: deployment.CreatedAt,
+			}
 			if err := a.deploymentStatus(ctx, base, deployment.ID, &fact); err != nil {
 				return nil, err
 			}

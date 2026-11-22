@@ -1,7 +1,6 @@
 name: devflow ship
 description: >
-  After a deployment, move every Jira ticket referenced by the shipped commits to the
-  status mapped for the deploy event in flow-map.yml, and optionally set a Fix Version.
+  Apply Jira transitions and optional fix versions, or preview other configured task providers.
 inputs:
   event:
     description: deploy.staging or deploy.production
@@ -24,11 +23,14 @@ inputs:
     default: "false"
 outputs:
   keys:
-    description: Space-separated Jira keys that were shipped
+    description: Space-separated shipped task keys (Jira keys for legacy repositories)
     value: ${{ steps.keys.outputs.keys }}
 runs:
   using: composite
   steps:
+    - uses: nscaledev/devflow/actions/setup@v0
+      with:
+        binary: true
     - name: Collect shipped keys
       id: keys
       shell: bash
@@ -38,7 +40,6 @@ runs:
         SINCE: ${{ inputs.since-tag }}
       run: |
         set -euo pipefail
-        bin=$(cd "$ACTION_PATH/../../bin" && pwd)
         if [ -z "$RANGE" ]; then
           if [ -n "$SINCE" ]; then RANGE="$SINCE..HEAD"
           else
@@ -46,12 +47,19 @@ runs:
             RANGE="${prev:+$prev..}HEAD"
           fi
         fi
-        keys=$("$bin/jira-keys.sh" "$RANGE" | paste -sd' ' -)
+        provider=$(devflow keys --provider)
+        if [ "$provider" = jira ]; then
+          bin=$(cd "$ACTION_PATH/../../bin" && pwd)
+          keys=$("$bin/jira-keys.sh" "$RANGE" | paste -sd' ' -)
+        else
+          keys=$(devflow keys --shipped --range "$RANGE" | paste -sd' ' -)
+        fi
+        echo "provider=$provider" >> "$GITHUB_OUTPUT"
         echo "Shipped keys in $RANGE: ${keys:-none}"
         echo "keys=$keys" >> "$GITHUB_OUTPUT"
 
-    - name: Move tickets
-      if: steps.keys.outputs.keys != ''
+    - name: Apply Jira effects for shipped commits
+      if: steps.keys.outputs.keys != '' && steps.keys.outputs.provider == 'jira'
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -71,4 +79,23 @@ runs:
           if [ -n "$FIX_VERSION" ] && [ "$DRY" != "true" ]; then
             "$root/bin/jira-fix-version.sh" "$key" "$FIX_VERSION" || echo "::warning::$key: fix version failed"
           fi
+        done
+    - name: Preview shipped task effects
+      if: steps.keys.outputs.keys != '' && steps.keys.outputs.provider != 'jira'
+      shell: bash
+      env:
+        KEYS: ${{ steps.keys.outputs.keys }}
+        EVENT: ${{ inputs.event }}
+        DRY: ${{ inputs.dry-run }}
+        PROVIDER: ${{ steps.keys.outputs.provider }}
+        GH_TOKEN: ${{ (steps.keys.outputs.provider == 'github-issues' || steps.keys.outputs.provider == 'repository') && github.token || '' }}
+      run: |
+        set -euo pipefail
+        if [ "$DRY" != true ]; then
+          echo "::notice::Ship previews task changes. Apply a reviewed transition through devflow transition."
+        fi
+        if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
+        read -r -a tasks <<<"$KEYS"
+        for key in "${tasks[@]}"; do
+          devflow transition --shipped --dry-run "$key" "$EVENT"
         done

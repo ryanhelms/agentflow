@@ -148,8 +148,14 @@ func (r *Repo) DiffStat(ctx context.Context) string {
 }
 
 // Messages returns full commit messages for a revision range, oldest first.
-func (r *Repo) Messages(ctx context.Context, rng string) ([]string, error) {
-	out, err := r.Git(ctx, "log", "--reverse", "--format=%B%x00", rng)
+func (r *Repo) Messages(ctx context.Context, rng string, paths ...string) ([]string, error) {
+	args := []string{"log", "--reverse", "--format=%B%x00", "--end-of-options", rng, "--"}
+	for _, path := range paths {
+		if path != "" && path != "." {
+			args = append(args, ":(literal)"+path)
+		}
+	}
+	out, err := r.Git(ctx, args...)
 	if err != nil {
 		return nil, err
 	}

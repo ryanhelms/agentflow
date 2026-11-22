@@ -14,7 +14,7 @@ const templatePrefix = "<!-- devflow:github-issues:template:v1:"
 
 // An envelope occupies the first line, followed by EOF or one blank line.
 // A template envelope can also carry the operation key; its body is always literal.
-var templateHeader = regexp.MustCompile(`^<!-- devflow:github-issues:template:v1:([0-9a-f]+):([0-9a-f]+)(?::[0-9a-f]{64})? -->(?:\n\n|$)`)
+var templateHeader = regexp.MustCompile(`^<!-- devflow:github-issues:template:v1:([0-9a-f]+):([0-9a-f]+)(?::([0-9a-f]{64}))? -->(?:\n\n|$)`)
 
 func templateMarker(ref provider.TaskTemplateRef, operation string) string {
 	header := templatePrefix + hex.EncodeToString([]byte(ref.Name)) + ":" + hex.EncodeToString([]byte(ref.Revision))

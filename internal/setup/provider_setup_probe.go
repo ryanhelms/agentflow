@@ -181,9 +181,15 @@ func (g *githubProbe) check(ctx context.Context, p *ProviderSetupPlan, role sele
 	endpoints := map[string][]string{
 		"code_hosting": {""}, "task_management": {"/issues?per_page=1"},
 		"devops.checks": {"/commits/HEAD/check-runs?per_page=1"}, "devops.deployments": {"/deployments?per_page=1"},
-		"devops.releases": {"/releases?per_page=1"}, "secops": {"/dependabot/alerts?per_page=1", "/code-scanning/alerts?per_page=1"},
+		"devops.releases": {"/releases?per_page=1"},
 	}
 	reads, ok := endpoints[role.name]
+	if settings, isSecOps := role.Settings.(*config.GitHubSecOpsSettings); isSecOps {
+		ok = true
+		for _, source := range settings.Findings {
+			reads = append(reads, "/"+source+"/alerts?per_page=1")
+		}
+	}
 	if !ok {
 		check(false, "provide a read-only GitHub API probe for "+role.name)
 		return

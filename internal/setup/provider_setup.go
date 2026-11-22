@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -16,6 +17,7 @@ import (
 	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/managedmcp"
 	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
 	"github.com/nscaledev/devflow/internal/provision"
 )
 
@@ -88,7 +90,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 	needsDetection := false
 	for _, role := range roles {
 		switch role.Settings.(type) {
-		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings, *config.GitHubWikiSettings:
+		case *config.CodeHostingSettings, *config.GitHubSettings, *config.GitHubIssuesSettings, *config.GitHubWikiSettings, *config.GitHubSecOpsSettings:
 			needsDetection = true
 		}
 	}
@@ -133,6 +135,9 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 	for _, r := range roles {
 		switch r.Provider {
 		case "github", "github-issues":
+			if settings, ok := r.Settings.(*config.GitHubSecOpsSettings); ok && len(settings.Findings) == 0 {
+				continue
+			}
 			ghRoles = append(ghRoles, r)
 		case "auto":
 			if detection.Forge == gitx.ForgeGitHub {
@@ -181,6 +186,12 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
 			p.checkDirectory(role, settings.Root)
+		case *config.DevOpsFixtureSettings:
+			if err := checkDevOpsFixture(root, role.name, settings.Path); err != nil {
+				p.check(role.name, role.Provider, false, err.Error())
+			} else {
+				p.check(role.name, role.Provider, true, fmt.Sprintf("can read fixture %q", settings.Path))
+			}
 		case *config.RepositorySettings:
 			if gitOK {
 				p.checkRepository(ctx, role, settings, repo)
@@ -202,6 +213,20 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		case *config.GitHubSettings:
 			if github.command != "" {
 				github.check(ctx, p, role, settings.Repository)
+			}
+		case *config.GitHubSecOpsSettings:
+			if len(settings.Findings) > 0 && github.command != "" {
+				github.check(ctx, p, role, settings.Repository)
+			}
+			if settings.Incidents != nil {
+				rootDir, err := os.OpenRoot(root)
+				if err == nil {
+					info, statErr := rootDir.Stat(settings.Incidents.Fixture)
+					_ = rootDir.Close()
+					p.check(role.name, role.Provider, statErr == nil && info.Mode().IsRegular(), "incident fixture "+settings.Incidents.Fixture)
+				} else {
+					p.check(role.name, role.Provider, false, "open the checkout to read the incident fixture")
+				}
 			}
 		case *config.GitHubIssuesSettings:
 			if github.command != "" {
@@ -233,6 +258,15 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		p.Ready = p.Ready && p.Registration.State == "configured"
 	}
 	return p, ctx.Err()
+}
+
+func checkDevOpsFixture(root, role, path string) error {
+	if role == "devops.deployments" {
+		_, err := devopsfixture.LoadDeployments(root, path)
+		return err
+	}
+	_, err := devopsfixture.LoadReleases(root, path)
+	return err
 }
 
 func value(s *string) string {
