@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.22.0](https://github.com/nscaledev/devflow/compare/v0.21.0...v0.22.0) - 2026-11-22
+
+### Features
+
+- register devflow in claude code desktop ([7367d7a](https://github.com/nscaledev/devflow/commit/7367d7a99406833e0cedff8450a744b80849c82b))
+
 ## [0.21.0](https://github.com/nscaledev/devflow/compare/v0.20.0...v0.21.0) - 2026-11-22
 
 ### Features
