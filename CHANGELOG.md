@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.29.0](https://github.com/nscaledev/devflow/compare/v0.28.1...v0.29.0) - 2026-11-22
+
+### Features
+
+- verify confluence writes in claude code desktop (#72) ([a8bdc9b](https://github.com/nscaledev/devflow/commit/a8bdc9b18abd0719ecdafa7ee844986f901a8b65))
+
 ## [0.28.1](https://github.com/nscaledev/devflow/compare/v0.28.0...v0.28.1) - 2026-11-22
 
 ### Fixes
