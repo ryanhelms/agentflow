@@ -1,17 +1,12 @@
-# Reusable provider-backed task transitions for GitHub Issues repositories.
+# Reusable previews for provider-backed GitHub Issues transitions.
 name: task-events
 
 on:
   workflow_call:
-    inputs:
-      dry-run:
-        description: Report transitions without changing issues
-        type: boolean
-        default: true
 
 permissions:
   contents: read
-  issues: write
+  issues: read
 
 jobs:
   transitions:
@@ -29,10 +24,9 @@ jobs:
       - uses: nscaledev/devflow/actions/setup@v0
         with:
           binary: true
-      - name: Sync linked tasks
+      - name: Preview linked task transitions
         env:
           GH_TOKEN: ${{ github.token }}
           DEVFLOW_HOME: ${{ runner.temp }}/devflow-task-events
           DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          DRY_RUN: ${{ inputs.dry-run && 'true' || 'false' }}
-        run: devflow transition --github-event --dry-run="$DRY_RUN"
+        run: devflow transition --github-event --dry-run
