@@ -32,6 +32,18 @@ contains `@AGENTS.md` so Claude Code loads this file.
   and fix anything now wrong or missing. If nothing reader-visible changed, say so in the
   PR description. CI warns when user-facing code changes without a README change. The
   same rule is loaded for Claude Code from `.claude/rules/readme-up-to-date.md`.
+- **Keep the CLI and MCP at parity.** The CLI is the engine: anything devflow can do
+  through an MCP tool must also be doable from the CLI, with the same behaviour. Every
+  `devflow_*` MCP tool has a CLI command, and both call the same `internal/app` method;
+  `internal/cli` and `internal/mcpserver` only parse input and format output, with no
+  provider-specific or business logic. Commands that write locally or to a provider use
+  the same confirmation flow as their tool (`confirmLoop`: needs_confirmation summary,
+  prompt, `--yes`) and offer `--json` where they print data. When you add or change an MCP
+  tool, add or change its CLI command, its row in `mcpToCLI` in
+  `internal/cli/parity_test.go`, the usage text in `internal/cli/cli.go`, its plugin skill
+  and the README in the same PR. `TestEveryMCPToolHasCLICommand` fails when a registered
+  tool has no CLI command. The same rule is loaded for Claude Code from
+  `.claude/rules/cli-mcp-parity.md`.
 - **Follow the commit convention** (below), for commit messages **and PR titles**. It is
   enforced at every step: `.githooks/commit-msg` on each commit, `.githooks/pre-push` on
   every pushed commit (`make install-hooks`), Claude Code's PreToolUse hook on
@@ -158,7 +170,8 @@ These are used by other repos and clients. Changing them is a breaking change:
   below its header (`go test ./internal/setup/` checks). Every user-facing CLI command has
   a plugin skill in `adapters/claude-code/skills/<command>/SKILL.md`; add one with a new
   command, and keep `devflow remove` able to undo whatever `devflow init` writes.
-- New MCP tools need an entry in `internal/mcpserver`, the plugin skill
+- New MCP tools need an entry in `internal/mcpserver`, a matching CLI command and
+  `mcpToCLI` row (see "Keep the CLI and MCP at parity" above), the plugin skill
   (`adapters/claude-code/skills/devflow/SKILL.md`) when agents should use them, and the
   blueprint's capability table.
 - User-facing behaviour changes need README and `docs/` updates in the same PR (see
