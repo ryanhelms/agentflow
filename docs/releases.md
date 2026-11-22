@@ -77,6 +77,27 @@ units:
     publish: go
 ```
 
+## Publish an explicit release
+
+The manual command publishes a stable release in the configured GitHub.com
+release repository. Preview the exact destination, tag, commit and metadata
+before confirming publication.
+
+```bash
+devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+  --title 'API 1.4.0' --notes 'Release notes' --dry-run
+devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+  --title 'API 1.4.0' --notes 'Release notes'
+devflow release get api-v1.4.0
+```
+
+The preview uses local configuration. Publication resolves the full commit SHA
+against GitHub and requires confirmation. Use `--yes` to accept the prompt in
+an authorized run. A matching stable release returns `already_applied` on retry.
+A tag at a different commit or a release with different metadata is a conflict.
+The operation can create a tag when one is absent. GitHub tag protections apply.
+The reusable workflow builds and uploads artifacts for its release-please releases.
+
 ## Using versions in your own workflows
 
 Tag staging builds with the branch version:

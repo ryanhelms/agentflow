@@ -75,6 +75,9 @@ Work
   release plan [--unit U] [--json]   next version of each unit on this branch
   release version --unit U       print the version a build of this branch gets
   release preview [--since TAG]  unreleased commits by type
+  release get TAG                inspect a published release from the selected provider
+  release publish TAG --revision SHA [--title T] [--notes TEXT] [--dry-run] [--yes]
+                                 explicitly publish a stable release at a commit
   keys --range A..B              Jira keys in a commit range
   lint-msg FILE                  validate a commit message file
 
@@ -1018,9 +1021,15 @@ func runDoctor(ctx context.Context, args []string) error {
 
 func runRelease(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow release init|sync|plan|version|preview")
+		return errors.New("usage: devflow release init|sync|plan|version|preview|get|publish")
 	}
 	sub, rest := args[0], args[1:]
+	switch sub {
+	case "get":
+		return runReleaseGet(ctx, rest)
+	case "publish":
+		return runReleasePublish(ctx, rest)
+	}
 	fs := flag.NewFlagSet("release "+sub, flag.ContinueOnError)
 	strategy := fs.String("strategy", "", "branching strategy: trunk or gitflow (default: detect)")
 	force := fs.Bool("force", false, "re-detect units even if releases.yml exists")

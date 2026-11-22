@@ -195,26 +195,34 @@ type Checks interface {
 }
 
 type Deployment struct {
-	Environment string
-	Revision    string
-	State       string
-	URL         string
+	Environment string `json:"environment"`
+	Revision    string `json:"revision"`
+	State       string `json:"state"`
+	URL         string `json:"url,omitempty"`
+	ID          string `json:"id,omitempty"`
+	Ref         string `json:"ref,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"`
 }
 
 type Deployments interface {
+	// Deployments returns records in newest-first order for the given revision.
 	Deployments(ctx context.Context, repo RepositoryRef, revision string) ([]Deployment, error)
 }
 
 type Release struct {
-	Tag      string
-	Revision string
-	Title    string
-	Notes    string
-	URL      string
+	Tag      string `json:"tag"`
+	Revision string `json:"revision"`
+	Title    string `json:"title"`
+	Notes    string `json:"notes"`
+	URL      string `json:"url,omitempty"`
+}
+
+type ReleaseReader interface {
+	GetRelease(ctx context.Context, repo RepositoryRef, tag string) (Release, error)
 }
 
 type Releases interface {
-	GetRelease(ctx context.Context, repo RepositoryRef, tag string) (Release, error)
+	ReleaseReader
 	PublishRelease(ctx context.Context, repo RepositoryRef, release Release, options WriteOptions) (WriteResult, error)
 }
 

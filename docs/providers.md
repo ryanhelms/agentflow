@@ -14,8 +14,8 @@ The migration of commands and workflows to these selections is tracked separatel
 | `task_management` | `jira` | `github-issues`, `filesystem`, `repository`, `none` |
 | `knowledge_base` | `confluence` | `filesystem`, `repository`, `github-wiki`, `none` |
 | `devops.checks` | `github` | `none` |
-| `devops.deployments` | `github` | `none` |
-| `devops.releases` | `github` | `none` |
+| `devops.deployments` | `github` | `fixture`, `none` |
+| `devops.releases` | `github` | `fixture`, `none` |
 | `secops` | `github` | `none` |
 | `notifications` | `slack` | `none` |
 
@@ -30,6 +30,7 @@ settings object. Validation errors identify the property to correct.
 | Jira | `site` and `projects` inherit the legacy Jira settings and defaults. |
 | Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. |
 | GitHub | An unset `repository` defers to Git remote detection. |
+| DevOps fixture | Set `path` to a repository-relative JSON file for each role. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
 | GitHub Wiki | `repository` defaults to unset, so Git forge detection selects the GitHub.com target. Set an explicit `owner/name` to use another GitHub.com repository. |
 | FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
@@ -59,6 +60,43 @@ Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
 values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
+
+## Deployment and release providers
+
+`devflow status` shows the newest matching deployment per environment. It uses
+the open PR head SHA when available and local `HEAD` otherwise. GitHub deployment
+entries retain `environment`, `ref`, `sha`, `created_at`, `state` and numeric `id`.
+Select `none` to omit deployments from status.
+
+`devflow release get TAG` reads a published release from `devops.releases`.
+Set `settings.repository` on either GitHub role to choose a specific GitHub.com
+`owner/name`. With the setting unset, devflow uses the detected GitHub.com target.
+
+This configuration uses two read-only fixtures in the local checkout. The
+fixtures can be inspected without service credentials.
+
+```yaml
+code_hosting: {provider: none}
+task_management: {provider: none}
+knowledge_base: {provider: none}
+devops:
+  checks: {provider: none}
+  deployments:
+    provider: fixture
+    settings: {path: .devflow/deployments.json}
+  releases:
+    provider: fixture
+    settings: {path: .devflow/releases.json}
+secops: {provider: none}
+notifications: {provider: none}
+```
+
+The deployment file is a JSON array ordered newest first. Each record needs
+`environment` and `revision` and can include `state` and `url`. Use the full
+commit ID from `git rev-parse HEAD` as `revision` to see a record in `devflow status`.
+The release file is a JSON array with unique `tag` values, each with a `revision`
+and optional `title`, `notes` and `url`. Use `devflow release get TAG` to read a
+record. Setup readiness checks that both selected files can be read and decoded.
 
 ## Check workstation and runner readiness
 

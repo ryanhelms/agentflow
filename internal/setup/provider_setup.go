@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
 	"github.com/nscaledev/devflow/internal/provision"
 )
 
@@ -136,6 +137,12 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
 			p.checkDirectory(role, settings.Root)
+		case *config.DevOpsFixtureSettings:
+			if err := checkDevOpsFixture(root, role.name, settings.Path); err != nil {
+				p.check(role.name, role.Provider, false, err.Error())
+			} else {
+				p.check(role.name, role.Provider, true, fmt.Sprintf("can read fixture %q", settings.Path))
+			}
 		case *config.RepositorySettings:
 			if gitOK {
 				p.checkRepository(ctx, role, settings, repo)
@@ -193,6 +200,15 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		p.Ready = p.Ready && p.Registration.State == "configured"
 	}
 	return p, ctx.Err()
+}
+
+func checkDevOpsFixture(root, role, path string) error {
+	if role == "devops.deployments" {
+		_, err := devopsfixture.LoadDeployments(root, path)
+		return err
+	}
+	_, err := devopsfixture.LoadReleases(root, path)
+	return err
 }
 
 func value(s *string) string {
