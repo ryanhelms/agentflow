@@ -5,7 +5,7 @@ passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollo
 
 ## Gate · Architecture approval
 
-Nothing below starts until both approvers sign off on [the blueprint](blueprint.html).
+Production rollout starts after both approvers sign off on [the blueprint](blueprint.html).
 
 - [ ] Kyle Redelinghuys approves the architecture and plan
 - [ ] Vishal Srini approves the architecture and plan
@@ -16,6 +16,35 @@ Ready before the gate (no team impact):
 - [x] Claude Code plugin tested end to end with `scripts/e2e-claude.sh` (12/12) and installed
       from the `nscaledev/devflow` marketplace
 - [ ] Test with a real Jira ticket once a pilot developer runs `devflow login` (read-only tools first)
+
+## Provider migration rehearsal
+
+Record the baseline before enabling a provider-backed workflow. Capture the
+consumer commit, caller workflow pins, effective provider settings, and the
+workflow that owns releases for that repository. Use the same event payload
+and revision when comparing legacy and provider previews.
+
+1. Review the [provider configuration](providers.md) and run
+   `devflow setup plan --json`. Complete sign-in in the runtime that will make
+   provider calls. Run `devflow setup verify` there with that runtime's
+   credentials.
+2. Run the consumer fixture in a separate checkout with its own devflow home.
+   Preview the candidate writes with read-only credentials. Assign one writer
+   to each effect before applying any change. Keep the operation identifiers
+   and delivery receipts available for replay.
+3. Interrupt a run after one effect, repeat it, and compare the final receipts.
+   Record which operations applied, were already present, or need human
+   reconciliation. Compare the release plan against the expected units and
+   versions.
+4. Stop the candidate writers before restoring the previous provider settings
+   and caller pins. Restore the saved configuration through its normal review
+   path. Re-run the legacy preview for the same event and verify the effect
+   counts and release plan. Reconcile already-applied effects with the service
+   owners before considering any compensating write.
+
+The existing [devflow repository pilot](https://github.com/nscaledev/devflow/issues/25)
+provides issue and ADR replay evidence. The [consumer rehearsal report](consumer-canary.md#recorded-consumer-rehearsal)
+links the hosted canary, rollback, and release verification.
 
 ## P0 · Foundations
 - [ ] Engineering leadership nominates the pilot team and two pilot repos

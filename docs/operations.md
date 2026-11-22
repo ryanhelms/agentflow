@@ -101,6 +101,18 @@ git fetch --tags && git tag -f v0 vX.Y.Z && git push -f origin v0
    `git tag -f v0 vPREV && git push -f origin v0`.
 4. Repos needing an immediate workaround can set `update.pin` in `.devflow/config.yml`.
 
+## Provider setup and migration
+
+Use `devflow setup plan --json` to inspect the selected roles and companion
+requirements in the current runtime. Perform sign-in in the desktop client,
+terminal, or runner that will make the calls. Use `devflow setup verify` or
+`devflow doctor --providers` to verify that runtime's readiness.
+
+Keep the pinned caller workflow and effective provider settings as the
+baseline for the [migration rehearsal](rollout.md#provider-migration-rehearsal).
+Use durable receipts where replay spans runner processes. Before assigning a
+live writer, verify the proposal and recovery path for each destination.
+
 ## Troubleshooting
 
 - `devflow doctor` checks the binary, hooks, auth, client config and API reachability.

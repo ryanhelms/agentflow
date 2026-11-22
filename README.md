@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | The GitHub Issues and Repository provider pilot completed in this repository. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
+| **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
 | **Current release** | <!-- devflow:version -->`v0.20.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
@@ -163,7 +163,9 @@ devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 
 The [provider configuration reference](docs/providers.md) documents independent
 service sections, versioned settings, defaults, and their override rules. Jira tasks
-and Confluence search can use separate sites and credentials. Use the
+and Confluence can use separate sites and credentials. See the
+[migration and rollback rehearsal](docs/rollout.md#provider-migration-rehearsal)
+and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
