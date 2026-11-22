@@ -41,7 +41,7 @@ jobs:
           DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
         run: |
           gh auth setup-git --hostname github.com
-          "$RUNNER_TEMP/devflow" docs search "Provider contracts and repository configuration" --space engineering \
+          "$RUNNER_TEMP/devflow" docs search "Provider contracts and repository configuration" --space engineering --json \
             | jq -e 'any(.pages[]; .ref.instance == "repository" and .ref.id == "provider-architecture")'
       - name: Close the approved issue
         env:
