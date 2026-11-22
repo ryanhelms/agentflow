@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -59,12 +58,8 @@ type RemoteURL struct {
 	Name      string // repository name
 }
 
-var credentialsRe = regexp.MustCompile(`(://)[^/@]*@`)
-
-func redact(raw string) string { return credentialsRe.ReplaceAllString(raw, "$1") }
-
-func invalid(raw, why string) error {
-	return fmt.Errorf("%w %q: %s", ErrInvalidRemote, redact(raw), why)
+func invalidRemote(reason string) error {
+	return fmt.Errorf("%w: %s", ErrInvalidRemote, reason)
 }
 
 // ParseRemoteURL parses an HTTPS, HTTP, ssh://, git:// or SCP-style
@@ -73,48 +68,48 @@ func invalid(raw, why string) error {
 func ParseRemoteURL(raw string) (RemoteURL, error) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
-		return RemoteURL{}, invalid(raw, "empty")
+		return RemoteURL{}, invalidRemote("empty")
 	}
 	if strings.ContainsAny(s, "\x00\r\n") {
-		return RemoteURL{}, invalid(raw, "contains control characters")
+		return RemoteURL{}, invalidRemote("contains control characters")
 	}
 	if strings.Contains(s, "://") {
-		return parseURLForm(raw, s)
+		return parseURLForm(s)
 	}
-	return parseSCPForm(raw, s)
+	return parseSCPForm(s)
 }
 
-func parseURLForm(raw, s string) (RemoteURL, error) {
+func parseURLForm(s string) (RemoteURL, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return RemoteURL{}, invalid(raw, "not a valid URL")
+		return RemoteURL{}, invalidRemote("not a valid URL")
 	}
 	var out RemoteURL
 	switch strings.ToLower(u.Scheme) {
 	case "file":
-		return RemoteURL{}, fmt.Errorf("%w: %q", ErrLocalRemote, redact(raw))
+		return RemoteURL{}, ErrLocalRemote
 	case "https", "http", "git":
 		out.Transport = strings.ToLower(u.Scheme)
 	case "ssh", "git+ssh", "ssh+git":
 		out.Transport = "ssh"
 		out.User = u.User.Username()
 	default:
-		return RemoteURL{}, invalid(raw, "unsupported scheme "+u.Scheme)
+		return RemoteURL{}, invalidRemote("unsupported scheme " + u.Scheme)
 	}
 	out.Host = strings.ToLower(u.Hostname())
 	out.Port = u.Port()
 	if out.Host == "" {
-		return RemoteURL{}, invalid(raw, "missing host")
+		return RemoteURL{}, invalidRemote("missing host")
 	}
-	if err := out.setPath(raw, u.Path); err != nil {
+	if err := out.setPath(u.Path); err != nil {
 		return RemoteURL{}, err
 	}
 	return out, nil
 }
 
-func parseSCPForm(raw, s string) (RemoteURL, error) {
+func parseSCPForm(s string) (RemoteURL, error) {
 	if strings.HasPrefix(s, "/") || strings.HasPrefix(s, ".") || strings.HasPrefix(s, "~") {
-		return RemoteURL{}, fmt.Errorf("%w: %q", ErrLocalRemote, raw)
+		return RemoteURL{}, ErrLocalRemote
 	}
 	var user, host, path string
 	rest := s
@@ -124,43 +119,42 @@ func parseSCPForm(raw, s string) (RemoteURL, error) {
 	if strings.HasPrefix(rest, "[") { // [ipv6]:path
 		end := strings.Index(rest, "]:")
 		if end < 0 {
-			return RemoteURL{}, invalid(raw, "malformed bracketed host")
+			return RemoteURL{}, invalidRemote("malformed bracketed host")
 		}
 		host, path = rest[1:end], rest[end+2:]
 	} else {
-		i := strings.Index(rest, ":")
-		if i < 0 {
-			// No colon: a relative local path such as "../repo" or "repo.git".
-			return RemoteURL{}, fmt.Errorf("%w: %q", ErrLocalRemote, raw)
+		var found bool
+		host, path, found = strings.Cut(rest, ":")
+		if !found {
+			return RemoteURL{}, ErrLocalRemote
 		}
-		host, path = rest[:i], rest[i+1:]
 	}
 	if strings.Contains(host, "/") {
-		return RemoteURL{}, fmt.Errorf("%w: %q", ErrLocalRemote, raw)
+		return RemoteURL{}, ErrLocalRemote
 	}
 	if len(host) == 1 { // C:\repo or C:/repo
-		return RemoteURL{}, fmt.Errorf("%w: %q", ErrLocalRemote, raw)
+		return RemoteURL{}, ErrLocalRemote
 	}
 	if host == "" {
-		return RemoteURL{}, invalid(raw, "missing host")
+		return RemoteURL{}, invalidRemote("missing host")
 	}
 	out := RemoteURL{Transport: "ssh", Host: strings.ToLower(host), User: user}
-	if err := out.setPath(raw, path); err != nil {
+	if err := out.setPath(path); err != nil {
 		return RemoteURL{}, err
 	}
 	return out, nil
 }
 
 // setPath validates the repository path and fills Path, Owner, Project, Name.
-func (u *RemoteURL) setPath(raw, p string) error {
+func (u *RemoteURL) setPath(p string) error {
 	p = strings.TrimSuffix(strings.Trim(p, "/"), ".git")
 	if p == "" {
-		return invalid(raw, "missing repository path")
+		return invalidRemote("missing repository path")
 	}
 	segs := strings.Split(p, "/")
 	for _, seg := range segs {
 		if seg == "" || seg == "." || seg == ".." {
-			return invalid(raw, "malformed repository path")
+			return invalidRemote("malformed repository path")
 		}
 	}
 	// Azure DevOps shapes, recognised by structure so they work for
@@ -173,7 +167,7 @@ func (u *RemoteURL) setPath(raw, p string) error {
 	}
 	if i := indexOf(segs, "_git"); i >= 0 {
 		if i == len(segs)-1 {
-			return invalid(raw, "missing repository name after _git")
+			return invalidRemote("missing repository name after _git")
 		}
 		name := segs[i+1]
 		var before []string
@@ -205,7 +199,7 @@ func (u *RemoteURL) setPath(raw, p string) error {
 		return nil
 	}
 	if len(segs) < 2 {
-		return invalid(raw, "expected owner/name")
+		return invalidRemote("expected owner/name")
 	}
 	u.Path = p
 	u.Owner = strings.Join(segs[:len(segs)-1], "/")
@@ -261,12 +255,15 @@ func canonicalHost(host string) string {
 	switch host {
 	case "ssh.github.com", "www.github.com":
 		return "github.com"
-	case "ssh.dev.azure.com":
+	case "ssh.dev.azure.com", "vs-ssh.visualstudio.com":
 		return "dev.azure.com"
 	case "altssh.gitlab.com", "www.gitlab.com":
 		return "gitlab.com"
 	case "www.bitbucket.org":
 		return "bitbucket.org"
+	}
+	if isAzureHost(host) {
+		return "dev.azure.com"
 	}
 	return host
 }
@@ -486,7 +483,7 @@ func DetectForge(remotes map[string]string, opts DetectOptions) (Detection, erro
 			return fail(StatusUnknown, "host %q (remote %s) is not a well-known code host; map it to a driver (github, gitlab, bitbucket or azuredevops) in the host mapping", rm.URL.Host, rm.Name)
 		}
 	}
-	if src.Forge != tgt.Forge {
+	if src.Forge != tgt.Forge || canonicalHost(src.URL.Host) != canonicalHost(tgt.URL.Host) {
 		return fail(StatusAmbiguous, "source %s is %s but target %s is %s; changes cannot cross code hosts. Pick remotes on the same host, or fix the host mapping", src.Name, src.Forge, tgt.Name, tgt.Forge)
 	}
 	d.Status, d.Forge = StatusOK, tgt.Forge

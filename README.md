@@ -160,6 +160,9 @@ devflow login     # your own Atlassian API token, stored in the OS keychain; reu
 devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
 ```
 
+The [provider configuration reference](docs/providers.md) documents independent
+service sections, versioned settings, defaults, and their override rules.
+
 ## Day-to-day use
 
 | Task | Terminal | AI client |

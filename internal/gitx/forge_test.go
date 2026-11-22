@@ -99,11 +99,11 @@ func TestParseRemoteURLMalformed(t *testing.T) {
 }
 
 func TestParseRemoteURLErrorsDoNotLeakCredentials(t *testing.T) {
-	_, err := ParseRemoteURL("https://user:topsecret@github.com/onlyowner")
+	_, err := ParseRemoteURL("https://user:topsecret@github.com/onlyowner?token=secretquery")
 	if err == nil {
 		t.Fatal("want error")
 	}
-	if strings.Contains(err.Error(), "topsecret") || strings.Contains(err.Error(), "user:") {
+	if strings.Contains(err.Error(), "topsecret") || strings.Contains(err.Error(), "user:") || strings.Contains(err.Error(), "secretquery") {
 		t.Errorf("error leaks credentials: %v", err)
 	}
 }
@@ -127,7 +127,7 @@ func TestInferForge(t *testing.T) {
 
 func TestParseForge(t *testing.T) {
 	ok := map[string]Forge{
-		"github": ForgeGitHub, " GitLab ": ForgeGitLab, "bitbucket": ForgeBitbucket,
+		"github": ForgeGitHub, "GitLab": ForgeGitLab, "bitbucket": ForgeBitbucket,
 		"azuredevops": ForgeAzureDevOps, "azure-devops": ForgeAzureDevOps, "ADO": ForgeAzureDevOps,
 	}
 	for in, want := range ok {
@@ -220,6 +220,8 @@ func TestDetectForge(t *testing.T) {
 			opts:   DetectOptions{Target: "backup"},
 			status: StatusUnknown, msgContain: `target remote "backup" cannot be used`},
 		{name: "cross-forge fork", remotes: rm(map[string]string{"origin": "git@gitlab.com:me/w.git", "upstream": gh}),
+			status: StatusAmbiguous, src: "origin", tgt: "upstream", fork: true, msgContain: "cannot cross code hosts"},
+		{name: "same forge across hosts", remotes: rm(map[string]string{"origin": "git@acme.ghe.com:me/w.git", "upstream": gh}),
 			status: StatusAmbiguous, src: "origin", tgt: "upstream", fork: true, msgContain: "cannot cross code hosts"},
 		{name: "fork onto unmapped host", remotes: rm(map[string]string{"origin": ghFork, "upstream": "https://git.corp.example/a/b"}),
 			status: StatusUnknown, src: "origin", tgt: "upstream", fork: true, msgContain: "git.corp.example"},
