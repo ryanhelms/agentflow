@@ -58,3 +58,23 @@ Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
 values. Optional fields such as `repository` accept `null` to clear the
 selection. A provider change starts with the new provider's defaults and
 validates its settings against that provider's schema.
+
+## Task templates
+
+Task object templates apply independently of the task provider. Configure a
+JSON catalog file relative to the checkout and an optional default template.
+Use an exact name and revision for a reproducible task definition.
+
+```yaml
+task_management:
+  templates:
+    catalog: .devflow/task-templates.json
+    default:
+      name: engineering-task
+      revision: "1"
+```
+
+The templates section is unset by default. If it is present, `catalog` is
+required and `default` may be omitted. The catalog defines each revision's
+required fields, defaults, body sections, and acceptance checklist. See the
+[task template format](../internal/tasktemplate/README.md).

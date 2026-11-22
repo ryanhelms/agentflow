@@ -1,0 +1,20 @@
+[
+  {
+    "name": "professional",
+    "revision": "1",
+    "defaults": {"labels": ["planned"], "priority": "normal"},
+    "required": ["title"],
+    "sections": [
+      {"heading": "Objective"},
+      {"heading": "Scope"},
+      {"heading": "Dependencies", "body": "None identified."},
+      {"heading": "Acceptance Criteria"},
+      {"heading": "Verification"}
+    ]
+  },
+  {
+    "name": "professional",
+    "revision": "01",
+    "required": ["title", "description"]
+  }
+]

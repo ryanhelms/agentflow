@@ -15,6 +15,14 @@ type Ref struct {
 	Revision string `yaml:"revision" json:"revision"`
 }
 
+// Validate requires both parts of an exact reference.
+func (r Ref) Validate() error {
+	if strings.TrimSpace(r.Name) == "" || strings.TrimSpace(r.Revision) == "" {
+		return fmt.Errorf("template requires a name and revision")
+	}
+	return nil
+}
+
 type Template struct {
 	Ref       `yaml:",inline"`
 	Defaults  Fields    `yaml:"defaults,omitempty" json:"defaults,omitempty"`
@@ -44,6 +52,9 @@ type Catalog []Template
 
 // Select retrieves exactly one definition of the stored name and revision.
 func (c Catalog) Select(ref Ref) (Template, error) {
+	if err := ref.Validate(); err != nil {
+		return Template{}, err
+	}
 	var match *Template
 	for i := range c {
 		if c[i].Ref == ref {
@@ -80,8 +91,8 @@ func (t Template) CheckSupport(supported []string) error {
 }
 
 func (t Template) checkDefinition() error {
-	if strings.TrimSpace(t.Name) == "" || strings.TrimSpace(t.Revision) == "" {
-		return fmt.Errorf("template requires a name and revision")
+	if err := t.Ref.Validate(); err != nil {
+		return err
 	}
 	for _, field := range t.Required {
 		switch field {
