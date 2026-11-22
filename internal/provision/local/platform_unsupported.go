@@ -1,4 +1,4 @@
-//go:build !darwin && !linux
+//go:build !darwin && !linux && !windows
 
 package local
 
@@ -9,7 +9,7 @@ import (
 )
 
 // New rejects unsupported platforms before these functions are reached.
-func ownedByEffectiveUser(fs.FileInfo) bool { return false }
+func trustedOwner(string, fs.FileInfo) bool { return false }
 
 func openNonblocking(*os.Root, string) (*os.File, error) { return nil, ErrUnsupported }
 

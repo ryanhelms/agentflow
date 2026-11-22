@@ -16,6 +16,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/provision"
 	"github.com/nscaledev/devflow/internal/provision/local"
+	"github.com/nscaledev/devflow/internal/provision/user"
 )
 
 func TestPinTrustAndIntegrity(t *testing.T) {
@@ -141,7 +142,7 @@ func TestHTTPSRawSource(t *testing.T) {
 		return &http.Response{StatusCode: status, Header: http.Header{"Location": {"https://other.example.invalid/gh"}}, Body: io.NopCloser(strings.NewReader(raw))}, nil
 	})
 	a := provision.Artifact{Source: source}
-	body, err := openArtifact(t.Context(), a)
+	body, err := user.OpenArtifact(t.Context(), a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +152,7 @@ func TestHTTPSRawSource(t *testing.T) {
 		t.Fatalf("read source: %q, %v", data, err)
 	}
 	for _, status = range []int{http.StatusFound, http.StatusNotFound} {
-		if _, err := openArtifact(t.Context(), a); err == nil {
+		if _, err := user.OpenArtifact(t.Context(), a); err == nil {
 			t.Fatalf("accepted HTTP %d", status)
 		}
 	}

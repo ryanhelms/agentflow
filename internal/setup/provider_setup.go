@@ -14,6 +14,7 @@ import (
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/managedmcp"
 	"github.com/nscaledev/devflow/internal/provider/asana"
 	"github.com/nscaledev/devflow/internal/provision"
 )
@@ -29,6 +30,7 @@ type ProviderSetupPlan struct {
 	Root         string                  `json:"root"`
 	Platform     provision.Platform      `json:"platform"`
 	Requirements []ProviderRequirement   `json:"requirements"`
+	Companions   []managedmcp.Status     `json:"companions,omitempty"`
 	InstallGH    *managedgh.Installation `json:"install_gh,omitempty"`
 	Registration *ClientRegistration     `json:"registration,omitempty"`
 	Ready        bool                    `json:"ready"`
@@ -47,6 +49,11 @@ type selectedRole struct {
 // PlanProviderSetup loads a fresh effective configuration on every invocation.
 // An empty client asks only about providers, suitable for terminal and CI use.
 func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupPlan, error) {
+	return PlanSetup(ctx, dir, client, "")
+}
+
+// PlanSetup optionally scopes the plan to one declared provider companion.
+func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSetupPlan, error) {
 	if client != "" && !slices.Contains(Clients, client) {
 		return nil, fmt.Errorf("unknown client %q: select a project adapter (%s) or omit the client for headless checks", client, strings.Join(Clients, ", "))
 	}
@@ -94,6 +101,33 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 		if err != nil {
 			return nil, err
 		}
+	}
+	var ids []string
+	for _, r := range roles {
+		if r.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
+			ids = append(ids, "github")
+		}
+		if r.Provider != "none" {
+			ids = append(ids, r.Provider)
+		}
+	}
+	p.Companions, err = managedmcp.Inspect(ctx, root, p.Platform, ids, companion)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range p.Companions {
+		p.check("companion", s.ID, s.Ready, s.Detail)
+	}
+	if companion != "" {
+		if client != "" {
+			s := p.Companions[0]
+			p.Registration, _, err = companionOverlay(root, client, s)
+			if err != nil {
+				return nil, err
+			}
+			p.Ready = p.Ready && p.Registration.State == "configured"
+		}
+		return p, ctx.Err()
 	}
 	var ghRoles, gitRoles []selectedRole
 	for _, r := range roles {
@@ -178,7 +212,16 @@ func PlanProviderSetup(ctx context.Context, dir, client string) (*ProviderSetupP
 				p.checkWiki(ctx, role, settings, detection)
 			}
 		default:
-			p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))
+			declared := false
+			for _, s := range p.Companions {
+				if slices.Contains(s.Providers, role.Provider) {
+					declared = true
+					p.check(role.name, role.Provider, s.Ready, s.ID+": "+s.Detail)
+				}
+			}
+			if !declared {
+				p.check(role.name, role.Provider, false, fmt.Sprintf("%s requires a read-only %s readiness adapter. Select an available adapter or set %s.provider to none to disable this role", role.name, role.Provider, role.name))
+			}
 		}
 	}
 	if client != "" {
