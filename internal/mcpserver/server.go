@@ -225,6 +225,7 @@ type contextOut struct{ *app.TicketContext }
 func (c contextOut) ContextText() string { return c.Text }
 
 func (s *Server) register() {
+	s.registerProviderSetup()
 	a := s.app
 	// Task awareness
 	add(s, "devflow_context", "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.", readOnly,
