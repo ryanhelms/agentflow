@@ -50,6 +50,10 @@ func TestDeclaredMCPSetup(t *testing.T) {
 	t.Chdir(root)
 	t.Setenv("DEVFLOW_HOME", home)
 	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	const updateToken = "fixture-update-token"
+	t.Setenv("GH_TOKEN", updateToken)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	if b, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
@@ -128,8 +132,16 @@ notifications: {provider: none}
 	status := 0
 	failList := false
 	http.DefaultTransport = companionTransport(func(req *http.Request) (*http.Response, error) {
+		// Remove still checks the release policy when background updates are off.
+		if req.Method == http.MethodGet && req.URL.Host == "api.github.com" &&
+			req.URL.Path == "/repos/nscaledev/devflow/contents/policy/versions.json" &&
+			req.Header.Get("Authorization") == "Bearer "+updateToken {
+			rec := httptest.NewRecorder()
+			rec.WriteHeader(http.StatusNotFound)
+			return rec.Result(), nil
+		}
 		if req.URL.Host != "fixture.invalid" || req.Header.Get("Authorization") != "Bearer "+fixtureAuth {
-			t.Errorf("unexpected credential destination")
+			t.Errorf("unexpected credential destination %s %s", req.Method, req.URL.Host)
 			return nil, fmt.Errorf("unexpected request")
 		}
 		rec := httptest.NewRecorder()
