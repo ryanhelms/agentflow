@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.30.0](https://github.com/nscaledev/devflow/compare/v0.29.0...v0.30.0) - 2026-11-22
+
+### Features
+
+- guide slack mcp sign-in in claude code desktop (#73) ([bcb46a5](https://github.com/nscaledev/devflow/commit/bcb46a5ccd890e0f458f25af90b35901a06d699c))
+
 ## [0.29.0](https://github.com/nscaledev/devflow/compare/v0.28.1...v0.29.0) - 2026-11-22
 
 ### Features
