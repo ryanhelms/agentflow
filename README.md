@@ -328,12 +328,19 @@ Deployments and release lookup also support local JSON fixtures.
 | Check for overlapping PRs | `devflow collisions` | `/devflow:collisions` |
 | Commit | `devflow commit` (or plain `git commit`) | `/devflow:commit` |
 | Preview Jira effects | `devflow preview` | shown before every commit |
+| Check PR readiness | `devflow pr --check` | `devflow_pr_ready` |
 | Open a PR | `devflow pr` | `/devflow:pr` |
 | Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
 | Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
 | Standup | `devflow standup` | `/devflow:standup` |
 | End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
 | Next release version | `devflow release plan` | "what version will this ship as?" |
+
+PR readiness requires a Jira key in the branch name by default. With
+`commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
+readiness if its other checks pass. To open a PR from that branch, supply a
+conventional title with `devflow pr --title "feat: add quota"` or the
+`devflow_pr_open` tool's `title` input.
 
 Each developer chooses an autonomy level per action class (`suggest`, `confirm` or
 `auto`) in `~/.devflow/config.yml`, capped by the repo's `policy.max_autonomy`. The

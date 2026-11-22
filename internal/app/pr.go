@@ -59,7 +59,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 		add(Check{Name: "branch has task reference", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
 	} else {
 		key = a.CurrentKey(ctx)
-		add(Check{Name: "branch has Jira key", OK: key != "", Detail: key})
+		add(Check{Name: "branch has Jira key", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
 	}
 	bad, err := a.LintBranch(ctx)
 	if err != nil {
