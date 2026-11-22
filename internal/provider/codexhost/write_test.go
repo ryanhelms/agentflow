@@ -21,7 +21,7 @@ func TestNativeWritePinsApprovedConnectionAndPayload(t *testing.T) {
 			[]string{`{"id":4,"result":{"content":[],"structuredContent":{"workspace_id":"T123"}}}`}},
 		exchange{slackSend, []string{`{"id":5,"result":{"content":[],"structuredContent":{"sent":true}}}`}},
 		exchange{`{"id":6,"method":"mcpServer/tool/call","params":{"threadId":"scratch","server":"slack","tool":"slack_read_user_profile","arguments":{}}}`,
-			[]string{`{"id":6,"result":{"content":[],"structuredContent":{"workspace_id":"T123"}}}`, ""}},
+			[]string{`{"id":6,"result":{"content":[],"structuredContent":{"workspace_id":"T123"}}}`}},
 	))
 	host := NewWriter(dir)
 	t.Cleanup(host.Close)
@@ -62,6 +62,7 @@ func TestNativeWritePinsApprovedConnectionAndPayload(t *testing.T) {
 	if _, err := host.Write(t.Context(), binding, call); !errors.Is(err, native.ErrDenied) {
 		t.Fatalf("replay: %v", err)
 	}
+	host.Close()
 	checkTrace(t, trace)
 }
 
