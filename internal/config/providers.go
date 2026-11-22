@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -85,6 +86,22 @@ func (s Selection) CheckTarget(property, value string) error {
 	}
 	c.Lock = nil
 	return c.check(value, nil)
+}
+
+// settingError reports the last layer that supplied the invalid property.
+func (s Selection) settingError(role, path string, err error) error {
+	problem := fmt.Errorf("%s.settings.%s: %w", role, path, err)
+	// An omitted required member belongs to the containing object.
+	var closest string
+	for p := range s.Sources {
+		if len(p) > len(closest) && (p == path || strings.HasPrefix(path, p+".")) {
+			closest = p
+		}
+	}
+	if source, ok := s.Sources[closest]; ok && source != configSource {
+		return &DefinitionError{Source: source, Err: problem}
+	}
+	return problem
 }
 
 type DisabledSettings struct{}
@@ -314,7 +331,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 		return Providers{}, err
 	}
 	if settings, ok := p.TaskManagement.Settings.(*AsanaSettings); ok {
-		if err := settings.validate(); err != nil {
+		if err := settings.validate(p.TaskManagement); err != nil {
 			return Providers{}, err
 		}
 	}
@@ -357,16 +374,16 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 	}
 	if wiki, ok := p.KnowledgeBase.Settings.(*GitHubWikiSettings); ok && wiki.Repository != nil {
 		if err := gitx.ValidateGitHubSlug(*wiki.Repository); err != nil {
-			return Providers{}, fmt.Errorf("knowledge_base.settings.repository: %w", err)
+			return Providers{}, p.KnowledgeBase.settingError("knowledge_base", "repository", err)
 		}
 	}
 	if settings, ok := p.SecOps.Settings.(*GitHubSecOpsSettings); ok && settings.Incidents != nil {
 		fixture := settings.Incidents
 		if !filepath.IsLocal(fixture.Fixture) || filepath.Clean(fixture.Fixture) == "." {
-			return Providers{}, fmt.Errorf("secops.settings.incidents.fixture: expected a path within the checkout")
+			return Providers{}, p.SecOps.settingError("secops", "incidents.fixture", errors.New("expected a path within the checkout"))
 		}
 		if strings.TrimSpace(fixture.Scope) == "" {
-			return Providers{}, fmt.Errorf("secops.settings.incidents.scope: expected a stable source scope")
+			return Providers{}, p.SecOps.settingError("secops", "incidents.scope", errors.New("expected a stable source scope"))
 		}
 	}
 	return p, validateNotificationSettings(p.Notifications)
@@ -460,13 +477,13 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 	sel.Contract = c.ID()
 	release, _ := defs.get(LayerRelease, sel.Provider, path)
 	sel.Constraints = release.Constraints
-	var baseline map[string]any
+	var baseline, previous map[string]any
 	if len(sel.Constraints) != 0 {
 		// Locks bind the compiled and release values, independent of legacy
 		// repository settings used to seed the effective configuration.
-		settings := providerSchemas()[path].providers[sel.Provider]()
-		if release.Settings != nil {
-			if err := applySettings(settings, release.Settings, path+".settings"); err != nil {
+		settings := copySettings(sel.Settings)
+		if release.settings != nil {
+			if err := applySettings(settings, release.settings, path+".settings"); err != nil {
 				return err
 			}
 		}
@@ -474,22 +491,34 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 			return err
 		}
 	}
+	check := func() error {
+		if baseline == nil {
+			return nil
+		}
+		current, err := plain(sel.Settings)
+		if err != nil {
+			return err
+		}
+		err = sel.checkConstraints(baseline, previous, current, path)
+		previous = current
+		return err
+	}
 	fromDefinition := func(layer string) error {
 		def, ok := defs.get(layer, sel.Provider, path)
 		if !ok {
 			return nil
 		}
 		if def.Contract != "" {
-			sel.Contract = def.Contract // validated when the definition was read
+			sel.Contract = def.Contract
 		}
-		if def.Settings == nil {
+		if def.settings == nil {
 			return nil
 		}
-		if err := sel.applyLayer(def.Settings, def.source, path); err != nil {
+		if err := sel.applyLayer(def.settings, def.source, path); err != nil {
 			return &DefinitionError{Source: def.source, Err: err}
 		}
 		if layer != LayerRelease {
-			if err := sel.checkConstraints(baseline, path); err != nil {
+			if err := check(); err != nil {
 				return &DefinitionError{Source: def.source, Err: err}
 			}
 		}
@@ -502,7 +531,7 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 	if err := fromDefinition(LayerRelease); err != nil {
 		return err
 	}
-	if err := sel.checkConstraints(baseline, path); err != nil {
+	if err := check(); err != nil {
 		return err
 	}
 	if err := fromDefinition(LayerProject); err != nil {
@@ -512,7 +541,7 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		if err := sel.applyLayer(overrides, configSource, path); err != nil {
 			return err
 		}
-		if err := sel.checkConstraints(baseline, path); err != nil {
+		if err := check(); err != nil {
 			return err
 		}
 	}
@@ -545,23 +574,18 @@ func (sel *Selection) applyLayer(raw any, src Source, path string) error {
 	if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
 		return err
 	}
-	leaves := map[string]any{}
-	flatten("", raw, leaves)
-	delete(leaves, "")
-	for leaf := range leaves {
-		sel.Sources[leaf] = src
-	}
+	fields := raw.(map[string]any) // checked by applySettings above
+	visitSettings("", fields, func(property string, value any) {
+		sel.Sources[property] = src
+		if value == nil {
+			// Clearing an optional object also clears its children's provenance.
+			maps.DeleteFunc(sel.Sources, func(p string, _ Source) bool { return strings.HasPrefix(p, property+".") })
+		}
+	})
 	return nil
 }
 
-func (sel Selection) checkConstraints(baseline map[string]any, path string) error {
-	if baseline == nil {
-		return nil
-	}
-	current, err := plain(sel.Settings)
-	if err != nil {
-		return err
-	}
+func (sel Selection) checkConstraints(baseline, previous, current map[string]any, path string) error {
 	for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
 		con := sel.Constraints[name]
 		value, present := lookup(current, con.parts)
@@ -569,8 +593,10 @@ func (sel Selection) checkConstraints(baseline map[string]any, path string) erro
 		if con.Lock == true && present != wasPresent {
 			return fmt.Errorf("%s.settings.%s is locked by %s", path, name, con.source)
 		}
-		if value == nil && base == nil {
-			continue // an optional property has no configured value
+		prior, _ := lookup(previous, con.parts)
+		_, supplied := sel.Sources[name]
+		if value == nil && base == nil && prior == nil && !supplied {
+			continue // an optional property has never been configured
 		}
 		if err := con.check(value, base); err != nil {
 			return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)

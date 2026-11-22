@@ -131,6 +131,7 @@ func TestDefinitionConstraints(t *testing.T) {
 		{name: "append passes", project: "github-issues:\n    task_management:\n      settings: {labels: [triage, bug]}", config: "provider: github-issues"},
 		{name: "pattern", config: "provider: github-issues\n  settings: {repository: other/repo}",
 			want: "repository value other/repo must match ^nscaledev/"},
+		{name: "pattern rejects explicit reset", config: "provider: github-issues\n  settings: {repository: null}", want: "repository value <nil> must match"},
 		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: nscaledev/devflow}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -164,6 +165,8 @@ func TestInvalidDefinitions(t *testing.T) {
 	for _, tc := range []struct{ name, file, want string }{
 		{"version", "version: 2\nproviders: {}", "version: expected integer 1"},
 		{"unknown field", "version: 1\nproviders: {}\nextra: 1", "field extra not found"},
+		{"null settings", "version: 1\nproviders: {jira: {task_management: {settings: null}}}", "settings: expected an object"},
+		{"trailing document", "version: 1\nproviders: {}\n---\nunknown: true", "expected exactly one YAML document"},
 		{"unknown role", "version: 1\nproviders:\n  jira:\n    tasks: {}", "providers.jira.tasks: unknown role"},
 		{"config-only provider", "version: 1\nproviders:\n  linear:\n    task_management: {}", "linear is not available for task_management"},
 		{"contract", "version: 1\nproviders:\n  jira:\n    task_management: {contract: knowledge/v1}", "does not apply"},
@@ -295,5 +298,29 @@ func TestRepositoryScopeSurvivesReleaseAndUserDefaults(t *testing.T) {
 	}
 	if len(s.Settings.(*JiraSettings).Projects) != 0 || s.CheckTarget("projects", "OTHER") == nil || s.CheckTarget("projects", "INFRA") != nil {
 		t.Fatal("user preference or release allowlist lost")
+	}
+}
+
+func TestInlineNullSettingsAreRejected(t *testing.T) {
+	root, _ := layers(t, "")
+	config(t, root, "task_management: {settings: null}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "task_management.settings: expected an object") {
+		t.Fatal(err)
+	}
+	config(t, root, "task_management: {provider: github-issues, settings: {repository: null}}")
+	if _, _, err := LoadRepo(root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWinningDefinitionOwnsSemanticError(t *testing.T) {
+	root, home := layers(t, "")
+	config(t, root, "task_management: {provider: asana}")
+	project(t, root, "project.yml", "version: 1\nproviders: {asana: {task_management: {settings: {project: '10'}}}}")
+	user(t, home, "override.yml", "version: 1\nproviders: {asana: {task_management: {settings: {project: bad/project}}}}")
+	_, _, err := LoadRepo(root)
+	var def *DefinitionError
+	if !errors.As(err, &def) || def.Source != (Source{LayerUser, "~/.devflow/providers/override.yml"}) || !strings.Contains(err.Error(), "task_management.settings.project") {
+		t.Fatal(err)
 	}
 }

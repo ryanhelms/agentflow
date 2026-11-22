@@ -61,6 +61,11 @@ func ListProviders(ctx context.Context, dir string, explain bool) (*ProviderList
 	if err != nil {
 		return nil, err
 	}
+	return ListConfiguredProviders(ctx, root, cfg, found, explain)
+}
+
+// ListConfiguredProviders describes the caller's active provider snapshot.
+func ListConfiguredProviders(ctx context.Context, root string, cfg *config.Repo, found, explain bool) (*ProviderList, error) {
 	selected := map[string]config.Selection{}
 	if found {
 		for _, r := range selectedRoles(cfg.Providers) {
@@ -75,9 +80,11 @@ func ListProviders(ctx context.Context, dir string, explain bool) (*ProviderList
 		sel, ok := selected[role.Role]
 		ro := RoleOptions{Role: role.Role, Selected: sel.Provider, Configured: ok && sel.Configured, Contract: sel.Contract}
 		if explain && ok {
-			if ro.Settings, err = sel.Explain(); err != nil {
+			settings, err := sel.Explain()
+			if err != nil {
 				return nil, err
 			}
+			ro.Settings = settings
 		}
 		for _, id := range role.Providers {
 			ro.Options = append(ro.Options, ProviderOption{

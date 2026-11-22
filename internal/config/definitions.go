@@ -75,10 +75,11 @@ type Constraint struct {
 }
 
 type roleDefinition struct {
-	Contract    string                `yaml:"contract"`
-	Settings    map[string]any        `yaml:"settings"`
-	Constraints map[string]Constraint `yaml:"constraints"`
-	source      Source
+	Contract     string    `yaml:"contract"`
+	SettingsNode yaml.Node `yaml:"settings"`
+	settings     map[string]any
+	Constraints  map[string]Constraint `yaml:"constraints"`
+	source       Source
 }
 
 type definitionFile struct {
@@ -163,6 +164,13 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 	if err := dec.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
+	var trailing yaml.Node
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return err
+		}
+		return errors.New("expected exactly one YAML document")
+	}
 	if file.Version != ProviderSchemaVersion {
 		return fmt.Errorf("version: expected integer %d", ProviderSchemaVersion)
 	}
@@ -183,11 +191,21 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 				// Configuration-only providers need the operation engine.
 				return fmt.Errorf("%s: %s is not available for %s; expected one of %s", p, id, role, strings.Join(schema.choices()[:len(schema.choices())-1], ", "))
 			}
-			if _, err := contract.Resolve(role, def.Contract); err != nil {
+			c, err := contract.Resolve(role, def.Contract)
+			if err != nil {
 				return fmt.Errorf("%s.contract: %w", p, err)
 			}
-			if def.Settings != nil {
-				if err := applySettings(factory(), def.Settings, p+".settings"); err != nil {
+			if def.Contract != "" {
+				def.Contract = c.ID()
+			}
+			if def.SettingsNode.Kind != 0 {
+				if err := def.SettingsNode.Decode(&def.settings); err != nil {
+					return fmt.Errorf("%s.settings: %w", p, err)
+				}
+				if def.settings == nil {
+					return fmt.Errorf("%s.settings: expected an object with string keys", p)
+				}
+				if err := applySettings(factory(), def.settings, p+".settings"); err != nil {
 					return err
 				}
 			}
@@ -278,7 +296,7 @@ func settingsType(t reflect.Type, name string, parts []string) (reflect.Type, er
 		case reflect.Struct:
 			found := false
 			for _, f := range reflect.VisibleFields(t) {
-				if tag := f.Tag.Get("yaml"); tag == part {
+				if tag := f.Tag.Get("yaml"); tag != "" && tag != ",inline" && tag == part {
 					t, found = f.Type, true
 					break
 				}
@@ -366,20 +384,17 @@ func asList(v any) []any {
 	return []any{v}
 }
 
-// flatten lists the leaf paths a YAML value sets. Objects merge key by key,
-// so their keys are separate leaves; lists replace as a unit.
-func flatten(prefix string, value any, out map[string]any) {
-	m, ok := value.(map[string]any)
-	if !ok || len(m) == 0 {
-		out[prefix] = value
-		return
-	}
-	for k, v := range m {
-		p := escapeSettingKey.Replace(k)
+// visitSettings uses the same escaped property names for provenance and explain.
+func visitSettings(prefix string, fields map[string]any, visit func(string, any)) {
+	for key, value := range fields {
+		path := escapeSettingKey.Replace(key)
 		if prefix != "" {
-			p = prefix + "." + p
+			path = prefix + "." + path
 		}
-		flatten(p, v, out)
+		visit(path, value)
+		if children, ok := value.(map[string]any); ok {
+			visitSettings(path, children, visit)
+		}
 	}
 }
 
@@ -402,13 +417,13 @@ func (s Selection) Explain() ([]Setting, error) {
 		return nil, err
 	}
 	leaves := map[string]any{}
-	flatten("", data, leaves)
-	for name, c := range s.Constraints {
-		if v, present := lookup(data, c.parts); present {
-			leaves[name] = v
+	visitSettings("", data, func(path string, v any) {
+		children, object := v.(map[string]any)
+		_, constrained := s.Constraints[path]
+		if !object || len(children) == 0 || constrained {
+			leaves[path] = v
 		}
-	}
-	delete(leaves, "") // a settings type with no properties
+	})
 	out := make([]Setting, 0, len(leaves))
 	for _, p := range slices.Sorted(maps.Keys(leaves)) {
 		src, ok := s.Sources[p]

@@ -54,8 +54,7 @@ type Autonomy struct {
 
 // Repo is .devflow/config.yml.
 type Repo struct {
-	Devflow                              int `yaml:"devflow"`
-	legacyJiraSite, legacyConfluenceSite bool
+	Devflow int `yaml:"devflow"`
 	// Providers holds the effective role selections populated by LoadRepo.
 	Providers Providers `yaml:"-"`
 	Update    struct {
@@ -79,6 +78,8 @@ type Repo struct {
 		TestCmd           string   `yaml:"test_cmd"`
 		LintCmd           string   `yaml:"lint_cmd"`
 	} `yaml:"policy"`
+
+	legacyJiraSite, legacyConfluenceSite bool
 }
 
 // Commit holds commit message rules.
