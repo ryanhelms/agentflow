@@ -85,7 +85,7 @@ func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
 	if a.ghc != nil {
 		return a.ghc, nil
 	}
-	tok, err := auth.GitHubToken(ctx)
+	tok, err := auth.GitHubToken(ctx, a.Repo.Dir)
 	if err != nil {
 		return nil, err
 	}

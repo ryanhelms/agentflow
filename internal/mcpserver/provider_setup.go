@@ -11,7 +11,8 @@ type setupPlanIn struct {
 }
 
 type setupApplyIn struct {
-	Client       string `json:"client" jsonschema:"explicit project adapter to register in the current workspace"`
+	InstallGH    bool   `json:"install_gh,omitempty" jsonschema:"install only the pinned gh companion for selected providers"`
+	Client       string `json:"client,omitempty" jsonschema:"explicit project adapter to register in the current workspace"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
 }
 
@@ -20,8 +21,8 @@ func (s *Server) registerProviderSetup() {
 		func(ctx context.Context, in setupPlanIn) (any, error) {
 			return setup.PlanProviderSetup(ctx, s.app.Repo.Dir, in.Client)
 		})
-	add(s, "devflow_setup_apply", "Register a project adapter after provider readiness and user confirmation. Rerun devflow_setup_plan to verify. Host trust and sign-in are handled by the client.", local,
+	add(s, "devflow_setup_apply", "Install a user-pinned gh companion with install_gh or register a project adapter with client. Each action requires local confirmation. Rerun devflow_setup_plan to verify. Host trust and sign-in are handled by the client.", remote,
 		func(ctx context.Context, in setupApplyIn) (any, error) {
-			return s.app.ApplyProviderSetup(ctx, in.Client, in.ConfirmToken)
+			return s.app.ApplyProviderSetup(ctx, in.Client, in.ConfirmToken, in.InstallGH)
 		})
 }

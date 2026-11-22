@@ -143,6 +143,7 @@ func gitObject(ctx context.Context, repo *gitx.Repo, args ...string) ([]byte, er
 }
 
 type githubProbe struct {
+	command   string
 	dir       string
 	detection gitx.Detection
 	auth      map[string]bool
@@ -170,11 +171,11 @@ func (g *githubProbe) check(ctx context.Context, p *ProviderSetupPlan, role sele
 	}
 	authenticated, checked := g.auth[host]
 	if !checked {
-		authenticated = probeCommand(ctx, g.dir, "gh", "auth", "status", "--hostname", host)
+		authenticated = probeCommand(ctx, g.dir, g.command, "auth", "status", "--hostname", host)
 		g.auth[host] = authenticated
 	}
 	if !authenticated {
-		check(false, "check connectivity and run gh auth login --hostname "+host+" or supply a token for that host in this environment")
+		check(false, fmt.Sprintf("check connectivity and run gh auth login --hostname %s using %s, or supply a token for that host in this environment", host, g.command))
 		return
 	}
 	endpoints := map[string][]string{
@@ -189,7 +190,7 @@ func (g *githubProbe) check(ctx context.Context, p *ProviderSetupPlan, role sele
 	}
 	for _, suffix := range reads {
 		endpoint := "repos/" + repository + suffix
-		if !probeCommand(ctx, g.dir, "gh", "api", "--hostname", host, "--method", "GET", "--silent", endpoint) {
+		if !probeCommand(ctx, g.dir, g.command, "api", "--hostname", host, "--method", "GET", "--silent", endpoint) {
 			check(false, fmt.Sprintf("verify %s exists on %s and the active identity can GET %s", repository, host, endpoint))
 			return
 		}

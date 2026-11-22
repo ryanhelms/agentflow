@@ -72,6 +72,55 @@ as errors. Use provider credentials in the environment where the command runs.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
 
+### Install a pinned gh companion
+
+On native macOS and Linux, providers that need GitHub CLI first try
+`gh --version` on PATH. If that check fails, setup looks for
+`companions.yml` in your devflow home (normally `~/.devflow`, or an absolute
+`DEVFLOW_HOME`). Keep this directory outside the checkout, under stable
+directories you trust. The directory and manifest must be owned by your user
+and writable only by you. Use an ordinary directory and a regular manifest file.
+
+Supply one pin per OS and architecture. Use the SHA256 of the **raw executable**
+from a source you trust. If your distributor supplies an archive, verify and
+extract it yourself, then pin the executable bytes. This example shows the
+shape of a local pin. Replace the path and digest with your own values.
+
+```yaml
+gh:
+  - platform: {os: linux, arch: amd64}
+    version: "2.70.0"
+    source: file:///opt/approved-tools/gh-2.70.0-linux-amd64
+    sha256: "<64 lowercase hexadecimal digits>"
+```
+
+An absolute local file URL or a direct HTTPS URL serving the raw executable
+is supported. HTTPS sources must respond directly with HTTP 200. Source URLs
+must be free of credentials, query strings and fragments. Repository provider
+settings select services. The user manifest supplies artifacts for the built-in
+`gh` command.
+
+1. Run `devflow setup plan --json` or call `devflow_setup_plan`. Review
+   `install_gh` for the source, version, platform, digest and destination home.
+   Planning reads local state and leaves the source unopened.
+2. Run `devflow setup apply --install-gh` and confirm, or pass `--yes` for
+   noninteractive approval. In MCP, call `devflow_setup_apply` with
+   `{"install_gh":true}`, review the returned summary, then repeat the call with
+   its `confirm_token` after approval. The local autonomy setting applies.
+3. Read the returned readiness checks. The installer verifies the digest before
+   publishing. Setup then checks the executable, authentication and selected
+   GitHub reads. If authentication is needed, supply the usual credentials or run
+   the verified path shown in the plan with `auth login --hostname HOST`.
+   Approve project registration separately with `setup apply --client NAME`.
+
+The cache lives under `DEVFLOW_HOME/companions/<os>-<arch>/gh/`. Devflow
+rechecks the installed digest against the current pin and invokes the
+version-and-digest-specific path for provider probes and app token lookup.
+An already verified copy works with the source offline. `GH_TOKEN` and
+`GITHUB_TOKEN` retain priority for app token lookup. Shell PATH and unmanaged
+tools stay as configured. The project launcher and devflow update verification
+still use the system `gh` for release bootstrap.
+
 ## GitHub Issues task lifecycle
 
 Use the `github-issues` task provider with the detected GitHub repository or set
