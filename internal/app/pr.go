@@ -325,7 +325,8 @@ func (a *App) ReviewReply(ctx context.Context, threadID, body, token string) (an
 
 // ShipStatus combines PR, checks, deployments and ticket state.
 func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
-	out := map[string]any{"branch": a.Repo.Branch(ctx)}
+	branch := a.Repo.Branch(ctx)
+	out := map[string]any{"branch": branch}
 	key := a.CurrentKey(ctx)
 	if key != "" {
 		out["key"] = key
@@ -355,16 +356,40 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 			}
 		}
 	}
+	revision := a.shipPRStatus(ctx, branch, out)
+	selection := a.Cfg.Providers.DevOps.Deployments
+	if selection.Provider == "none" {
+		return out, nil
+	}
+	if revision == "" {
+		head, err := a.Repo.Git(ctx, "rev-parse", "--verify", "HEAD")
+		if err != nil {
+			return out, nil
+		}
+		revision = strings.TrimSpace(head)
+	}
+	if deployments, err := a.shipDeployments(ctx, selection, revision); err == nil {
+		out["deployments"] = deployments
+	} else if selection.Configured {
+		out["deployments_error"] = err.Error()
+	}
+	return out, nil
+}
+
+func (a *App) shipPRStatus(ctx context.Context, branch string, out map[string]any) string {
+	if branch == "" || a.Cfg.Providers.CodeHosting.Provider == "none" {
+		return ""
+	}
 	repo, err := a.GitHubRepo(ctx)
 	if err != nil {
-		return out, nil
+		return ""
 	}
 	c, err := a.GitHub(ctx)
 	if err != nil {
 		out["github"] = err.Error()
-		return out, nil
+		return ""
 	}
-	if pr, err := c.PRForBranch(ctx, repo, a.Repo.Branch(ctx)); err == nil && pr != nil {
+	if pr, err := c.PRForBranch(ctx, repo, branch); err == nil && pr != nil {
 		out["pr"] = map[string]any{"number": pr.Number, "url": pr.HTMLURL, "draft": pr.Draft}
 		if checks, err := a.changeChecks(ctx, c, repo, pr.Head.SHA); err == nil {
 			summary := map[string]int{}
@@ -387,15 +412,7 @@ func (a *App) ShipStatus(ctx context.Context) (map[string]any, error) {
 		if threads, err := c.ReviewThreads(ctx, repo, pr.Number); err == nil {
 			out["unresolved_threads"] = len(threads)
 		}
+		return pr.Head.SHA
 	}
-	if deps, err := c.Deployments(ctx, repo); err == nil {
-		latest := map[string]gh.Deployment{}
-		for _, d := range deps {
-			if _, seen := latest[d.Environment]; !seen {
-				latest[d.Environment] = d
-			}
-		}
-		out["deployments"] = latest
-	}
-	return out, nil
+	return ""
 }

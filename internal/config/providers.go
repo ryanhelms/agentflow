@@ -67,6 +67,11 @@ type GitHubSettings struct {
 	// An unset repository uses the repository selected by code-host detection.
 	Repository *string `yaml:"repository"`
 }
+
+type DevOpsFixtureSettings struct {
+	Path string `yaml:"path"`
+}
+
 type GitHubWikiSettings struct {
 	// An unset repository uses the GitHub.com target selected by forge detection.
 	Repository *string `yaml:"repository"`
@@ -181,6 +186,9 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
+	devOpsFixture := roleSchema{"github", map[string]settingsFactory{
+		"github": githubSettings, "fixture": func() any { return &DevOpsFixtureSettings{} },
+	}}
 
 	var p Providers
 	taskManagement, present, err := section(raw, "task_management", "task_management", "version", "provider", "settings", "templates")
@@ -217,8 +225,8 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node) (Providers, error)
 		}}, &p.CodeHosting},
 		{raw, "knowledge_base", "knowledge_base", roleSchema{"confluence", knowledge}, &p.KnowledgeBase},
 		{devops, "checks", "devops.checks", github, &p.DevOps.Checks},
-		{devops, "deployments", "devops.deployments", github, &p.DevOps.Deployments},
-		{devops, "releases", "devops.releases", github, &p.DevOps.Releases},
+		{devops, "deployments", "devops.deployments", devOpsFixture, &p.DevOps.Deployments},
+		{devops, "releases", "devops.releases", devOpsFixture, &p.DevOps.Releases},
 		{raw, "secops", "secops", github, &p.SecOps},
 		{raw, "notifications", "notifications", roleSchema{"slack", map[string]settingsFactory{
 			"slack": func() any { return &SlackSettings{} },

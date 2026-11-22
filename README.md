@@ -213,7 +213,11 @@ GitHub PR URL and review branch. The task listing reflects the change after
 merge. Use `publication: push` for direct writes to an unprotected branch.
 [Provider configuration](docs/providers.md)
 
-The status command reads checks from the configured `devops.checks` provider.
+`devflow status` reads checks and deployments from their own `devops` providers.
+Deployments match the open PR's head commit or the local `HEAD` when there is no
+open PR. Use `devflow release get TAG` to inspect a release from `devops.releases`.
+Deployments and release lookup also support local JSON fixtures.
+[DevOps provider configuration](docs/providers.md#deployment-and-release-providers)
 
 ## Day-to-day use
 
@@ -271,6 +275,12 @@ the system of record for what runs in production.
   Helm charts (OCI) and libraries (Go submodule tags, npm, PyPI, Terraform).
 
 Full rules and examples: [docs/releases.md](docs/releases.md).
+
+For a manual release, `devflow release publish TAG --revision SHA --dry-run`
+previews the destination and commit. Publication takes an explicit full commit
+SHA and confirmation under the remote autonomy policy. Retry the same tag, SHA,
+title and notes to reconcile the result.
+[Manual release publication](docs/releases.md#publish-an-explicit-release)
 
 ## AI client support
 
