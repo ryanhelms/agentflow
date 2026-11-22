@@ -178,6 +178,14 @@ Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`
 checks provider readiness and returns an error for missing requirements.
+
+If Claude Code Desktop on macOS is missing the devflow tools, run
+`devflow setup apply --client claude-desktop` in the enrolled checkout.
+It registers the project launcher in `.mcp.json`. Restart Claude Code Desktop,
+approve the project server if prompted, and look for `mcp__devflow__devflow_setup_plan`.
+Use `--client claude` for the Claude Code plugin marketplace.
+[Desktop setup and verification](docs/providers.md#claude-code-desktop).
+
 On macOS and Linux, if a selected GitHub provider needs `gh` and the PATH
 copy fails its version check or is missing, you can pin a raw executable in
 `~/.devflow/companions.yml` and approve `devflow setup apply --install-gh`.

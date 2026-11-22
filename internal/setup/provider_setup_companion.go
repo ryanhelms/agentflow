@@ -43,9 +43,9 @@ var geminiVariable = regexp.MustCompile(`\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%`)
 
 func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistration, []byte, error) {
 	r := &ClientRegistration{Client: client, State: "blocked", Entry: "devflow-" + s.ID}
-	format, ok := companionClients[client]
+	format, ok := companionClients[runtimeClient(client)]
 	if !ok {
-		r.Detail = "managed MCP registration supports claude, cursor, gemini and vscode project configurations"
+		r.Detail = "managed MCP registration supports claude, claude-desktop, cursor, gemini and vscode project configurations"
 		return r, nil, nil
 	}
 	r.Path = filepath.FromSlash(format.path)
@@ -59,6 +59,11 @@ func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistrat
 		r.Detail = "use a literal executable path and endpoint without client variable substitutions"
 		return r, nil, nil
 	}
+	return serverOverlay(dir, r, format.group, companionEntry(client, s))
+}
+
+// Only companion keys (devflow-<id>) can be replaced with fresh approval.
+func serverOverlay(dir string, r *ClientRegistration, group string, wanted map[string]any) (*ClientRegistration, []byte, error) {
 	current, err := registrationBytes(dir, r)
 	if err != nil || r.Detail != "" {
 		return r, nil, err
@@ -68,17 +73,20 @@ func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistrat
 		return r, nil, nil
 	}
 	entries := map[string]any{}
-	if existing, ok := doc[format.group]; ok {
+	if existing, ok := doc[group]; ok {
 		entries, ok = existing.(map[string]any)
 		if !ok {
-			r.Detail = "inspect the conflicting " + format.group + " in " + r.Path
+			r.Detail = "inspect the conflicting " + group + " in " + r.Path
 			return r, nil, nil
 		}
 	}
-	wanted := companionEntry(client, s)
-	r.State = "pending"
-	r.Detail = "add " + r.Entry + " to " + r.Path
-	if prev, ok := entries[r.Entry]; ok {
+	r.State, r.Detail = "pending", "add "+r.Entry+" to "+r.Path
+	if r.Entry == "devflow" {
+		inspectDesktopLauncher(r, entries, wanted)
+		if r.State != "pending" {
+			return r, nil, nil
+		}
+	} else if prev, ok := entries[r.Entry]; ok {
 		if reflect.DeepEqual(prev, wanted) {
 			r.State, r.Detail = "configured", "managed entry matches the verified companion"
 			return r, nil, nil
@@ -90,13 +98,13 @@ func companionOverlay(dir, client string, s managedmcp.Status) (*ClientRegistrat
 		r.Detail = "replace the reserved " + r.Entry + " entry in " + r.Path
 	}
 	entries[r.Entry] = wanted
-	doc[format.group] = entries
+	doc[group] = entries
 	next, err := json.MarshalIndent(doc, "", "  ")
 	return r, append(next, '\n'), err
 }
 
 func companionEntry(client string, s managedmcp.Status) map[string]any {
-	format := companionClients[client]
+	format := companionClients[runtimeClient(client)]
 	wanted := map[string]any{}
 	env := format.envPrefix + s.AuthEnv + "}"
 	if s.Kind == provision.RemoteMCP {
@@ -136,6 +144,10 @@ func entryDigest(entry any) (string, error) {
 
 func companionReceiptName(name string) string { return name + ".devflow-companions.json" }
 
+func receiptedKey(config, key string) bool {
+	return strings.HasPrefix(key, "devflow-") || config == ".mcp.json" && key == "devflow"
+}
+
 // Each client has a project-local receipt containing only keys and entry digests.
 func readCompanionRecords(dir *os.Root, config string) (map[string]string, error) {
 	name := companionReceiptName(config)
@@ -150,7 +162,7 @@ func readCompanionRecords(dir *os.Root, config string) (map[string]string, error
 	}
 	for key, digest := range records {
 		sum, err := hex.DecodeString(digest)
-		if !strings.HasPrefix(key, "devflow-") || err != nil || len(sum) != sha256.Size {
+		if !receiptedKey(config, key) || err != nil || len(sum) != sha256.Size {
 			return nil, invalid
 		}
 	}

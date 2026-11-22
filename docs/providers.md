@@ -139,6 +139,37 @@ as errors. Use provider credentials in the environment where the command runs.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
 
+### Claude Code Desktop
+
+The `claude` setup mode configures the Claude Code plugin marketplace. If a
+trusted desktop session still lacks the devflow tools, register the project
+server from the enrolled checkout in a POSIX launcher environment.
+
+```bash
+devflow setup plan --client claude-desktop
+devflow setup apply --client claude-desktop
+devflow setup verify --client claude-desktop
+```
+
+Setup adds `mcpServers.devflow` to the checkout's `.mcp.json`. It uses `sh`
+and Git to find the checkout's executable `.devflow/bin/devflow` and run
+`mcp --client claude` over stdio. Restart Claude Code Desktop, open the trusted
+project, and approve the server if prompted. Call `mcp__devflow__devflow_setup_plan`
+with `{"client":"claude-desktop"}` and compare the result with
+`devflow doctor --providers --client claude-desktop --json`.
+For a configured knowledge provider, search
+for a known document with `mcp__devflow__devflow_docs_search` and the same
+query in `devflow docs search`.
+
+From an existing MCP session, pass `{"client":"claude-desktop"}` to
+`devflow_setup_plan` and `devflow_setup_apply`. Review the apply preview and
+repeat with its confirmation token. Keep the generated
+`.mcp.json.devflow-companions.json` receipt with the project file.
+`devflow remove` uses it to remove an unchanged launcher that setup wrote.
+An edited launcher or a matching entry supplied by the team stays in place.
+On native Windows, configure the project server manually with the verified
+`devflow.exe` and arguments `mcp --client claude`.
+
 ### Install a pinned gh companion
 
 On native macOS and Linux, providers that need GitHub CLI first try
@@ -263,7 +294,7 @@ Registration reserves `devflow-<id>` in one project file.
 | --- | --- | --- |
 | VS Code | `.vscode/mcp.json` | `${env:NAME}` |
 | Cursor | `.cursor/mcp.json` | `${env:NAME}` |
-| Claude Code | `.mcp.json` | `${NAME}` |
+| Claude Code (`claude` or `claude-desktop`) | `.mcp.json` | `${NAME}` |
 | Gemini CLI | `.gemini/settings.json` | `${NAME}` |
 
 Review any pending replacement of that key. The merge preserves other entries,

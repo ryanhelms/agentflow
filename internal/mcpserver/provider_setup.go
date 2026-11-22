@@ -9,14 +9,14 @@ import (
 
 type setupPlanIn struct {
 	Companion string `json:"companion,omitempty" jsonschema:"scope readiness to this user-declared MCP companion id"`
-	Client    string `json:"client,omitempty" jsonschema:"project adapter (claude, codex, grok, cursor, vscode, gemini). Omit for headless readiness"`
+	Client    string `json:"client,omitempty" jsonschema:"project adapter (claude, claude-desktop, codex, grok, cursor, vscode, gemini). Omit for headless readiness"`
 }
 
 type setupApplyIn struct {
 	Companion    string `json:"companion,omitempty" jsonschema:"select one declared MCP companion; specify install or an explicit client"`
 	Install      bool   `json:"install,omitempty" jsonschema:"install the selected pinned MCP companion only"`
 	InstallGH    bool   `json:"install_gh,omitempty" jsonschema:"install only the pinned gh companion for selected providers"`
-	Client       string `json:"client,omitempty" jsonschema:"explicit project adapter to register in the current workspace"`
+	Client       string `json:"client,omitempty" jsonschema:"explicit project adapter to register in the current workspace (use claude-desktop for Claude Code Desktop)"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
 }
 
