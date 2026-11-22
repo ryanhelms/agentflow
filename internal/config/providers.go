@@ -179,7 +179,7 @@ type RoleProviders struct {
 // ProviderCatalog lists the providers each role accepts, from the same
 // registry that validates .devflow/config.yml.
 func ProviderCatalog() []RoleProviders {
-	schemas := providerSchemas(&Repo{})
+	schemas := providerSchemas()
 	out := make([]RoleProviders, 0, len(ProviderRoles))
 	for _, role := range ProviderRoles {
 		s := schemas[role]
@@ -192,9 +192,8 @@ func (s roleSchema) choices() []string {
 	return append(slices.Sorted(maps.Keys(s.providers)), "none")
 }
 
-// providerSchemas is the provider registry, keyed by role path. Repo supplies
-// defaults that legacy top-level settings still carry.
-func providerSchemas(repo *Repo) map[string]roleSchema {
+// providerSchemas is the provider registry, keyed by role path.
+func providerSchemas() map[string]roleSchema {
 	const taskDir = ".devflow/tasks"
 	fileDefaults := func() FileTaskSettings {
 		return FileTaskSettings{Scope: "default", Transitions: defaultTransitions()}
@@ -214,7 +213,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 	}
 	tasks["asana"] = func() any { return &AsanaSettings{} }
 	tasks["jira"] = func() any {
-		return &JiraSettings{Site: repo.Jira.Site, Projects: append([]string{}, repo.Jira.Projects...)}
+		return &JiraSettings{Site: DefaultSite, Projects: []string{}}
 	}
 	tasks["github-issues"] = func() any {
 		return &GitHubIssuesSettings{
@@ -227,7 +226,7 @@ func providerSchemas(repo *Repo) map[string]roleSchema {
 		"filesystem": func() any { return &FileSystemSettings{Root: "docs"} },
 		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
 	}
-	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: repo.Confluence.Site} }
+	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: DefaultSite} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
 	devOpsFixture := roleSchema{"github", map[string]settingsFactory{
@@ -268,7 +267,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 			raw[key] = value
 		}
 	}
-	schemas := providerSchemas(repo)
+	schemas := providerSchemas()
 	defs, err := loadDefinitions(root, schemas)
 	if err != nil {
 		return Providers{}, err
@@ -279,7 +278,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 	if err != nil {
 		return Providers{}, err
 	}
-	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management", defs)
+	p.TaskManagement, err = schemas["task_management"].resolve(taskManagement, present, "task_management", defs, repo)
 	if err != nil {
 		return Providers{}, err
 	}
@@ -320,7 +319,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 		if err != nil {
 			return Providers{}, err
 		}
-		*role.out, err = schemas[role.path].resolve(fields, present, role.path, defs)
+		*role.out, err = schemas[role.path].resolve(fields, present, role.path, defs, repo)
 		if err != nil {
 			return Providers{}, err
 		}
@@ -366,7 +365,7 @@ func sectionVersion(fields map[string]any, path string) (int, error) {
 	return ProviderSchemaVersion, nil
 }
 
-func (s roleSchema) resolve(fields map[string]any, present bool, path string, defs *definitions) (Selection, error) {
+func (s roleSchema) resolve(fields map[string]any, present bool, path string, defs *definitions, repo *Repo) (Selection, error) {
 	version, err := sectionVersion(fields, path)
 	if err != nil {
 		return Selection{}, err
@@ -391,12 +390,36 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string, de
 		}
 		return sel, nil
 	}
-	return sel, sel.applyLayers(fields, path, defs)
+	return sel, sel.applyLayers(fields, path, defs, repo)
 }
 
-// applyLayers merges release, project, config.yml and user settings in that
-// order. Release constraints are checked against every later layer.
-func (sel *Selection) applyLayers(fields map[string]any, path string, defs *definitions) error {
+var configSource = Source{Layer: LayerProject, File: ".devflow/config.yml"}
+
+// Legacy fields seed the role before the release defaults. Preserve their
+// provenance even when the value happens to equal a compiled default.
+func (repo *Repo) legacySettings(id string) map[string]any {
+	values := map[string]any{}
+	switch id {
+	case "jira":
+		if repo.legacyJiraSite {
+			values["site"] = repo.Jira.Site
+		}
+		if repo.Jira.Projects != nil {
+			items := make([]any, len(repo.Jira.Projects))
+			for i, project := range repo.Jira.Projects {
+				items[i] = project
+			}
+			values["projects"] = items
+		}
+	case "confluence":
+		if repo.legacyConfluenceSite {
+			values["site"] = repo.Confluence.Site
+		}
+	}
+	return values
+}
+
+func (sel *Selection) applyLayers(fields map[string]any, path string, defs *definitions, repo *Repo) error {
 	sel.Sources = map[string]Source{}
 	c, err := contract.Resolve(path, "")
 	if err != nil {
@@ -406,43 +429,52 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 	release, _ := defs.get(LayerRelease, sel.Provider, path)
 	sel.Constraints = release.Constraints
 	var baseline map[string]any
-	apply := func(raw any, src Source, contractID string) error {
-		if contractID != "" {
-			c, err := contract.Resolve(path, contractID)
-			if err != nil {
+	if len(sel.Constraints) != 0 {
+		// Locks bind the compiled and release values, independent of legacy
+		// repository settings used to seed the effective configuration.
+		settings := providerSchemas()[path].providers[sel.Provider]()
+		if release.Settings != nil {
+			if err := applySettings(settings, release.Settings, path+".settings"); err != nil {
 				return err
 			}
-			sel.Contract = c.ID()
 		}
-		if raw == nil {
-			return nil
+		if baseline, err = plain(settings); err != nil {
+			return err
 		}
-		if src.Layer != LayerRelease {
-			if baseline == nil {
-				var err error
-				if baseline, err = plain(sel.Settings); err != nil {
-					return err
-				}
-			}
-			for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
-				value, set := lookup(raw, name)
-				if !set {
-					continue
-				}
-				base, _ := lookup(baseline, name)
-				con := sel.Constraints[name]
-				if err := con.check(value, base); err != nil {
-					return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
-				}
-			}
-		}
+	}
+	apply := func(raw any, src Source) error {
 		if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
 			return err
 		}
 		leaves := map[string]any{}
 		flatten("", raw, leaves)
+		delete(leaves, "")
 		for leaf := range leaves {
 			sel.Sources[leaf] = src
+		}
+		return nil
+	}
+	check := func() error {
+		if baseline == nil {
+			return nil
+		}
+		current, err := plain(sel.Settings)
+		if err != nil {
+			return err
+		}
+		for _, name := range slices.Sorted(maps.Keys(sel.Constraints)) {
+			con := sel.Constraints[name]
+			value, present := lookup(current, con.parts)
+			base, wasPresent := lookup(baseline, con.parts)
+			if con.Lock == true && present != wasPresent {
+				return fmt.Errorf("%s.settings.%s is locked by %s", path, name, con.source)
+			}
+			if value == nil && base == nil {
+				continue // an optional property has no configured value
+			}
+			if err := con.check(value, base); err != nil {
+				return fmt.Errorf("%s.settings.%s %w by %s", path, name, err, con.source)
+			}
 		}
 		return nil
 	}
@@ -451,23 +483,39 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		if !ok {
 			return nil
 		}
-		var raw any
-		if def.Settings != nil {
-			raw = def.Settings
+		if def.Contract != "" {
+			sel.Contract = def.Contract // validated when the definition was read
 		}
-		if err := apply(raw, def.source, def.Contract); err != nil {
+		if def.Settings == nil {
+			return nil
+		}
+		if err := apply(def.Settings, def.source); err != nil {
 			return &DefinitionError{Source: def.source, Err: err}
+		}
+		if layer != LayerRelease {
+			if err := check(); err != nil {
+				return &DefinitionError{Source: def.source, Err: err}
+			}
 		}
 		return nil
 	}
+	if err := apply(repo.legacySettings(sel.Provider), configSource); err != nil {
+		return err
+	}
 	if err := fromDefinition(LayerRelease); err != nil {
+		return err
+	}
+	if err := check(); err != nil {
 		return err
 	}
 	if err := fromDefinition(LayerProject); err != nil {
 		return err
 	}
 	if overrides, ok := fields["settings"]; ok {
-		if err := apply(overrides, Source{Layer: LayerProject, File: ".devflow/config.yml"}, ""); err != nil {
+		if err := apply(overrides, configSource); err != nil {
+			return err
+		}
+		if err := check(); err != nil {
 			return err
 		}
 	}

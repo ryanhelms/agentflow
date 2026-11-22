@@ -70,6 +70,7 @@ type Constraint struct {
 	Allow   []any  `yaml:"allow" json:"allow,omitempty"`
 	Pattern string `yaml:"pattern" json:"pattern,omitempty"`
 	pattern *regexp.Regexp
+	parts   []string
 	source  Source
 }
 
@@ -214,7 +215,12 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 }
 
 func (c *Constraint) compile(settings reflect.Type, name string) error {
-	t, err := settingsType(settings, name)
+	parts, err := splitSettingPath(name)
+	if err != nil {
+		return err
+	}
+	c.parts = parts
+	t, err := settingsType(settings, name, parts)
 	if err != nil {
 		return err
 	}
@@ -238,9 +244,33 @@ func (c *Constraint) compile(settings reflect.Type, name string) error {
 	return nil
 }
 
+// Paths use backslash to quote literal dots and backslashes in map keys.
+var escapeSettingKey = strings.NewReplacer(`\`, `\\`, ".", `\.`)
+
+func splitSettingPath(name string) ([]string, error) {
+	var parts []string
+	var part strings.Builder
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '.':
+			parts = append(parts, part.String())
+			part.Reset()
+		case '\\':
+			i++
+			if i == len(name) || (name[i] != '.' && name[i] != '\\') {
+				return nil, fmt.Errorf("invalid escape in settings property %q", name)
+			}
+			part.WriteByte(name[i])
+		default:
+			part.WriteByte(name[i])
+		}
+	}
+	return append(parts, part.String()), nil
+}
+
 // settingsType follows a dotted yaml path through a settings struct.
-func settingsType(t reflect.Type, name string) (reflect.Type, error) {
-	for _, part := range strings.Split(name, ".") {
+func settingsType(t reflect.Type, name string, parts []string) (reflect.Type, error) {
+	for _, part := range parts {
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
@@ -269,8 +299,8 @@ func settingsType(t reflect.Type, name string) (reflect.Type, error) {
 }
 
 // lookup finds a dotted path in plain YAML data.
-func lookup(data any, name string) (any, bool) {
-	for _, part := range strings.Split(name, ".") {
+func lookup(data any, parts []string) (any, bool) {
+	for _, part := range parts {
 		m, ok := data.(map[string]any)
 		if !ok {
 			return nil, false
@@ -345,9 +375,9 @@ func flatten(prefix string, value any, out map[string]any) {
 		return
 	}
 	for k, v := range m {
-		p := k
+		p := escapeSettingKey.Replace(k)
 		if prefix != "" {
-			p = prefix + "." + k
+			p = prefix + "." + p
 		}
 		flatten(p, v, out)
 	}
@@ -373,6 +403,11 @@ func (s Selection) Explain() ([]Setting, error) {
 	}
 	leaves := map[string]any{}
 	flatten("", data, leaves)
+	for name, c := range s.Constraints {
+		if v, present := lookup(data, c.parts); present {
+			leaves[name] = v
+		}
+	}
 	delete(leaves, "") // a settings type with no properties
 	out := make([]Setting, 0, len(leaves))
 	for _, p := range slices.Sorted(maps.Keys(leaves)) {

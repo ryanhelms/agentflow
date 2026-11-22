@@ -220,3 +220,63 @@ func TestShippedReleaseDefinitionsLoad(t *testing.T) {
 		t.Fatalf("definitions = %v, want %v", c.Providers.Definitions, want)
 	}
 }
+
+func TestConstraintsCheckMergedObjectsAndLiteralKeys(t *testing.T) {
+	root, home := layers(t, `version: 1
+providers:
+  github-issues:
+    task_management:
+      constraints:
+        search: {lock: true}
+        'transitions.pr\.merged': {lock: true}
+  slack:
+    notifications:
+      settings:
+        native: {workspace_id: T0123456789, channel_id: C0123456789}
+      constraints:
+        native.channel_id: {lock: true}
+`)
+	config(t, root, "task_management: {provider: github-issues, settings: {search: {limit: 30}}}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := c.Providers.TaskManagement.Explain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := map[string]any{}
+	for _, s := range settings {
+		if s.Constraint != nil {
+			locked[s.Path] = s.Value
+		}
+	}
+	if !reflect.DeepEqual(locked, map[string]any{`transitions.pr\.merged`: "closed", "search": map[string]any{"limit": 30, "open_only": true}}) {
+		t.Fatalf("explained locks = %#v", locked)
+	}
+	for _, tc := range []struct{ def, want string }{
+		{"github-issues: {task_management: {settings: {transitions: {pr.merged: open}}}}", `transitions.pr\.merged is locked`},
+		{"slack: {notifications: {settings: {native: null}}}", "native.channel_id is locked"},
+	} {
+		user(t, home, "override.yml", "version: 1\nproviders:\n  "+tc.def)
+		if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: got %v, want %q", tc.def, err, tc.want)
+		}
+	}
+}
+
+func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
+	root, _ := layers(t, "version: 1\nproviders:\n  jira: {task_management: {constraints: {projects: {allow: [PLAT]}}}}")
+	config(t, root, "jira: {projects: [OPS]}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "value OPS is not allowed") {
+		t.Fatalf("invalid inherited projects: %v", err)
+	}
+	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Providers.KnowledgeBase.Sources["site"] != configSource || c.Providers.TaskManagement.Sources["projects"] != configSource {
+		t.Fatal("legacy settings lost their repository source")
+	}
+}
