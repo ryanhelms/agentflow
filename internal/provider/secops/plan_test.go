@@ -127,7 +127,7 @@ func TestOperationIdentity(t *testing.T) {
 	replay := planFinding(updated, target, func(event secops.Event) (provider.TaskDraft, error) {
 		return provider.TaskDraft{Title: "Triage " + event.Title, Type: "Bug"}, nil
 	})
-	if first.Options.OperationID == "" || replay.Options != first.Options || replay.Draft.Title == first.Draft.Title {
+	if first.Options.OperationID == "" || replay.Options.OperationID != first.Options.OperationID || replay.Draft.Title == first.Draft.Title {
 		t.Fatalf("updated event and template changed operation identity: %+v, %+v", first, replay)
 	}
 	differentRepo := finding
