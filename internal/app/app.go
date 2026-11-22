@@ -359,7 +359,7 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 		Site string `json:"site"`
 	}{plan, a.jiraSettings().Site}
 	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
-	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "transition", summary, token, token != "", commands); p != nil || err != nil {
 		return p, err
 	}
 	return a.ApplyTransition(ctx, plan)

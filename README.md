@@ -211,6 +211,13 @@ Teamwork Graph CLI’s saved OAuth login. Run `devflow setup login --provider ji
 to sign in. The preview shows the profile, site, project, issue and comment.
 Each approval permits one post. If the outcome is uncertain, inspect the issue
 before approving again. Unattended Jira REST workflows keep their configured identity.
+
+With the same Jira enrollment, `devflow_transition` previews a forward move
+and `devflow_start` creates the branch or worktree, assigns the issue to the
+signed-in Jira user and applies the configured start transition. Both require
+approval. Devflow reads the issue on the write connection to verify each change.
+Hosted Jira canaries verified forward transitions and self-assignment.
+
 For Confluence, use `devflow setup login --provider confluence --client devflow`
 and preview the update with `devflow_docs_publish`. Desktop verifies the page’s
 space ID and key on the same site before it can publish. Repositories can limit

@@ -25,6 +25,11 @@ const (
 	origin           = "https://mcp.atlassian.com"
 	catalogEndpoint  = rovooauth.Resource + "?tools=all"
 	commentTool      = "addOrEditJiraIssueComment"
+	issueTool        = "getJiraIssue"
+	accountTool      = "getJiraCurrentUser"
+	transitionsTool  = "listJiraIssueTransitions"
+	moveTool         = "transitionJiraIssue"
+	assignTool       = "editJiraIssue"
 	createTool       = "createJiraIssue"
 	remoteLinkTool   = "createJiraIssueRemoteIssueLink"
 	updateTool       = "updateConfluenceContent"
@@ -47,7 +52,7 @@ func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWr
 			return nil, native.ErrUnavailable
 		}
 		switch {
-		case call.Provider == "jira" && (call.Tool == remoteLinkTool || call.Tool == commentTool || call.Tool == createTool),
+		case call.Provider == "jira" && (call.Tool == remoteLinkTool || call.Tool == commentTool || call.Tool == createTool || jiraStateTool(call.Tool)),
 			call.Provider == "confluence" && call.Tool == updateTool:
 			return connect(ctx, call, token, transport)
 		}
@@ -61,6 +66,7 @@ type session struct {
 	writeTool        string
 	issueKey         string
 	projectKey       string
+	stateTarget      string // Approved account or transition ID.
 	pageID           string
 	verifiedSnapshot string
 	client           *mcp.ClientSession
@@ -68,6 +74,7 @@ type session struct {
 	tools            map[string]*jsonschema.Schema
 	token            tokenSource
 	generation       string
+	verifiedAccount  string
 }
 
 func connect(ctx context.Context, call native.Call, token tokenSource, transport http.RoundTripper) (*session, error) {
@@ -107,8 +114,13 @@ func connect(ctx context.Context, call native.Call, token tokenSource, transport
 	pageID, _ := call.Arguments["contentId"].(string)
 	issueKey, _ := call.Arguments["issueIdOrKey"].(string)
 	projectKey, _ := call.Arguments["projectKey"].(string)
+	target, _ := call.Arguments["assignee"].(string)
+	if call.Tool == moveTool {
+		target, _ = call.Arguments["transitionId"].(string)
+	}
 	return &session{
-		provider: call.Provider, site: site, writeTool: call.Tool, issueKey: issueKey, projectKey: projectKey, pageID: pageID,
+		stateTarget: target,
+		provider:    call.Provider, site: site, writeTool: call.Tool, issueKey: issueKey, projectKey: projectKey, pageID: pageID,
 		client: connected, bearer: wire, tools: tools, token: token, generation: generation,
 	}, nil
 }
@@ -158,6 +170,12 @@ func decodeCatalogSchema(input any) (*jsonschema.Schema, error) {
 
 func relevantTool(writeTool, name string) bool {
 	switch writeTool {
+	case issueTool, accountTool, transitionsTool:
+		return name == writeTool
+	case assignTool:
+		return name == assignTool || name == issueTool || name == accountTool
+	case moveTool:
+		return name == moveTool || name == issueTool || name == transitionsTool || name == accountTool
 	case commentTool:
 		return name == commentTool || name == "getJiraIssue"
 	case createTool:
@@ -189,6 +207,9 @@ func (s *session) wireCall(call native.Call) (native.Call, error) {
 	}
 	if !relevantTool(s.writeTool, call.Tool) {
 		return native.Call{}, native.ErrDenied
+	}
+	if jiraStateTool(s.writeTool) {
+		return s.jiraStateCall(call)
 	}
 	if s.writeTool == createTool {
 		if err := s.checkCreateCall(call); err != nil {
@@ -266,7 +287,19 @@ func (s *session) Call(ctx context.Context, call native.Call) (json.RawMessage, 
 	if wire.Tool == updateTool && wire.Arguments["snapshotToken"] != s.verifiedSnapshot {
 		return nil, errors.Join(native.ErrWriteNotDispatched, native.ErrDenied, errors.New("snapshot was not verified on this connection"))
 	}
+	if wire.Tool == assignTool && s.verifiedAccount != s.stateTarget {
+		return nil, errors.Join(native.ErrWriteNotDispatched, native.ErrDenied, errors.New("self-assignment requires the current account on this connection"))
+	}
 	raw, err := s.invoke(ctx, wire.Tool, wire.Arguments)
+	if wire.Tool == accountTool {
+		s.verifiedAccount = ""
+		if err == nil {
+			s.verifiedAccount, err = nativemap.DecodeJiraCurrentUser(raw)
+		}
+	}
+	if err == nil && jiraStateTool(s.writeTool) && wire.Tool == issueTool {
+		err = s.checkStateIssue(raw)
+	}
 	if err != nil || s.provider != "confluence" {
 		return raw, err
 	}
@@ -311,7 +344,15 @@ func (s *session) invoke(ctx context.Context, tool string, args map[string]any) 
 	// Keep any other envelope intact so provider errors remain visible.
 	var envelope map[string]json.RawMessage
 	if json.Unmarshal(payload, &envelope) == nil && len(envelope) == 1 && len(envelope["data"]) > 0 {
+		if jiraStateTool(s.writeTool) {
+			if err := s.checkStateResult(tool, envelope["data"]); err != nil {
+				return nil, err
+			}
+		}
 		return envelope["data"], nil
+	}
+	if jiraStateTool(s.writeTool) {
+		return nil, fmt.Errorf("%w: missing Rovo Jira state data envelope", native.ErrDenied)
 	}
 	if s.provider == "confluence" && tool != updateTool {
 		return nil, fmt.Errorf("%w: missing Rovo Confluence data envelope", native.ErrDenied)

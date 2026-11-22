@@ -314,7 +314,7 @@ fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
 Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
 Desktop can also use Devflow-owned connections for unlinked Jira issue creation,
-Jira comments, web links and Confluence page replacement. Each preview identifies Devflow as the connection owner.
+Jira comments, start and forward transitions, web links and Confluence page replacement. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -358,6 +358,23 @@ type exists in the project and binds the title, description and labels to one
 approval. A successful result includes the new issue key. A request with a parent
 or other issue link uses the existing linked-creation route. If the outcome is
 uncertain, inspect the project before approving another creation.
+
+Use `devflow_transition` to apply the flow-map event for an issue. For example,
+`devflow --native-client claude-desktop transition APP-42 pr.opened --dry-run`
+shows the mapped destination. Omit `--dry-run` for the approval preview, which
+binds the site, issue key, source and target statuses, and available transition
+ID. Done issues, backward moves and issues already at the target skip the write.
+
+Use `devflow_start` or `devflow --native-client claude-desktop start APP-42` to
+preview the local branch or worktree, the authenticated Jira account and any
+mapped start transition together. Both operations require confirmation even at
+`auto`. Start creates the branch first, verifies self-assignment, then applies
+the transition. An issue already assigned to that account skips the edit.
+If a later step fails, the branch stays available and the error identifies
+which Jira change was verified. Inspect the issue before approving more work.
+A provider denial or uncertain result ends the operation on that connection.
+The input schemas were captured from Rovo. The state reads and write outcomes
+have been exercised with an offline provider.
 
 With that Jira enrollment, `devflow_comment` can add one standard issue
 comment. The CLI uses the same grant and policy with
