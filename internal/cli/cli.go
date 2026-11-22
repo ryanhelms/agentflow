@@ -45,6 +45,8 @@ Setup
   pin [--check]                  pin .github/workflows/devflow.yml to this devflow release
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
+  setup [plan|verify|apply] [--client NAME] [--json]   inspect providers or register a project adapter
+  doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove stored Atlassian credentials
   doctor [--fix]                 check binary, hooks, auth, client config and API access
@@ -88,6 +90,9 @@ func Main(args []string) int {
 		return 0
 	}
 	cmd, rest := args[0], args[1:]
+	if cmd == "doctor" && len(rest) > 0 && rest[0] == "--providers" {
+		cmd, rest = "setup", append([]string{"verify"}, rest[1:]...)
+	}
 	if !quietCommand(cmd) {
 		maybeUpdate(ctx)
 	}
@@ -109,7 +114,7 @@ func Main(args []string) int {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "update", "version", "help":
+	case "hook", "lint-msg", "keys", "mcp", "setup", "update", "version", "help":
 		return true
 	}
 	return false
@@ -153,6 +158,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runRemove(ctx, args)
 	case "pin":
 		return runPin(ctx, args)
+	case "setup":
+		return runProviderSetup(ctx, args)
 	case "install":
 		return runInstall(ctx, args)
 	case "login":
