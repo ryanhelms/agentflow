@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.20.0](https://github.com/nscaledev/devflow/compare/v0.19.0...v0.20.0) - 2026-11-22
+
+### Features
+
+- integrate provider delivery and workflow replay ([6351c00](https://github.com/nscaledev/devflow/commit/6351c0037f27fdb422820858ee32eb8ebafa92d8))
+
 ## [0.19.0](https://github.com/nscaledev/devflow/compare/v0.18.0...v0.19.0) - 2026-11-22
 
 ### Features
