@@ -162,8 +162,8 @@ The shared installation stays available to other projects. [Companion cleanup an
 Opening the repo in a supported client runs the devflow launcher.
 
 ```bash
-devflow login     # your own Atlassian API token, stored in the OS keychain; reuses gh auth
-devflow doctor --fix   # checks binary, hooks, auth, flow map and client config
+devflow setup plan --client NAME   # preferred provider MCP and CLI fallback
+devflow doctor --fix               # checks binary, hooks, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
@@ -184,6 +184,10 @@ Run `devflow setup plan --client NAME` to see which providers and companions
 are ready in the current environment. `devflow setup apply --client NAME`
 registers a supported project adapter after approval. `devflow setup verify`
 checks provider readiness and returns an error for missing requirements.
+In an agent session, use the setup skill to reuse the provider's connected MCP
+or start its OAuth flow. Use `devflow setup login --provider NAME` to start
+the supported vendor CLI's browser login when no MCP is available. See
+[interactive provider setup](docs/providers.md#interactive-provider-setup).
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.

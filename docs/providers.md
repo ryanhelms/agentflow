@@ -202,6 +202,41 @@ as errors. Use provider credentials in the environment where the command runs.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
 
+### Interactive provider setup
+
+The plan lists official provider tools in `provider_tools`. The MCP client
+checks its own connected servers and uses the provider MCP when it supports the
+requested operation. Jira and Confluence share the Atlassian connector. Slack
+and Asana have their own OAuth connectors. GitHub has an official MCP and the
+existing managed `gh` fallback. Atlassian's Teamwork Graph CLI is available
+as a fallback for Jira and Confluence.
+
+If a connector is absent, the setup agent offers to install or register the
+official integration using the guide from the plan. When the provider reports
+sign-in required, the agent starts the client's OAuth action, then waits for
+the user to finish the consent flow. With Claude Code and Codex, it can use
+the configured server's name:
+
+```bash
+devflow setup login --provider jira --client claude-desktop --server atlassian
+devflow setup login --provider slack --client codex --server slack
+devflow setup login --provider jira  # starts the installed Teamwork Graph CLI login
+```
+
+The command delegates to the native tool and lets it store the login.
+Use the host's Connect or Sign in action for clients without a native login
+command. Retry the original read in the chosen tool after sign-in. Jira and
+Confluence require separate product access checks even with the same connector.
+A permission denial calls for access to the affected product, project or space.
+
+A standalone plan cannot list the tools or sign-in state of another MCP
+server owned by the host. Validate the available read capabilities in the
+agent session. Interactive setup works without exporting personal credentials.
+Operations that still use compiled REST or webhook adapters have their
+existing credential behavior until their transports are migrated. Use the
+provider MCP for direct reads where the host has it. Devflow-managed writes
+continue through devflow's preview and confirmation policy.
+
 ### Claude Code Desktop
 
 The `claude` setup mode configures the Claude Code plugin marketplace. If a
@@ -270,8 +305,8 @@ settings select services. The user manifest supplies artifacts for the built-in
    its `confirm_token` after approval. The local autonomy setting applies.
 3. Read the returned readiness checks. The installer verifies the digest before
    publishing. Setup then checks the executable, authentication and selected
-   GitHub reads. If authentication is needed, supply the usual credentials or run
-   the verified path shown in the plan with `auth login --hostname HOST`.
+   GitHub reads. If authentication is needed, start browser login using
+   the verified path shown in the plan with `auth login --hostname HOST --web`.
    Approve project registration separately with `setup apply --client NAME`.
 
 The cache lives under `DEVFLOW_HOME/companions/<os>-<arch>/gh/`. Devflow
