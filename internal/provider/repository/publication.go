@@ -88,6 +88,11 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 			return zero, errors.New("publication branch coincides with target base")
 		}
 	}
+	if a.BeforeWrite != nil {
+		if err := a.BeforeWrite(c.branch, target); err != nil {
+			return zero, err
+		}
+	}
 	var attemptedBase string
 	var pushErr error
 	for pushes := 0; ; pushes++ {

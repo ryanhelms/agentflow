@@ -61,7 +61,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack notifications, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
-| **AI assist** | 26 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **AI assist** | 27 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -166,6 +166,9 @@ service sections, versioned settings, defaults, and their override rules. Use th
 `filesystem` knowledge provider to search a local directory with
 `devflow docs search` or `devflow_docs_search`.
 
+Choose the `repository` knowledge provider to search a Git destination and
+publish managed Markdown with `devflow docs publish`. A GitHub review
+publication returns the PR link and a pending review status.
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
 when the issue repository is known, or specify `owner/repo#42`. Devflow carries
