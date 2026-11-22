@@ -7,10 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/nscaledev/devflow/adapters"
@@ -114,13 +115,15 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		return res, err
 	}
 
-	rels := make([]string, 0, len(mergedJSON))
+	groups := map[string]string{}
 	for rel := range mergedJSON {
-		rels = append(rels, rel)
+		groups[rel] = ""
 	}
-	sort.Strings(rels)
-	for _, rel := range rels {
-		if err := unmergeJSON(res, repoDir, rel, opt.DryRun); err != nil {
+	for _, format := range companionClients {
+		groups[format.path] = format.group
+	}
+	for _, rel := range slices.Sorted(maps.Keys(groups)) {
+		if err := unmergeJSON(res, root, rel, groups[rel], opt.DryRun); err != nil {
 			return res, fmt.Errorf("%s: %w", rel, err)
 		}
 	}
@@ -175,21 +178,70 @@ func removeIfEmpty(dir string) {
 
 // unmergeJSON removes the keys devflow merged into a shared JSON file, deleting the
 // file when nothing else is left in it.
-func unmergeJSON(res *Result, repoDir, rel string, dryRun bool) error {
-	dest := filepath.Join(repoDir, filepath.FromSlash(rel))
-	b, err := os.ReadFile(dest)
+func unmergeJSON(res *Result, root *os.Root, rel, group string, dryRun bool) error {
+	parent, name := filepath.Split(filepath.FromSlash(rel))
+	parent = filepath.Clean(parent)
+	info, err := root.Lstat(parent)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	cur := map[string]any{}
-	if err := json.Unmarshal(b, &cur); err != nil {
+	if !info.IsDir() {
+		res.Notes = append(res.Notes, "kept "+rel+" (inspect the project directory by hand)")
+		return nil
+	}
+	dir, err := root.OpenRoot(parent)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	if dryRun {
+		return removeClientEntries(res, dir, rel, name, group, true)
+	}
+	// Only take the project writer lock for an actual change. Re-read both
+	// files under it so a concurrent setup cannot invalidate the preview.
+	var preview Result
+	if err := removeClientEntries(&preview, dir, rel, name, group, true); err != nil {
+		return err
+	}
+	if len(preview.Merged)+len(preview.Removed) == 0 {
+		res.Notes = append(res.Notes, preview.Notes...)
+		res.Skipped = append(res.Skipped, preview.Skipped...)
+		return nil
+	}
+	return withClientLock(dir, name, func() error {
+		return removeClientEntries(res, dir, rel, name, group, false)
+	})
+}
+
+func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, dryRun bool) error {
+	var records map[string]string
+	if group != "" {
+		var err error
+		records, err = readCompanionRecords(dir, name)
+		if err != nil {
+			res.Notes = append(res.Notes, "kept "+companionReceiptName(rel)+" (could not read companion ownership; review manually)")
+		}
+	}
+	current, err := readProjectFile(dir, name)
+	if errors.Is(err, errNotRegular) {
+		res.Notes = append(res.Notes, "kept "+rel+" (inspect the file and remove devflow's entries by hand)")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	doc := registrationJSON(current, &ClientRegistration{Path: rel})
+	if doc == nil {
 		res.Skipped = append(res.Skipped, rel+" (not valid JSON; remove devflow's entries by hand)")
 		return nil
 	}
-	changed := false
+	changed, err := removeCompanionEntries(res, doc, rel, group, records)
+	if err != nil {
+		return err
+	}
 	for _, src := range mergedJSON[rel] {
 		var data []byte
 		if p, ok := strings.CutPrefix(src, "template:"); ok {
@@ -204,29 +256,76 @@ func unmergeJSON(res *Result, repoDir, rel string, dryRun bool) error {
 		if err := json.Unmarshal(data, &sub); err != nil {
 			return err
 		}
-		if deepRemove(cur, sub) {
+		if deepRemove(doc, sub) {
 			changed = true
 		}
 	}
-	if !changed {
+	if changed {
+		if err := saveClientRemoval(res, dir, rel, name, doc, dryRun); err != nil {
+			return err
+		}
+	}
+	if records == nil {
 		return nil
 	}
-	if len(cur) == 0 {
+	res.Removed = append(res.Removed, companionReceiptName(rel))
+	if dryRun {
+		return nil
+	}
+	return dir.Remove(companionReceiptName(name))
+}
+
+func saveClientRemoval(res *Result, dir *os.Root, rel, name string, doc map[string]any, dryRun bool) error {
+	if len(doc) == 0 {
 		res.Removed = append(res.Removed, rel)
 		if dryRun {
 			return nil
 		}
-		return os.Remove(dest)
+		return dir.Remove(name)
 	}
 	res.Merged = append(res.Merged, rel)
 	if dryRun {
 		return nil
 	}
-	out, err := json.MarshalIndent(cur, "", "  ")
+	out, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dest, append(out, '\n'), 0o644)
+	return publishAfter(dir, name, append(out, '\n'), nil)
+}
+
+func removeCompanionEntries(res *Result, doc map[string]any, rel, group string, records map[string]string) (bool, error) {
+	if group == "" {
+		return false, nil
+	}
+	entries, _ := doc[group].(map[string]any)
+	changed := false
+	for _, key := range slices.Sorted(maps.Keys(entries)) {
+		if !strings.HasPrefix(key, "devflow-") {
+			continue
+		}
+		id := fmt.Sprintf("%s %q", rel, key)
+		expected, tracked := records[key]
+		if !tracked {
+			res.Notes = append(res.Notes, "kept "+id+" (untracked entry; review manually)")
+			continue
+		}
+		digest, err := entryDigest(entries[key])
+		if err != nil {
+			return false, err
+		}
+		if digest != expected {
+			res.Notes = append(res.Notes, "kept "+id+" (changed since registration; review manually)")
+			continue
+		}
+		delete(entries, key)
+		res.Notes = append(res.Notes, "remove companion "+id)
+		changed = true
+	}
+	if changed && len(entries) == 0 {
+		delete(doc, group)
+	}
+	return changed, nil
 }
 
 // deepRemove deletes from dst every key in src whose value matches, recursing into

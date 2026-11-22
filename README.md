@@ -152,6 +152,11 @@ client configs, unsets `core.hooksPath`, and turns
 automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
 in a PR. Authored task and knowledge records under `.devflow/` are preserved.
 
+For provider MCP companions, removal compares each project entry with the receipt
+written by setup. It removes unchanged, recorded entries and lists edited or
+untracked entries for manual review, including registrations from older versions.
+The shared installation stays available to other projects. [Companion cleanup and repair](docs/providers.md#companion-cleanup-and-repair).
+
 ### Set up your machine (engineers)
 
 Opening the repo in a supported client runs the devflow launcher.
