@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -41,6 +43,9 @@ type TicketContext struct {
 // Context builds the ticket bundle for key (or the current branch's key).
 // It degrades gracefully: missing credentials become warnings, not errors.
 func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
+	if a.usesIssues() {
+		return a.issueContext(ctx, key)
+	}
 	tc := &TicketContext{Branch: a.Repo.Branch(ctx)}
 	if key == "" {
 		key = a.CurrentKey(ctx)
@@ -87,7 +92,7 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 	if col, err := a.Collisions(ctx, key); err == nil {
 		tc.OpenPR, tc.Others, tc.Overlaps = col.MyPR, col.OthersOnTicket, col.FileOverlaps
 	}
-	tc.Text = renderContext(tc)
+	tc.Text = a.renderContext(tc)
 	return tc, nil
 }
 
@@ -101,7 +106,7 @@ func confluenceOnly(pages []atlassian.Page) []atlassian.Page {
 	return out
 }
 
-func renderContext(tc *TicketContext) string {
+func (a *App) renderContext(tc *TicketContext) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "devflow · %s", tc.Key)
 	if tc.Status != "" {
@@ -125,23 +130,33 @@ func renderContext(tc *TicketContext) string {
 		fmt.Fprintf(&b, "\nAcceptance criteria [%d/%d]\n%s", done, total, tc.Criteria.Render())
 	}
 	if len(tc.FlowNext) > 0 {
+		events := []string{flowmap.PROpened, flowmap.PRMerged, flowmap.DeployProduction}
+		heading := "Flow map (" + projectOf(tc.Key) + ")"
+		if a.usesIssues() {
+			events = slices.Sorted(maps.Keys(tc.FlowNext))
+			heading = "Issue transitions"
+		}
 		var parts []string
-		for _, ev := range []string{flowmap.PROpened, flowmap.PRMerged, flowmap.DeployProduction} {
-			if s, ok := tc.FlowNext[ev]; ok {
-				parts = append(parts, ev+" → "+s)
+		for _, ev := range events {
+			if state, ok := tc.FlowNext[ev]; ok {
+				parts = append(parts, ev+" → "+state)
 			}
 		}
-		fmt.Fprintf(&b, "\nFlow map (%s): %s\n", projectOf(tc.Key), strings.Join(parts, " · "))
+		fmt.Fprintf(&b, "\n%s: %s\n", heading, strings.Join(parts, " · "))
 	}
-	pr := "none"
-	if tc.OpenPR != "" {
-		pr = tc.OpenPR
+	// GitHub Issues context currently has task data only. Report collaboration
+	// details when they were queried.
+	if !a.usesIssues() || tc.OpenPR != "" || len(tc.Others) > 0 {
+		pr := "none"
+		if tc.OpenPR != "" {
+			pr = tc.OpenPR
+		}
+		others := "none"
+		if len(tc.Others) > 0 {
+			others = strings.Join(tc.Others, ", ")
+		}
+		fmt.Fprintf(&b, "Open PR: %s · Others on this ticket: %s\n", pr, others)
 	}
-	others := "none"
-	if len(tc.Others) > 0 {
-		others = strings.Join(tc.Others, ", ")
-	}
-	fmt.Fprintf(&b, "Open PR: %s · Others on this ticket: %s\n", pr, others)
 	if len(tc.Overlaps) > 0 {
 		fmt.Fprintf(&b, "Files in other open PRs: %s\n", strings.Join(tc.Overlaps, ", "))
 	}
@@ -165,6 +180,9 @@ type WorkItem struct {
 
 // MyWork lists the developer's open tickets, active sprint first.
 func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
+	if a.usesIssues() {
+		return a.issueWork(ctx)
+	}
 	jc, err := a.Jira()
 	if err != nil {
 		return nil, err
@@ -220,6 +238,9 @@ type StartResult struct {
 func (a *App) Start(ctx context.Context, key string, worktree bool, token string) (any, error) {
 	if key == "" {
 		return nil, errors.New("key is required; call devflow_my_work to choose one")
+	}
+	if a.usesIssues() {
+		return a.startIssue(ctx, key, worktree, token)
 	}
 	jc, err := a.Jira()
 	if err != nil {
@@ -278,6 +299,25 @@ func (a *App) Checklist(ctx context.Context, key string) (*contextx.Checklist, e
 		return nil, err
 	}
 	store := a.Checklists(ctx)
+	if a.usesIssues() {
+		ref, err := a.issueRef(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		task, getErr := a.getIssue(ctx, ref)
+		if getErr == nil {
+			return a.syncIssueChecklist(ctx, ref, task)
+		}
+		cl, err := store.Load(ref.StorageKey())
+		if err != nil {
+			return nil, err
+		}
+		if cl == nil {
+			return nil, getErr
+		}
+		cl.Key = key
+		return cl, nil
+	}
 	if jc, err := a.Jira(); err == nil {
 		if iss, err := jc.GetIssue(ctx, key); err == nil {
 			return store.Sync(key, contextx.ParseCriteria(iss.DescriptionText()))
@@ -301,9 +341,18 @@ func (a *App) UpdateChecklist(ctx context.Context, key, item string, done bool, 
 		return nil, fmt.Errorf("no acceptance criterion matches %q", item)
 	}
 	cl.Items[i].Done, cl.Items[i].Evidence = done, evidence
-	if err := a.Checklists(ctx).Save(cl); err != nil {
+	stored := *cl
+	if a.usesIssues() {
+		ref, err := a.issueRef(ctx, cl.Key)
+		if err != nil {
+			return nil, err
+		}
+		stored.Key = ref.StorageKey()
+	}
+	if err := a.Checklists(ctx).Save(&stored); err != nil {
 		return nil, err
 	}
+	cl.Updated = stored.Updated
 	if !post {
 		return cl, nil
 	}
@@ -345,6 +394,9 @@ func (a *App) ScopeCheck(ctx context.Context) (*contextx.Drift, error) {
 // CreateTicket creates a linked ticket. It always requires confirmation
 // because its content usually comes from code or ticket text.
 func (a *App) CreateTicket(ctx context.Context, project, issueType, summary, description, linkTo, token string) (any, error) {
+	if a.usesIssues() {
+		return a.createIssue(ctx, project, issueType, summary, description, linkTo, token)
+	}
 	if project == "" {
 		project = projectOf(a.CurrentKey(ctx))
 	}
@@ -388,7 +440,7 @@ func (a *App) LoginCheck(ctx context.Context) (string, string, error) {
 	return me.DisplayName, login, err
 }
 
-// Keys returns unique Jira keys in commit messages of a range.
+// Keys returns unique task keys in commit messages of a range.
 func (a *App) Keys(ctx context.Context, rng string) ([]string, error) {
 	msgs, err := a.Repo.Messages(ctx, rng)
 	if err != nil {
@@ -397,7 +449,17 @@ func (a *App) Keys(ctx context.Context, rng string) ([]string, error) {
 	seen := map[string]bool{}
 	var keys []string
 	for _, m := range msgs {
-		for _, k := range gitx.KeyRe.FindAllString(m, -1) {
+		var found []string
+		if a.usesIssues() {
+			_, body, _ := strings.Cut(m, "\n")
+			found, err = issueKeys(body)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			found = gitx.KeyRe.FindAllString(m, -1)
+		}
+		for _, k := range found {
 			if !seen[k] {
 				seen[k] = true
 				keys = append(keys, k)
