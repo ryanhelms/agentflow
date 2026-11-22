@@ -31,6 +31,8 @@ func (a *App) ApplyGitHubTaskEvent(ctx context.Context, actions event.GitHubActi
 		actions.TaskScope = scope
 	case a.usesFileTasks():
 		actions.TaskScope = a.fileScope()
+	case a.usesAsana():
+		actions.TaskScope = a.asanaSettings().Project
 	case actions.TaskInstance == "none":
 		result.Plan = event.Plan{Repository: actions.Repository, RepositoryID: actions.RepositoryID, EventName: actions.EventName, EventID: actions.EventID, Skip: "provider_disabled"}
 		return result, nil

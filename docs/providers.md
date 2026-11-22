@@ -6,7 +6,7 @@ provider's default for that field. Omitted fields inherit their defaults, nested
 objects merge by field, and supplied lists replace the default lists.
 
 This reference describes the configuration accepted by the provider foundation.
-The migration of commands and workflows to these selections is tracked separately.
+The provider-specific sections below describe the CLI, MCP and workflow entry points.
 
 | Section | Default provider | Other schema selections |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ The migration of commands and workflows to these selections is tracked separatel
 | `devops.deployments` | `github` | `fixture`, `none` |
 | `devops.releases` | `github` | `fixture`, `none` |
 | `secops` | `github` | `none` |
-| `notifications` | `slack` | `none` |
+| `notifications` | `slack` | `webhook`, `router`, `none` |
 
 Each selection accepts `version` (default `1`), `provider` (see the table),
 and `settings` (defaults below). The enclosing `devops` section also accepts
@@ -36,7 +36,9 @@ settings object. Validation errors identify the property to correct.
 | GitHub Wiki | `repository` defaults to unset, so Git forge detection selects the GitHub.com target. Set an explicit `owner/name` to use another GitHub.com repository. |
 | FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
 | Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. |
+| SecOps | `findings` defaults to Dependabot and code scanning. `min_severity` defaults to `high`. `repository` and the optional incident fixture start unset. See [SecOps configuration](secops.md). |
 | Slack | `destination` and `credential_ref` default to unset. |
+| Webhook and router | A webhook uses an environment credential reference and can declare safe rejection codes. A router maps named destinations and signals. See [notification settings](notifications.md). |
 
 This configuration overrides one search property and sets a different provider
 for the knowledge section. The search limit stays at 30, and Repository keeps

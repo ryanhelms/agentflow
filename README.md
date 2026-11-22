@@ -221,7 +221,7 @@ The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.
 Other task providers use previews in the generic transition, ship and release
-workflows. Apply a reviewed change through `devflow transition`. For GitHub Issues, PR and commit bodies carry
+workflows. Apply a reviewed change through `devflow transition`. For GitHub Issues and Asana, PR and commit bodies carry
 qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
 read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
 covers runner credentials, event replay, release outputs and pin rollback.

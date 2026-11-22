@@ -13,6 +13,8 @@ on:
         required: false
       JIRA_TOKEN:
         required: false
+      ASANA_ACCESS_TOKEN:
+        required: false
       TASK_READ_TOKEN:
         description: Optional repository-scoped token with Issues read access
         required: false
@@ -52,6 +54,7 @@ jobs:
           JIRA_USER: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_USER || '' }}
           JIRA_TOKEN: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_TOKEN || '' }}
           PROVIDER: ${{ steps.task.outputs.provider }}
+          ASANA_ACCESS_TOKEN: ${{ steps.task.outputs.provider == 'asana' && secrets.ASANA_ACCESS_TOKEN || '' }}
           GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || steps.task.outputs.provider == 'repository' && github.token || '' }}
         run: |
           if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi

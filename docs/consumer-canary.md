@@ -38,7 +38,9 @@ inputs and provider responses are fixtures. A successful run ends with
    private GitHub Issues repository, pass the optional `TASK_READ_TOKEN` with
    Issues read access to that repository if the built-in token cannot read it.
    Repository tasks use Git read access to their configured origin. FileSystem
-   reads records available in the trusted checkout. A missing credential or
+   reads records available in the trusted checkout. Asana reads use
+   `ASANA_ACCESS_TOKEN`. Hosted event previews use its configured default
+   project. A missing credential or
    unreadable referenced task identifies the failing check.
 5. Compare task, destination, event, target state, release unit and tag against
    the legacy plan. Record the preview and run ID with the baseline. Keep one

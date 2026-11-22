@@ -39,6 +39,10 @@ func (a *App) prepareWorkflowTasks() error {
 		if os.Getenv("GH_TOKEN") == "" && os.Getenv("GITHUB_TOKEN") == "" {
 			return errors.New("GitHub Issues task reads require GH_TOKEN with Issues read access to the runner repository")
 		}
+	case "asana":
+		if strings.TrimSpace(os.Getenv("ASANA_ACCESS_TOKEN")) == "" {
+			return errors.New("Asana task reads require ASANA_ACCESS_TOKEN in the workflow environment")
+		}
 	case "filesystem", "repository", "none":
 	default:
 		return fmt.Errorf("workflow task reads do not support task_management.provider %q", name)
@@ -114,6 +118,9 @@ func (a *App) workflowTaskRef(ctx context.Context, key string) (provider.Ref, er
 	ref, err := a.taskRef(ctx, key)
 	if err != nil {
 		return ref, err
+	}
+	if a.usesAsana() {
+		return a.validateAsanaRef(ref)
 	}
 	var scope string
 	if a.usesIssues() {

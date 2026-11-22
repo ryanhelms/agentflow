@@ -43,6 +43,7 @@ jobs:
       JIRA_USER: ${{ secrets.JIRA_USER }}
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
       TASK_READ_TOKEN: ${{ secrets.TASK_READ_TOKEN }}  # optional, Issues read for private repositories
+      ASANA_ACCESS_TOKEN: ${{ secrets.ASANA_ACCESS_TOKEN }}  # optional, read access for selected Asana projects
 
   transitions:
     if: >-
@@ -55,6 +56,7 @@ jobs:
       JIRA_USER: ${{ secrets.JIRA_USER }}
       JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
       TASK_READ_TOKEN: ${{ secrets.TASK_READ_TOKEN }}  # optional, Issues read for private repositories
+      ASANA_ACCESS_TOKEN: ${{ secrets.ASANA_ACCESS_TOKEN }}  # optional, read access for selected Asana projects
 
   # Semantic versioning: every merge to the default branch with feat/fix/! commits
   # publishes a GitHub Release per changed unit in .devflow/releases.yml, with its
