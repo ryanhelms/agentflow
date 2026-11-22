@@ -11,9 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). This repository is also piloting the GitHub Issues and Repository providers. |
-| **Current release** | <!-- devflow:version -->`v0.13.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
-| **Status** | Built and tested. Awaiting architecture approval (Kyle Redelinghuys, Vishal Srini) before rollout P0. Piloting in `nscaledev/mcp-gateway` (warn-only, no Jira project yet). |
+| **Status** | The GitHub Issues and Repository provider pilot completed in this repository. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
 | **Current release** | <!-- devflow:version -->`v0.13.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
@@ -181,10 +179,6 @@ Devflow verifies its SHA256 and uses the cached executable directly. See the
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
-Select `github-issues` in `task_management.provider` to work with GitHub issues
-through the existing task commands. Start an issue with `devflow start '#42'`
-when the issue repository is known, or specify `owner/repo#42`. Devflow carries
-the qualified issue reference in the PR body and interactive commit message.
 
 Select `github-issues` in `task_management.provider` to work with GitHub issues
 through the existing task commands. Start an issue with `devflow start '#42'`
@@ -194,6 +188,9 @@ Configure a catalog and default under `task_management.templates` to preview new
 with template defaults, required sections and checklist items. Devflow records
 the selected revision and validates the issue against it before a comment or
 state change. See the [task template configuration](docs/providers.md#task-templates).
+
+New issues created through devflow in this repository use the
+[`engineering-task` template](.devflow/task-templates.json).
 GitHub Issues repositories can run the reusable `task-events.yml` workflow to
 preview configured pull-request transitions with read-only issue permissions.
 The job reads trusted base-branch configuration and uses an explicit qualified
