@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
@@ -180,6 +182,36 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 		_, err = jiraNativeIssue(ctx, write, site, ref)
 	}
 	return write, err
+}
+
+type jiraCommentCLIKey struct{}
+
+// WithJiraCommentCLI opts a single interactive comment entry point into the
+// saved workstation login. CI and configured service identities keep their route.
+func WithJiraCommentCLI(ctx context.Context) context.Context {
+	ci, _ := strconv.ParseBool(os.Getenv("CI"))
+	actions, _ := strconv.ParseBool(os.Getenv("GITHUB_ACTIONS"))
+	if ci || actions || os.Getenv("DEVFLOW_OPERATION_ID") != "" ||
+		(os.Getenv("JIRA_USER") != "" && os.Getenv("JIRA_TOKEN") != "") {
+		return ctx
+	}
+	return context.WithValue(ctx, jiraCommentCLIKey{}, true)
+}
+
+func (a *App) prepareCLIComment(ctx context.Context, site string, ref provider.Ref, body string) (*twg.PreparedJiraComment, error) {
+	enabled, _ := ctx.Value(jiraCommentCLIKey{}).(bool)
+	if !enabled || !jiraMCPOrigin(site) {
+		return nil, nil
+	}
+	cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := cli.PrepareComment(ctx, ref, body)
+	if errors.Is(err, twg.ErrToolAbsent) {
+		return nil, nil
+	}
+	return prepared, atlCLIError("jira", err)
 }
 
 func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider.TaskDraft) (*jiraWrite, error) {

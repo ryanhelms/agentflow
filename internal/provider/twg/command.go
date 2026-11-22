@@ -44,12 +44,15 @@ func (o *output) Write(p []byte) (int, error) {
 }
 
 type envelope struct {
-	Data    json.RawMessage   `json:"data"`
-	Error   json.RawMessage   `json:"error"`
-	Errors  []json.RawMessage `json:"errors"`
-	Success *bool             `json:"success"`
-	OK      *bool             `json:"ok"`
-	Partial bool              `json:"partial"`
+	Command string                 `json:"command"`
+	Request json.RawMessage        `json:"request"`
+	Data    json.RawMessage        `json:"data"`
+	Error   json.RawMessage        `json:"error"`
+	Errors  []json.RawMessage      `json:"errors"`
+	Success *bool                  `json:"success"`
+	OK      *bool                  `json:"ok"`
+	Partial bool                   `json:"partial"`
+	Meta    struct{ Partial bool } `json:"meta"`
 }
 
 func (b binding) read(ctx context.Context, name string, args []string, dest any) error {
@@ -113,9 +116,15 @@ func decodeResult(name string, dest any, stdout, stderr *output, runErr error) e
 		}
 		return fmt.Errorf("%s: start or wait for executable: %w", name, ErrFailure)
 	}
-	if !validJSON || !present(result.Data) || result.Partial || failed(result.Success) || failed(result.OK) ||
-		json.Unmarshal(result.Data, dest) != nil {
+	if !validJSON || !present(result.Data) || result.Partial || result.Meta.Partial || failed(result.Success) || failed(result.OK) {
 		return fmt.Errorf("%s: invalid or incomplete json result: %w", name, ErrFailure)
+	}
+	if full, ok := dest.(*envelope); ok {
+		*full = result
+		return nil
+	}
+	if json.Unmarshal(result.Data, dest) != nil {
+		return fmt.Errorf("%s: invalid json data: %w", name, ErrFailure)
 	}
 	return nil
 }
@@ -150,7 +159,7 @@ func classify(raw json.RawMessage) error {
 	}
 	code := strings.ToUpper(strings.ReplaceAll(e.Code, "-", "_"))
 	switch code {
-	case "ACCESS_DENIED", "FORBIDDEN", "HTTP_403", "INSUFFICIENT_SCOPE", "PERMISSION_DENIED", "SITE_ACCESS_DENIED":
+	case "ACCESS_DENIED", "FORBIDDEN", "HTTP_403", "INSUFFICIENT_SCOPE", "PERMISSION_DENIED", "SITE_ACCESS_DENIED", "TWG_TARGET_OUTSIDE_DEFAULT_ORG":
 		return ErrAccessDenied
 	}
 	for _, status := range []json.RawMessage{e.HTTPStatus, e.StatusCode, e.Status} {

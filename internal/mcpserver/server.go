@@ -308,6 +308,9 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_comment", "Comment on a task when its provider supports comments.", remote,
 		func(ctx context.Context, in commentIn) (any, error) {
+			if s.interactiveClient() {
+				ctx = app.WithJiraCommentCLI(ctx)
+			}
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})
 	s.registerJiraRemoteLink()

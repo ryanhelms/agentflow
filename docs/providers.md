@@ -371,8 +371,30 @@ and its hosted response shape still needs verification.
 Each approval authorizes one append. Devflow records a durable claim before
 sending it. An old token cannot authorize a second post or a different route.
 If the result is uncertain, inspect the issue before approving a new append.
-A new approval can intentionally post the same text again. Without a Devflow
-grant, comments use the existing configured Jira API route.
+A new approval can intentionally post the same text again.
+
+When the MCP comment capability is unavailable, a single interactive
+`devflow_comment` or `devflow comment` can use Atlassian's Teamwork Graph CLI.
+Eligible callers are the supported named MCP clients, the CLI with an explicit
+`--native-client`, and a terminal with interactive standard input.
+Run `devflow setup login --provider jira` to sign in with OAuth. Devflow checks
+a saved OAuth profile for the Jira site using `twg auth profile list` and
+passes the configured site to every command. The subprocess receives no environment credentials.
+
+Devflow resolves the issue key and verifies its project before showing the
+preview. Confirmation binds the CLI profile, site, project, issue key, numeric ID
+and literal text, including the attribution when remote autonomy is `auto`.
+The write uses `twg jira workitem comment create --issue-id ID --body TEXT --body-format plain`.
+The CLI trims surrounding whitespace and expands Jira account mentions, so
+Devflow rejects these inputs before dispatch. A verified response includes
+`comment_id`. Inspect the issue before approving again if the CLI fails
+after dispatch or the receipt cannot be verified.
+[Atlassian CLI command catalog](https://developer.atlassian.com/platform/teamwork-graph/twg-cli/commands/commands-catalog/).
+
+An absent CLI permits the existing REST route. Sign-in and permission errors
+stop on the selected route. CI, calls with `DEVFLOW_OPERATION_ID`, unattended
+CLI calls, and configured Jira service accounts retain the existing REST fallback. Batch EOD
+posts and checklist updates keep their existing routing.
 
 Confluence page replacement uses a separate enrollment. From the enrolled
 workspace, run `devflow setup login --provider confluence --client devflow`

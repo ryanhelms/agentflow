@@ -108,7 +108,7 @@ Work
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop comment [KEY] TEXT [--yes]
-                                 use the separately enrolled Rovo connection for a Jira comment
+                                 use the enrolled Rovo connection or signed-in twg for a Jira comment
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -130,6 +130,9 @@ func Main(args []string) int {
 		}
 		defer writer.Close()
 		ctx = native.WithWriteHost(ctx, writer)
+		if args[2] == "comment" {
+			ctx = app.WithJiraCommentCLI(ctx)
+		}
 		args = args[2:]
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {

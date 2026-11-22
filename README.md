@@ -206,7 +206,11 @@ The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
 and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
 route adds one comment after approval and returns its verified comment ID.
 The CLI equivalent is `devflow --native-client claude-desktop comment [KEY] TEXT`.
-An uncertain result requires inspection of the issue before another approval.
+If the MCP comment capability is unavailable, interactive clients can use the
+Teamwork Graph CLI’s saved OAuth login. Run `devflow setup login --provider jira`
+to sign in. The preview shows the profile, site, project, issue and comment.
+Each approval permits one post. If the outcome is uncertain, inspect the issue
+before approving again. Unattended Jira REST workflows keep their configured identity.
 For Confluence, use `devflow setup login --provider confluence --client devflow`
 and preview the update with `devflow_docs_publish`. Desktop verifies the page’s
 space ID and key on the same site before it can publish. Repositories can limit
