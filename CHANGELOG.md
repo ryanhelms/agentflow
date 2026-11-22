@@ -5,6 +5,18 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.16.0](https://github.com/nscaledev/devflow/compare/v0.15.0...v0.16.0) - 2026-11-22
+
+### Features
+
+- wire file-backed task provider operations ([2b79d09](https://github.com/nscaledev/devflow/commit/2b79d09ecb9733fdf9ac6acaca68833caa3edd62))
+
+## [0.15.0](https://github.com/nscaledev/devflow/compare/v0.14.0...v0.15.0) - 2026-11-22
+
+### Features
+
+- install verified github cli during setup ([6df129a](https://github.com/nscaledev/devflow/commit/6df129ab686e51d913a7be602ed92a7e7feb260d))
+
 ## [0.14.0](https://github.com/nscaledev/devflow/compare/v0.13.0...v0.14.0) - 2026-11-22
 
 ### Features
