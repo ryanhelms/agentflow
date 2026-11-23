@@ -3,14 +3,11 @@
 Phases are gated by outcomes, not dates. Start a phase only when the previous one has
 passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollout).
 
-## Gate · Architecture approval
+## Architecture approval
 
-Production rollout starts after both approvers sign off on [the blueprint](blueprint.html).
+Kyle Redelinghuys and Vishal Srini approved [the architecture and rollout plan](blueprint.html). Each rollout phase still has its own exit check.
 
-- [ ] Kyle Redelinghuys approves the architecture and plan
-- [ ] Vishal Srini approves the architecture and plan
-
-Ready before the gate (no team impact):
+Foundations and verification:
 - [x] `nscaledev/devflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
 - [x] CI green (tests with race detector, golangci-lint, shellcheck, actionlint, GoReleaser check)
 - [x] Claude Code plugin tested end to end with `scripts/e2e-claude.sh` (12/12) and installed
