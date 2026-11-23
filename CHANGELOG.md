@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.44.0](https://github.com/nscaledev/devflow/compare/v0.43.0...v0.44.0) - 2026-11-23
+
+### Features
+
+- install and manage devflow from terminals and AI clients (#102) ([426c95f](https://github.com/nscaledev/devflow/commit/426c95fa2571801ed0c8df5d3615ad72e39453f1))
+
 ## [0.43.0](https://github.com/nscaledev/devflow/compare/v0.42.0...v0.43.0) - 2026-11-23
 
 ### Features
