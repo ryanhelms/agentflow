@@ -67,6 +67,40 @@ A declined interactive prompt or an unanswered prompt at end of input cancels
 its request. A worker stops waiting when the reported state is `cancelled`,
 `consumed` or `expired`.
 
+## PR publication and its branch push
+
+A PR preview covers the source repository and branch, the exact commit,
+the destination repository and base branch, and the PR fields. Use
+`devflow pr --prepare --draft --title TITLE` to preview a draft, or
+`devflow pr --prepare --draft=false --title TITLE` to preview a ready PR.
+The MCP equivalent is `devflow_pr_prepare` with `draft` set to `true` or `false`.
+
+By default, the stricter of the PR and push decisions governs publication.
+A repository can keep `policy.max_autonomy.remote: confirm` and set
+`policy.allow_auto_pr_publication: true` to permit automatic execution of
+this combined operation. Publish the opt-in on the target default branch and
+update your checkout before using it. A feature branch proposing the opt-in
+follows the existing policy when opening its own PR. Personal preferences must
+allow both actions. An explicit action ceiling can tighten either action, and
+a repository-wide `suggest` ceiling still applies. Devflow checks the target’s
+current default-branch revision again on apply. Passing reviewers or labels adds
+GitHub writes to the operation, so the usual remote ceiling applies to the
+entire request. If your checkout lacks the current default-branch
+revision, fetch the target remote and prepare the PR again.
+[Example configuration](../README.md#control-agent-approvals)
+
+| Operation | Personal actions that must permit automatic execution | Applies the PR opt-in |
+| --- | --- | --- |
+| Open a draft PR and push its branch | `pr_open_draft`, `push` | Yes |
+| Open a ready PR and push its branch | `pr_open`, `push` | Yes |
+| Push a branch on its own | `push` | No |
+| Mark an existing draft ready | `pr_ready_for_review` | No |
+
+With the example configuration, both PR previews return `prepared` and
+`devflow push --prepare` returns `needs_confirmation`. Run the previews
+in the same worktree to see the decisions before sending any changes.
+Devflow rejects publication from a protected source branch.
+
 ## Org secrets and variables
 
 Set at the `nscaledev` org level, visible to repos that use devflow. The caller

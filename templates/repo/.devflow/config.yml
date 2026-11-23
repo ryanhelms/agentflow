@@ -25,6 +25,7 @@ policy:
     local: auto
     remote: confirm
     # actions: {commit: confirm}  # optional tighter ceiling for one operation
+  # allow_auto_pr_publication: true  # permit automatic PR creation with its feature-branch push
   # max_approval_window: 15m     # caps the user's approval_window (default 5m)
   protected_branches: [main, master, develop, "release/*"]
   test_cmd: make test

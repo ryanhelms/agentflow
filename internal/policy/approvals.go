@@ -336,7 +336,10 @@ func (g *Gate) prepare(d *Decision, class Class, action string, related []string
 				return err
 			}
 		}
-		if r.State == prepared && d.Policy.Level != config.Auto {
+		// Retire the old prompt when a newly enabled publication policy
+		// entitles this exact snapshot to a prepared token.
+		if (r.State == pending && d.Policy.Source == config.PRPublicationPolicySource && d.Policy.Level == config.Auto) ||
+			(r.State == prepared && d.Policy.Level != config.Auto) {
 			if err = g.change(&r, cancelled); err != nil {
 				return err
 			}

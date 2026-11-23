@@ -36,11 +36,15 @@ func (a *App) branchPublication(ctx context.Context, willPush bool) (*publicatio
 	if err != nil {
 		return nil, err
 	}
-	base := "main"
-	if sym, err := a.Repo.Git(ctx, "symbolic-ref", "--quiet", "refs/remotes/"+remotes.Target.Name+"/HEAD"); err == nil {
-		base = strings.TrimPrefix(strings.TrimSpace(sym), "refs/remotes/"+remotes.Target.Name+"/")
+	return &publication{remotes: remotes, branch: branch, base: a.publicationBase(ctx, remotes.Target.Name), sha: strings.TrimSpace(sha), url: raw}, nil
+}
+
+func (a *App) publicationBase(ctx context.Context, targetName string) string {
+	prefix := "refs/remotes/" + targetName + "/"
+	if sym, err := a.Repo.Git(ctx, "symbolic-ref", "--quiet", prefix+"HEAD"); err == nil {
+		return strings.TrimPrefix(strings.TrimSpace(sym), prefix)
 	}
-	return &publication{remotes: remotes, branch: branch, base: base, sha: strings.TrimSpace(sha), url: raw}, nil
+	return "main"
 }
 
 func (p *publication) checkLocal(ctx context.Context, a *App) error {

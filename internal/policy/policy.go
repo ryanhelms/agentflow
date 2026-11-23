@@ -99,9 +99,9 @@ func (g *Gate) Explain(class Class, action string, related []string, force bool)
 			u.Autonomy.Remote = g.Autonomy.Remote
 		}
 	}
-	result := config.ResolveAutonomy(&u, g.repo, string(class), action, force)
-	for _, other := range related {
-		candidate := config.ResolveAutonomy(&u, g.repo, string(class), other, force)
+	rules := config.ResolveOperationAutonomy(&u, g.repo, string(class), action, related, force)
+	result := rules[0]
+	for _, candidate := range rules[1:] {
 		if candidate.Level != result.Level && config.Min(candidate.Level, result.Level) == candidate.Level {
 			result = candidate
 		}
@@ -135,7 +135,8 @@ func (g *Gate) CheckActionsUntil(class Class, action string, related []string, p
 		d.Outcome, d.Reason = Prepared, "informational preview only"
 		return d, nil
 	}
-	if rule.Level == config.Auto && token == "" && !prepareOnly {
+	directAuto := rule.Level == config.Auto && token == "" && !prepareOnly
+	if directAuto && rule.Source != config.PRPublicationPolicySource {
 		return d, nil
 	}
 	digest, err := g.fingerprint(class, action, related, payload)
@@ -149,7 +150,14 @@ func (g *Gate) CheckActionsUntil(class Class, action string, related []string, p
 			}
 			return g.consume(&d, token, digest)
 		}
-		return g.prepare(&d, class, action, related, digest, force, deadline)
+		if err := g.prepare(&d, class, action, related, digest, force, deadline); err != nil || !directAuto {
+			return err
+		}
+		// A direct automatic PR can race another agent's preview. Redeem the
+		// same snapshot under this lock so an older receipt cannot replay it.
+		id := d.Approval.OperationID
+		d = Decision{Policy: &rule, Outcome: Proceed}
+		return g.consume(&d, g.token(id), digest)
 	})
 	return d, err
 }

@@ -78,11 +78,12 @@ type Repo struct {
 	FlowMap string `yaml:"flow_map"`
 	Commit  Commit `yaml:"commit"`
 	Policy  struct {
-		MaxAutonomy       Autonomy       `yaml:"max_autonomy"`
-		MaxApprovalWindow *time.Duration `yaml:"max_approval_window,omitempty"`
-		ProtectedBranches []string       `yaml:"protected_branches"`
-		TestCmd           string         `yaml:"test_cmd"`
-		LintCmd           string         `yaml:"lint_cmd"`
+		AllowAutoPRPublication bool           `yaml:"allow_auto_pr_publication,omitempty"`
+		MaxAutonomy            Autonomy       `yaml:"max_autonomy"`
+		MaxApprovalWindow      *time.Duration `yaml:"max_approval_window,omitempty"`
+		ProtectedBranches      []string       `yaml:"protected_branches"`
+		TestCmd                string         `yaml:"test_cmd"`
+		LintCmd                string         `yaml:"lint_cmd"`
 	} `yaml:"policy"`
 
 	legacyJiraSite, legacyConfluenceSite bool
@@ -178,6 +179,13 @@ func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project defini
 // of optional provider files. Provider operations must use LoadRepo.
 func LoadRepoCore(root string) (*Repo, bool, error) {
 	c, _, found, err := loadRepoFile(root)
+	return c, found, err
+}
+
+// ParseRepoCore reads repository policy, update and commit settings from a
+// snapshot, such as the configuration committed on a PR's target base.
+func ParseRepoCore(raw []byte) (*Repo, bool, error) {
+	c, _, found, err := parseRepoFile(raw)
 	return c, found, err
 }
 

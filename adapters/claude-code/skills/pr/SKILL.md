@@ -6,6 +6,8 @@ description: Check readiness and open a pull request for the current ticket
 2. Call devflow_pr_prepare. Use a conventional title and the repo's PR template
    with the rationale, changes, acceptance criteria and test plan. Set draft
    when criteria are incomplete. The preview includes both the push and PR.
+   A repository can opt into automatic PR publication while standalone pushes
+   require approval. Use the combined preview when asked to open a PR.
 3. Apply through devflow_pr_open with the same arguments and token according
    to the approval response in AGENTS.md. Give me the PR link.
 

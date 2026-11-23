@@ -290,3 +290,96 @@ func TestInterruptedForegroundPrompt(t *testing.T) {
 		t.Fatal("new worker could not recover prompt", err)
 	}
 }
+
+func TestPublicationPolicyChangeAcrossAgents(t *testing.T) {
+	home := t.TempDir()
+	user := &config.User{Autonomy: config.Autonomy{Remote: config.Auto}}
+	repo := &config.Repo{}
+	repo.Policy.MaxAutonomy.Remote = config.Confirm
+	a, b := gateFor(t, home, "author"), gateFor(t, home, "worker")
+	a.Configure("repo", user, repo)
+	b.Configure("repo", user, repo)
+	open := func(g *Gate, token string, preview bool) (Decision, error) {
+		return g.CheckActions(Remote, "pr_open_draft", []string{"push"}, "snapshot", token, false, preview)
+	}
+	prompt, err := open(a, "", true)
+	if err != nil || prompt.Outcome != NeedsConfirmation {
+		t.Fatal(prompt, err)
+	}
+	repo.Policy.AllowAutoPRPublication = true
+	preview, err := open(b, "", true)
+	if err != nil || preview.Outcome != Prepared || preview.Approval.OperationID == prompt.Approval.OperationID || preview.Policy.Source != config.PRPublicationPolicySource {
+		t.Fatal(preview, err)
+	}
+	if st, err := a.Status(prompt.Approval.OperationID); err != nil || st.State != cancelled {
+		t.Fatal(st, err)
+	}
+	if _, err := open(a, prompt.Token, false); !errors.Is(err, ErrCancelled) {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"push", "pr_ready_for_review"} {
+		if _, err := a.Check(Remote, action, "snapshot", preview.Token, false); !errors.Is(err, ErrChanged) {
+			t.Fatal(action, err)
+		}
+	}
+	if _, err := a.CheckActions(Remote, "pr_open", []string{"push"}, "snapshot", preview.Token, false, false); !errors.Is(err, ErrChanged) {
+		t.Fatal(err)
+	}
+	if _, err := a.CheckActions(Remote, "pr_open_draft", []string{"push"}, "other snapshot", preview.Token, false, false); !errors.Is(err, ErrChanged) {
+		t.Fatal(err)
+	}
+	repo.Policy.AllowAutoPRPublication = false
+	if _, err := open(b, preview.Token, false); !errors.Is(err, ErrChanged) {
+		t.Fatal(err)
+	}
+	repo.Policy.AllowAutoPRPublication = true
+	if d, err := open(a, preview.Token, false); err != nil || d.Outcome != Proceed {
+		t.Fatal(d, err)
+	}
+	if _, err := open(b, preview.Token, false); !errors.Is(err, ErrConsumed) {
+		t.Fatal(err)
+	}
+}
+
+func TestDirectAutoPublicationRetiresOutstandingReceipts(t *testing.T) {
+	for _, state := range []string{pending, approved, prepared} {
+		t.Run(state, func(t *testing.T) {
+			home := t.TempDir()
+			a, b := gateFor(t, home, "owner"), gateFor(t, home, "publisher")
+			u := &config.User{Autonomy: config.Autonomy{Remote: config.Auto}}
+			r := &config.Repo{}
+			r.Policy.MaxAutonomy.Remote = config.Confirm
+			r.Policy.AllowAutoPRPublication = state == prepared
+			a.Configure("repo", u, r)
+			b.Configure("repo", u, r)
+			open := func(g *Gate, token string, preview bool) (Decision, error) {
+				return g.CheckActions(Remote, "pr_open", []string{"push"}, "snapshot", token, false, preview)
+			}
+			first, err := open(a, "", true)
+			if err != nil || first.Token == "" {
+				t.Fatal(first, err)
+			}
+			id := first.Approval.OperationID
+			if state == approved {
+				if _, err := a.Approve(id, first.Token); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r.Policy.AllowAutoPRPublication = true
+			if d, err := open(b, "", false); err != nil || d.Outcome != Proceed || d.Token != "" {
+				t.Fatal(d, err)
+			}
+			r.Policy.AllowAutoPRPublication = false
+			wantState, wantErr := consumed, ErrConsumed
+			if state == pending {
+				wantState, wantErr = cancelled, ErrCancelled
+			}
+			if st, err := a.Status(id); err != nil || st.State != wantState {
+				t.Fatal(st, err)
+			}
+			if _, err := open(a, first.Token, false); !errors.Is(err, wantErr) {
+				t.Fatal(err)
+			}
+		})
+	}
+}

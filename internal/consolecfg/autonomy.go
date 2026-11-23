@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/nscaledev/devflow/internal/app"
@@ -17,10 +18,11 @@ import (
 // ApprovalSettings contains only editable values. An empty field inherits the
 // next layer. Neither the personal file nor unrelated user settings leave disk.
 type ApprovalSettings struct {
-	Local   config.Level            `json:"local"`
-	Remote  config.Level            `json:"remote"`
-	Window  string                  `json:"window"`
-	Actions map[string]config.Level `json:"actions"`
+	Local                  config.Level            `json:"local"`
+	Remote                 config.Level            `json:"remote"`
+	Window                 string                  `json:"window"`
+	Actions                map[string]config.Level `json:"actions"`
+	AllowAutoPRPublication *bool                   `json:"allow_auto_pr_publication,omitempty"`
 }
 
 func settings(a config.Autonomy, window *time.Duration) ApprovalSettings {
@@ -45,6 +47,7 @@ func InspectApprovals(personal, repository []byte) (ApprovalView, error) {
 		return ApprovalView{}, errors.New("cannot read approval settings in the configuration file")
 	}
 	v := ApprovalView{Personal: settings(user.Autonomy, user.ApprovalWindow), Repository: settings(repo.Policy.MaxAutonomy, repo.Policy.MaxApprovalWindow), UserRevision: digest(string(personal))}
+	v.Repository.AllowAutoPRPublication = &repo.Policy.AllowAutoPRPublication
 	for _, s := range []ApprovalSettings{v.Personal, v.Repository} {
 		if err := s.validate(); err != nil {
 			return ApprovalView{}, err
@@ -100,7 +103,11 @@ func EditApprovals(content []byte, personal bool, next ApprovalSettings) ([]byte
 	root := doc.Content[0]
 	prefix, window := []string{"autonomy"}, []string{"approval_window"}
 	var before ApprovalSettings
+	var allowedPublication bool
 	if personal {
+		if next.AllowAutoPRPublication != nil {
+			return nil, errors.New("allow_auto_pr_publication is a repository policy setting")
+		}
 		var u config.User
 		if root.Decode(&u) != nil {
 			return nil, errors.New("invalid personal configuration")
@@ -113,14 +120,21 @@ func EditApprovals(content []byte, personal bool, next ApprovalSettings) ([]byte
 			return nil, errors.New("invalid repository configuration")
 		}
 		before = settings(r.Policy.MaxAutonomy, r.Policy.MaxApprovalWindow)
+		allowedPublication = r.Policy.AllowAutoPRPublication
 	}
 	changed := false
+	if next.AllowAutoPRPublication != nil && allowedPublication != *next.AllowAutoPRPublication {
+		if err := setApprovalLeaf(root, []string{"policy", "allow_auto_pr_publication"}, "!!bool", strconv.FormatBool(*next.AllowAutoPRPublication)); err != nil {
+			return nil, err
+		}
+		changed = true
+	}
 	set := func(path []string, old, value string) error {
 		if old == value {
 			return nil
 		}
 		changed = true
-		return setApprovalLeaf(root, path, value)
+		return setApprovalLeaf(root, path, "!!str", value)
 	}
 	if err := set(window, before.Window, next.Window); err != nil {
 		return nil, err
@@ -156,7 +170,10 @@ func EditApprovals(content []byte, personal bool, next ApprovalSettings) ([]byte
 	return out.Bytes(), nil
 }
 
-func setApprovalLeaf(n *yaml.Node, path []string, value string) error {
+func setApprovalLeaf(n *yaml.Node, path []string, tag, value string) error {
+	if len(path) == 0 {
+		return errors.New("missing approval setting path")
+	}
 	if err := editableMap(n); err != nil {
 		return err
 	}
@@ -173,12 +190,12 @@ func setApprovalLeaf(n *yaml.Node, path []string, value string) error {
 		return errors.New("edit anchored approval settings in the source file")
 	}
 	if len(path) > 1 {
-		return setApprovalLeaf(node, path[1:], value)
+		return setApprovalLeaf(node, path[1:], tag, value)
 	}
 	if value == "" {
 		n.Content = slices.Delete(n.Content, at, at+2)
 	} else {
-		node.Kind, node.Tag, node.Value, node.Content = yaml.ScalarNode, "!!str", value, nil
+		node.Kind, node.Tag, node.Value, node.Content = yaml.ScalarNode, tag, value, nil
 	}
 	return nil
 }

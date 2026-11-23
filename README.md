@@ -523,10 +523,35 @@ permissions and provider sign-in prompts are controlled by their respective clie
 Devflow runs configured Git commit hooks, including native hooks on Windows.
 It verifies the approved tree and message before Git moves the branch.
 
-Automatic draft publication requires both `push` and `pr_open_draft` to allow
-`auto`. Opening a reviewable PR uses `push` and `pr_open`. Promoting an existing
-draft uses `pr_ready_for_review`. For exact previews and approval handoff, see the
-[operations guide](docs/operations.md#prepare-and-apply-an-operation).
+To let an agent open a draft or ready PR while keeping standalone pushes under
+review, add this repository setting to `.devflow/config.yml` on the target
+repository’s default branch and bring that change into your checkout.
+
+```yaml
+policy:
+  max_autonomy:
+    remote: confirm
+  allow_auto_pr_publication: true
+```
+
+In your personal configuration, choose which kinds of PR may open automatically.
+
+```yaml
+autonomy:
+  remote: confirm
+  actions:
+    push: auto
+    pr_open_draft: auto
+    pr_open: auto
+```
+
+With these settings, Devflow can push the exact feature-branch revision and open
+the PR in one operation. Adding reviewers or labels also writes to GitHub and
+uses the usual remote ceiling. A standalone push, promoting an existing draft, and
+other remote writes still require review. To require review for ready PRs, set
+`pr_open: confirm`. The opt-in defaults to off. Personal preferences, explicit
+per-action ceilings and a repository-wide `suggest` ceiling can still require
+review or manual execution. [PR publication examples](docs/operations.md#pr-publication-and-its-branch-push)
 
 The table above gives the terminal commands for the same day-to-day operations.
 When a provider write needs confirmation, the CLI shows the approval summary. Pass

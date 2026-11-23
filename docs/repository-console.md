@@ -189,7 +189,24 @@ updates the personal file, read the new revision and preview your patch again.
 
 Use `compose` with `edit: "remove"` to inherit a provider setting, or
 `edit: "select"` to stage a provider switch. Use `stage_autonomy` with a
-`patch` to stage repository ceilings. For other registered editable sources,
+`patch` to stage repository ceilings. For example, send this to `devflow_config`
+to enable automatic PR publication for eligible personal preferences.
+
+```json
+{
+  "operation": "stage_autonomy",
+  "base_digest": "<digest from read>",
+  "content": "<current configuration source>",
+  "patch": {"allow_auto_pr_publication": true}
+}
+```
+
+Preview and publish the returned source through the same repository review
+flow. This field belongs to the repository. The personal `push`,
+`pr_open_draft` and `pr_open` choices determine which PRs a developer
+can publish automatically. [PR publication policy](operations.md#pr-publication-and-its-branch-push)
+
+For other registered editable sources,
 supply the complete edited file to `preview`. Each repository publication
 covers one file. Use `readiness` to check the providers configured in the
 current checkout.
@@ -249,6 +266,8 @@ Under **Repository ceilings**, choose a class or an action, then choose
 **Stage repository settings**. **Review staged configuration** opens the shared
 source editor with the change alongside any other staged edits to the same file.
 The effective rules on the Autonomy page then reflect that proposed configuration.
+To permit automatic publication of a draft or ready PR with its branch push,
+select **Allow automatic PR publication** under **Repository ceilings**.
 Preview and publish the change through the repository review flow below.
 
 Choose **Inherit** to remove a class or action setting. Leave **Approval window**

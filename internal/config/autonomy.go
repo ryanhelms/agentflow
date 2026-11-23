@@ -9,6 +9,10 @@ import (
 )
 
 const (
+	// PRPublicationPolicySource identifies the repository setting that permits
+	// a PR and its branch push to run together above the remote confirm ceiling.
+	PRPublicationPolicySource = "policy.allow_auto_pr_publication"
+
 	DefaultApprovalWindow = 5 * time.Minute
 	MinApprovalWindow     = time.Minute
 	MaxApprovalWindow     = time.Hour
@@ -102,6 +106,24 @@ type AutonomyDecision struct {
 // both repository ceilings. forceConfirm preserves mandatory review for a
 // particular operation or provider route. Nil configs use the loader defaults.
 func ResolveAutonomy(user *User, repo *Repo, class, action string, forceConfirm bool) AutonomyDecision {
+	return resolveAutonomy(user, repo, class, action, forceConfirm, false)
+}
+
+// ResolveOperationAutonomy returns the rules for the primary action and each
+// effect in order. Only opening a PR with its single branch push qualifies for
+// the repository's publication exception to an explicit remote confirm ceiling.
+func ResolveOperationAutonomy(user *User, repo *Repo, class, primary string, related []string, forceConfirm bool) []AutonomyDecision {
+	publication := repo != nil && repo.Policy.AllowAutoPRPublication && repo.Policy.MaxAutonomy.Remote == Confirm &&
+		class == "remote" && (primary == "pr_open" || primary == "pr_open_draft") && len(related) == 1 && related[0] == "push"
+	rules := make([]AutonomyDecision, 0, 1+len(related))
+	rules = append(rules, resolveAutonomy(user, repo, class, primary, forceConfirm, publication))
+	for _, effect := range related {
+		rules = append(rules, resolveAutonomy(user, repo, class, effect, forceConfirm, publication))
+	}
+	return rules
+}
+
+func resolveAutonomy(user *User, repo *Repo, class, action string, forceConfirm, publication bool) AutonomyDecision {
 	if user == nil {
 		user = &User{}
 	}
@@ -139,7 +161,11 @@ func ResolveAutonomy(user *User, repo *Repo, class, action string, forceConfirm 
 		}
 	}
 	if d.RepoClass.rank() < d.Level.rank() {
-		d.Level, d.Source = d.RepoClass, "policy.max_autonomy."+class
+		if publication {
+			d.Source = PRPublicationPolicySource
+		} else {
+			d.Level, d.Source = d.RepoClass, "policy.max_autonomy."+class
+		}
 	}
 	if d.RepoAction != "" && d.RepoAction.rank() < d.Level.rank() {
 		d.Level, d.Source = d.RepoAction, "policy.max_autonomy.actions."+action

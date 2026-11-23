@@ -96,13 +96,17 @@ func replacePersonal(dir string, original, next []byte) error {
 // ApprovalPatch updates only supplied fields. An explicitly empty value clears
 // that override, restoring inheritance. An omitted action retains its setting.
 type ApprovalPatch struct {
-	Local   *config.Level           `json:"local,omitempty" jsonschema:"Local action preference or ceiling. An empty string restores inheritance."`
-	Remote  *config.Level           `json:"remote,omitempty" jsonschema:"Remote action preference or ceiling. An empty string restores inheritance."`
-	Window  *string                 `json:"window,omitempty" jsonschema:"Review window from 1m through 1h. An empty string restores inheritance."`
-	Actions map[string]config.Level `json:"actions,omitempty" jsonschema:"Named action overrides. Set a key to an empty string to remove only that override."`
+	Local                  *config.Level           `json:"local,omitempty" jsonschema:"Local action preference or ceiling. An empty string restores inheritance."`
+	Remote                 *config.Level           `json:"remote,omitempty" jsonschema:"Remote action preference or ceiling. An empty string restores inheritance."`
+	Window                 *string                 `json:"window,omitempty" jsonschema:"Review window from 1m through 1h. An empty string restores inheritance."`
+	Actions                map[string]config.Level `json:"actions,omitempty" jsonschema:"Named action overrides. Set a key to an empty string to remove only that override."`
+	AllowAutoPRPublication *bool                   `json:"allow_auto_pr_publication,omitempty" jsonschema:"Repository only. Permit automatic draft or ready pull request publication including its branch push, subject to action rules and opt-in on the target branch. Defaults to false."`
 }
 
 func (p ApprovalPatch) apply(old consolecfg.ApprovalSettings) (consolecfg.ApprovalSettings, error) {
+	if p.AllowAutoPRPublication != nil {
+		old.AllowAutoPRPublication = p.AllowAutoPRPublication
+	}
 	if p.Local != nil {
 		old.Local = *p.Local
 	}

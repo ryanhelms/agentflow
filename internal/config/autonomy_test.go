@@ -93,3 +93,72 @@ func TestInvalidScopedAutonomy(t *testing.T) {
 		}
 	}
 }
+
+func TestPRPublicationScope(t *testing.T) {
+	r, _, _, err := parseRepoFile([]byte("policy: {allow_auto_pr_publication: true, max_autonomy: {remote: confirm, local: confirm}}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &User{Autonomy: Autonomy{Local: Auto, Remote: Auto}}
+	for _, tc := range []struct {
+		name, class, primary string
+		related              []string
+		scoped               bool
+	}{
+		{"ready", "remote", "pr_open", []string{"push"}, true},
+		{"draft", "remote", "pr_open_draft", []string{"push"}, true},
+		{"standalone push", "remote", "push", nil, false},
+		{"ready transition", "remote", "pr_ready_for_review", []string{"push"}, false},
+		{"other remote action", "remote", "notify", nil, false},
+		{"no push", "remote", "pr_open", nil, false},
+		{"different related action", "remote", "pr_open", []string{"release_publish"}, false},
+		{"extra effect", "remote", "pr_open", []string{"push", "notify"}, false},
+		{"duplicate push", "remote", "pr_open", []string{"push", "push"}, false},
+		{"local operation", "local", "pr_open", []string{"push"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rules := ResolveOperationAutonomy(u, r, tc.class, tc.primary, tc.related, false)
+			if len(rules) != 1+len(tc.related) {
+				t.Fatal(rules)
+			}
+			want, source := Confirm, "policy.max_autonomy."+tc.class
+			if tc.scoped {
+				want, source = Auto, PRPublicationPolicySource
+			}
+			for _, rule := range rules {
+				if rule.Level != want || rule.Source != source || rule.RepoClass != Confirm {
+					t.Errorf("%s: %+v", rule.Action, rule)
+				}
+			}
+		})
+	}
+}
+
+func TestPRPublicationRespectsPolicyLayers(t *testing.T) {
+	for _, tc := range []struct {
+		name                     string
+		enabled, forced          bool
+		userClass, repoClass     Level
+		userActions, repoActions map[string]Level
+		wantPR, wantPush         Level
+	}{
+		{name: "default", userClass: Auto, repoClass: Confirm, wantPR: Confirm, wantPush: Confirm},
+		{name: "strict repository", enabled: true, userClass: Auto, repoClass: Suggest, wantPR: Suggest, wantPush: Suggest},
+		{name: "invalid legacy class", enabled: true, userClass: Auto, repoClass: "other", wantPR: Confirm, wantPush: Confirm},
+		{name: "personal confirm", enabled: true, userClass: Confirm, repoClass: Confirm, wantPR: Confirm, wantPush: Confirm},
+		{name: "personal action preferences", enabled: true, userClass: Confirm, repoClass: Confirm, userActions: map[string]Level{"pr_open_draft": Auto, "push": Suggest}, wantPR: Auto, wantPush: Suggest},
+		{name: "explicit repo action caps", enabled: true, userClass: Auto, repoClass: Confirm, repoActions: map[string]Level{"pr_open_draft": Suggest, "push": Confirm}, wantPR: Suggest, wantPush: Confirm},
+		{name: "mandatory confirmation", enabled: true, forced: true, userClass: Auto, repoClass: Confirm, wantPR: Confirm, wantPush: Confirm},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u := &User{Autonomy: Autonomy{Remote: tc.userClass, Actions: tc.userActions}}
+			r := &Repo{}
+			r.Policy.AllowAutoPRPublication = tc.enabled
+			r.Policy.MaxAutonomy = Autonomy{Remote: tc.repoClass, Actions: tc.repoActions}
+			rules := ResolveOperationAutonomy(u, r, "remote", "pr_open_draft", []string{"push"}, tc.forced)
+			if rules[0].Level != tc.wantPR || rules[1].Level != tc.wantPush {
+				t.Fatal(rules)
+			}
+		})
+	}
+}
