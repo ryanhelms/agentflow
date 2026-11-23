@@ -57,17 +57,26 @@ func (a *App) prepareWithActions(class policy.Class, primary string, related []s
 
 func (a *App) checkApproval(class policy.Class, action string, related []string, summary any, token string, force bool, commands []string, prepareOnly bool, deadline time.Time) (*Pending, error) {
 	d, err := a.Gate.CheckActionsUntil(class, action, related, summary, token, force, prepareOnly, deadline)
-	if err != nil || d.Outcome == policy.Proceed {
+	if err != nil {
 		return nil, err
+	}
+	return PendingDecision(a.Gate, d, summary, commands), nil
+}
+
+// PendingDecision preserves foreground prompt ownership and cancellation for
+// operations that resolve the current policy immediately before a write.
+func PendingDecision(gate *policy.Gate, d policy.Decision, summary any, commands []string) *Pending {
+	if d.Outcome == policy.Proceed {
+		return nil
 	}
 	p := &Pending{Status: string(d.Outcome), ConfirmToken: d.Token, Reason: d.Reason, Summary: summary, Approval: d.Approval, Policy: d.Policy}
 	if d.Outcome == policy.NeedsConfirmation {
-		p.gate = a.Gate
+		p.gate = gate
 	}
 	if d.Outcome == policy.SuggestOnly {
 		p.Commands = commands
 	}
-	return p, nil
+	return p
 }
 
 // OpenPrompt keeps a foreground prompt alive until the CLI applies or

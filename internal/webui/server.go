@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/consolepublish"
+	"github.com/nscaledev/devflow/internal/configconsole"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 )
@@ -34,7 +34,7 @@ type server struct {
 	// Serialize approval consumption and publishing. Re-read policy for every save.
 	writeMu   sync.Mutex
 	gate      *policy.Gate
-	publishTo func(context.Context, string, string, string, string, string, string, bool, ...string) (consolepublish.Result, error)
+	publishTo configconsole.Publisher
 }
 
 func randomKey() string {
@@ -53,7 +53,7 @@ func Serve(ctx context.Context, dir string, port int, ready func(string)) error 
 	if err != nil {
 		return fmt.Errorf("open console listener: %w", err)
 	}
-	s := &server{repo: repo, origin: "http://" + l.Addr().String(), launch: randomKey(), session: randomKey(), publishTo: consolepublish.PublishTo}
+	s := &server{repo: repo, origin: "http://" + l.Addr().String(), launch: randomKey(), session: randomKey()}
 	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
 	defer stop()

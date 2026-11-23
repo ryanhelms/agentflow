@@ -6,6 +6,125 @@ port, or use `--no-open` to open the printed URL yourself. Keep that URL on
 your machine. Its launch code is single-use. Refreshing the same tab preserves
 the session. Stop the process with Ctrl+C.
 
+## Configure Devflow from chat
+
+Use a Devflow MCP connection for the worktree you want to configure. If the
+tools are missing after upgrading Devflow, reconnect the MCP server or start a
+fresh client session in that worktree. For a Codex checkout without a Devflow
+registration, run `devflow setup plan --client codex` and review the project
+registration with `devflow setup apply --client codex`. Open a fresh session
+after registration. [Client setup](../README.md#set-up-your-machine-engineers)
+
+| Ask in chat | What Devflow does |
+| --- | --- |
+| “Which setting controls local commits here, and where does it come from?” | Shows your preference, the repository ceilings and the effective rule. |
+| “Set my personal commit preference to automatic. Keep the five-minute window.” | Previews the change to your user configuration. On approval, saves it on this workstation. |
+| “Change the task provider’s search limit to 25 and open a draft PR.” | Reads the repository settings, stages the typed value, and shows its source diff, effective changes and publication destination before requesting approval. |
+| “Show the release units and preview this change to their configuration.” | Reads the registered release configuration by path and previews your proposed source against its current revision. |
+| “Check which configured provider connections are ready.” | Runs the checkout’s provider readiness checks and reports connections that need attention. |
+
+`devflow_config` handles inspection and preparation. `devflow_config_apply` saves
+the reviewed personal change or publishes the reviewed repository file.
+The CLI exposes the same operations through `devflow config OP`. Pass the
+remaining fields as a JSON object on standard input or with `--input FILE`.
+List the sources and read the repository configuration with these commands.
+
+```sh
+devflow config list
+printf '%s\n' '{"path":".devflow/config.yml"}' | devflow config read
+```
+
+### Change a personal preference
+
+Call `devflow_config` with `{"operation":"autonomy"}` to read the effective
+rules and the current `user_revision`. To make local commits automatic, use
+the returned revision in a second call to `devflow_config`.
+
+```json
+{
+  "operation": "preview_personal",
+  "user_revision": "<revision from autonomy>",
+  "patch": {"actions": {"commit": "auto"}}
+}
+```
+
+Review the before and after values. Once the developer approves, call
+`devflow_config_apply` with the same revision and patch and the token from the
+preview.
+
+```json
+{
+  "operation": "save_personal",
+  "user_revision": "<revision from autonomy>",
+  "patch": {"actions": {"commit": "auto"}},
+  "confirm_token": "<token from preview_personal>"
+}
+```
+
+A patch can change `local`, `remote`, `window` and individual `actions`.
+Omitted fields keep their existing values. For example,
+`{"actions":{"commit":""}}` returns the commit setting to inheritance.
+Devflow uses the current on-disk policy to review the change. If another editor
+updates the personal file, read the new revision and preview your patch again.
+
+### Publish a repository change
+
+1. Call `devflow_config` with `{"operation":"list"}` to see the registered
+   files and provider settings. Use `read` with `path: ".devflow/config.yml"`
+   for the current source and digest. Managed and credential-bearing sources
+   appear in the inventory with their contents withheld.
+2. For a checkout using GitHub Issues for task management, the following
+   `devflow_config` call sets the search limit to 25. Substitute the source
+   and digest from `read`. `value` accepts the JSON type from the setting's
+   schema.
+
+   ```json
+   {
+     "operation": "compose",
+     "path": ".devflow/config.yml",
+     "base_digest": "<digest from read>",
+     "content": "<source from read>",
+     "role": "task_management",
+     "edit": "set",
+     "setting": "search.limit",
+     "value": 25
+   }
+   ```
+
+3. Preview the result with `devflow_config`. Copy the edited `content` returned
+   by `compose` and retain the original digest through successive edits.
+
+   ```json
+   {
+     "operation": "preview",
+     "path": ".devflow/config.yml",
+     "base_digest": "<digest from read>",
+     "content": "<edited source from compose>",
+     "title": "chore: adjust issue search limit",
+     "mode": "draft"
+   }
+   ```
+
+4. Review the diff, effective settings and publication destination. After
+   approval, call `devflow_config_apply` with `operation: "publish"`, the same
+   path, digest, source, title and mode, and the returned `confirm_token`.
+   Supply a conventional title that follows the checkout's commit rules. If the
+   proposal includes a `task_ref`, include it in both calls. The default mode is
+   `draft`. Request `direct` explicitly to apply the reviewed change to the
+   default branch through GitHub's checks and review rules.
+
+Use `compose` with `edit: "remove"` to inherit a provider setting, or
+`edit: "select"` to stage a provider switch. Use `stage_autonomy` with a
+`patch` to stage repository ceilings. For other registered editable sources,
+supply the complete edited file to `preview`. Each repository publication
+covers one file. Use `readiness` to check the providers configured in the
+current checkout.
+
+For an approval handoff, the prompt owner records consent for the exact
+preview. Another worker can apply that same request with the approved
+operation ID as `confirm_token`. A change to the reviewed inputs or an expired
+request requires a fresh preview. [Approval handoff](operations.md#prepare-and-apply-an-operation)
+
 ## Follow an effective setting back to its source
 
 Open **Providers**, select a role, then select a setting. For example, open

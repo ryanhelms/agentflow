@@ -43,6 +43,13 @@ type App struct {
 	fm       *flowmap.Map
 }
 
+// ConfigLoadError identifies a configuration file that prevented a full session
+// from starting. The configuration editor can still inspect its safe sources.
+type ConfigLoadError struct{ err error }
+
+func (e *ConfigLoadError) Error() string { return e.err.Error() }
+func (e *ConfigLoadError) Unwrap() error { return e.err }
+
 // Open opens the repo containing dir. client names the calling AI client.
 func Open(ctx context.Context, dir, client string) (*App, error) {
 	repo, err := gitx.Open(ctx, dir)
@@ -51,11 +58,11 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	}
 	cfg, found, err := config.LoadRepo(repo.Dir)
 	if err != nil {
-		return nil, err
+		return nil, &ConfigLoadError{err}
 	}
 	user, err := config.LoadUser()
 	if err != nil {
-		return nil, err
+		return nil, &ConfigLoadError{err}
 	}
 	home, err := config.Home()
 	if err != nil {

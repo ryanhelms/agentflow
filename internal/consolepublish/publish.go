@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -87,7 +88,7 @@ func destination(ctx context.Context, a *app.App) (string, error) {
 
 // PublishTo creates or recovers a single-file PR. It never stages, commits or
 // checks out files in the developer's workspace.
-func PublishTo(ctx context.Context, root, expectedDestination, path, original, content, title string, draft bool, taskRef ...string) (Result, error) {
+func PublishTo(ctx context.Context, root, expectedDestination, path, original, content, title string, draft bool, reviewed map[string]string, taskRef ...string) (Result, error) {
 	a, err := localApp(ctx, root)
 	if err != nil {
 		return Result{}, err
@@ -127,9 +128,12 @@ func PublishTo(ctx context.Context, root, expectedDestination, path, original, c
 	if err != nil {
 		return Result{}, err
 	}
-	deps, err := dependencies(root, plan.Sources, path, original)
+	deps, err := SourceBaseline(root, plan.Sources, path, original)
 	if err != nil {
 		return Result{}, err
+	}
+	if !maps.Equal(reviewed, deps) {
+		return Result{}, errors.New("configuration inputs changed; review the current proposal again")
 	}
 	client, err := a.GitHub(ctx)
 	if err != nil {

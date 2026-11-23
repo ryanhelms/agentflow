@@ -22,6 +22,8 @@ import (
 // runs the same internal/app operation. A new static tool must add a CLI
 // command and a row here.
 var mcpToCLI = map[string]string{
+	"devflow_config":                "config",
+	"devflow_config_apply":          "config publish",
 	"devflow_policy_explain":        "policy explain",
 	"devflow_approval_status":       "policy status",
 	"devflow_approval_approve":      "policy approve",
