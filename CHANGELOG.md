@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.38.0](https://github.com/nscaledev/devflow/compare/v0.37.0...v0.38.0) - 2026-11-23
+
+### Features
+
+- **knowledge:** read okf alongside legacy documents (#90) ([2615790](https://github.com/nscaledev/devflow/commit/26157900ab216d8892d86f7d1bc7210986628958))
+
 ## [0.37.0](https://github.com/nscaledev/devflow/compare/v0.36.0...v0.37.0) - 2026-11-23
 
 ### Features
