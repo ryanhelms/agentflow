@@ -11,6 +11,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/githubissues"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
@@ -153,17 +154,28 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 		return nil, err
 	}
 	var link provider.Ref
-	if linkTo == "" {
-		link, err = a.branchTask(ctx)
+	document, parseErr := provider.ParseRef(linkTo)
+	if parseErr == nil && document.Instance != issuesInstance {
+		if selected := a.Cfg.Providers.KnowledgeBase.Provider; selected == "none" || document.Instance != selected {
+			return nil, fmt.Errorf("document %s does not match the selected knowledge provider %q", document, selected)
+		}
+		draft.Description, err = githubissues.AppendRelatedKnowledge(draft.Description, document)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		link, err = a.taskRef(ctx, linkTo)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if link.ID != "" {
-		linkTo = taskKey(link)
-		draft.Description += "\n\nRelated issue: " + linkTo
+		if linkTo == "" {
+			link, err = a.branchTask(ctx)
+		} else {
+			link, err = a.taskRef(ctx, linkTo)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if link.ID != "" {
+			linkTo = taskKey(link)
+			draft.Description += "\n\nRelated issue: " + linkTo
+		}
 	}
 	s := map[string]any{"provider": issuesInstance, "project": draft.Scope, "type": "Issue", "summary": draft.Title, "description": draft.Description, "link_to": linkTo, "labels": draft.Labels, "operation_id": issueOperation()}
 	if draft.Template != nil {

@@ -8,6 +8,14 @@ objects merge by field, and supplied lists replace the default lists.
 This reference describes the configuration accepted by the provider foundation.
 The provider-specific sections below describe the CLI, MCP and workflow entry points.
 
+`devflow init` and `devflow install` give agents the same workflow guidance in a
+managed `AGENTS.md` block. Project-specific instructions remain outside that
+block. The guidance tells agents to use the effective provider configuration.
+When a session starts, the MCP server and Claude Code hook report the selected
+task and knowledge providers. Run `devflow setup providers --explain` to inspect
+how Devflow resolved their settings. Existing repositories can refresh just
+this guidance with `devflow init --guidance-only`.
+
 | Section | Default provider | Other schema selections |
 | --- | --- | --- |
 | `code_hosting` | `auto` | `github`, `none` |
@@ -983,8 +991,13 @@ subsequent runs. Devflow releases continue through GoReleaser.
 
 ## Link knowledge to a GitHub issue
 
-Put a top-level section in the issue body and list one qualified document per
-bullet. This example uses the Repository knowledge provider.
+During issue creation, pass a qualified document reference with `--link-to`
+or the MCP `link_to` field. Devflow validates it against the selected knowledge
+provider and adds it to the issue body before showing the approval preview.
+A task reference in the same field still links the new issue to that task.
+
+For an existing issue, put a top-level section in the issue body and list one
+qualified document per bullet. This example uses the Repository knowledge provider.
 
 ```markdown
 ## Related Knowledge

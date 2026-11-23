@@ -47,6 +47,9 @@ type TicketContext struct {
 // Context builds the ticket bundle for key (or the current branch's key).
 // It degrades gracefully: missing credentials become warnings, not errors.
 func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return &TicketContext{Branch: a.Repo.Branch(ctx), Text: "devflow · task management is disabled\n"}, nil
+	}
 	if a.UsesTaskRefs() {
 		return a.providerContext(ctx, key)
 	}
@@ -208,6 +211,9 @@ type WorkItem struct {
 
 // MyWork lists the developer's open tickets, active sprint first.
 func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return nil, nil
+	}
 	if a.UsesTaskRefs() {
 		return a.providerWork(ctx)
 	}
@@ -240,6 +246,9 @@ type StartResult struct {
 
 // Start creates a branch (or worktree) for key, assigns it and moves it to the start status.
 func (a *App) Start(ctx context.Context, key string, worktree bool, token string) (any, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return nil, provider.Unsupported("none", "starting a task")
+	}
 	if key == "" {
 		return nil, errors.New("key is required; call devflow_my_work to choose one")
 	}

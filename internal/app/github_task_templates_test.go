@@ -97,6 +97,35 @@ func TestIssueTemplateCreateApproval(t *testing.T) {
 	}
 }
 
+func TestIssueCreateLinksConfiguredKnowledge(t *testing.T) {
+	a, f := issueApp(t)
+	configureIssueTemplates(t, a)
+	a.Cfg.Providers.KnowledgeBase.Provider = "repository"
+	const doc = "repository/engineering/provider-architecture"
+	create := func(link, token string) (any, error) {
+		return a.CreateTicket(t.Context(), "", "Task", "", "", link, token)
+	}
+	preview, err := create(doc, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := preview.(*Pending).Summary.(map[string]any)
+	description := summary["description"].(string)
+	if !strings.Contains(description, "- [ ] Verify") || !strings.Contains(description, "## Related Knowledge\n\n- `"+doc+"`") || len(f.writes) != 0 {
+		t.Fatalf("unexpected preview: %+v, writes %v", summary, f.writes)
+	}
+	token := confirmation(t, preview)
+	if _, err := create("filesystem/engineering/provider-architecture", ""); err == nil {
+		t.Fatal("accepted a nonselected knowledge provider")
+	}
+	if _, err := create("repository/engineering/other", token); !errors.Is(err, policy.ErrToken) {
+		t.Fatalf("accepted changed document under the original approval: %v", err)
+	}
+	if _, err := create(doc, token); err != nil || len(f.writes) != 1 || f.draft.Description != description {
+		t.Fatalf("creation did not preserve the approved description: %+v, %v", f.draft, err)
+	}
+}
+
 func TestIssueTemplateRejectsInvalidCreate(t *testing.T) {
 	a, f := issueApp(t)
 	configureIssueTemplates(t, a)

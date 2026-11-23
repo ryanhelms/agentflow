@@ -150,3 +150,26 @@ func TestCoreHooksSurviveInvalidProviderDefinition(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionStartReportsConfiguredProviders(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", "-b", "PLAT-1-disabled").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %s, %v", out, err)
+	}
+	if err := os.Mkdir(".devflow", 0700); err != nil {
+		t.Fatal(err)
+	}
+	const config = "task_management: {provider: none}\nknowledge_base: {provider: repository}\n"
+	if err := os.WriteFile(".devflow/config.yml", []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := SessionStart(t.Context(), "test", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "task_management=none, knowledge_base=repository") || strings.Contains(out.String(), "Jira") {
+		t.Fatalf("session context = %s", out.String())
+	}
+}

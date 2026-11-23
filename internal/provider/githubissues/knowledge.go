@@ -8,14 +8,21 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
+const relatedKnowledgeHeading = "## Related Knowledge"
+
 var markdownHeading = regexp.MustCompile(`^#{1,6}([ \t]|$)`)
 
 // RelatedKnowledge reads top-level "- REF" entries under the literal heading.
 // Keep the issue body intact for templates, checklists and legacy readers.
 func RelatedKnowledge(body string) (links []provider.Link, warnings []string) {
-	const heading = "## Related Knowledge"
-	if !strings.Contains(body, heading) {
-		return nil, nil
+	links, warnings, _ = scanRelatedKnowledge(body)
+	return links, warnings
+}
+
+func scanRelatedKnowledge(body string) (links []provider.Link, warnings []string, headingLine int) {
+	headingLine = -1
+	if !strings.Contains(body, relatedKnowledgeHeading) {
+		return nil, nil, headingLine
 	}
 	seen := make(map[provider.Ref]bool)
 	var inSection, inComment bool
@@ -49,7 +56,10 @@ func RelatedKnowledge(body string) (links []provider.Link, warnings []string) {
 			block = strings.TrimLeft(line, " ")
 		}
 		if markdownHeading.MatchString(block) {
-			inSection = line == heading
+			inSection = line == relatedKnowledgeHeading
+			if inSection && !inComment && headingLine < 0 {
+				headingLine = i
+			}
 			continue
 		}
 		value, bullet := strings.CutPrefix(line, "- ")
@@ -69,5 +79,38 @@ func RelatedKnowledge(body string) (links []provider.Link, warnings []string) {
 			seen[ref] = true
 		}
 	}
-	return links, warnings
+	return links, warnings, headingLine
+}
+
+// AppendRelatedKnowledge attaches a canonical ref without rewriting authored issue text.
+func AppendRelatedKnowledge(body string, ref provider.Ref) (string, error) {
+	if err := ref.Validate(); err != nil {
+		return "", err
+	}
+	links, _, headingLine := scanRelatedKnowledge(body)
+	for _, link := range links {
+		if *link.Ref == ref {
+			return body, nil
+		}
+	}
+	bullet := "- `" + ref.String() + "`"
+	var next string
+	if headingLine >= 0 {
+		lines := strings.SplitAfter(body, "\n")
+		before := strings.Join(lines[:headingLine+1], "")
+		after := strings.Join(lines[headingLine+1:], "")
+		next = strings.TrimSuffix(before, "\n") + "\n\n" + bullet + "\n" + after
+	} else {
+		if body != "" {
+			next = body + "\n\n"
+		}
+		next += relatedKnowledgeHeading + "\n\n" + bullet
+	}
+	links, _ = RelatedKnowledge(next)
+	for _, link := range links {
+		if *link.Ref == ref {
+			return next, nil
+		}
+	}
+	return "", fmt.Errorf("could not attach document %s to the issue Markdown; check for an unclosed code block or comment", ref)
 }
