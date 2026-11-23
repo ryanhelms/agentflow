@@ -270,8 +270,13 @@ endpoint in your user-owned `~/.devflow/mcp-companions.yml`. Run
 discovery headlessly. Approve installation and registration separately in
 VS Code, Cursor, Claude Code or Gemini CLI. [Provider MCP setup](docs/providers.md#register-a-provider-mcp-companion).
 
-FileSystem and Repository knowledge can read nested OKF v0.3 concepts alongside
-legacy Devflow documents. See [OKF knowledge bundles](docs/providers.md#read-an-okf-knowledge-bundle).
+FileSystem and Repository publish new knowledge documents as OKF v0.3 concepts
+by default. Use `devflow docs publish` with optional `--type`, `--description`
+and `--tags '["capacity"]'`, or pass `type`, `description` and `tags` to
+`devflow_docs_publish`. Set `knowledge_base.settings.format: legacy` to create
+legacy records. Search finds nested OKF concepts alongside legacy records.
+Updates keep each document’s existing format and preserve unknown OKF
+frontmatter. Converting a legacy record takes an explicit migration. [OKF knowledge bundles](docs/providers.md#read-an-okf-knowledge-bundle)
 
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review

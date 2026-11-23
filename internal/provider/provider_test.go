@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"testing"
@@ -111,5 +112,26 @@ func testTaskContract(t *testing.T, tasks Tasks) {
 	}
 	if !errors.Is(Unsupported("fake", "sprint reporting"), ErrUnsupported) {
 		t.Fatal("missing unsupported capability error")
+	}
+}
+
+func TestDocumentMetadataJSON(t *testing.T) {
+	for _, doc := range []Document{{}, {Type: "ADR", Description: "Decision", Tags: []string{"eng"}}} {
+		data, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(data, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for key, want := range map[string]string{"type": `"ADR"`, "description": `"Decision"`, "tags": `["eng"]`} {
+			if doc.Type == "" {
+				want = ""
+			}
+			if got := string(fields[key]); got != want {
+				t.Errorf("%s = %q, want %q", key, got, want)
+			}
+		}
 	}
 }

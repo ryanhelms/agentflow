@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 )
 
 // Knowledge manages document records in a caller-owned directory.
@@ -32,8 +33,21 @@ func NewOKFCompatibleKnowledge(instance, directory string) (*Knowledge, error) {
 	return k, err
 }
 
+// NewOKFKnowledge opens a mixed knowledge store. Format selects the encoding
+// for new documents. A replacement keeps the existing record's encoding.
+func NewOKFKnowledge(instance, directory, format string) (*Knowledge, error) {
+	if err := okf.ValidateFormat(format); err != nil {
+		return nil, err
+	}
+	k, err := NewOKFCompatibleKnowledge(instance, directory)
+	if err == nil {
+		k.format = format
+	}
+	return k, err
+}
+
 func document(r record) provider.Document {
-	return provider.Document{Ref: r.Ref, Title: r.Title, Body: r.body, Links: r.Links, Revision: r.revision}
+	return provider.Document{Ref: r.Ref, Title: r.Title, Type: r.concept.Type, Description: r.concept.Description, Tags: r.concept.Tags, Body: r.body, Links: r.Links, Revision: r.revision}
 }
 
 func (s *Knowledge) Get(ctx context.Context, ref provider.Ref) (provider.Document, error) {
@@ -66,8 +80,13 @@ func (s *Knowledge) Find(ctx context.Context, q provider.DocumentQuery) ([]provi
 }
 
 func (s *Knowledge) Publish(ctx context.Context, ref provider.Ref, draft provider.DocumentDraft, opts provider.WriteOptions) (provider.WriteResult, error) {
+	if s.format != "" || draft.Type != "" || draft.Description != "" || draft.Tags != nil {
+		if err := validatePublishText(ref, draft, opts.OperationID); err != nil {
+			return provider.WriteResult{}, err
+		}
+	}
 	r := record{header: header{
 		Version: 1, Kind: documentKind, Ref: ref, Title: draft.Title, Links: draft.Links,
-	}, body: draft.Body}
+	}, body: draft.Body, concept: okf.Concept{Type: draft.Type, Description: draft.Description, Tags: draft.Tags}}
 	return s.write(ctx, publish, r, opts)
 }

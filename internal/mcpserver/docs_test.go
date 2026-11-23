@@ -5,10 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
@@ -68,9 +71,17 @@ func TestRepositoryDocsTools(t *testing.T) {
 	args := map[string]any{"ref": ref, "title": "Quota", "body": "Capacity decision", "operation_id": "create"}
 	var pending app.Pending
 	call("devflow_docs_publish", args, &pending)
-	if pending.Status != "needs_confirmation" || pending.ConfirmToken == "" {
+	if pending.Status != "needs_confirmation" || pending.ConfirmToken == "" || pending.Summary.(map[string]any)["format"] != "okf" {
 		t.Fatalf("pending: %+v", pending)
 	}
+	args["type"], args["description"], args["tags"] = "Runbook", "GPU quota policy", []string{"gpu", "ops"}
+	args["confirm_token"] = pending.ConfirmToken
+	denied, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_docs_publish", Arguments: args})
+	if err != nil || !denied.IsError || !strings.Contains(denied.Content[0].(*mcp.TextContent).Text, policy.ErrToken.Error()) {
+		t.Fatalf("changed metadata accepted with original approval: %+v, %v", denied, err)
+	}
+	delete(args, "confirm_token")
+	call("devflow_docs_publish", args, &pending)
 	args["confirm_token"] = pending.ConfirmToken
 	var result provider.WriteResult
 	call("devflow_docs_publish", args, &result)
@@ -79,7 +90,8 @@ func TestRepositoryDocsTools(t *testing.T) {
 		Note  string
 	}
 	call("devflow_docs_search", map[string]any{"query": "capacity", "space": "engineering"}, &search)
-	if result.Status != provider.Applied || search.Note == "" || len(search.Pages) != 1 || search.Pages[0].Ref != ref || search.Pages[0].Revision != result.Revision {
+	if result.Status != provider.Applied || search.Note == "" || len(search.Pages) != 1 || search.Pages[0].Ref != ref || search.Pages[0].Revision != result.Revision ||
+		search.Pages[0].Type != "Runbook" || search.Pages[0].Description != "GPU quota policy" || !slices.Equal(search.Pages[0].Tags, []string{"gpu", "ops"}) {
 		t.Fatalf("publish %+v, search %+v", result, search)
 	}
 }

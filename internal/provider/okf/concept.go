@@ -1,4 +1,4 @@
-// Package okf reads Open Knowledge Format v0.3 concept documents.
+// Package okf reads and writes Open Knowledge Format v0.3 concept documents.
 package okf
 
 import (

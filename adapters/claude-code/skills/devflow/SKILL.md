@@ -59,8 +59,9 @@ For GitHub Issues, `devflow_context` resolves references in the issue's
 provider, scope and ID to read the full document.
 
 Use `devflow_docs_publish` to publish a managed document through its selected
-knowledge provider. Include its stable operation ID and ask for confirmation
-when the tool returns a preview.
+knowledge provider. Include its stable operation ID. FileSystem and Repository
+accept optional `type`, `description` and `tags` for OKF concepts. Include the
+selected format and document in the approval when the tool returns a preview.
 
 ### Configured provider setup
 

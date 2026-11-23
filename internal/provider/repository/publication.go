@@ -112,9 +112,10 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		if applyErr == nil && result.Status == provider.AlreadyApplied {
 			return result, nil
 		}
-		// A stale v1 review branch must never authorize publishing over an
-		// OKF document on the current base, even with a valid confirmation.
-		if a.okfKnowledge && (errors.Is(applyErr, provider.ErrUnsupported) || errors.Is(applyErr, filesystem.ErrKnowledgeScan)) {
+		// An unreadable base cannot validate a review. The compatible reader
+		// also cannot use a stale review branch to overwrite an OKF concept.
+		if a.okfKnowledge && (errors.Is(applyErr, filesystem.ErrKnowledgeScan) ||
+			(a.format == "" && errors.Is(applyErr, provider.ErrUnsupported))) {
 			return zero, applyErr
 		}
 		// An engineer may have removed the record or its receipt after

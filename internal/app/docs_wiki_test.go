@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +67,11 @@ func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 
 	before := docsGit(t, bare, "show-ref")
 	in := DocsPublishInput{Ref: ref, Title: "Quota update", Body: "New text", OperationID: "edit-quota", ExpectedRevision: pages[0].Revision}
+	withTags := in
+	withTags.Tags = []string{"capacity"}
+	if out, err := a.DocsPublish(ctx, withTags, ""); out != nil || !errors.Is(err, provider.ErrUnsupported) {
+		t.Fatalf("wiki metadata reached Git destination resolution: %v, %v", out, err)
+	}
 	if _, err := a.DocsPublish(ctx, in, ""); err == nil || !strings.Contains(err.Error(), "git rewrites the repository push destination") {
 		t.Fatalf("expected rejection before approval for the rewritten wiki URL: %v", err)
 	}

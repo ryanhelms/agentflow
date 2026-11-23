@@ -243,7 +243,7 @@ func TestRepositoryReadinessUsesSelectedTree(t *testing.T) {
 		ready          bool
 	}{
 		{"directory: records", "refs/heads/main:records", true},
-		{"directory: records, repository: .", "refs/heads/main:records", true},
+		{"directory: records, format: legacy, repository: .", "refs/heads/main:records", true},
 		{"directory: missing", "provide directory", false},
 		{"branch: unseen", "make branch", false},
 		{"directory: ../outside", "inside the Git tree", false},

@@ -106,7 +106,7 @@ knowledge_base: {provider: filesystem, settings: {root: docs}}
 		t.Fatalf("PR body %q, %v", body, err)
 	}
 	// Asana preserves link metadata in context even if the record is missing.
-	a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemSettings).Root = t.TempDir()
+	a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemKnowledgeSettings).Root = t.TempDir()
 	tc, err = a.Context(ctx, "101")
 	if err != nil || len(tc.Warnings) != 1 || len(tc.Docs) != 1 || tc.Docs[0].ID != "filesystem/team/design" || tc.Docs[0].Title != "design" {
 		t.Fatalf("unresolved Asana link: %+v, %v", tc, err)
