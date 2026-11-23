@@ -75,10 +75,17 @@ site fonts.
 docker compose up --build --wait website
 ```
 
-Open [the local website](http://127.0.0.1:5173). Edit the HTML, JavaScript, or
-CSS in `website/src/` with your usual editor. Vite applies CSS and JavaScript
-updates in the open tab and refreshes the page for HTML edits. The install
-commands and documentation version index live in `website/src/main.js`.
+Open [the local website](http://127.0.0.1:5173). Edit React components and CSS in
+`website/src/` with your usual editor. Vite uses React Fast Refresh and reloads
+the page for HTML edits. Installer commands live in `website/src/install.js`.
+The release index and searchable summaries live in `website/src/docs-data.js`.
+
+The site uses the Nscale design system's Dashboard and Workbench page
+templates, shared React components, and theme tokens. The published archives
+in `website/vendor/` are pinned in the npm lockfile so local Docker builds
+can install them without GitHub Packages credentials. When updating the
+design system, obtain the published archives, update the file dependencies,
+then regenerate and commit the lockfile. [Nscale design system](https://github.com/nscaledev/design-system)
 
 | Task | Command |
 | --- | --- |
@@ -89,7 +96,7 @@ commands and documentation version index live in `website/src/main.js`.
 
 Source edits work with either startup command. With the detached server, rerun
 `docker compose up --build --wait website` after changing the package files,
-Vite configuration, or Dockerfile. To add a dependency, use npm from
+package archives, Vite configuration, or Dockerfile. To add a dependency, use npm from
 `website/` and include the updated `package-lock.json` with the change.
 
 Set `DEVFLOW_WEBSITE_PORT=5174` in your shell or a root Compose `.env` file to

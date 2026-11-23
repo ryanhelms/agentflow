@@ -26,6 +26,8 @@ services:
         - action: rebuild
           path: ./website/package-lock.json
         - action: rebuild
+          path: ./website/vendor
+        - action: rebuild
           path: ./website/vite.config.js
         - action: rebuild
           path: ./website/Dockerfile

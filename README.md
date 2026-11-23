@@ -606,7 +606,8 @@ scripts/                  e2e test, blueprint build, agent-docs check
 To view the launch and documentation website locally, run
 `docker compose up --build --wait website` from the repository root and open
 [the local website](http://127.0.0.1:5173). Edit `website/src/` to see changes
-in the browser. [Website development guide](CONTRIBUTING.md#website)
+in the browser. The site uses Nscale's shared page layouts, components, and
+tokens. [Website development guide](CONTRIBUTING.md#website)
 
 ```bash
 make check     # vet, race tests, golangci-lint, shellcheck, actionlint, agent docs
