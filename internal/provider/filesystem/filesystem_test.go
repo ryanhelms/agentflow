@@ -423,8 +423,18 @@ func TestInterruptedWrite(t *testing.T) {
 		time.Sleep(time.Minute)
 		return
 	}
+	t.Run("legacy", func(t *testing.T) { interruptedPublish(t, helper, docsAt) })
+	t.Run("okf", func(t *testing.T) {
+		interruptedPublish(t, helper, func(t *testing.T, dir string) *Knowledge {
+			return writer(t, dir, "okf")
+		})
+	})
+}
+
+func interruptedPublish(t *testing.T, helper string, open func(*testing.T, string) *Knowledge) {
+	t.Helper()
 	dir := t.TempDir()
-	a := docsAt(t, dir)
+	a := open(t, dir)
 	ref := provider.Ref{Instance: instance, Scope: "scope", ID: "doc"}
 	first, err := a.Publish(t.Context(), ref, provider.DocumentDraft{Title: "Before"}, provider.WriteOptions{})
 	if err != nil {
@@ -465,7 +475,7 @@ func TestInterruptedWrite(t *testing.T) {
 	if err := cmd.Wait(); err == nil {
 		t.Fatal("expected interrupted process")
 	}
-	b := docsAt(t, dir)
+	b := open(t, dir)
 	if got, err := b.Get(ctx, ref); err != nil || got.Title != "Before" || got.Revision != first.Revision {
 		t.Fatalf("interrupted original = %+v, %v", got, err)
 	}

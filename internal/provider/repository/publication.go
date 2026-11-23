@@ -113,7 +113,7 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		}
 		// A stale v1 review branch must never authorize publishing over an
 		// OKF document on the current base, even with a valid confirmation.
-		if errors.Is(applyErr, provider.ErrUnsupported) {
+		if a.format == "" && errors.Is(applyErr, provider.ErrUnsupported) {
 			return zero, applyErr
 		}
 		// An engineer may have removed the record or its receipt after

@@ -57,7 +57,7 @@ func parseKnowledge(instance, name string, data []byte) (record, error) {
 	r := record{
 		header: header{Version: 1, Kind: documentKind, Title: concept.Title,
 			Ref: provider.Ref{Instance: instance, Scope: scope, ID: id}},
-		body: concept.Body, revision: digest(data), okfConcept: true,
+		body: concept.Body, revision: digest(data), concept: concept,
 	}
 	if strings.TrimSpace(r.Title) == "" {
 		r.Title = path.Base(name)
@@ -78,6 +78,14 @@ func parseKnowledge(instance, name string, data []byte) (record, error) {
 				return record{}, errors.New("x-devflow-ref requires exactly scope and id")
 			}
 			r.Ref.Scope, r.Ref.ID = fields["scope"], fields["id"]
+			r.explicitRef = true
+		case "x-devflow-links":
+			if value.Kind != yaml.SequenceNode || value.ShortTag() != "!!seq" {
+				return record{}, errors.New("x-devflow-links requires a sequence")
+			}
+			if err := value.Decode(&r.Links); err != nil {
+				return record{}, fmt.Errorf("x-devflow-links: %w", err)
+			}
 		case "x-devflow-operations":
 			r.Operations, err = extensionStrings(value)
 			if err != nil {
