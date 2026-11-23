@@ -1,6 +1,6 @@
 {
   "name": "devflow",
-  "version": "0.46.1",
+  "version": "0.47.0",
   "description": "Manage Devflow in a project and use its delivery workflow tools.",
   "skills": "./skills/",
   "mcpServers": "./adapters/codex/plugin-mcp.json",
