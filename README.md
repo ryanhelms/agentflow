@@ -304,6 +304,8 @@ state change. See the [task template configuration](docs/providers.md#task-templ
 
 New issues created through devflow in this repository use the
 [`engineering-task` template](.devflow/task-templates.json).
+The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
+knowledge migration, and full repository workflow.
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.
