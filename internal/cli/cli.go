@@ -41,6 +41,7 @@ const usage = `devflow links git work to your configured task, knowledge and cod
 Usage: devflow <command> [flags]
 
 Setup
+  ui [--no-open] [--port N] [directory]   open the repository console on loopback
   init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
   init --guidance-only           refresh the managed AGENTS.md block
   remove [--dry-run] [--force] [--keep-releases]
@@ -195,7 +196,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "notify", "setup", "secops", "update", "version", "help":
+	case "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -203,6 +204,8 @@ func quietCommand(cmd string) bool {
 
 func run(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
+	case "ui":
+		return runUI(ctx, args)
 	case "mcp":
 		fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 		client := fs.String("client", "", "calling client name")

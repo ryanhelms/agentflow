@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>devflow · Repository console</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="layout">
+    <aside class="rail">
+      <div class="product"><span class="brand-mark" aria-hidden="true"></span><span>devflow</span></div>
+      <nav aria-label="Repository console">
+        <a href="#overview" data-page="overview" aria-current="page"><span class="nav-icon ico-grid" aria-hidden="true"></span>Overview</a>
+        <a href="#providers" data-page="providers"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
+        <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
+        <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
+      </nav>
+      <div class="rail-footer"><span class="local-mark" aria-hidden="true"></span>Local console <span id="rail-version"></span></div>
+    </aside>
+    <div class="workspace">
+      <header class="context">
+        <div class="breadcrumb"><span>Repository</span><span aria-hidden="true">/</span><strong id="top-repo">Loading…</strong></div>
+        <button id="refresh" class="button secondary" type="button">Refresh checkout</button>
+      </header>
+      <main id="main" tabindex="-1">
+        <p id="status" class="notice" role="status">Opening the checkout…</p>
+        <section id="page-overview" aria-labelledby="overview-title">
+          <div class="page-heading"><h1 id="overview-title">Overview</h1></div>
+          <section class="checkout" aria-labelledby="checkout-title">
+            <div class="section-heading"><h2 id="checkout-title">Checkout</h2><span class="pill" id="working-state">Loading…</span></div>
+            <div class="checkout-name" id="checkout-name">—</div>
+            <code class="root-path" id="root-path">—</code>
+            <dl id="repo-metadata" class="metadata"></dl>
+          </section>
+          <div class="overview-grid">
+            <section class="panel" aria-labelledby="attention-title">
+              <div class="section-heading"><h2 id="attention-title">Needs attention</h2><button id="activity" class="button secondary small" type="button">Check activity</button></div>
+              <p class="muted" id="activity-note"></p><ul class="rows" id="attention-list"></ul>
+            </section>
+            <section class="panel" aria-labelledby="routing-title">
+              <div class="section-heading"><h2 id="routing-title">Provider roles</h2><a href="#providers">Manage</a></div>
+              <ul class="rows" id="routing-list"></ul>
+            </section>
+          </div>
+        </section>
+        <section id="page-providers" aria-labelledby="providers-title" hidden>
+          <div class="page-heading"><h1 id="providers-title">Providers</h1><p>Inspect the active provider and the settings used by each role.</p></div>
+          <section class="panel" aria-labelledby="connections-title">
+            <div class="section-heading"><h2 id="connections-title">Checkout connections</h2><button id="check-connections" class="button secondary small" type="button" disabled>Check connections</button></div>
+            <p id="connection-status" class="muted" role="status">Check the providers selected in the configuration on disk.</p>
+            <details id="connection-results" hidden><summary>Connection details</summary><ul class="rows" id="connection-list"></ul></details>
+          </section>
+          <p id="provider-error" class="notice error" role="status" hidden></p>
+          <div class="provider-layout">
+            <div class="panel role-panel"><h2>Roles</h2><div id="roles" class="role-list"></div></div>
+            <div class="panel provider-main">
+              <div class="section-heading"><div><h2 id="role-title">Provider</h2><span class="muted code wrap" id="role-contract"></span></div></div>
+              <div id="role-detail" hidden>
+                <form id="select-provider" class="form-row">
+                  <label>Selected provider<select id="provider-choice"></select></label>
+                  <button type="submit" id="stage-provider" class="button secondary">Stage switch</button>
+                </form>
+                <p id="switch-note" class="notice" hidden>Switching replaces inline settings for this role. Existing records stay with their current provider.</p>
+                <div class="settings-heading"><h3>Effective settings</h3><label class="search"><span class="sr-only">Filter effective settings</span><input type="search" id="setting-filter" placeholder="Filter settings"></label></div>
+                <div id="settings-list" class="settings"></div>
+              </div>
+              <p id="compose-message" class="notice error" role="status" hidden></p>
+              <p id="role-empty" class="muted">No provider data available.</p>
+            </div>
+          </div>
+        </section>
+        <section id="page-configuration" aria-labelledby="configuration-title" hidden>
+          <div class="page-heading"><h1 id="configuration-title">Configuration</h1><p>Edit a repository file and preview its effect before publishing.</p></div>
+          <p id="config-error" class="notice error" role="status" hidden></p>
+          <section class="panel editor" aria-labelledby="source-title">
+            <div class="section-heading"><h2 id="source-title">Source editor</h2><span class="tag" id="draft-state"></span></div>
+            <label>Configuration file<select id="file"></select></label>
+            <p class="muted" id="file-reason" hidden></p>
+            <label class="sr-only" for="source">File contents</label>
+            <textarea id="source" class="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="file-reason"></textarea>
+            <details id="core-details" hidden><summary>Effective repository settings</summary><pre class="brief" id="core-values"></pre></details>
+            <div id="edit-controls">
+              <div class="fields">
+                <label>PR and commit title<input type="text" id="commit-title" value="chore: update devflow settings" autocomplete="off" maxlength="64"></label>
+                <label>Task reference (optional)<input id="task-ref" type="text" autocomplete="off"></label>
+                <label>Delivery<select id="delivery"><option value="apply">Apply to default branch</option><option value="draft">Open a draft pull request</option></select></label>
+              </div>
+              <div class="actions"><button class="button primary" id="preview" type="button" disabled>Preview change</button><button class="button secondary" id="discard" type="button" disabled>Discard edits</button></div>
+              <p id="edit-message" class="notice" role="status" hidden></p>
+            </div>
+          </section>
+          <section id="review" class="panel review" aria-labelledby="review-title" hidden>
+            <div class="section-heading"><h2 id="review-title" tabindex="-1">Review change</h2></div>
+            <p id="review-summary"></p><div id="review-messages"></div>
+            <h3>Effective setting changes</h3><div id="change-list"></div>
+            <details id="patch" hidden>
+              <summary>Source patch</summary><pre class="brief" id="patch-text"></pre>
+              <button id="download-patch" class="button secondary small" type="button">Download patch</button>
+            </details>
+            <details id="source-diff"><summary>Compare source</summary><div class="comparison"><div><h4>Current</h4><pre id="before"></pre></div><div><h4>Proposed</h4><pre id="after"></pre></div></div></details>
+            <div class="actions"><button id="publish" class="button primary" type="button">Confirm and apply</button><button id="back-to-edit" class="button secondary" type="button">Back to editor</button></div>
+            <p id="publish-message" class="notice" role="status" hidden></p>
+          </section>
+          <div id="published" class="notice" role="status" hidden></div>
+        </section>
+        <section id="page-handoff" aria-labelledby="handoff-title" hidden>
+          <div class="page-heading"><h1 id="handoff-title">Handoff</h1><p>Share the current checkout context with another developer or agent.</p></div>
+          <div class="panel"><div class="section-heading"><h2>Repository brief</h2><button id="copy-handoff" class="button secondary small" type="button">Copy brief</button></div>
+            <pre id="handoff-text" class="brief"></pre><p id="copy-message" class="notice" role="status" hidden></p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <dialog id="setting-dialog" aria-labelledby="setting-dialog-title">
+    <form id="setting-form">
+      <div class="section-heading"><h2 id="setting-dialog-title">Edit setting</h2><button class="button secondary small" type="button" id="close-setting">Close</button></div>
+      <p id="setting-name" class="code wrap"></p>
+      <label id="setting-value-label">Repository override <span id="typed-control"></span></label>
+      <label id="setting-null-label" class="inline-check" hidden><input type="checkbox" id="setting-null">Set an explicit null</label>
+      <p id="setting-help" class="muted"></p><p id="setting-message" class="notice error" role="status" hidden></p>
+      <div class="actions"><button id="stage-setting" type="submit" class="button primary">Stage value</button><button id="inherit-setting" class="button secondary" type="button">Remove inline override</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

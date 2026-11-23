@@ -1,0 +1,160 @@
+:root {
+  color-scheme: light;
+  --midnight: #040e27; --nav-panel: #0a1734; --blue: #0f41f3; --green: #00df99;
+  --ink: #13203b; --muted: #526178; --line: #d9e2ee; --frost: #f0f5fc;
+  --paper: #fff; --radius: 4px; --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif; color: var(--ink); background: #f6f8fb;
+}
+* {box-sizing: border-box}
+body {margin: 0; line-height: 1.5}
+[hidden] {display: none !important}
+a {color: #103ab6; text-underline-offset: .18em}
+button, input, select, textarea {font: inherit}
+button, a, input, textarea, select, summary {border-radius: var(--radius)}
+button, select, summary {cursor: pointer}
+:focus-visible {outline: 3px solid #4168ec; outline-offset: 3px}
+h1, h2, h3, h4, p, dl, pre, ul {margin: 0}
+h1 {font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.1; letter-spacing: -.055em; font-weight: 650}
+h2 {font-size: 1.16rem; line-height: 1.35; letter-spacing: -.024em; font-weight: 650}
+h3 {font-size: 1rem; font-weight: 650}
+h4 {font-size: .83rem}
+code, pre, .code, .source {font-family: var(--mono)}
+.wrap {overflow-wrap: anywhere}
+.muted, .page-heading p {color: var(--muted)}
+.skip {position: absolute; z-index: 5; top: -12rem; left: 1rem; background: white; padding: .5rem 1rem}
+.skip:focus {top: .5rem}
+.sr-only {position: absolute; height: 1px; width: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap}
+.layout {display: grid; grid-template-columns: 13.5rem minmax(0,1fr); min-height: 100vh}
+.rail {align-self: start; background: var(--midnight); color: #fdfff8; min-height: 100vh; position: sticky; top: 0; display: flex; flex-direction: column}
+.product {display: flex; align-items: center; gap: .7rem; padding: 2rem 1.5rem 2.6rem; font-size: 1.67rem; font-weight: 700; letter-spacing: -.07em}
+.brand-mark {width: 1.7rem; height: 1.65rem; border: .35rem solid var(--green); border-top-width: 0; transform: skewY(-15deg); position: relative}
+.brand-mark::after {position: absolute; content: ""; left: .24rem; top: .28rem; width: .55rem; height: .35rem; background: var(--green)}
+nav {display: grid; gap: .35rem; padding: 0 .75rem}
+nav a {text-decoration: none; color: #c9d5ed; display: flex; align-items: center; gap: .9rem; padding: .7rem .95rem; font-size: .94rem; font-weight: 525}
+nav a:hover {background: var(--nav-panel); color: white}
+nav a[aria-current=page] {background: #182951; color: white; box-shadow: inset 3px 0 var(--green)}
+.nav-icon {width: .9rem; height: .9rem; display: inline-block; position: relative; flex-shrink: 0; border: 1.5px solid currentColor; border-radius: 2px}
+.ico-grid {background: linear-gradient(currentColor,currentColor) center/1px 100% no-repeat, linear-gradient(currentColor,currentColor) center/100% 1px no-repeat}
+.ico-roles {transform: rotate(45deg); width: .73rem; height: .73rem; margin: 0 .085rem}
+.ico-roles::after {content: ""; position: absolute; border: 1px solid currentColor; inset: 2px}
+.ico-file {height: 1rem; width: .78rem; margin: 0 .06rem}
+.ico-file::after, .ico-handoff::after {content: ""; position: absolute; border-top: 1px solid; border-bottom: 1px solid; left: 2px; right: 2px; top: 3px; height: 3px}
+.ico-handoff {height: .72rem; box-shadow: -2px 2px var(--midnight), -3px 3px currentColor}
+.rail-footer {margin: auto 1.35rem 1.35rem; color: #b9c9e7; display: flex; align-items: center; gap: .45rem; font-size: .78rem}
+.local-mark {width: .45rem; height: .45rem; background: var(--green); border-radius: 50%}
+#rail-version {margin-left: auto; font-family: var(--mono); overflow-wrap: anywhere; min-width: 0}
+.workspace {min-width: 0}
+.context {min-height: 4.3rem; padding: .7rem clamp(1rem,4vw,3.5rem); background: var(--paper); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: .75rem}
+.breadcrumb {display: flex; flex-wrap: wrap; gap: .55rem; color: var(--muted); align-items: center; font-size: .88rem; min-width: 0}
+.breadcrumb strong {color: var(--ink); overflow-wrap: anywhere}
+main {max-width: 96rem; margin: 0 auto; padding: clamp(1rem,3.5vw,3rem) clamp(1rem,4vw,3.5rem) 4rem}
+.page-heading {margin-bottom: 1.55rem}
+.page-heading p {margin-top: .45rem}
+.panel, .checkout {padding: clamp(1rem,2.1vw,1.65rem); background: var(--paper); border: 1px solid var(--line); min-width: 0}
+.section-heading, .settings-heading, .actions, .form-row {display: flex; gap: .8rem; align-items: center; flex-wrap: wrap}
+.section-heading, .settings-heading {justify-content: space-between; margin-bottom: 1.12rem}
+.section-heading a {font-size: .85rem; font-weight: 600}
+.checkout {border-top: 3px solid var(--blue); background: linear-gradient(104deg, #fff 45%, #edf3ff)}
+.checkout-name {font-size: clamp(1.4rem,3vw,2rem); letter-spacing: -.04em; font-weight: 600; overflow-wrap: anywhere}
+.root-path {color: var(--muted); display: block; overflow-wrap: anywhere; margin-top: .25rem; font-size: .84rem}
+.metadata {border-top: 1px solid var(--line); margin-top: 1.25rem; padding-top: .95rem; display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .8rem 1rem}
+.metadata dt {color: var(--muted); font-size: .78rem}
+.metadata dd {margin: .2rem 0 0; font-family: var(--mono); font-size: .88rem; overflow-wrap: anywhere}
+.overview-grid {margin-top: 1.1rem; display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: 1.1rem; align-items: start}
+.rows {list-style: none; padding: 0}
+.rows li {padding: .65rem 0; border-top: 1px solid var(--line); overflow-wrap: anywhere}
+.rows li:first-child {border-top: none}
+.route, .attention-item {display: flex; flex-wrap: wrap; gap: .25rem .8rem; justify-content: space-between; align-items: baseline}
+.route button {background: none; border: none; color: #103ab6; padding: 0; font-size: .93rem; text-align: left}
+.route button:hover {text-decoration: underline}
+.route code, .field-type, .tag, .pill {font-size: .77rem}
+.attention-item strong {font-size: .95rem}
+.attention-detail {color: var(--muted); margin-top: .2rem; font-size: .9rem}
+.tag, .pill {border: 1px solid var(--line); padding: .14rem .55rem; background: var(--frost); color: #344965; font-weight: 600}
+.pill {border-radius: 2rem}
+.pill.changed {background: #fff2da; color: #815112; border-color: #edd9b3}
+.button {border: 1px solid transparent; padding: .55rem .9rem; font-size: .9rem; font-weight: 600; align-self: center}
+.button.primary {color: white; background: var(--blue)}
+.button.primary:hover:enabled {background: #0c34c2}
+.button.secondary {color: #22344d; background: white; border-color: #becddd}
+.button.secondary:hover:enabled {background: var(--frost)}
+.button.small {padding: .35rem .65rem; font-size: .82rem}
+button:disabled, select:disabled {opacity: .55; cursor: default}
+.notice {background: #eaf1fe; border-left: 3px solid #4764b6; color: #233f6e; padding: .7rem .85rem; overflow-wrap: anywhere; font-size: .93rem; margin-bottom: .9rem}
+.notice.error {background: #fff0ec; color: #872b20; border-color: #ba4938}
+.notice:last-child {margin: .9rem 0 0}
+#activity-note {font-size: .93rem; margin: 0 0 .45rem}
+.provider-layout {display: grid; grid-template-columns: minmax(10rem, .65fr) minmax(0,2fr); gap: 1.1rem; align-items: start}
+.role-panel {padding: 1rem}
+.role-panel h2 {padding: 0 .45rem .65rem}
+.role-list {display: grid; gap: .15rem}
+.role-list button {border: none; border-left: 2px solid transparent; text-align: left; background: transparent; padding: .53rem .55rem; color: var(--ink); font-size: .9rem}
+.role-list button span {display: block; font: .73rem var(--mono); color: var(--muted); margin-top: .17rem}
+.role-list button:hover, .role-list button[aria-pressed=true] {background: var(--frost)}
+.role-list button[aria-pressed=true] {border-left-color: var(--blue); color: #123ba5; font-weight: 650}
+label {display: grid; gap: .35rem; font-size: .88rem; font-weight: 600; color: #34445d}
+input, select, textarea {background: #fff; color: var(--ink); border: 1px solid #adbed1; padding: .52rem .63rem; width: 100%; min-width: 0}
+.form-row {align-items: end; margin-bottom: 1rem}
+.form-row .button {align-self: end}
+.form-row label {flex: 1; min-width: 10rem}
+.settings-heading {padding-top: 1.15rem; border-top: 1px solid var(--line)}
+.search {max-width: 13rem}
+.setting {border-top: 1px solid var(--line); padding: .75rem 0}
+.setting-top {display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap}
+.setting-top strong {overflow-wrap: anywhere; font: 600 .9rem var(--mono)}
+.field-type {color: var(--muted)}
+.setting .value {overflow-wrap: anywhere; white-space: pre-wrap; margin: .28rem 0; font: .88rem/1.55 var(--mono)}
+.setting .source-line, .setting details {font-size: .8rem; color: var(--muted); overflow-wrap: anywhere}
+.setting .button {margin-left: auto}
+details {margin-top: .45rem}
+details summary {color: #23458d; font-weight: 600}
+.history {margin: .4rem 0 0; padding-left: 1.2rem}
+#role-contract {display: block; margin-top: .25rem; font-size: .8rem}
+#source {margin: .85rem 0; display: block; resize: vertical; width: 100%; min-height: 20rem; line-height: 1.55; font-size: .88rem; padding: .85rem; tab-size: 2; background: #f8faff; white-space: pre; overflow: auto}
+#file-reason {margin-top: .6rem}
+.fields {display: grid; grid-template-columns: 2fr 1fr; gap: 1rem}
+.actions {margin-top: 1rem}
+.review, #published {margin-top: 1rem}
+.review h3 {margin: 1.1rem 0 .45rem}
+.review details {margin-top: 1.2rem}
+.review .actions {border-top: 1px solid var(--line); padding-top: 1rem}
+.change {border-top: 1px solid var(--line); padding: .7rem 0}
+.change strong {display: block; margin-bottom: .3rem; overflow-wrap: anywhere}
+.change code {white-space: pre-wrap; overflow-wrap: anywhere; display: block; padding: .2rem .4rem; font-size: .82rem}
+.removed {color: #7c3029; background: #fff3f1}
+.added {color: #145a43; background: #e8f8ee}
+.comparison {display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .7rem}
+.comparison > div {min-width: 0}
+.comparison pre, .brief {font-size: .85rem; line-height: 1.6; padding: .9rem; background: #f4f7fb; border: 1px solid var(--line)}
+.comparison pre {max-height: 25rem; overflow: auto}
+.brief {white-space: pre-wrap; overflow-wrap: anywhere}
+dialog {border: 1px solid var(--line); padding: 1.45rem; max-width: min(90vw,35rem); width: 100%; color: var(--ink)}
+dialog::backdrop {background: rgb(4 14 39 / .45)}
+#setting-name {margin: .4rem 0 .8rem}
+.setting-input {font-family: var(--mono); min-height: 5.5rem}
+#setting-help {margin: .6rem 0; font-size: .85rem}
+@media (max-width: 64rem) {.layout {grid-template-columns: 11.25rem minmax(0,1fr)} .overview-grid {grid-template-columns: 1fr} .provider-layout {grid-template-columns: minmax(9.5rem,.65fr) minmax(0,2fr)}}
+@media (max-width: 48rem) {
+  .layout {display: block}
+  .rail {position: static; min-height: 0}
+  .product {padding: .8rem 1rem .5rem; font-size: 1.45rem}
+  .brand-mark {width: 1.3rem; height: 1.2rem; border-width: 0 .24rem .24rem}
+  nav {display: flex; flex-wrap: wrap; gap: .1rem; padding: .2rem .65rem .55rem}
+  nav a {padding: .38rem .55rem; font-size: .86rem}
+  .nav-icon,.rail-footer {display: none}
+  .context {min-height: 3.5rem}
+  .provider-layout {grid-template-columns: 1fr}
+  .role-list {grid-template-columns: repeat(auto-fit,minmax(8.5rem,1fr))}
+  .fields,.comparison {grid-template-columns: 1fr}
+}
+@media (max-width: 28rem) {.breadcrumb>span {display: none} .context .button {font-size: .79rem} .settings-heading {align-items: stretch} .search {max-width: none; width: 100%}}
+.reply-form {display: grid; justify-items: start; gap: .5rem; margin: .6rem 0}
+.reply-form label, #typed-control {width: 100%}
+.reply-form textarea {resize: vertical}
+.inline-check {display: flex; align-items: center; gap: .5rem; margin-top: .5rem}
+.inline-check input {width: auto}
+#core-details {margin-bottom: 1rem}
+#patch-text {max-height: 26rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere}
+#core-values {max-height: 20rem; overflow: auto}
+
+#review-messages .notice, #published p {white-space: pre-line}

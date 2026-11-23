@@ -4,8 +4,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -129,7 +131,33 @@ func LoadRepo(root string) (*Repo, bool, error) {
 	if err != nil {
 		return nil, found, err
 	}
-	providers, err := resolveProviders(c, extra, root)
+	return resolveRepo(c, extra, found, func(d *definitions, schemas map[string]roleSchema) error {
+		return d.loadDir(LayerProject, filepath.Join(root, ".devflow", "providers"), ".devflow/providers", schemas)
+	}, false)
+}
+
+// InspectRepo resolves a snapshot of the repository inputs against the current
+// release and personal layers. A nil content represents an absent config.
+// No candidate data is written to the working tree or used to call a provider.
+func InspectRepo(content []byte, projectFiles map[string][]byte) (*Repo, bool, error) {
+	c, extra, found, err := parseRepoFile(content)
+	if err != nil {
+		return nil, found, err
+	}
+	return resolveRepo(c, extra, found, func(d *definitions, schemas map[string]roleSchema) error {
+		for _, name := range slices.Sorted(maps.Keys(projectFiles)) {
+			src := Source{Layer: LayerProject, File: name}
+			if err := d.add(src, projectFiles[name], schemas); err != nil {
+				return &DefinitionError{Source: src, Err: err}
+			}
+			d.files = append(d.files, src)
+		}
+		return nil
+	}, true)
+}
+
+func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project definitionLoader, trace bool) (*Repo, bool, error) {
+	providers, err := resolveProviders(c, extra, project, trace)
 	var defErr *DefinitionError
 	if errors.As(err, &defErr) {
 		return nil, found, err
@@ -149,15 +177,19 @@ func LoadRepoCore(root string) (*Repo, bool, error) {
 }
 
 func loadRepoFile(root string) (*Repo, map[string]yaml.Node, bool, error) {
+	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, false, err
+	}
+	return parseRepoFile(b)
+}
+
+func parseRepoFile(b []byte) (*Repo, map[string]yaml.Node, bool, error) {
 	var file struct {
 		Repo  `yaml:",inline"`
 		Extra map[string]yaml.Node `yaml:",inline"`
 	}
-	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
-	found := err == nil
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, false, err
-	}
+	found := b != nil
 	if found {
 		if err := yaml.Unmarshal(b, &file); err != nil {
 			return nil, nil, true, fmt.Errorf(".devflow/config.yml: %w", err)

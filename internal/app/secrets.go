@@ -65,3 +65,14 @@ func scanDiff(diff string) []SecretHit {
 	}
 	return hits
 }
+
+// ContainsSecret checks text before it is sent to the browser or reviewed for publication.
+// A commit's allow-secret annotation does not grant permission to display a credential.
+func ContainsSecret(text string) bool {
+	for _, p := range secretPatterns {
+		if p.re.MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
