@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.46.0](https://github.com/nscaledev/devflow/compare/v0.45.0...v0.46.0) - 2026-11-23
+
+### Features
+
+- scope and share action approvals across agents (#105) ([8aeb8c5](https://github.com/nscaledev/devflow/commit/8aeb8c56c2d16a1923fae4e6fdf5ff4edfabb068))
+
 ## [0.45.0](https://github.com/nscaledev/devflow/compare/v0.44.1...v0.45.0) - 2026-11-23
 
 ### Features
