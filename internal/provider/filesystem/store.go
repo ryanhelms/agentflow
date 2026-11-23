@@ -145,8 +145,16 @@ func (s *store) walk(ctx context.Context, visit func(string) error) error {
 	return nil
 }
 
+var errRecordReplaced = errors.New("record replaced while opening")
+
 func (s *store) read(name string) (record, error) {
-	return s.readFrom(s.root, name, name)
+	// An atomic publish may replace the file between Lstat and OpenFile.
+	// Retry from the checked path rather than accepting a different inode.
+	r, err := s.readFrom(s.root, name, name)
+	for attempt := 0; attempt < 3 && errors.Is(err, errRecordReplaced); attempt++ {
+		r, err = s.readFrom(s.root, name, name)
+	}
+	return r, err
 }
 
 func (s *store) readFrom(dir *os.Root, file, name string) (record, error) {
@@ -168,8 +176,11 @@ func (s *store) readFrom(dir *os.Root, file, name string) (record, error) {
 	if err != nil {
 		return record{}, err
 	}
-	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
-		return record{}, fmt.Errorf("file %q changed while opening: %w", name, provider.ErrConflict)
+	if !opened.Mode().IsRegular() {
+		return record{}, fmt.Errorf("%q must be a regular file: %w", name, provider.ErrConflict)
+	}
+	if !os.SameFile(info, opened) {
+		return record{}, fmt.Errorf("file %q: %w: %w", name, errRecordReplaced, provider.ErrConflict)
 	}
 	data, err := io.ReadAll(f)
 	if err != nil {

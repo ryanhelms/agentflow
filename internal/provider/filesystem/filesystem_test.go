@@ -488,8 +488,27 @@ func interruptedPublish(t *testing.T, helper string, open func(*testing.T, strin
 }
 
 func TestReaderSeesWholeRevisions(t *testing.T) {
-	dir := t.TempDir()
-	writer, reader := docsAt(t, dir), docsAt(t, dir)
+	for _, format := range []string{"legacy", "okf"} {
+		t.Run(format, func(t *testing.T) {
+			dir := t.TempDir()
+			open := func() *Knowledge {
+				if format == "legacy" {
+					return docsAt(t, dir)
+				}
+				store, err := NewOKFKnowledge(instance, dir, format)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = store.Close() })
+				return store
+			}
+			checkWholeRevisions(t, open(), open())
+		})
+	}
+}
+
+func checkWholeRevisions(t *testing.T, writer, reader *Knowledge) {
+	t.Helper()
 	ctx := t.Context()
 	ref := provider.Ref{Instance: instance, Scope: "scope", ID: "shared"}
 	bodies := []string{strings.Repeat("first\n", 8192), strings.Repeat("second\n", 8192)}
