@@ -75,6 +75,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/readiness", s.readiness)
 	mux.HandleFunc("POST /api/reply", s.replyToWorker)
 	mux.HandleFunc("POST /api/compose", s.compose)
+	mux.HandleFunc("POST /api/document", s.document)
+	mux.HandleFunc("POST /api/document/edit", s.editDocument)
 	mux.HandleFunc("POST /api/preview", s.preview)
 	mux.HandleFunc("POST /api/publish", s.publish)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

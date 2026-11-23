@@ -58,8 +58,8 @@ func EditSetting(content, role, path string, value json.RawMessage, inherit bool
 		if !json.Valid(value) {
 			return "", errors.New("setting value must be valid JSON")
 		}
-		var val yaml.Node
-		if err := yaml.Unmarshal(value, &val); err != nil {
+		val, _, err := readDocument(string(value), "json")
+		if err != nil {
 			return "", err
 		}
 		replacement = *val.Content[0]
@@ -109,6 +109,9 @@ func EditSetting(content, role, path string, value json.RawMessage, inherit bool
 		}
 		if oldID != nextID {
 			if at := field(parent, "settings"); at >= 0 {
+				if linkedNode(parent.Content[at+1]) {
+					return "", errors.New("edit linked YAML anchors in the source editor")
+				}
 				parent.Content = slices.Delete(parent.Content, at, at+2)
 				idx = field(parent, key)
 			}
@@ -116,15 +119,21 @@ func EditSetting(content, role, path string, value json.RawMessage, inherit bool
 	}
 	switch {
 	case inherit:
+		if linkedNode(parent.Content[idx+1]) {
+			return "", errors.New("edit linked YAML anchors in the source editor")
+		}
 		parent.Content = slices.Delete(parent.Content, idx, idx+2)
 	case idx >= 0:
 		old := parent.Content[idx+1]
-		if old.Kind == yaml.AliasNode || old.Anchor != "" {
-			return "", errors.New("edit the anchored setting in the source editor")
+		if !browserNumbers(old) {
+			return "", errors.New("a number exceeds browser precision; edit this field in the source editor")
 		}
-		replacement.HeadComment = old.HeadComment
-		replacement.LineComment = old.LineComment
-		replacement.FootComment = old.FootComment
+		if sameNodeValue(old, &replacement) {
+			return content, nil
+		}
+		if err := preserveYAML(old, &replacement); err != nil {
+			return "", err
+		}
 		parent.Content[idx+1] = &replacement
 	default:
 		parent.Content = append(parent.Content, keyNode(key), &replacement)

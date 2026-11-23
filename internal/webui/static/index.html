@@ -6,6 +6,10 @@
   <meta name="color-scheme" content="light">
   <title>devflow · Repository console</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/typed-editor.css">
+  <link rel="stylesheet" href="/document-editor.css">
+  <script src="/typed-editor.js" defer></script>
+  <script src="/document-editor.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -77,11 +81,45 @@
           <div class="page-heading"><h1 id="configuration-title">Configuration</h1><p>Edit a repository file and preview its effect before publishing.</p></div>
           <p id="config-error" class="notice error" role="status" hidden></p>
           <section class="panel editor" aria-labelledby="source-title">
-            <div class="section-heading"><h2 id="source-title">Source editor</h2><span class="tag" id="draft-state"></span></div>
+            <div class="section-heading"><h2 id="source-title">Configuration editor</h2><span class="tag" id="draft-state"></span></div>
             <label>Configuration file<select id="file"></select></label>
             <p class="muted" id="file-reason" hidden></p>
-            <label class="sr-only" for="source">File contents</label>
-            <textarea id="source" class="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="file-reason"></textarea>
+            <div id="document-modes" class="document-modes" role="group" aria-label="Editor view" hidden>
+              <button id="document-mode-fields" type="button" aria-pressed="true">Fields</button>
+              <button id="document-mode-source" type="button" aria-pressed="false">Source</button>
+            </div>
+            <p id="document-message" class="notice" role="status" hidden></p>
+            <div id="document-fields" class="document-fields" hidden>
+              <section class="document-outline" aria-label="Document fields">
+                <label>Find a field<input type="search" id="document-search" placeholder="Name or path" autocomplete="off"></label>
+                <div id="document-breadcrumb" class="document-breadcrumb" aria-label="Field location"></div>
+                <div id="document-keys" class="document-keys"></div>
+                <form id="document-add" class="document-add" hidden>
+                  <label id="document-key-label">Property name<input id="document-key" list="document-key-names" autocomplete="off"></label>
+                  <datalist id="document-key-names"></datalist>
+                  <button id="document-add-button" class="button secondary small" type="submit">Add property</button>
+                </form>
+              </section>
+              <section class="document-field" aria-labelledby="document-field-name">
+                <h3 id="document-field-name"></h3><p id="document-field-path" class="source-line code wrap"></p>
+                <div id="document-control"></div>
+                <div class="actions" id="document-actions" hidden>
+                  <button id="document-set" class="button primary small" type="button">Stage field</button>
+                  <button id="document-remove" class="button secondary small" type="button" hidden>Remove field</button>
+                  <button id="document-reset" class="button secondary small" type="button" hidden>Restore checkout value</button>
+                </div>
+                <p id="document-field-message" class="notice" role="status" hidden></p>
+              </section>
+            </div>
+            <div id="document-source">
+              <label class="sr-only" for="source">File contents</label>
+              <textarea id="source" class="source" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="file-reason"></textarea>
+              <div id="document-source-tools" class="document-source-tools" hidden>
+                <button id="document-complete" type="button" class="button secondary small">Suggest at cursor</button>
+                <span id="document-cursor" class="muted code" aria-live="off"></span>
+              </div>
+              <div id="document-completions" class="document-completions" role="group" aria-label="Source suggestions" hidden></div>
+            </div>
             <details id="core-details" hidden><summary>Effective repository settings</summary><pre class="brief" id="core-values"></pre></details>
             <div id="edit-controls">
               <div class="fields">
@@ -117,11 +155,10 @@
     </div>
   </div>
   <dialog id="setting-dialog" aria-labelledby="setting-dialog-title">
-    <form id="setting-form">
-      <div class="section-heading"><h2 id="setting-dialog-title">Edit setting</h2><button class="button secondary small" type="button" id="close-setting">Close</button></div>
+    <form id="setting-form" novalidate>
+      <div class="section-heading"><h2 id="setting-dialog-title" tabindex="-1">Edit setting</h2><button class="button secondary small" type="button" id="close-setting">Close</button></div>
       <p id="setting-name" class="code wrap"></p>
-      <label id="setting-value-label">Repository override <span id="typed-control"></span></label>
-      <label id="setting-null-label" class="inline-check" hidden><input type="checkbox" id="setting-null">Set an explicit null</label>
+      <div id="typed-control"></div>
       <p id="setting-help" class="muted"></p><p id="setting-message" class="notice error" role="status" hidden></p>
       <div class="actions"><button id="stage-setting" type="submit" class="button primary">Stage value</button><button id="inherit-setting" class="button secondary" type="button">Remove inline override</button></div>
     </form>

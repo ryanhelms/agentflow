@@ -431,7 +431,13 @@ func (s Selection) Explain() ([]Setting, error) {
 	visitSettings("", data, func(path string, v any) {
 		children, object := v.(map[string]any)
 		_, constrained := s.Constraints[path]
-		if !object || len(children) == 0 || constrained {
+		dynamic := false
+		if object && s.history != nil {
+			parts, _ := splitSettingPath(path)
+			t, err := settingsType(reflect.TypeOf(s.Settings), path, parts)
+			dynamic = err == nil && t.Kind() == reflect.Map
+		}
+		if !object || len(children) == 0 || constrained || dynamic {
 			leaves[path] = v
 		}
 	})

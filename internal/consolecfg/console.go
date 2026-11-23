@@ -234,12 +234,7 @@ func validateFile(kind, content string) error {
 		_, err := flowmap.Parse([]byte(content))
 		return err
 	case docs:
-		var cfg struct {
-			Space string `yaml:"space"`
-			Pages []struct {
-				File string `yaml:"file"`
-			} `yaml:"pages"`
-		}
+		var cfg documentMappings
 		if err := yaml.Unmarshal([]byte(content), &cfg); err != nil {
 			return err
 		}
@@ -252,11 +247,7 @@ func validateFile(kind, content string) error {
 			}
 		}
 	case envs:
-		var cfg struct {
-			Deployments struct {
-				Mapping map[string][]string `yaml:"environmentMapping"`
-			} `yaml:"deployments"`
-		}
+		var cfg environmentMappings
 		if err := yaml.Unmarshal([]byte(content), &cfg); err != nil {
 			return err
 		}
@@ -287,6 +278,9 @@ func effective(s Snapshot) map[property]any {
 		for _, role := range s.Providers.Roles {
 			out[property{role.Role, "provider"}] = role.Selected
 			for _, s := range role.Settings {
+				if children, ok := s.Value.(map[string]any); ok && len(children) > 0 && s.Constraint == nil {
+					continue // each map entry already has its own effective change
+				}
 				out[property{role.Role, "settings." + s.Path}] = s.Value
 			}
 		}

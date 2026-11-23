@@ -16,6 +16,7 @@ let roleID = "";
 let filePath = "";
 let review = null;
 let settingBeingEdited = null;
+let settingEditor = null;
 let publishing = false;
 let previewSequence = 0;
 let connectionSequence = 0;
@@ -114,6 +115,7 @@ function showPage(focus = false) {
     if (link.dataset.page === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  if (page === "configuration" && state) renderEditor();
   if (focus) $("main").focus();
 }
 
@@ -387,78 +389,94 @@ function renderSettings() {
     edit.setAttribute("aria-label","Edit " + setting.path);
     edit.addEventListener("click",() => openSetting(setting));
     head.append(edit);
-    row.append(head,element("div",value,"value"),element("p",origin,"source-line"));
+    row.append(head,settingSummary(setting.value),element("p",origin,"source-line"));
     appendHistory(row,setting);
     target.append(row);
   }
   if (!target.children.length) target.append(element("p",filter ? "No matching settings." : "This role has no settings to display.","muted"));
 }
+
+function settingSummary(value) {
+  if (Array.isArray(value)) {
+    if (!value.length) return element("div","Empty list","value muted");
+    const list = element("div","","collection-values");
+    for (const item of value.slice(0,8)) list.append(element("code", display(item)));
+    if (value.length > 8) list.append(element("span", "+" + (value.length - 8) + " more","muted"));
+    return list;
+  }
+  if (value && typeof value === "object") {
+    const count = Object.keys(value).length;
+    return element("div", count + (count === 1 ? " entry" : " entries"), "value muted");
+  }
+  return element("div",display(value),"value");
+}
 $("setting-filter").addEventListener("input",renderSettings);
+
+function settingPath(path) {
+  return (path.match(/(?:\\.|[^.\\])+/g) || []).map(part => part.replace(/\\(.)/g, "$1"));
+}
 
 function propertySchema(setting) {
   let schema = state?.config?.schemas?.[roleID]?.[role()?.selected];
-  const parts = setting.path.match(/(?:\\.|[^.\\])+/g) || [];
-  for (const part of parts) {
-    const key = part.replace(/\\(.)/g,"$1");
-    schema = schema?.properties?.[key] || schema?.additional_properties;
+  for (const key of settingPath(setting.path)) {
+    schema = schema?.properties && Object.hasOwn(schema.properties,key)
+      ? schema.properties[key] : schema?.additional_properties;
   }
   return schema || {};
 }
 
+function editorSuggestions(path) {
+  const key = path.filter(part => typeof part === "string").at(-1);
+  const git = state?.completions || {};
+  switch (key) {
+    case "branch":
+    case "protected_branches":
+      return [state?.branch,...(git.branches || [])].filter(Boolean);
+    case "source_remote":
+    case "target_remote":
+      return git.remotes || [];
+    case "repository":
+      return git.repositories || [];
+    case "catalog":
+      return files().filter(f => f.kind === "Task templates").map(f => f.path);
+    case "flow_map":
+      return files().filter(f => f.kind === "Flow map").map(f => f.path);
+  }
+  if (path.includes("routes") && typeof path.at(-1) === "number" && path.includes("notifications")) {
+    const routeRole = roles().find(item => item.role === "notifications");
+    const destinations = routeRole?.settings?.find(item => item.path === "destinations")?.value;
+    return Object.keys(destinations || {});
+  }
+  return [];
+}
+
 function openSetting(setting) {
   settingBeingEdited = setting;
-  $("setting-name").textContent = labelRole(roleID) + " / " + setting.path;
   const schema = propertySchema(setting);
-  const type = schema.type || setting.type || valueType(setting.value);
-  const nullable = schema.nullable === true;
-  const choices = Array.isArray(schema.enum) ? schema.enum : [];
-  let input;
-  let format;
-  if (choices.length || type === "boolean") {
-    input = element("select");
-    for (const choice of choices.length ? choices : [true,false]) selectOption(input,String(choice),String(choice));
-    format = type === "boolean" ? "boolean" : "string";
-  } else if (type === "string") {
-    input = element("input"); input.type = "text"; format = "string";
-  } else if (["integer","number"].includes(type)) {
-    input = element("input"); input.type = "number"; input.step = type === "integer" ? "1" : "any";
-    if (schema.nonnegative) input.min = "0";
-    format = "number";
-  } else {
-    input = element("textarea"); input.className = "setting-input"; input.spellcheck = false; format = "json";
-  }
-  input.id = "setting-value";
-  input.dataset.format = format;
-  const raw = setting.value;
-  if (raw !== null && raw !== undefined) input.value = format === "json" ? JSON.stringify(raw,null,2) : String(raw);
-  else if (format === "json") input.value = "null";
-  $("typed-control").replaceChildren(input);
-  $("setting-null-label").hidden = !nullable;
-  $("setting-null").checked = nullable && raw === null;
-  input.disabled = $("setting-null").checked;
-  $("setting-help").textContent = format === "json" ? "Use JSON for this value. Staging edits the repository’s inline settings." : "Staging writes an inline repository override. Personal settings may take precedence.";
-  const {source,history} = setting;
-  $("inherit-setting").disabled = !(source?.file === repositoryFile || history?.some((item) => item.source?.file === repositoryFile));
+  const inline = setting.history?.find(item => item.step === "inline");
+  // Map overrides merge by key. Start with what the team file actually owns,
+  // so editing one entry cannot copy personal or inherited entries into Git.
+  let value = inline ? inline.value : setting.value;
+  const isMap = schema.type === "object" && Boolean(schema.additional_properties);
+  if (isMap && !inline) value = {};
+  $("setting-dialog").toggleAttribute("data-collection", schema.type === "array" || schema.type === "object");
+  const parts = [...roleID.split("."), "settings", ...settingPath(setting.path)];
+  settingEditor = createTypedEditor($("typed-control"), schema, value, {
+    label: setting.path, path: parts, suggestions: editorSuggestions, allowed: setting.constraint?.allow
+  });
+  $("setting-name").textContent = labelRole(roleID) + " / " + setting.path;
+  const help = isMap
+    ? "Edit the keys owned by this repository. Removing a key restores any inherited value."
+    : "Stage a repository override, then preview its effective value before publishing.";
+  $("setting-help").textContent = help + (setting.source?.layer === "user" ? " A personal definition overrides this setting on your machine." : "");
+  $("inherit-setting").disabled = !inline;
   notice("setting-message");
   $("setting-dialog").showModal();
-  (input.disabled ? $("setting-null") : input).focus();
-}
-$("setting-null").addEventListener("change",() => { $("setting-value").disabled = $("setting-null").checked; });
-
-function settingInputValue() {
-  const input = $("setting-value");
-  if (!$("setting-null-label").hidden && $("setting-null").checked) return null;
-  if (input.dataset.format === "number") {
-    if (!input.value || !input.validity.valid) throw new Error("Enter a valid number for this field.");
-    return input.valueAsNumber;
-  }
-  if (input.dataset.format === "boolean") return input.value === "true";
-  if (input.dataset.format === "string") return input.value;
-  return JSON.parse(input.value);
+  $("setting-dialog-title").focus();
 }
 
 $("close-setting").addEventListener("click",() => $("setting-dialog").close());
-$("setting-dialog").addEventListener("close",() => { settingBeingEdited = null; });
+$("setting-dialog").addEventListener("close",() => { settingBeingEdited = null; settingEditor = null; });
 
 function localDraft(path) {
   const saved = drafts.get(path);
@@ -503,10 +521,11 @@ async function stageSetting(operation) {
   $("stage-setting").disabled = true;
   revert.disabled = true;
   try {
-    const value = operation === "remove" ? null : settingInputValue();
+    const value = operation === "remove" ? null : settingEditor.read();
+    if (value === undefined) throw new Error("Choose a value to stage.");
     await compose(operation,setting.path,value);
     $("setting-dialog").close();
-  } catch (e) { notice("setting-message",e instanceof SyntaxError ? "Enter a valid JSON value." : e.message,true); }
+  } catch (e) { notice("setting-message",e.message,true); }
   finally { $("stage-setting").disabled = false; revert.disabled = wasDisabled; }
 }
 $("setting-form").addEventListener("submit",(event) => { event.preventDefault(); stageSetting("set"); });
@@ -543,6 +562,28 @@ function renderEditor() {
   $("file-reason").hidden = !reason;
   $("edit-controls").hidden = !active?.editable;
   refreshEditorControls();
+  updateDocumentEditor();
+}
+
+function updateDocumentEditor() {
+  if ($("page-configuration").hidden) return;
+  const path = filePath;
+  const draft = localDraft(path);
+  renderDocumentEditor({
+    file: file(), draft, disabled: publishing || draft.base_digest !== file()?.digest,
+    request, suggestions: editorSuggestions,
+    openProvider(id) { chooseRole(id); go("providers"); },
+    stage(result) {
+      const current = localDraft(path);
+      if (publishing || path !== filePath || current.base_digest !== draft.base_digest || current.content !== draft.content) {
+        throw new Error("The draft changed. Reopen the field to apply this edit.");
+      }
+      putDraft(path,result.content,draft.base_digest,result.providers);
+      invalidateReview();
+      renderEditor();
+      notice("edit-message",result.warning || "Field staged. Preview the change before publishing.",Boolean(result.warning));
+    }
+  });
 }
 
 function refreshEditorControls() {
@@ -566,6 +607,7 @@ $("source").addEventListener("input",() => {
   putDraft(filePath,$("source").value,draft.base_digest);
   invalidateReview();
   refreshEditorControls();
+  updateDocumentEditor();
 });
 for (const id of ["commit-title","task-ref","delivery"]) {
   $(id).addEventListener("input",() => { invalidateReview(); refreshEditorControls(); });
@@ -646,13 +688,14 @@ $("download-patch").addEventListener("click",() => {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url),1000);
 });
-$("back-to-edit").addEventListener("click",() => { invalidateReview(); $("source").focus(); });
+$("back-to-edit").addEventListener("click",() => { invalidateReview(); documentEditorFocus(); });
 
 function setPublishing(busy) {
   publishing = busy;
   $("source").readOnly = busy || !file()?.editable;
   for (const key of ["file","commit-title","task-ref","delivery","publish","back-to-edit","refresh"]) $(key).disabled = busy;
   refreshEditorControls();
+  updateDocumentEditor();
 }
 
 $("publish").addEventListener("click",async () => {

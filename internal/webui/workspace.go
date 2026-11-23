@@ -14,6 +14,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/consolecfg"
+	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/version"
 )
@@ -77,7 +78,18 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 	for _, c := range changes {
 		fmt.Fprintf(&note, "%s %s\n", c.Status, c.Path)
 	}
-	reply(w, 200, map[string]any{"root": s.repo.Dir, "repository": filepath.Base(s.repo.Dir), "branch": branch, "head": head, "version": version.Version, "dirty": len(changes) > 0, "dirty_count": len(changes), "pin": pin, "config": snapshot, "attention": attention, "handoff": note.String()})
+	reply(w, 200, map[string]any{"root": s.repo.Dir, "repository": filepath.Base(s.repo.Dir), "branch": branch, "head": head, "version": version.Version, "dirty": len(changes) > 0, "dirty_count": len(changes), "pin": pin, "config": snapshot, "attention": attention, "handoff": note.String(), "completions": s.checkoutCompletions(ctx)})
+}
+
+// Offer locally known names, including when the workstation is offline.
+func (s *server) checkoutCompletions(ctx context.Context) map[string][]string {
+	branches, _ := s.repo.Git(ctx, "for-each-ref", "--sort=-committerdate", "--count=100", "--format=%(refname:lstrip=2)", "refs/heads")
+	remotes, _ := s.repo.Git(ctx, "remote")
+	hints := map[string][]string{"branches": strings.Fields(branches), "remotes": strings.Fields(remotes)}
+	if repo := s.repo.RemoteRepo(ctx); gitx.ValidateGitHubSlug(repo) == nil {
+		hints["repositories"] = []string{repo}
+	}
+	return hints
 }
 
 type pull struct {

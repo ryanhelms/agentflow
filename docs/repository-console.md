@@ -22,7 +22,14 @@ the current checkout. The results identify which providers are ready, what
 needs attention, and which connections need verification inside the agent
 client. Run the check again after updating your checkout.
 
-Stage a typed value to set an inline repository override. Remove the inline
+For a list such as GitHub Issues `labels`, choose **Edit**, then **Add item**.
+Enter one label per row. Move rows to change the order, or remove an individual
+entry. Other lists use the control for their item type. For example, a
+security findings list offers supported finding types, and webhook status
+codes use numeric inputs. Map editors let you add or rename keys and edit
+each value. Branch and Git remote fields offer names from the local checkout.
+
+Stage a value to set an inline repository override. Remove the inline
 override to inherit the next applicable value. **Stage switch** selects a new
 provider for the role and removes its previous inline settings. Return to
 **Providers** to configure the staged selection in the same proposal. Preview the
@@ -39,7 +46,11 @@ See [provider definitions and precedence](providers.md#provider-definitions).
    templates, document mappings and deployment environments. Workflow and client
    registration files appear with their ownership. Use `devflow init` to set
    up a repository that does not yet have configuration.
-2. Edit the source, or use a draft prepared by the provider controls. Enter a
+2. Use **Fields** to find a setting, edit it with its typed control and stage
+   it. For a task template, for example, you can edit the ordered list of
+   sections and their headings. Use **Source** for direct YAML or JSON edits.
+   **Suggest at cursor** or Ctrl+Space offers completions where the editor can
+   identify the field. Both views use the same draft. Enter a
    conventional commit title and, if appropriate, a qualified task reference.
    Each proposal applies to one file. Keep credentials in their credential
    store. The editor withholds sources that appear to contain credentials.

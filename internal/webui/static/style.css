@@ -131,7 +131,10 @@ details summary {color: #23458d; font-weight: 600}
 dialog {border: 1px solid var(--line); padding: 1.45rem; max-width: min(90vw,35rem); width: 100%; color: var(--ink)}
 dialog::backdrop {background: rgb(4 14 39 / .45)}
 #setting-name {margin: .4rem 0 .8rem}
-.setting-input {font-family: var(--mono); min-height: 5.5rem}
+#setting-dialog[data-collection] {max-width: min(94vw,50rem)}
+#setting-dialog {max-height: 90vh; overflow: auto}
+.collection-values {display: flex; flex-wrap: wrap; gap: .3rem; margin: .35rem 0}
+.collection-values code {background: #edf2fa; border-radius: .22rem; padding: .12rem .38rem; overflow-wrap: anywhere}
 #setting-help {margin: .6rem 0; font-size: .85rem}
 @media (max-width: 64rem) {.layout {grid-template-columns: 11.25rem minmax(0,1fr)} .overview-grid {grid-template-columns: 1fr} .provider-layout {grid-template-columns: minmax(9.5rem,.65fr) minmax(0,2fr)}}
 @media (max-width: 48rem) {

@@ -405,7 +405,10 @@ Deployments and release lookup also support local JSON fixtures.
 
 Run `devflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
-and how a proposed edit changes the effective configuration. You can publish
+and how a proposed edit changes the effective configuration. Add and reorder
+list entries, edit maps by key, and choose supported values in the provider
+and configuration editors. The source view also offers field and value
+completion. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
 questions for this worktree. [Repository console guide](docs/repository-console.md)

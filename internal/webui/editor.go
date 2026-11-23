@@ -86,11 +86,15 @@ func (s *server) compose(w http.ResponseWriter, r *http.Request) {
 		problem(w, 422, err.Error())
 		return
 	}
+	s.composed(w, r, change.Path, content, change.Base)
+}
+
+func (s *server) composed(w http.ResponseWriter, r *http.Request, path, content, base string) {
 	out := map[string]any{"content": content}
-	if plan, err := consolecfg.Preview(r.Context(), s.repo.Dir, change.Path, content, change.Base); err == nil {
+	if plan, err := consolecfg.Preview(r.Context(), s.repo.Dir, path, content, base); err == nil {
 		out["providers"] = plan.Providers
 	} else {
-		// A switch may need more source edits before the candidate resolves.
+		// A candidate may need several field edits before the resolver accepts it.
 		out["warning"] = err.Error()
 	}
 	reply(w, 200, out)
