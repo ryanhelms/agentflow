@@ -1,0 +1,10 @@
+{
+  "gid": "1201000000000011",
+  "resource_type": "user",
+  "name": "Fixture User",
+  "email": "fixture@example.invalid",
+  "workspaces": [
+    {"gid": "1201000000000042", "name": "Pilot workspace", "resource_type": "workspace"},
+    {"gid": "1201000000000080", "name": "Second workspace", "resource_type": "workspace"}
+  ]
+}

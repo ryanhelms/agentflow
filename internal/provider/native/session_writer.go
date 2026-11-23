@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -55,6 +56,22 @@ type writeLease struct {
 
 func NewSessionWriter(owner string, open func(context.Context, Call) (WriteSession, error)) *SessionWriter {
 	return &SessionWriter{owner: owner, open: open, leases: make(map[[sha256.Size]byte]*writeLease), readback: make(map[string]*writeLease)}
+}
+
+// NewRoutedSessionWriter selects a provider's session factory before preparing
+// the approval. All routes share the same lease registry and connection owner.
+func NewRoutedSessionWriter(owner string, byProvider map[string]*SessionWriter) *SessionWriter {
+	routes := maps.Clone(byProvider)
+	return NewSessionWriter(owner, func(ctx context.Context, call Call) (WriteSession, error) {
+		writer := routes[call.Provider]
+		if writer == nil {
+			return nil, ErrUnavailable
+		}
+		if writer.owner != owner {
+			return nil, ErrDenied
+		}
+		return writer.open(ctx, call)
+	})
 }
 
 var _ WriteHost = (*SessionWriter)(nil)

@@ -28,8 +28,8 @@ import (
 	"github.com/nscaledev/devflow/internal/mcpserver"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/desktophost"
 	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -56,9 +56,9 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for the Jira or Confluence pilot
+                                 use --client devflow for Jira, Confluence or Asana enrollment
   setup logout --provider NAME --client devflow
-                                 disconnect the local Devflow Rovo enrollment
+                                 disconnect a local Devflow provider enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login
@@ -108,7 +108,7 @@ Work
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop COMMAND
-                                 use the enrolled Jira connection for comment, start or transition
+                                 use enrolled Jira or Asana connections for supported task writes
                                  comments can fall back to the signed-in Teamwork Graph CLI
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
@@ -171,10 +171,10 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" && command != "start" && command != "transition" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start or transition)")
+		if command != "comment" && command != "start" && command != "transition" && command != "task" {
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition or task)")
 		}
-		return rovohost.NewWriter(), nil
+		return desktophost.NewWriter(), nil
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)
 	}

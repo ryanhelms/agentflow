@@ -270,5 +270,5 @@ func runProviderLogout(ctx context.Context, args []string) error {
 	if *provider == "" || *client != "devflow" || fs.NArg() != 0 {
 		return errors.New("usage: devflow setup logout --provider NAME --client devflow")
 	}
-	return setup.DisconnectRovo(ctx, *provider)
+	return setup.DisconnectProvider(ctx, *provider)
 }

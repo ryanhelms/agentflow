@@ -11,6 +11,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/provider/asanaoauth"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 )
 
@@ -145,6 +146,19 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 // LoginProvider launches the selected provider OAuth flow. The enrollment
 // owner manages its own login and credential storage.
 func LoginProvider(ctx context.Context, dir, provider, client, server string, input io.Reader, output, diagnostics io.Writer) error {
+	if client == "devflow" && provider == "asana" {
+		if server != "" && server != "asana" {
+			return errors.New("use the asana server for Devflow Asana enrollment")
+		}
+		if err := asanaoauth.Login(ctx, input, diagnostics); err != nil {
+			return err
+		}
+		if output != nil {
+			_, err := fmt.Fprintln(output, "Devflow connected Asana through its MCP OAuth app.")
+			return err
+		}
+		return nil
+	}
 	if client == "devflow" {
 		if server != "" && server != "atlassian" {
 			return errors.New("use the atlassian server for Devflow Rovo enrollment")
@@ -183,7 +197,10 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	return nil
 }
 
-// DisconnectRovo discards the native grant enrolled by Devflow.
-func DisconnectRovo(ctx context.Context, provider string) error {
+// DisconnectProvider discards the native grant enrolled by Devflow.
+func DisconnectProvider(ctx context.Context, provider string) error {
+	if provider == "asana" {
+		return asanaoauth.Disconnect(ctx)
+	}
 	return rovooauth.Disconnect(ctx, provider)
 }

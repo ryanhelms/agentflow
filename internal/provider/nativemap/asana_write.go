@@ -22,7 +22,7 @@ func AsanaCreate(draft provider.TaskDraft) (TaskWrite, error) {
 		return TaskWrite{}, err
 	}
 	args := map[string]any{"default_project": draft.Scope, "tasks": []any{map[string]any{"name": draft.Title, "project_id": draft.Scope, "notes": notes}}}
-	return taskWrite(Asana, "create_tasks", args, func(raw json.RawMessage) (provider.WriteResult, error) {
+	return asanaTaskWrite(draft.Scope, "create_tasks", args, func(raw json.RawMessage) (provider.WriteResult, error) {
 		task, err := asanaBatchTask(raw)
 		if err != nil {
 			return provider.WriteResult{}, err
@@ -45,7 +45,7 @@ func AsanaComplete(ref provider.Ref) (TaskWrite, error) {
 		return TaskWrite{}, err
 	}
 	args := map[string]any{"tasks": []any{map[string]any{"task_id": ref.ID, "completed": true}}}
-	return taskWrite(Asana, "update_tasks", args, func(raw json.RawMessage) (provider.WriteResult, error) {
+	return asanaTaskWrite(ref.Scope, "update_tasks", args, func(raw json.RawMessage) (provider.WriteResult, error) {
 		task, err := asanaBatchTask(raw)
 		if err != nil {
 			return provider.WriteResult{}, err
@@ -68,7 +68,7 @@ func AsanaComment(ref provider.Ref, body string) (TaskWrite, error) {
 		return TaskWrite{}, errors.New("asana comment is empty")
 	}
 	args := map[string]any{"task_id": ref.ID, "text": body}
-	return taskWrite(Asana, "add_comment", args, func(raw json.RawMessage) (provider.WriteResult, error) {
+	return asanaTaskWrite(ref.Scope, "add_comment", args, func(raw json.RawMessage) (provider.WriteResult, error) {
 		type story struct {
 			GID             string        `json:"gid"`
 			Task            asanaResource `json:"task"`
@@ -107,6 +107,12 @@ func AsanaComment(ref provider.Ref, body string) (TaskWrite, error) {
 		}
 		return provider.WriteResult{Ref: ref, Status: provider.Applied}, nil
 	}), nil
+}
+
+func asanaTaskWrite(project, tool string, args map[string]any, decode func(json.RawMessage) (provider.WriteResult, error)) TaskWrite {
+	write := taskWrite(Asana, tool, args, decode)
+	write.call.Scope = project
+	return write
 }
 
 func asanaWriteRef(ref provider.Ref) error {

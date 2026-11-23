@@ -83,3 +83,39 @@ func TestUnresolvableInputSchemaDoesNotPermitFallback(t *testing.T) {
 		t.Fatalf("unresolvable schema = %v", err)
 	}
 }
+
+func TestRoutedSessionWriterPreservesProviderAndOwner(t *testing.T) {
+	session := &writeLeaseFixture{}
+	routes := map[string]*SessionWriter{
+		"jira": NewSessionWriter("devflow", func(_ context.Context, call Call) (WriteSession, error) {
+			if call.Provider != "jira" {
+				t.Fatal("wrong provider reached the Jira session")
+			}
+			return session, nil
+		}),
+		"asana": NewSessionWriter("another-owner", func(context.Context, Call) (WriteSession, error) {
+			t.Fatal("another enrollment owner was selected")
+			return nil, ErrDenied
+		}),
+	}
+	writer := NewRoutedSessionWriter("devflow", routes)
+	t.Cleanup(writer.Close)
+	delete(routes, "jira")
+	call := Call{Provider: "jira", Server: "atlassian", Tool: "createJiraIssueRemoteIssueLink"}
+	binding, err := writer.Prepare(t.Context(), call)
+	if err != nil || binding.Owner != "devflow" {
+		t.Fatalf("prepare Jira: %+v %v", binding, err)
+	}
+	if _, err := writer.Write(t.Context(), binding, call); err != nil || session.writes != 1 {
+		t.Fatalf("write Jira: %v, writes: %d", err, session.writes)
+	}
+	if _, err := writer.Write(t.Context(), binding, call); !errors.Is(err, ErrDenied) || session.writes != 1 {
+		t.Fatalf("Jira replay: %v, writes: %d", err, session.writes)
+	}
+	if _, err := writer.Prepare(t.Context(), Call{Provider: "asana", Server: "asana", Tool: "add_comment"}); !errors.Is(err, ErrDenied) {
+		t.Fatalf("Asana owner mismatch: %v", err)
+	}
+	if _, err := writer.Prepare(t.Context(), Call{Provider: "slack", Server: "slack", Tool: "slack_send_message"}); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unconfigured Slack route: %v", err)
+	}
+}

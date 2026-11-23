@@ -22,6 +22,7 @@ type Call struct {
 	Provider  string         `json:"provider"`
 	Server    string         `json:"server"`
 	Tool      string         `json:"tool"`
+	Scope     string         `json:"scope,omitempty"` // Devflow resource scope, separate from vendor arguments.
 	Arguments map[string]any `json:"arguments"`
 }
 
