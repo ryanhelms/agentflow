@@ -67,6 +67,16 @@ func (g *Gate) Configure(repository string, user *config.User, repo *config.Repo
 	g.scope, g.user, g.repo = repository, user, repo
 }
 
+// WithConfiguration keeps the prompt owner and journal while resolving each
+// operation against a new on-disk policy. Existing callers keep their snapshot.
+func (g *Gate) WithConfiguration(repository string, user *config.User, repo *config.Repo) *Gate {
+	current := *g
+	current.Autonomy = config.Effective(user, repo)
+	current.initial = current.Autonomy
+	current.Configure(repository, user, repo)
+	return &current
+}
+
 // Decision is the result of a policy check.
 type Decision struct {
 	Outcome  Outcome                  `json:"status"`

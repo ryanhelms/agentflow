@@ -77,6 +77,13 @@ knowledge provider. Include its stable operation ID. FileSystem and Repository
 accept optional `type`, `description` and `tags` for OKF concepts. Include the
 selected format and document in the approval when the tool returns a preview.
 
+### Edit Devflow configuration
+
+Use `devflow_config` to inspect sources and effective settings, compose an edit
+and preview it. Present the scope and exact change. Use `devflow_config_apply`
+to save personal preferences or publish a repository file after approval.
+The config skill describes both workflows.
+
 ### Configured provider setup
 
 Use `devflow_setup_providers` to list the providers each role accepts and

@@ -416,6 +416,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Task | Terminal | AI client |
 | --- | --- | --- |
 | Open the local repository console | `devflow ui` | `/devflow:ui` |
+| Inspect, edit and review configuration | `devflow config OP` | `devflow_config`, `devflow_config_apply` |
 | Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
@@ -441,7 +442,12 @@ console shows the active provider for each role, where its settings came from,
 and how a proposed edit changes the effective configuration. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
-questions for this worktree. [Repository console guide](docs/repository-console.md)
+questions for this worktree. From a connected chat, ask “Show which rule governs
+local commits here” or “Set my local commits to automatic and show me the change
+before saving.” You can also edit provider settings, repository ceilings and the
+other editable files in the console inventory. Devflow returns the proposed
+change for review before saving personal preferences or publishing a repository
+change. [Configure Devflow from chat](docs/repository-console.md#configure-devflow-from-chat)
 
 PR readiness requires a Jira key in the branch name by default. With
 `commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
@@ -562,7 +568,7 @@ Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `k
 CI.
 
 The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
-`install`, `setup`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
+`install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
 `eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos devflow has not set up yet. Skills that

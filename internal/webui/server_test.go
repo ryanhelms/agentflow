@@ -3,6 +3,8 @@ package webui
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,8 @@ import (
 	"github.com/nscaledev/devflow/internal/consolepublish"
 	"github.com/nscaledev/devflow/internal/gitx"
 )
+
+func hash(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }
 
 func testServer(t *testing.T) *server {
 	t.Helper()
@@ -150,7 +154,7 @@ func TestConfirmedPreviewPublishesOnlyOnce(t *testing.T) {
 	}
 	in := edit{Path: path, Base: hash(original), Content: string(original) + "# shared\n", Title: "chore: document configuration", Draft: true}
 	calls := 0
-	s.publishTo = func(_ context.Context, root, destination, file, before, after, title string, draft bool, task ...string) (consolepublish.Result, error) {
+	s.publishTo = func(_ context.Context, root, destination, file, before, after, title string, draft bool, _ map[string]string, task ...string) (consolepublish.Result, error) {
 		calls++
 		if root != s.repo.Dir || destination != "example/devflow-console" || file != path || before != string(original) || after != in.Content || title != in.Title || !draft {
 			t.Fatal("published arguments differ from review")

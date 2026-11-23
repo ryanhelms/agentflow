@@ -141,6 +141,9 @@ func EditSetting(content, role, path string, value json.RawMessage, inherit bool
 	if err := validateFile(core, out.String()); err != nil {
 		return "", errors.New("use the source editor to preserve linked YAML anchors")
 	}
+	if sensitive(out.String()) {
+		return "", errors.New("composed source contains a credential-like value; use a credential reference")
+	}
 	return out.String(), nil
 }
 
