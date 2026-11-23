@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Devflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Devflow PR validation on its default branch. |
-| **Current release** | <!-- devflow:version -->`v0.49.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.50.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |

@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.50.0](https://github.com/nscaledev/devflow/compare/v0.49.0...v0.50.0) - 2026-11-23
+
+### Features
+
+- **asana:** bind desktop task writes to oauth (#81) ([61d6572](https://github.com/nscaledev/devflow/commit/61d657218985ecf93a9f90acb8057769e065d08d))
+
 ## [0.49.0](https://github.com/nscaledev/devflow/compare/v0.48.0...v0.49.0) - 2026-11-23
 
 ### Features
