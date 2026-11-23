@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.52.0](https://github.com/nscaledev/devflow/compare/v0.51.0...v0.52.0) - 2026-11-23
+
+### Features
+
+- scope automatic pushes to pull request publication (#120) ([4e79bf7](https://github.com/nscaledev/devflow/commit/4e79bf7a054c6079aa3dc1bf18c68fe8463c227e))
+
 ## [0.51.0](https://github.com/nscaledev/devflow/compare/v0.50.0...v0.51.0) - 2026-11-23
 
 ### Features
