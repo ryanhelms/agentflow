@@ -64,13 +64,18 @@ func (b binding) read(ctx context.Context, name string, args []string, dest any)
 // run reports whether the subprocess started, the point after which a mutation
 // may have reached Jira even if TWG fails to return an acknowledgement.
 func (b binding) run(ctx context.Context, name string, args []string, dest any) (started bool, err error) {
-	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
-	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return false, fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
 	}
 
 	command := managedcli.Selected(ctx, "twg")
+	if repo := managedcli.ReadInstallRepo(ctx); command == "" && repo != "" {
+		tool, _ := managedcli.ForProvider("jira")
+		command, err = managedcli.Ensure(ctx, repo, tool)
+		if err != nil {
+			return false, fmt.Errorf("%s: could not prepare Teamwork Graph CLI: %w", name, err)
+		}
+	}
 	if command == "" {
 		command = "twg"
 		if _, err := exec.LookPath(command); err != nil {
@@ -80,6 +85,8 @@ func (b binding) run(ctx context.Context, name string, args []string, dest any) 
 			}
 		}
 	}
+	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, command, append(args, "--site", b.site, "--output", "json", "--output-summary", "none")...)
 	cmd.Env = commandEnv()
 	cmd.WaitDelay = 250 * time.Millisecond

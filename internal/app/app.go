@@ -91,7 +91,11 @@ func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
 		}
 	}
 	tool, _ := managedcli.ForProvider("github")
-	command, err := managedcli.Resolve(ctx, a.Repo.Dir, tool)
+	resolve := managedcli.Resolve
+	if managedcli.ReadInstallRepo(ctx) != "" {
+		resolve = managedcli.Ensure
+	}
+	command, err := resolve(ctx, a.Repo.Dir, tool)
 	if err != nil {
 		return nil, err
 	}

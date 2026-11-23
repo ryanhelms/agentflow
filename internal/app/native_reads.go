@@ -286,6 +286,15 @@ func readNative[T any](ctx context.Context, repo string, call native.Call, decod
 	})
 }
 
+func (a *App) standaloneReadContext(ctx context.Context) context.Context {
+	ci, _ := strconv.ParseBool(os.Getenv("CI"))
+	actions, _ := strconv.ParseBool(os.Getenv("GITHUB_ACTIONS"))
+	if a.Client != "cli" || native.HasHost(ctx) || ci || actions {
+		return ctx
+	}
+	return managedcli.WithReadInstall(ctx, a.Repo.Dir)
+}
+
 func useAtlassianCLI(ctx context.Context, site, name string) bool {
 	if !strings.HasPrefix(site, "https://") {
 		return false
