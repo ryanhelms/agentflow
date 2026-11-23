@@ -16,7 +16,7 @@ import (
 )
 
 func TestConsoleDestination(t *testing.T) {
-	for _, d := range []string{"overview", "providers", "configuration", "handoff"} {
+	for _, d := range []string{"overview", "providers", "autonomy", "configuration", "handoff"} {
 		got, err := (Destination{Screen: d}).Normalize("overview")
 		if err != nil || got.Screen != d || got.Fragment() != "screen="+d {
 			t.Fatalf("%s: %+v, %v", d, got, err)

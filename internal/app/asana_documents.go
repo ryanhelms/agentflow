@@ -17,6 +17,9 @@ import (
 )
 
 func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task provider.Task) error {
+	if a.Cfg.Providers.KnowledgeBase.Provider == "none" {
+		return nil
+	}
 	links := task.Links
 	if a.usesIssues() {
 		var warnings []string
@@ -60,6 +63,7 @@ func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task prov
 
 // DocsGet reads one document by its full identity from the selected provider.
 func (a *App) DocsGet(ctx context.Context, ref provider.Ref) (provider.Document, error) {
+	ctx = a.standaloneReadContext(ctx)
 	var zero provider.Document
 	if err := ref.Validate(); err != nil {
 		return zero, err
@@ -90,7 +94,7 @@ func (a *App) DocsGet(ctx context.Context, ref provider.Ref) (provider.Document,
 		if err != nil {
 			return zero, err
 		}
-		return mappedNativeRead(ctx, "atlassian", read, func() (provider.Document, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "atlassian", read, func(ctx context.Context) (provider.Document, error) {
 			if !useAtlassianCLI(ctx, site, "confluence") {
 				return legacyRead()
 			}

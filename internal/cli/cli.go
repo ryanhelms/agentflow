@@ -32,6 +32,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/devflow/internal/setup/initproviders"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
 	"github.com/nscaledev/devflow/internal/webui"
@@ -46,6 +47,9 @@ Setup
                                  open or reuse the local repository console
   ui --status | --stop           inspect or stop the shared local UI daemon
   init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
+  init --detect-providers        show local selection evidence and supported choices as JSON
+  init [--guided|--non-interactive] [--provider ROLE=ID ...]
+                                 review and persist provider choices; the terminal guides by default
   init --guidance-only           refresh the managed AGENTS.md block
   remove [--dry-run] [--force] [--keep-releases]
                                  undo init: delete devflow's files, strip its entries from
@@ -82,12 +86,20 @@ Work
   scope [--json]                 changes and new TODOs that look outside the ticket
   comment [KEY] TEXT [--yes]     comment on the task
   collisions [KEY] [--json]      other PRs on this task or touching your files
-  commit [-m MSG] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
+  config OP [--input FILE|-]     inspect or prepare repository console settings from JSON
+  config publish [--input FILE|-]   publish the exact approved repository change
+  config save_personal [--input FILE|-]   save the exact approved preferences
+  policy explain [ACTION]          show autonomy, repository ceilings and review windows
+  policy status ID                inspect a shared approval
+  policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker
+  push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
+  pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
+  commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
   preview [MSG]                  configured task effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
   secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
                                  preview or create tasks from configured security events
-  pr [--check] [--run] [--title T] [--draft] [--yes]   readiness check, then open the PR
+  pr [--check] [--run] [--title T] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR
   review [threads] [--json]      unresolved review threads on this branch's PR
   review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
@@ -120,7 +132,7 @@ Runtime
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
-  update [--rollback] [--quiet]  install the latest release now, or go back one version
+  update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
 `
 
@@ -156,7 +168,7 @@ func Main(args []string) int {
 	if cmd == "doctor" && len(rest) > 0 && rest[0] == "--providers" {
 		cmd, rest = "setup", append([]string{"verify"}, rest[1:]...)
 	}
-	if !quietCommand(cmd) {
+	if !quietCommand(cmd) && (cmd != "init" || !initInspection(rest)) {
 		maybeUpdate(ctx)
 	}
 	err := run(ctx, cmd, rest)
@@ -199,7 +211,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
+	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -207,6 +219,12 @@ func quietCommand(cmd string) bool {
 
 func run(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
+	case "config":
+		return runConfig(ctx, args)
+	case "policy":
+		return runPolicy(ctx, args)
+	case "push":
+		return runBranchWrite(ctx, "push", args)
 	case "ui":
 		return runUI(ctx, args)
 	case "mcp":
@@ -347,12 +365,9 @@ func run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		a.Gate.Autonomy.Local = config.Auto // the developer asked for it directly
-		out, err := a.ADRDraft(ctx, strings.Join(args[1:], " "), "", "", "", "")
-		if err != nil {
-			return err
-		}
-		return printJSON(out)
+		return confirmLoop(false, func(token string) (any, error) {
+			return a.ADRDraft(ctx, strings.Join(args[1:], " "), "", "", "", token)
+		})
 	case "release":
 		return runRelease(ctx, args)
 	case "update":
@@ -430,28 +445,74 @@ func runInit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	force := fs.Bool("force", false, "overwrite existing files")
 	guidanceOnly := fs.Bool("guidance-only", false, "refresh only the generated AGENTS.md block")
+	guided := fs.Bool("guided", false, "prompt for unknown providers and review selections")
+	headless := fs.Bool("non-interactive", false, "use existing selections and defaults without prompting")
+	detect := fs.Bool("detect-providers", false, "print repository provider evidence as JSON without changing anything")
+	answers := map[string]string{}
+	fs.Func("provider", "persist a provider for ROLE=ID (repeatable)", func(value string) error { return providerArgument(answers, value) })
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, _ := os.Getwd()
+	if fs.NArg() != 0 {
+		return errors.New("init operates on the current checkout; unexpected positional argument")
+	}
+	if *guided && *headless {
+		return errors.New("choose either --guided or --non-interactive")
+	}
+	if *detect && (*guided || *headless || *force || *guidanceOnly || len(answers) > 0) {
+		return errors.New("run init --detect-providers separately from initialization")
+	}
+	if *guidanceOnly && (*guided || *headless || len(answers) > 0) {
+		return errors.New("provider selection is unavailable with --guidance-only")
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	repo, err := gitx.Open(ctx, dir)
+	if err != nil {
+		return err
+	}
 	if *guidanceOnly {
 		if *force {
 			return errors.New("init --guidance-only cannot be combined with --force")
-		}
-		repo, err := gitx.Open(ctx, dir)
-		if err != nil {
-			return err
 		}
 		res, err := setup.RefreshAgentInstructions(repo.Dir)
 		printResult(res)
 		return err
 	}
-	res, err := app.InitRepo(ctx, dir, "cli", *force)
+	prompt := *guided || (!*headless && term.IsTerminal(int(os.Stdin.Fd())))
+	var edit *initproviders.Edit
+	if *detect || prompt || len(answers) > 0 {
+		plan, err := initproviders.Detect(ctx, repo)
+		if err != nil {
+			return err
+		}
+		if *detect {
+			return printJSON(plan)
+		}
+		if prompt {
+			if err := guideProviders(plan, answers, os.Stdin, os.Stderr); err != nil {
+				return err
+			}
+		}
+		edit, err = plan.Prepare(answers, *force)
+		if err != nil {
+			return err
+		}
+	}
+	res, err := app.InitRepo(ctx, repo.Dir, "cli", *force)
 	if res != nil {
 		printResult(res.Files)
 	}
 	if err != nil {
 		return err
+	}
+	if edit != nil {
+		if err := setup.SaveInitProviderConfig(repo.Dir, edit.Before, edit.After); err != nil {
+			return err
+		}
+		fmt.Println("  updated  .devflow/config.yml provider selections")
 	}
 	rel := res.Release
 	fmt.Printf("Release units (%s strategy):\n", rel.Strategy)
@@ -647,6 +708,16 @@ func runStart(ctx context.Context, args []string) error {
 func runCommit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
 	msg := fs.String("m", "", "commit message (otherwise built interactively)")
+	prepare := fs.Bool("prepare", false, "prepare the exact commit without writing it")
+	token := fs.String("confirm-token", "", "resume the exact reviewed change")
+	var paths []string
+	fs.Func("path", "include only this path (repeatable)", func(path string) error {
+		if path == "" {
+			return errors.New("--path requires a path")
+		}
+		paths = append(paths, path)
+		return nil
+	})
 	split := fs.Bool("split", false, "show the proposed commit groups")
 	dry := fs.Bool("dry-run", false, "validate and preview only")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
@@ -656,6 +727,18 @@ func runCommit(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	if *prepare || *token != "" || len(paths) > 0 {
+		if *msg == "" || *split || *dry || (*prepare && (*token != "" || *yes)) {
+			return errors.New("use -m MSG for an exact commit and select one of --prepare or --confirm-token")
+		}
+		if *prepare {
+			return writeResult(a.CommitPrepare(ctx, *msg, paths))
+		}
+		if *token != "" {
+			return writeResult(a.Commit(ctx, *msg, paths, *token))
+		}
+		return confirmLoop(*yes, func(tok string) (any, error) { return a.Commit(ctx, *msg, paths, tok) })
 	}
 	if *split {
 		groups, err := a.CommitPlan(ctx)
@@ -811,7 +894,16 @@ func runTransition(ctx context.Context, args []string) error {
 }
 
 func runPR(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "mark-ready" {
+		return runBranchWrite(ctx, "pr mark-ready", args[1:])
+	}
 	fs := flag.NewFlagSet("pr", flag.ContinueOnError)
+	prepare := fs.Bool("prepare", false, "prepare the exact publication without publishing it")
+	token := fs.String("confirm-token", "", "resume the exact reviewed publication")
+	body := fs.String("body", "", "pull request body")
+	var labels, reviewers []string
+	fs.Func("label", "label to apply (repeatable)", func(v string) error { labels = append(labels, v); return nil })
+	fs.Func("reviewer", "reviewer to request (repeatable)", func(v string) error { reviewers = append(reviewers, v); return nil })
 	check := fs.Bool("check", false, "readiness check only")
 	runCmds := fs.Bool("run", false, "also run test and lint commands")
 	title := fs.String("title", "", "PR title")
@@ -823,6 +915,21 @@ func runPR(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	in := app.PROpenInput{Title: *title, Body: *body, Reviewers: reviewers, Labels: labels}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "draft" {
+			in.Draft = draft
+		}
+	})
+	if *prepare || *token != "" {
+		if *check || *runCmds || (*prepare && (*token != "" || *yes)) {
+			return errors.New("use one of --prepare, --confirm-token or --check")
+		}
+		if *prepare {
+			return writeResult(a.PRPrepare(ctx, in))
+		}
+		return writeResult(a.PROpen(ctx, in, *token))
 	}
 	r, err := a.PRReady(ctx, *runCmds)
 	if err != nil {
@@ -841,10 +948,6 @@ func runPR(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	in := app.PROpenInput{Title: *title}
-	if *draft {
-		in.Draft = draft
-	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.PROpen(ctx, in, tok) })
 }
 
@@ -857,15 +960,24 @@ func confirmLoop(yes bool, fn func(token string) (any, error)) error {
 	if p, ok := out.(*app.Pending); ok {
 		switch p.Status {
 		case "suggest":
-			fmt.Println("Your autonomy is set to suggest. Run:")
+			fmt.Println(p.Reason)
 			for _, c := range p.Commands {
 				fmt.Println("  " + c)
 			}
 			return nil
 		case "needs_confirmation":
-			_ = printJSON(p.Summary)
+			if !yes {
+				release, err := p.OpenPrompt()
+				if err != nil {
+					return err
+				}
+				defer release()
+			}
+			if err := printApproval(p); err != nil {
+				return errors.Join(err, p.Cancel())
+			}
 			if !yes && !strings.HasPrefix(strings.ToLower(ask("Proceed? [y/N]: ")), "y") {
-				return errors.New("cancelled")
+				return errors.Join(errors.New("cancelled"), p.Cancel())
 			}
 			if out, err = fn(p.ConfirmToken); err != nil {
 				return err
@@ -990,6 +1102,7 @@ func spawnBackgroundUpdate(u *update.Updater) {
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	rollback := fs.Bool("rollback", false, "switch back to the previous version")
+	stable := fs.Bool("latest-stable", false, "install GitHub's latest stable release, respecting project version restrictions")
 	quiet := fs.Bool("quiet", false, "no output; leave a notice for the next run")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -999,6 +1112,9 @@ func runUpdate(ctx context.Context, args []string) error {
 		return err
 	}
 	if *rollback {
+		if *stable {
+			return errors.New("choose either --latest-stable or --rollback")
+		}
 		v, err := u.Rollback()
 		if err == nil {
 			fmt.Printf("devflow now runs %s. Restart AI sessions to use it.\n", v)
@@ -1006,12 +1122,18 @@ func runUpdate(ctx context.Context, args []string) error {
 		return err
 	}
 	u.Touch()
-	rel, err := u.Latest(ctx)
+	resolve := u.Latest
+	if *stable {
+		resolve = u.LatestStable
+	}
+	rel, err := resolve(ctx)
 	if err != nil {
 		return err
 	}
-	if rel == nil || !u.NewerThanCurrent(rel) || u.Installed(rel.Version().String()) {
-		if !*quiet {
+	if rel == nil || (!*stable && !u.NewerThanCurrent(rel)) || u.Installed(rel.Version().String()) {
+		if *stable && rel != nil && !*quiet {
+			fmt.Printf("Devflow %s is already active in the verified installation cache.\n", rel.Tag)
+		} else if !*quiet {
 			fmt.Printf("devflow %s is up to date (channel %s)\n", version.Version, u.Opts.Channel)
 		}
 		return nil

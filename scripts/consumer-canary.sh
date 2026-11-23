@@ -29,7 +29,7 @@ config=.devflow/config.yml
 old=1111111111111111111111111111111111111111
 # Older callers declare only JIRA_USER and JIRA_TOKEN for the task jobs.
 sed -e '/^      TASK_READ_TOKEN:/d' -e "s/@v0$/@$old # v0.1.0/" "$root/templates/repo/$caller" > "$caller"
-printf '%s\n' 'devflow: 1' > "$config"
+printf '%s\n' 'devflow: 1' 'task_management: {provider: jira}' > "$config"
 cat > .devflow/releases.yml <<'YAML'
 strategy: trunk
 units:

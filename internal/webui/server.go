@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/consolepublish"
+	"github.com/nscaledev/devflow/internal/configconsole"
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 )
@@ -36,7 +36,7 @@ type server struct {
 	// Serialize approval consumption and publishing. Re-read policy for every save.
 	writeMu   sync.Mutex
 	gate      *policy.Gate
-	publishTo func(context.Context, string, string, string, string, string, string, bool, ...string) (consolepublish.Result, error)
+	publishTo configconsole.Publisher
 }
 
 func randomKey() string {
@@ -61,6 +61,9 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)
 	mux.HandleFunc("POST /api/tabs/leave", s.tabLeave)
 	mux.HandleFunc("GET /api/activity", s.activity)
+	mux.HandleFunc("GET /api/autonomy", s.autonomy)
+	mux.HandleFunc("POST /api/autonomy", s.autonomy)
+	mux.HandleFunc("POST /api/autonomy/inspect", s.autonomy)
 	mux.HandleFunc("POST /api/readiness", s.readiness)
 	mux.HandleFunc("POST /api/reply", s.replyToWorker)
 	mux.HandleFunc("POST /api/compose", s.compose)

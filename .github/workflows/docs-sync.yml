@@ -26,10 +26,21 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - id: knowledge
+        name: Resolve knowledge provider
+        run: |
+          provider=$(devflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Install pandoc
+        if: steps.knowledge.outputs.provider == 'confluence'
         run: sudo apt-get install -y -qq pandoc >/dev/null
       - name: Publish pages
+        if: steps.knowledge.outputs.provider == 'confluence'
         env:
           MAPPING: ${{ inputs.mapping }}
           CONFLUENCE_BASE: ${{ vars.CONFLUENCE_BASE }}

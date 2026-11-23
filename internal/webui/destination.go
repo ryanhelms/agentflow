@@ -12,7 +12,7 @@ import (
 
 // Destination is a screen in the current worktree's console.
 type Destination struct {
-	Screen string `json:"screen,omitempty" jsonschema:"Console screen: overview, providers (default for chat), configuration, or handoff."`
+	Screen string `json:"screen,omitempty" jsonschema:"Console screen: overview, providers (default for chat), autonomy, configuration, or handoff."`
 	Role   string `json:"role,omitempty" jsonschema:"Optional role to select on the providers screen: code_hosting, task_management, knowledge_base, devops.checks, devops.deployments, devops.releases, secops, or notifications."`
 }
 
@@ -24,9 +24,9 @@ func (d Destination) Normalize(defaultScreen string) (Destination, error) {
 		}
 	}
 	switch d.Screen {
-	case "overview", "providers", "configuration", "handoff":
+	case "overview", "providers", "autonomy", "configuration", "handoff":
 	default:
-		return Destination{}, errors.New("choose a screen: overview, providers, configuration, or handoff")
+		return Destination{}, errors.New("choose a screen: overview, providers, autonomy, configuration, or handoff")
 	}
 	if d.Role != "" {
 		if d.Screen != "providers" {

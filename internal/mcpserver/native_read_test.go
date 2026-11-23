@@ -69,10 +69,6 @@ task_management:
 	if !isError || !strings.Contains(text, "access denied") {
 		t.Fatalf("denied: %s", text)
 	}
-	text, isError = call(native.Reply{ID: req.ID, Status: "sign_in_required"})
-	if !isError || !strings.Contains(text, "start the client's provider OAuth flow") {
-		t.Fatalf("sign-in: %s", text)
-	}
 	if runtime.GOOS == "windows" {
 		return
 	}
@@ -88,10 +84,11 @@ printf '%s\n' '{"data":{"issues":[{"key":"APP-8","fields":{"summary":"CLI result
 	if err := os.WriteFile(filepath.Join(bin, "twg"), []byte(twg), 0700); err != nil {
 		t.Fatal(err)
 	}
-	text, isError = call(native.Reply{ID: req.ID, Status: "unavailable"})
-	items = nil
-	if err := json.Unmarshal([]byte(text), &items); isError || err != nil || len(items) != 1 || items[0].Key != "APP-8" {
-		t.Fatalf("vendor CLI fallback: %s, %v", text, err)
+	for _, status := range []string{"unavailable", "sign_in_required", "connection_failed", "oauth_app_restricted"} {
+		text, isError = call(native.Reply{ID: req.ID, Status: status})
+		items = nil
+		if err := json.Unmarshal([]byte(text), &items); isError || err != nil || len(items) != 1 || items[0].Key != "APP-8" {
+			t.Fatalf("vendor CLI fallback after %s: %s, %v", status, text, err)
+		}
 	}
-
 }

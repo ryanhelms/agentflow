@@ -22,6 +22,10 @@ func (d *daemon) pickerResource(w http.ResponseWriter, r *http.Request, clone re
 	switch r.URL.Path {
 	case "/_devflow/picker.js":
 		pickerAsset(w, "workspace-picker.js", "text/javascript; charset=utf-8")
+	case "/_devflow/appearance.js":
+		pickerAsset(w, "appearance.js", "text/javascript; charset=utf-8")
+	case "/_devflow/nscale-tokens.css":
+		pickerAsset(w, "nscale-tokens.css", "text/css; charset=utf-8")
 	case "/_devflow/style.css":
 		pickerAsset(w, "style.css", "text/css; charset=utf-8")
 	case "/_devflow/worktrees":

@@ -18,7 +18,7 @@ let modalContext;
 let pendingProviderChoice;
 let saveTimer;
 let loadSequence = 0;
-const screenNames = {overview: "repository overview", providers: "provider editor", configuration: "configuration editor", handoff: "handoff screen"};
+const screenNames = {overview: "repository overview", providers: "provider editor", autonomy: "autonomy settings", configuration: "configuration editor", handoff: "handoff screen"};
 const views = Object.keys(screenNames);
 const roleNames = {
   code_hosting: "Code hosting", task_management: "Task management", knowledge_base: "Knowledge base",
@@ -37,6 +37,17 @@ let settingEditor = null;
 let publishing = false;
 let previewSequence = 0;
 let connectionSequence = 0;
+let autonomyView = null;
+let autonomyLoading = false;
+let autonomySaving = false;
+let autonomySequence = 0;
+const autonomyForms = new Map();
+const autonomyLevels = { suggest: "Suggest", confirm: "Ask for confirmation", auto: "Automatic" };
+const commonActions = {
+  commit: "Create a local commit", push: "Push a branch", pr_open_draft: "Open a draft pull request",
+  pr_open: "Open a ready pull request", pr_ready_for_review: "Mark a pull request ready",
+  ticket_create: "Create a task", review_reply: "Reply to a review"
+};
 
 function element(tag, text = "", klass = "") {
   const node = document.createElement(tag);
@@ -327,13 +338,17 @@ function showPage(focus = false) {
       openSetting(previous.setting,previous);
     }
   }
+  if (screen === "autonomy" && state) loadAutonomy();
   for (const name of views) $("page-" + name).hidden = screen !== name;
   for (const link of document.querySelectorAll("[data-page]")) {
     if (link.dataset.page === screen) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
   if (screen === "configuration" && state) renderEditor();
-  if (focus) $("main").focus();
+  if (focus) {
+    $("main").focus({preventScroll: true});
+    window.scrollTo(0, 0);
+  }
 }
 
 function go(screen, role = "") {
@@ -429,9 +444,13 @@ const tabs = consoleTabs({
     clearCommanderActivity();
     const current = destination();
     if (!next && current.screen === screen && (!role || roleID === role)) return {handled:true};
-    if (publishing) {
-      notice("status","A publication is in progress. Request the editor again once it finishes.");
+    if (publishing || autonomySaving) {
+      notice("status","A save is in progress. Request the editor again once it finishes.");
       return {blocked:"publishing"};
+    }
+    if (next && autonomyForms.size) {
+      notice("status","Save or discard the edits in Autonomy before switching worktrees.");
+      return {blocked:"autonomy"};
     }
     if (next && !storeDrafts()) {
       if ($("setting-dialog").open) notice("setting-storage-error",$("workspace-save-error").textContent,true);
@@ -462,6 +481,10 @@ window.addEventListener("pageshow",event => {
 function renderOverview() {
   const name = state.repository || state.root?.split(/[\\/]/).pop() || "Local checkout";
   $("top-repo").textContent = name;
+  const branch = $("context-branch");
+  branch.textContent = state.branch || (state.head ? state.head.slice(0, 12) : "");
+  branch.hidden = !branch.textContent;
+  branch.title = state.branch || "Detached HEAD";
   $("checkout-name").textContent = name;
   $("root-path").textContent = state.root || "Worktree path unavailable";
   $("rail-version").textContent = state.version || "";
@@ -471,7 +494,7 @@ function renderOverview() {
   $("working-state").classList.toggle("changed", dirty);
   const metadata = $("repo-metadata");
   metadata.replaceChildren();
-  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["CLI version",state.version], ["Caller pin",state.pin]]) {
+  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["Running CLI",state.version], ["Workflow pin",state.pin]]) {
     const group = element("div");
     group.append(element("dt",label),element("dd",value || "Unavailable"));
     metadata.append(group);
@@ -552,6 +575,206 @@ async function loadState() {
 }
 $("refresh").addEventListener("click", loadState);
 
+function settingsFrom(value = {}) {
+  return { local: value.local || "", remote: value.remote || "", window: value.window || "",
+    actions: { ...value.actions } };
+}
+
+function sameSettings(left, right) {
+  return ["local","remote","window"].every((key) => left[key] === right[key]) &&
+    Object.keys(left.actions).length === Object.keys(right.actions).length &&
+    Object.keys(left.actions).every((action) => left.actions[action] === right.actions[action]);
+}
+
+function layerForm() {
+  const scope = $("autonomy-scope").value;
+  return autonomyForms.get(scope) || {
+    settings: settingsFrom(autonomyView?.[scope]),
+    original: settingsFrom(autonomyView?.[scope]),
+    revision: autonomyView?.user_revision,
+    base: localDraft(repositoryFile)
+  };
+}
+
+function recordAutonomyEdit(field, value, action) {
+  const scope = $("autonomy-scope").value;
+  const form = layerForm();
+  if (action) {
+    if (value) form.settings.actions[action] = value;
+    else delete form.settings.actions[action];
+  } else {
+    form.settings[field] = value;
+  }
+  if (sameSettings(form.settings, form.original)) autonomyForms.delete(scope);
+  else autonomyForms.set(scope, form);
+  notice("autonomy-status");
+  updateAutonomyControls();
+}
+
+function autonomyBlocker(scope, form) {
+  if (scope === "personal") {
+    if (form.revision !== autonomyView.user_revision) return "Personal preferences changed on disk. Discard the form edits to load the current preferences.";
+    return "";
+  }
+  const item = file(repositoryFile);
+  const draft = localDraft(repositoryFile);
+  if (!item?.editable) return item?.reason || "The repository configuration is read-only.";
+  if (draft.base_digest !== item.digest) return "The checkout changed. Review the staged file in Configuration.";
+  if (form.base.content !== draft.content || form.base.base_digest !== draft.base_digest) return "The staged configuration changed. Discard the form edits to edit the current candidate.";
+  return "";
+}
+
+function updateAutonomyControls() {
+  const scope = $("autonomy-scope").value;
+  const dirty = autonomyForms.has(scope);
+  $("autonomy-controls").disabled = !autonomyView || autonomyLoading || autonomySaving;
+  const blocked = autonomyView && autonomyBlocker(scope, layerForm());
+  $("save-autonomy").disabled = !dirty || Boolean(blocked);
+  $("save-autonomy").textContent = scope === "personal" ? "Save preferences" : "Stage repository settings";
+  $("reset-autonomy").disabled = !dirty;
+  $("autonomy-state").textContent = !autonomyView ? "Unavailable" : dirty ? "Unsaved form edits" : scope === "repository" && drafts.has(repositoryFile) ? "Staged configuration" : "Current settings";
+  $("review-autonomy").hidden = !drafts.has(repositoryFile);
+  notice("autonomy-reason", blocked || "", true);
+}
+
+function fillAutonomyLevels(select, value) {
+  select.replaceChildren();
+  selectOption(select, "", "Inherit");
+  for (const [key, label] of Object.entries(autonomyLevels)) selectOption(select, key, label);
+  select.value = value || "";
+}
+
+function renderAutonomyActions() {
+  const scope = $("autonomy-scope").value;
+  const settings = layerForm().settings;
+  const target = $("autonomy-actions");
+  target.replaceChildren();
+  const search = $("autonomy-filter").value.trim().toLowerCase();
+  const common = Object.keys(commonActions);
+  const actions = [...(autonomyView?.actions || [])].sort((a,b) => {
+    const rank = (key) => common.includes(key) ? common.indexOf(key) : common.length;
+    return rank(a.action) - rank(b.action) || a.action.localeCompare(b.action);
+  });
+  for (const item of actions) {
+    const title = commonActions[item.action] || item.action.replaceAll("_", " ").replaceAll(".", " · ");
+    if (!(item.action + " " + title).toLowerCase().includes(search)) continue;
+    const row = element("div", "", "autonomy-action");
+    const detail = element("div");
+    detail.append(element("h3", title), element("code", item.action, "key"));
+    for (const rule of item.rules || []) {
+      const effective = element("div", "", "effective");
+      const part = rule.action && rule.action !== item.action ? rule.action + " · " : "";
+      effective.append(element("strong", part + rule.class + " · " + (autonomyLevels[rule.level] || rule.level)),
+        element("small", "Rule " + rule.source + " · review window " + rule.approval_window + " (" + rule.window_source + ")"));
+      detail.append(effective);
+    }
+    if (item.rules?.some((rule) => rule.action && rule.action !== item.action)) {
+      detail.append(element("p", "Publication also requires a branch push. The more restrictive rule applies."));
+    }
+    if (item.confirmation) detail.append(element("p", (item.mandatory ? "Required review. " : "Provider rule. ") + item.confirmation));
+    const label = element("label", scope === "personal" ? "Personal preference" : "Repository ceiling");
+    const select = element("select");
+    select.setAttribute("aria-label", title + " · " + label.textContent);
+    fillAutonomyLevels(select, settings.actions[item.action]);
+    select.addEventListener("change", () => recordAutonomyEdit("actions", select.value, item.action));
+    label.append(select);
+    row.append(detail,label);
+    target.append(row);
+  }
+  if (!target.childElementCount) target.append(element("p", "No matching actions.", "muted"));
+}
+
+function renderAutonomy() {
+  updateAutonomyControls();
+  if (!autonomyView) {
+    $("autonomy-actions").replaceChildren();
+    $("autonomy-rules-source").textContent = "";
+    return;
+  }
+  const personal = $("autonomy-scope").value === "personal";
+  $("autonomy-scope-help").textContent = personal
+    ? "These preferences apply across your checkouts. An action preference overrides your class preference within repository ceilings."
+    : "These ceilings limit everyone in this checkout. Repository changes go through Configuration for review and publication.";
+  $("autonomy-rules-source").textContent = drafts.has(repositoryFile)
+    ? "Effective rules use saved personal preferences and the staged repository configuration."
+    : "Effective rules use saved personal preferences and the repository configuration on disk.";
+  const values = layerForm().settings;
+  for (const field of ["local","remote"]) fillAutonomyLevels($("autonomy-" + field), values[field]);
+  $("autonomy-window").value = values.window;
+  renderAutonomyActions();
+}
+
+async function loadAutonomy() {
+  if (autonomySaving) return;
+  const seq = ++autonomySequence;
+  autonomyLoading = true;
+  updateAutonomyControls();
+  notice("autonomy-status", "Loading approval settings…");
+  try {
+    const draft = drafts.get(repositoryFile);
+    const next = draft ? await request("api/autonomy/inspect", {content: draft.content, base_digest: draft.base_digest})
+      : await request("api/autonomy");
+    if (seq !== autonomySequence) return;
+    autonomyView = next;
+    notice("autonomy-status");
+  } catch (e) {
+    if (seq !== autonomySequence) return;
+    autonomyView = null;
+    notice("autonomy-status", e.message, true);
+  } finally {
+    if (seq === autonomySequence) { autonomyLoading = false; renderAutonomy(); }
+  }
+}
+
+$("autonomy-scope").addEventListener("change", renderAutonomy);
+$("autonomy-filter").addEventListener("input", renderAutonomyActions);
+$("autonomy-filter").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") event.preventDefault();
+});
+for (const field of ["local","remote","window"]) {
+  const node = $("autonomy-" + field);
+  node.addEventListener(field === "window" ? "input" : "change", () => recordAutonomyEdit(field, node.value));
+}
+$("reset-autonomy").addEventListener("click", () => {
+  autonomyForms.delete($("autonomy-scope").value);
+  notice("autonomy-status");
+  renderAutonomy();
+});
+$("review-autonomy").addEventListener("click", () => {
+  filePath = repositoryFile;
+  renderEditor();
+});
+$("autonomy-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const scope = $("autonomy-scope").value;
+  const form = autonomyForms.get(scope);
+  if (!form || !autonomyView || autonomyLoading || autonomySaving || autonomyBlocker(scope, form)) return;
+  const draft = localDraft(repositoryFile);
+  const payload = { scope, settings: form.settings, user_revision: autonomyView.user_revision };
+  if (scope === "repository" || drafts.has(repositoryFile)) Object.assign(payload, {content: draft.content, base_digest: draft.base_digest});
+  autonomySaving = true;
+  updateAutonomyControls();
+  notice("autonomy-status", scope === "personal" ? "Saving preferences…" : "Staging repository settings…");
+  try {
+    const result = await request("api/autonomy", payload);
+    if (scope === "repository") {
+      if (typeof result.content !== "string" || !result.autonomy) throw new Error("The server returned an incomplete staged configuration.");
+      const latest = localDraft(repositoryFile);
+      if (latest.content !== draft.content || latest.base_digest !== draft.base_digest) throw new Error("The configuration changed while staging. Review the current candidate.");
+      putDraft(repositoryFile, result.content, draft.base_digest, result.providers);
+      filePath = repositoryFile;
+      invalidateReview();
+      renderEditor();
+      autonomyView = result.autonomy;
+    } else {
+      autonomyView = result;
+    }
+    autonomyForms.delete(scope);
+    notice("autonomy-status", scope === "personal" ? "Personal preferences saved." : "Repository settings staged. Open Configuration to preview and publish the change.");
+  } catch (e) { notice("autonomy-status", e.message, true); }
+  finally { autonomySaving = false; renderAutonomy(); }
+});
+
 async function loadActivity() {
   $("activity").disabled = true;
   $("activity-note").textContent = "Checking repository activity…";
@@ -592,11 +815,11 @@ function replyForm(entry) {
       if (result.approval) {
         approval = result.approval;
         send.textContent = "Confirm send";
-        message.textContent = "Confirm to deliver this answer to the worker.";
+        message.textContent = approvalExplanation(result);
       } else if (result.state === "answered") {
         message.textContent = "Reply delivered.";
         await loadActivity();
-      } else { throw new Error("The reply has no confirmed delivery status. Check activity."); }
+      } else { throw new Error(result.reason || "The reply has no confirmed delivery status. Check activity."); }
     } catch (e) {
       approval = "";
       send.textContent = "Review reply";
@@ -662,6 +885,7 @@ function renderProviders() {
   const error = staged && !roles().length ? "Preview your edited repository configuration to inspect its provider settings." : problems();
   notice("provider-error",error,true);
   const available = roles();
+  $("role-count").textContent = String(available.length);
   if (!role()) roleID = available[0]?.role || "";
   const items = $("roles");
   items.replaceChildren();
@@ -670,7 +894,10 @@ function renderProviders() {
     button.type = "button";
     button.setAttribute("aria-pressed",String(item.role === roleID));
     button.append(element("span",item.selected || "Unconfigured"));
-    button.addEventListener("click",() => chooseRole(item.role));
+    button.addEventListener("click", () => {
+      chooseRole(item.role);
+      items.querySelector('[aria-pressed="true"]')?.focus({preventScroll: true});
+    });
     items.append(button);
   }
   const active = role();
@@ -993,7 +1220,7 @@ function renderReview(data, intent) {
   if (data.destination) $("review-summary").textContent += " · " + data.destination;
   const notes = $("review-messages");
   notes.replaceChildren();
-  const messages = [data.note,data.ci,data.warning,data.reason,data.plan?.warning];
+  const messages = [data.note,data.ci,data.warning,approvalExplanation(data),data.plan?.warning];
   for (const message of messages) if (typeof message === "string" && message) notes.append(element("p",message,"notice"));
   $("publish").textContent = intent.draft ? "Confirm and open draft PR" : "Confirm and apply to default branch";
   $("publish").disabled = data.publishable === false || !data.approval || publishing;
@@ -1077,10 +1304,18 @@ function hasPendingEdits() {
   return drafts.size || $("setting-dialog").open || $("document-control").querySelector("[data-modified]") || $("commit-title").value !== $("commit-title").defaultValue || $("task-ref").value || $("delivery").value === "draft";
 }
 window.addEventListener("beforeunload",(event) => {
-  if (!leavingForWorktree && !storeDrafts() && hasPendingEdits()) { event.preventDefault(); event.returnValue = ""; }
+  if (!leavingForWorktree && (autonomyForms.size || (!storeDrafts() && hasPendingEdits()))) { event.preventDefault(); event.returnValue = ""; }
 });
 
 $("refresh").disabled = true;
 $("activity").disabled = true;
 $("copy-handoff").disabled = true;
 connect();
+
+function approvalExplanation(data) {
+  if (!data.policy) return data.reason || "";
+  const rule = data.policy;
+  let message = rule.action + " requires " + rule.level + " under " + rule.source + ".";
+  if (data.request?.expires_at) message += " Review by " + new Date(data.request.expires_at).toLocaleTimeString() + ".";
+  return message + (data.reason ? " " + data.reason : "");
+}

@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +62,14 @@ func TestWorkflowGitHubTaskReads(t *testing.T) {
 }
 
 func TestWorkflowJiraTaskReads(t *testing.T) {
-	a, err := Open(t.Context(), newRepo(t), "test")
+	dir := newRepo(t)
+	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("task_management: {provider: jira}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Open(t.Context(), dir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

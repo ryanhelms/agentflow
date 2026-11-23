@@ -28,7 +28,7 @@ func TestTabNavigationChecksIdentityAndAcknowledgement(t *testing.T) {
 		t.Fatal("automatic launch navigated the tab")
 	default:
 	}
-	for _, expected := range []tabOutcome{tabMissing, tabAccepted, tabStorageFull, tabPublishing} {
+	for _, expected := range []tabOutcome{tabMissing, tabAccepted, tabStorageFull, tabPublishing, tabAutonomy} {
 		result := make(chan tabOutcome, 1)
 		go func() { result <- s.tabRoutes().navigateTo(t.Context(), d, false, "") }()
 		var event navigation

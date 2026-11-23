@@ -41,6 +41,9 @@ export XDG_CACHE_HOME="$tmp/cache" DEVFLOW_HOME="$tmp/home" DEVFLOW_NO_UPDATE=1
 mkdir -p "$XDG_CACHE_HOME/devflow/dev" "$DEVFLOW_HOME"
 (cd "$root" && go build -o "$XDG_CACHE_HOME/devflow/dev/devflow" ./cmd/devflow)
 ln -sfn dev "$XDG_CACHE_HOME/devflow/current"
+# Keep incidental CLI calls in the test on the fixture binary even if the
+# developer already has a different Devflow release on PATH.
+export PATH="$XDG_CACHE_HOME/devflow/current:$PATH"
 
 repo="$tmp/repo"
 mkdir -p "$repo"
@@ -49,7 +52,7 @@ git init -q -b main
 git config user.email "e2e@nscale.com"
 git config user.name "devflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
-"$XDG_CACHE_HOME/devflow/current/devflow" init >/dev/null
+"$XDG_CACHE_HOME/devflow/current/devflow" init --non-interactive --provider task_management=jira >/dev/null
 rm -f .claude/settings.json # load the plugin from this checkout instead of the marketplace
 git add -A
 git commit -q -m "chore(PLAT-1): add devflow configuration"
@@ -72,6 +75,7 @@ init=$(jq -c 'select(.type=="system" and .subtype=="init")' "$tmp/1.jsonl")
 check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:devflow:devflow" and .status=="connected")' <<<"$init"
 check "25 devflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_devflow_devflow__"))] | length >= 25' <<<"$init"
 check "21 skills" jq -e '[.slash_commands[] | select(startswith("devflow:"))] | length >= 21' <<<"$init"
+check "manager skill available" jq -e '.slash_commands | index("devflow:manager") != null' <<<"$init"
 check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("devflow · PLAT-123"))' "$tmp/1.jsonl"
 
 echo "2. /devflow:commit"
@@ -103,11 +107,15 @@ git config user.name "devflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
 run_claude "$tmp/4.jsonl" "Reply with the word ready." "mcp__plugin_devflow_devflow"
 check "repo set up on session start" test -f .devflow/config.yml
+check "local installation receipt created" test -f .devflow/installation.yml
 check "developer told about it" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("set this repo up automatically"))' "$tmp/4.jsonl"
 check "nothing committed" test "$(git log -1 --format=%s)" = "chore(PLAT-1): init"
 rm -f .claude/settings.json
-run_claude "$tmp/5.jsonl" "/devflow:remove — I confirm the removal in advance; don't commit anything." \
-  "Bash(devflow remove:*)" "Bash(devflow:*)" "Bash(git status:*)"
+plugin_launcher="$root/adapters/claude-code/bin/devflow"
+# Claude's Bash permission matcher distinguishes quoted paths in the literal command.
+run_claude "$tmp/5.jsonl" "/devflow:remove — I confirm the removal in advance; run the packaged launcher's preview and removal as separate Bash calls, and don't commit anything." \
+  "Bash(sh \"$plugin_launcher\" remove --dry-run)" "Bash(sh \"$plugin_launcher\" remove)" \
+  "Bash(sh $plugin_launcher remove --dry-run)" "Bash(sh $plugin_launcher remove)" "Bash(git status:*)"
 check "devflow removed" test ! -e .devflow
 check "auto init off for this clone" test "$(git config devflow.autoinit)" = false
 run_claude "$tmp/6.jsonl" "Reply with the word ready." "mcp__plugin_devflow_devflow"

@@ -57,8 +57,12 @@ func TestDescribeEveryConfigurationFormat(t *testing.T) {
 	if at(t, main.Schema, "devops", "checks", "provider").Default != "github" || !slices.Contains(at(t, main.Schema, "commit", "types", "*").Suggestions, "feat") || at(t, main.Schema, "commit", "require_key").Type != "boolean" {
 		t.Fatal("missing main fields")
 	}
+	if at(t, main.Schema, "task_management", "provider").Default != "none" || len(at(t, main.Schema, "task_management", "settings").Properties) != 0 {
+		t.Fatal("unconfigured task management should have no provider settings")
+	}
+	main = describe(MainFile, "task_management: {provider: jira}\n")
 	if at(t, main.Schema, "task_management", "settings", "projects", "*").Type != "string" || at(t, main.Schema, "task_management", "settings", "projects").Nullable {
-		t.Fatal("schema should use default Jira provider")
+		t.Fatal("schema should use selected Jira provider")
 	}
 	main = describe(MainFile, "task_management: {provider: github-issues, settings: {search: {limit: -12}}}\n")
 	if !at(t, main.Schema, "task_management", "settings", "search", "limit").Nonnegative || main.Positions["/task_management/settings/search/limit"].Line != 1 {

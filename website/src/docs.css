@@ -1,0 +1,109 @@
+.docs-page .page,
+.docs-page .workbench-pane,
+.docs-page .workbench-center {
+  height: auto;
+  overflow: visible;
+}
+
+.docs-page .workbench {
+  height: auto;
+  min-height: 32rem;
+}
+
+.docs-page .ph-actions .select {
+  min-width: 11rem;
+}
+
+.docs-search {
+  padding: var(--s-4);
+  border-bottom: var(--keyline) solid var(--border);
+}
+
+.docs-result {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s-2) var(--s-4);
+  border: 0;
+  border-bottom: var(--keyline) solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.docs-result:hover,
+.docs-result.is-selected {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.docs-result.is-selected {
+  box-shadow: inset 2px 0 var(--brand-spearmint);
+  font-weight: 600;
+}
+
+.docs-result:focus-visible {
+  outline-offset: -2px;
+}
+
+.docs-article {
+  padding: var(--s-5);
+}
+
+.docs-reader > .panel-body {
+  padding: clamp(var(--s-4), 3vw, var(--s-7));
+}
+
+.docs-prose {
+  max-width: 72ch;
+  font-size: var(--fs-lg);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.docs-command {
+  max-width: 100%;
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: var(--keyline) solid var(--border);
+  background: var(--bg);
+  font: 400 var(--fs-sm)/1.5 var(--mono);
+}
+
+.docs-command code {
+  font: inherit;
+}
+
+.docs-reader-footer {
+  width: 100%;
+  padding-block: var(--s-2);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 720px) {
+  .docs-page .workbench {
+    /* WorkbenchTemplate sets the desktop pane width inline. */
+    grid-template-columns: minmax(0, 1fr) !important;
+    min-height: 0;
+  }
+
+  .docs-page .workbench-pane {
+    border-right: 0;
+  }
+
+  .docs-page .ph-actions,
+  .docs-page .ph-actions > .field {
+    width: 100%;
+  }
+
+  .docs-article {
+    padding: var(--s-3);
+  }
+}

@@ -9,7 +9,7 @@ serves the configured repositories directly on the loopback interface.
 Ask Agent Commander **“Open the task management provider editor for this
 repo.”** Its coordinator calls `devflow_ui_open` in the worktree selected for
 the chat. This opens **Providers → Task management**. You can also ask for
-Overview, Configuration or Handoff. The tool defaults to Providers and accepts
+Overview, Autonomy, Configuration or Handoff. The tool defaults to Providers and accepts
 an optional provider role.
 
 ```json
@@ -54,7 +54,8 @@ editor controls on this browser. For example, you can leave a provider list
 half-edited, work in another checkout, and return to the open field and its
 unsubmitted rows. The source selection, field search, and publication inputs
 are also restored. If the underlying file changes, the editor keeps the draft
-for recovery and requires you to review the new source before publishing.
+for recovery and requires you to review the new source before publishing. Save or discard personal or
+repository Autonomy form edits before switching worktrees.
 
 To try this with two linked worktrees, open the provider editor from the chat
 for the first one and type into a list row. Leave the field open. Ask the chat
@@ -74,6 +75,129 @@ worktree, or run the displayed command from its terminal. Use
 Keep that link on your machine. Private browsing and clearing site data
 remove browser-local credentials and drafts. A console started with v0.43.0
 predates the daemon. Its first launch after upgrading opens the new address.
+
+The repository name and branch stay visible while you navigate. Under
+**Appearance**, choose **System**, **Light** or **Dark**. The console remembers
+your choice for this browser origin when browser storage is available.
+
+## Configure Devflow from chat
+
+Use a Devflow MCP connection for the worktree you want to configure. If the
+tools are missing after upgrading Devflow, reconnect the MCP server or start a
+fresh client session in that worktree. For a Codex checkout without a Devflow
+registration, run `devflow setup plan --client codex` and review the project
+registration with `devflow setup apply --client codex`. Open a fresh session
+after registration. [Client setup](../README.md#set-up-your-machine-engineers)
+
+| Ask in chat | What Devflow does |
+| --- | --- |
+| “Which setting controls local commits here, and where does it come from?” | Shows your preference, the repository ceilings and the effective rule. |
+| “Set my personal commit preference to automatic. Keep the five-minute window.” | Previews the change to your user configuration. On approval, saves it on this workstation. |
+| “Change the task provider’s search limit to 25 and open a draft PR.” | Reads the repository settings, stages the typed value, and shows its source diff, effective changes and publication destination before requesting approval. |
+| “Show the release units and preview this change to their configuration.” | Reads the registered release configuration by path and previews your proposed source against its current revision. |
+| “Check which configured provider connections are ready.” | Runs the checkout’s provider readiness checks and reports connections that need attention. |
+
+`devflow_config` handles inspection and preparation. `devflow_config_apply` saves
+the reviewed personal change or publishes the reviewed repository file.
+The CLI exposes the same operations through `devflow config OP`. Pass the
+remaining fields as a JSON object on standard input or with `--input FILE`.
+List the sources and read the repository configuration with these commands.
+
+```sh
+devflow config list
+printf '%s\n' '{"path":".devflow/config.yml"}' | devflow config read
+```
+
+### Change a personal preference
+
+Call `devflow_config` with `{"operation":"autonomy"}` to read the effective
+rules and the current `user_revision`. To make local commits automatic, use
+the returned revision in a second call to `devflow_config`.
+
+```json
+{
+  "operation": "preview_personal",
+  "user_revision": "<revision from autonomy>",
+  "patch": {"actions": {"commit": "auto"}}
+}
+```
+
+Review the before and after values. Once the developer approves, call
+`devflow_config_apply` with the same revision and patch and the token from the
+preview.
+
+```json
+{
+  "operation": "save_personal",
+  "user_revision": "<revision from autonomy>",
+  "patch": {"actions": {"commit": "auto"}},
+  "confirm_token": "<token from preview_personal>"
+}
+```
+
+A patch can change `local`, `remote`, `window` and individual `actions`.
+Omitted fields keep their existing values. For example,
+`{"actions":{"commit":""}}` returns the commit setting to inheritance.
+Devflow uses the current on-disk policy to review the change. If another editor
+updates the personal file, read the new revision and preview your patch again.
+
+### Publish a repository change
+
+1. Call `devflow_config` with `{"operation":"list"}` to see the registered
+   files and provider settings. Use `read` with `path: ".devflow/config.yml"`
+   for the current source and digest. Managed and credential-bearing sources
+   appear in the inventory with their contents withheld.
+2. For a checkout using GitHub Issues for task management, the following
+   `devflow_config` call sets the search limit to 25. Substitute the source
+   and digest from `read`. `value` accepts the JSON type from the setting's
+   schema.
+
+   ```json
+   {
+     "operation": "compose",
+     "path": ".devflow/config.yml",
+     "base_digest": "<digest from read>",
+     "content": "<source from read>",
+     "role": "task_management",
+     "edit": "set",
+     "setting": "search.limit",
+     "value": 25
+   }
+   ```
+
+3. Preview the result with `devflow_config`. Copy the edited `content` returned
+   by `compose` and retain the original digest through successive edits.
+
+   ```json
+   {
+     "operation": "preview",
+     "path": ".devflow/config.yml",
+     "base_digest": "<digest from read>",
+     "content": "<edited source from compose>",
+     "title": "chore: adjust issue search limit",
+     "mode": "draft"
+   }
+   ```
+
+4. Review the diff, effective settings and publication destination. After
+   approval, call `devflow_config_apply` with `operation: "publish"`, the same
+   path, digest, source, title and mode, and the returned `confirm_token`.
+   Supply a conventional title that follows the checkout's commit rules. If the
+   proposal includes a `task_ref`, include it in both calls. The default mode is
+   `draft`. Request `direct` explicitly to apply the reviewed change to the
+   default branch through GitHub's checks and review rules.
+
+Use `compose` with `edit: "remove"` to inherit a provider setting, or
+`edit: "select"` to stage a provider switch. Use `stage_autonomy` with a
+`patch` to stage repository ceilings. For other registered editable sources,
+supply the complete edited file to `preview`. Each repository publication
+covers one file. Use `readiness` to check the providers configured in the
+current checkout.
+
+For an approval handoff, the prompt owner records consent for the exact
+preview. Another worker can apply that same request with the approved
+operation ID as `confirm_token`. A change to the reviewed inputs or an expired
+request requires a fresh preview. [Approval handoff](operations.md#prepare-and-apply-an-operation)
 
 ## Follow an effective setting back to its source
 
@@ -107,6 +231,31 @@ routes future operations once the new configuration is in use. Existing provider
 records stay at their source. Automatic data migration and a per-repository
 scope selector are tracked in [issue #96](https://github.com/nscaledev/devflow/issues/96).
 See [provider definitions and precedence](providers.md#provider-definitions).
+
+## Set approval preferences and ceilings
+
+Open **Autonomy** to inspect the rule, source and review window for each action.
+Use **Find an action** to look up a name such as `commit`. Actions with both local
+and remote provider routes show a rule for each class. Mandatory or conditional
+review requirements appear alongside the action.
+
+Under **Personal preferences**, choose **Automatic** for **Create a local
+commit** and choose **Save preferences** to apply that choice for your user.
+The repository ceilings still apply. The personal form saves immediately to
+the Devflow user configuration. Restart an existing Devflow MCP server to use
+the updated settings.
+
+Under **Repository ceilings**, choose a class or an action, then choose
+**Stage repository settings**. **Review staged configuration** opens the shared
+source editor with the change alongside any other staged edits to the same file.
+The effective rules on the Autonomy page then reflect that proposed configuration.
+Preview and publish the change through the repository review flow below.
+
+Choose **Inherit** to remove a class or action setting. Leave **Approval window**
+empty to inherit the duration, or enter a duration from `1m` to `1h`.
+The personal window defaults to five minutes. A repository can set a shorter
+maximum. **Discard form edits** restores the selected scope to its last loaded
+or staged values.
 
 ## Edit and publish a repository file
 
@@ -164,3 +313,25 @@ worker activity, follow the instruction on Overview to open a fresh local
 link from the intended worktree. **Handoff** provides a copyable summary for
 the next developer or agent. The local configuration editor also works with
 Agent Commander disconnected.
+
+## Update the console design tokens
+
+The Go binary embeds the published `package/tokens.css` from
+`@nscaledev/design-tokens@0.1.0` as `internal/webui/static/nscale-tokens.css`.
+This keeps both themes available offline. The Nscale Design System MCP's
+`list_design_packages` tool reports the package version and archive SHA-256.
+
+To reproduce the checked-in asset, run these commands from the repository root
+with GitHub Packages read access. You can also use the same archive from the
+design-system plugin's `vendor/` directory.
+
+```bash
+token_dir=$(mktemp -d)
+npm pack @nscaledev/design-tokens@0.1.0 --registry=https://npm.pkg.github.com --pack-destination="$token_dir"
+token_archive="$token_dir/nscaledev-design-tokens-0.1.0.tgz"
+printf '%s  %s\n' cf7592b43e4a0fe0f2fdee54213b7b23b5267203e9866733cd6abcc1f4435362 "$token_archive" | shasum -a 256 -c - &&
+  tar -xOzf "$token_archive" package/tokens.css > internal/webui/static/nscale-tokens.css
+```
+
+For a package upgrade, update the version and archive checksum together,
+replace the stylesheet, and check the console in light and dark mode.

@@ -103,6 +103,15 @@
     check((await fetch("/fixture/live")).ok,"tab registration failed");
     check(await openTab("auto&screen=handoff"),"background startup missed active worktree");
     check(location.hash === "#providers?role=task_management","background startup changed the active screen");
+    check(await openTab("screen=autonomy"),"could not open Autonomy from chat");
+    await until(() => !byID("autonomy-controls").disabled && !byID("page-autonomy").hidden,"worktree Autonomy settings did not load");
+    const level = byID("autonomy-local");
+    level.value = "suggest";
+    level.dispatchEvent(new Event("change",{bubbles:true}));
+    const blocked = await fetch("/fixture/navigate?worktree=w/second&screen=configuration",{method:"POST"});
+    check(blocked.status===409 && (await blocked.json()).error.includes("autonomy"),"cross-worktree navigation discarded pending Autonomy edits");
+    byID("reset-autonomy").click();
+    check(await openTab("screen=providers&role=task_management"),"could not return to the provider editor");
     const capKey="devflow.commander:/w/first/";
     const grant=sessionStorage.getItem(capKey);
     check(grant && !Object.values(localStorage).some(v=>v.includes(grant)), "Commander grant escaped this tab");

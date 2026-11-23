@@ -48,14 +48,17 @@ const (
 	tabAccepted    tabOutcome = "accepted"
 	tabStorageFull tabOutcome = "storage"
 	tabPublishing  tabOutcome = "publishing"
+	tabAutonomy    tabOutcome = "autonomy"
 )
 
 func (o tabOutcome) err() error {
 	switch o {
 	case tabStorageFull:
 		return errors.New("the open console could not save its worktree state. Keep that tab open, save your edits or free browser storage, then retry")
+	case tabAutonomy:
+		return errors.New("save or discard the open console’s autonomy edits before switching worktrees")
 	case tabPublishing:
-		return errors.New("the open console is publishing a change. Wait for publication to finish, then retry")
+		return errors.New("the open console is saving a change. Wait for the save to finish, then retry")
 	}
 	return nil
 }
@@ -297,7 +300,7 @@ func (s *server) tabAck(w http.ResponseWriter, r *http.Request) {
 	}
 	// Only accept known reasons. Browser-controlled text never enters chat logs.
 	outcome := input.Blocked
-	if input.Blocked != tabMissing && (input.Handled || (input.Blocked != tabStorageFull && input.Blocked != tabPublishing)) {
+	if input.Blocked != tabMissing && (input.Handled || (input.Blocked != tabStorageFull && input.Blocked != tabPublishing && input.Blocked != tabAutonomy)) {
 		problem(w, http.StatusBadRequest, "unknown or conflicting navigation result")
 		return
 	}

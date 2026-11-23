@@ -63,22 +63,50 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		return res, err
 	}
 	defer root.Close()
+	receipt, err := readEnrollment(root)
+	if err != nil {
+		return res, err
+	}
+	fullInstall := receipt != nil && !receipt.ClientOnly || receipt == nil && legacyInstallation(root)
+	guidance, _ := readProjectFile(root, agentInstructionsFile)
+	legacyClients := receipt == nil && (fullInstall || bytes.Contains(guidance, []byte(blockStart)) && bytes.Contains(guidance, []byte(blockEnd)))
+	if receipt == nil && !fullInstall {
+		if repo, openErr := gitx.Open(ctx, repoDir); openErr == nil {
+			optedOut, _ := repo.Git(ctx, "config", "--local", "--type=bool", AutoInitKey)
+			if strings.TrimSpace(optedOut) == "false" && !bytes.Contains(guidance, []byte(blockStart)) && !hasCompanionReceipts(repoDir) {
+				res.Notes = append(res.Notes, "Devflow was already removed from this clone")
+				return res, nil
+			}
+		}
+	}
 	del := func(rel string) error {
+		if receipt.existing(rel) {
+			res.Notes = append(res.Notes, "kept "+rel+" (present before installation)")
+			return nil
+		}
+		info, err := root.Lstat(filepath.FromSlash(rel))
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			res.Skipped = append(res.Skipped, rel+" (expected a regular project file; review manually)")
+			return nil
+		}
 		res.Removed = append(res.Removed, rel)
 		if opt.DryRun {
 			return nil
 		}
-		return root.RemoveAll(filepath.FromSlash(rel))
+		return root.Remove(filepath.FromSlash(rel))
 	}
 
 	for _, rel := range ownedPaths {
-		if exists(repoDir, rel) {
+		if fullInstall && exists(repoDir, rel) {
 			if err := del(rel); err != nil {
 				return res, err
 			}
 		}
 	}
-	if !opt.KeepReleases {
+	if fullInstall && !opt.KeepReleases {
 		for _, rel := range releaseFiles {
 			if exists(repoDir, rel) {
 				if err := del(rel); err != nil {
@@ -90,15 +118,19 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 
 	// Other template files: delete when unchanged (or forced), otherwise keep.
 	err = fs.WalkDir(templates.Repo, "repo", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil || d.IsDir() || !fullInstall {
 			return err
 		}
 		rel := strings.TrimPrefix(p, "repo/")
 		if rel == "AGENTS.md" || rel == ".codex/config.toml" || mergedJSON[rel] != nil || isOwned(rel) {
 			return nil
 		}
-		cur, err := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(rel)))
-		if errors.Is(err, os.ErrNotExist) {
+		cur, err := readProjectFile(root, filepath.FromSlash(rel))
+		if errors.Is(err, errNotRegular) {
+			res.Skipped = append(res.Skipped, rel+" (expected a regular project file; review manually)")
+			return nil
+		}
+		if err == nil && cur == nil {
 			return nil
 		}
 		if err != nil {
@@ -123,28 +155,67 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		groups[format.path] = format.group
 	}
 	for _, rel := range slices.Sorted(maps.Keys(groups)) {
-		if err := unmergeJSON(res, root, rel, groups[rel], opt.DryRun); err != nil {
+		cleanup := legacyClients
+		var protected []string
+		if !fullInstall && receipt == nil {
+			protected = []string{"includeCoAuthoredBy", "contextFileName"}
+		}
+		if receipt != nil {
+			var claimed bool
+			protected, claimed = receipt.ClientEntries[rel]
+			cleanup = claimed || fullInstall && !receipt.existing(rel)
+		}
+		if err := unmergeJSON(res, root, rel, groups[rel], cleanup, protected, receipt.existing(rel), opt.DryRun); err != nil {
 			return res, fmt.Errorf("%s: %w", rel, err)
 		}
 	}
-	if err := removeCodex(res, repoDir, opt.DryRun); err != nil {
-		return res, err
+	cleanCodex := legacyClients
+	if receipt != nil {
+		protected, claimed := receipt.ClientEntries[".codex/config.toml"]
+		cleanCodex = claimed && !slices.Contains(protected, "mcp_servers.devflow") || fullInstall && !receipt.existing(".codex/config.toml")
 	}
-	if err := removeBlock(res, repoDir, "AGENTS.md", opt.DryRun); err != nil {
-		return res, err
+	if cleanCodex {
+		if err := removeCodex(res, root, receipt.existing(".codex/config.toml"), opt.DryRun); err != nil {
+			return res, err
+		}
 	}
-	if !opt.DryRun {
-		for _, dir := range []string{".devflow/bin", ".devflow", ".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"} {
-			removeIfEmpty(filepath.Join(repoDir, filepath.FromSlash(dir)))
+	if receipt == nil || fullInstall || receipt.ClientGuidance {
+		if err := removeBlock(res, root, receipt, opt.DryRun); err != nil {
+			return res, err
+		}
+	}
+	if receipt != nil {
+		if err := del(receiptPath); err != nil {
+			return res, err
+		}
+	}
+	if (fullInstall || receipt != nil) && !opt.DryRun {
+		directories := []string{".devflow/bin", ".devflow", ".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"}
+		if !fullInstall {
+			directories = []string{".devflow"}
+			for name := range receipt.ClientEntries {
+				if _, known := mergedJSON[name]; known || name == ".codex/config.toml" {
+					directories = append(directories, filepath.Dir(name))
+				}
+			}
+		}
+		for _, dir := range directories {
+			if !receipt.existing(dir) {
+				removeIfEmpty(root, filepath.FromSlash(dir))
+			}
 		}
 	}
 
 	if repo, err := gitx.Open(ctx, repoDir); err == nil && !opt.DryRun {
 		hp, _ := repo.Git(ctx, "config", "--local", "core.hooksPath")
-		if strings.TrimSpace(hp) == ".githooks" && !exists(repoDir, ".githooks") {
+		managed, _ := repo.Git(ctx, "config", "--local", managedHooks)
+		if strings.TrimSpace(hp) == ".githooks" && (strings.TrimSpace(managed) == "true" || (fullInstall && receipt == nil && !exists(repoDir, ".githooks"))) {
 			if _, err := repo.Git(ctx, "config", "--local", "--unset", "core.hooksPath"); err == nil {
 				res.Notes = append(res.Notes, "unset core.hooksPath for this clone")
 			}
+		}
+		if strings.TrimSpace(managed) == "true" {
+			_, _ = repo.Git(ctx, "config", "--local", "--unset", managedHooks)
 		}
 		if _, err := repo.Git(ctx, "config", "--local", AutoInitKey, "false"); err == nil {
 			res.Notes = append(res.Notes, "automatic init is off for this clone (git config "+AutoInitKey+" false); `devflow init` turns it back on")
@@ -154,6 +225,15 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		"commit the deletions on a branch and open a PR; other clones keep core.hooksPath until they pull",
 		"repo variables and secrets (JIRA_*, DEVFLOW_*) and ~/.codex/prompts/devflow-*.md are not touched")
 	return res, nil
+}
+
+func hasCompanionReceipts(repoDir string) bool {
+	for _, format := range companionClients {
+		if exists(repoDir, companionReceiptName(format.path)) {
+			return true
+		}
+	}
+	return false
 }
 
 func isOwned(rel string) bool {
@@ -170,15 +250,15 @@ func exists(repoDir, rel string) bool {
 	return err == nil
 }
 
-func removeIfEmpty(dir string) {
-	if entries, err := os.ReadDir(dir); err == nil && len(entries) == 0 {
-		_ = os.Remove(dir)
+func removeIfEmpty(root *os.Root, dir string) {
+	if info, err := root.Lstat(dir); err == nil && info.IsDir() {
+		_ = root.Remove(dir)
 	}
 }
 
 // unmergeJSON removes the keys devflow merged into a shared JSON file, deleting the
 // file when nothing else is left in it.
-func unmergeJSON(res *Result, root *os.Root, rel, group string, dryRun bool) error {
+func unmergeJSON(res *Result, root *os.Root, rel, group string, cleanup bool, protected []string, keepFile, dryRun bool) error {
 	parent, name := filepath.Split(filepath.FromSlash(rel))
 	parent = filepath.Clean(parent)
 	info, err := root.Lstat(parent)
@@ -198,12 +278,12 @@ func unmergeJSON(res *Result, root *os.Root, rel, group string, dryRun bool) err
 	}
 	defer dir.Close()
 	if dryRun {
-		return removeClientEntries(res, dir, rel, name, group, true)
+		return removeClientEntries(res, dir, rel, name, group, cleanup, protected, keepFile, true)
 	}
 	// Only take the project writer lock for an actual change. Re-read both
 	// files under it so a concurrent setup cannot invalidate the preview.
 	var preview Result
-	if err := removeClientEntries(&preview, dir, rel, name, group, true); err != nil {
+	if err := removeClientEntries(&preview, dir, rel, name, group, cleanup, protected, keepFile, true); err != nil {
 		return err
 	}
 	if len(preview.Merged)+len(preview.Removed) == 0 {
@@ -212,11 +292,11 @@ func unmergeJSON(res *Result, root *os.Root, rel, group string, dryRun bool) err
 		return nil
 	}
 	return withClientLock(dir, name, func() error {
-		return removeClientEntries(res, dir, rel, name, group, false)
+		return removeClientEntries(res, dir, rel, name, group, cleanup, protected, keepFile, false)
 	})
 }
 
-func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, dryRun bool) error {
+func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, cleanup bool, protected []string, keepFile, dryRun bool) error {
 	var records map[string]string
 	if group != "" {
 		var err error
@@ -242,7 +322,11 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, dry
 	if err != nil {
 		return err
 	}
-	for _, src := range mergedJSON[rel] {
+	var sources []string
+	if cleanup {
+		sources = mergedJSON[rel]
+	}
+	for _, src := range sources {
 		var data []byte
 		if p, ok := strings.CutPrefix(src, "template:"); ok {
 			data = mustTemplate(p)
@@ -256,12 +340,12 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, dry
 		if err := json.Unmarshal(data, &sub); err != nil {
 			return err
 		}
-		if deepRemove(doc, sub) {
+		if removeAdapterEntries(doc, sub, protected) {
 			changed = true
 		}
 	}
 	if changed {
-		if err := saveClientRemoval(res, dir, rel, name, doc, dryRun); err != nil {
+		if err := saveClientRemoval(res, dir, rel, name, doc, keepFile, dryRun); err != nil {
 			return err
 		}
 	}
@@ -275,8 +359,8 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, dry
 	return dir.Remove(companionReceiptName(name))
 }
 
-func saveClientRemoval(res *Result, dir *os.Root, rel, name string, doc map[string]any, dryRun bool) error {
-	if len(doc) == 0 {
+func saveClientRemoval(res *Result, dir *os.Root, rel, name string, doc map[string]any, keepFile, dryRun bool) error {
+	if len(doc) == 0 && !keepFile {
 		res.Removed = append(res.Removed, rel)
 		if dryRun {
 			return nil
@@ -332,86 +416,88 @@ func removeCompanionEntries(res *Result, doc map[string]any, rel, group string, 
 	return changed, nil
 }
 
-// deepRemove deletes from dst every key in src whose value matches, recursing into
-// objects and dropping objects left empty. It reports whether dst changed.
-func deepRemove(dst, src map[string]any) bool {
+// A server or marketplace declaration is one registration. Removing only its
+// command from an edited declaration would leave a broken user-owned entry.
+func removeAdapterEntries(doc, adapter map[string]any, protected []string) bool {
 	changed := false
-	for k, v := range src {
-		dv, ok := dst[k]
+	for key, expected := range adapter {
+		current, ok := doc[key]
 		if !ok {
 			continue
 		}
-		sm, sok := v.(map[string]any)
-		dm, dok := dv.(map[string]any)
-		switch {
-		case sok && dok:
-			if deepRemove(dm, sm) {
+		wanted, group := expected.(map[string]any)
+		if !group {
+			if !slices.Contains(protected, key) && reflect.DeepEqual(current, expected) {
+				delete(doc, key)
 				changed = true
 			}
-			if len(dm) == 0 {
-				delete(dst, k)
+			continue
+		}
+		entries, ok := current.(map[string]any)
+		if !ok {
+			continue
+		}
+		removed := false
+		for name, entry := range wanted {
+			if !slices.Contains(protected, key+"/"+name) && reflect.DeepEqual(entries[name], entry) {
+				delete(entries, name)
+				removed = true
 			}
-		case reflect.DeepEqual(dv, v):
-			delete(dst, k)
+		}
+		if removed {
 			changed = true
+			if len(entries) == 0 && !slices.Contains(protected, key) {
+				delete(doc, key)
+			}
 		}
 	}
 	return changed
 }
 
-// removeCodex drops the [mcp_servers.devflow] tables from .codex/config.toml.
-func removeCodex(res *Result, repoDir string, dryRun bool) error {
+// Remove only the shipped Codex block, keeping surrounding comments and the
+// entire table if a user added settings to it.
+func removeCodex(res *Result, root *os.Root, keepFile, dryRun bool) error {
 	const rel = ".codex/config.toml"
-	dest := filepath.Join(repoDir, filepath.FromSlash(rel))
-	b, err := os.ReadFile(dest)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	data, err := readProjectFile(root, rel)
 	if err != nil {
 		return err
 	}
-	var out []string
-	skipping, changed := false, false
-	for _, line := range strings.Split(string(b), "\n") {
-		t := strings.TrimSpace(line)
-		if strings.HasPrefix(t, "[") {
-			name := strings.Trim(t, "[] ")
-			skipping = name == "mcp_servers.devflow" || strings.HasPrefix(name, "mcp_servers.devflow.")
-			if skipping {
-				changed = true
-				// drop the comment lines that introduce the table
-				for len(out) > 0 && strings.HasPrefix(strings.TrimSpace(out[len(out)-1]), "#") {
-					out = out[:len(out)-1]
-				}
-			}
-		}
-		if !skipping {
-			out = append(out, line)
-		}
-	}
-	if !changed {
+	block := mustAdapter("codex/config.toml")
+	start := bytes.Index(data, block)
+	if start < 0 {
 		return nil
 	}
-	rest := strings.TrimSpace(strings.Join(out, "\n"))
-	if rest == "" {
+	tail := data[start+len(block):]
+	next := bytes.TrimSpace(tail)
+	if len(next) > 0 && (!bytes.HasPrefix(next, []byte("[")) || bytes.HasPrefix(next, []byte("[mcp_servers.devflow."))) {
+		return nil
+	}
+	if start > 0 && data[start-1] != '\n' {
+		return nil
+	}
+	if keepFile && start > 0 {
+		start--
+	} // installCodex added this separator.
+	remaining := append(bytes.Clone(data[:start]), tail...)
+	if len(remaining) == 0 && !keepFile {
 		res.Removed = append(res.Removed, rel)
 		if dryRun {
 			return nil
 		}
-		return os.Remove(dest)
+		return root.Remove(rel)
 	}
 	res.Merged = append(res.Merged, rel)
 	if dryRun {
 		return nil
 	}
-	return os.WriteFile(dest, []byte(rest+"\n"), 0o644)
+	return publishAfter(root, rel, remaining, nil)
 }
 
 // removeBlock deletes the devflow marker block from a markdown file, and the file when
 // only the block was in it.
-func removeBlock(res *Result, repoDir, rel string, dryRun bool) error {
-	dest := filepath.Join(repoDir, rel)
-	b, err := os.ReadFile(dest)
+func removeBlock(res *Result, root *os.Root, receipt *enrollment, dryRun bool) error {
+	const rel = agentInstructionsFile
+	b, err := readProjectFile(root, rel)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -425,16 +511,22 @@ func removeBlock(res *Result, repoDir, rel string, dryRun bool) error {
 		return nil
 	}
 	rest := strings.TrimRight(s[:i], "\n ") + "\n" + strings.TrimLeft(s[j+len(blockEnd):], "\n")
-	if strings.TrimSpace(rest) == "" {
+	if receipt != nil {
+		prefix := strings.TrimSuffix(s[:i], strings.Repeat("\n", receipt.AgentSeparator))
+		rest = prefix + strings.TrimPrefix(s[j+len(blockEnd):], "\n")
+	} else if strings.TrimSpace(rest) != "" {
+		rest = strings.TrimRight(rest, "\n") + "\n"
+	}
+	if strings.TrimSpace(rest) == "" && !receipt.existing(rel) {
 		res.Removed = append(res.Removed, rel)
 		if dryRun {
 			return nil
 		}
-		return os.Remove(dest)
+		return root.Remove(rel)
 	}
 	res.Merged = append(res.Merged, rel)
 	if dryRun {
 		return nil
 	}
-	return os.WriteFile(dest, []byte(strings.TrimRight(rest, "\n")+"\n"), 0o644)
+	return publishAfter(root, rel, []byte(rest), nil)
 }

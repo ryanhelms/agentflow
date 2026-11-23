@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/nscaledev/devflow/internal/configconsole"
 	"github.com/nscaledev/devflow/internal/consolecfg"
 )
 
@@ -51,5 +52,5 @@ func (s *server) editDocument(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	s.composed(w, r, in.Path, content, in.Base)
+	reply(w, http.StatusOK, configconsole.DescribeComposition(r.Context(), s.repo.Dir, in.Path, content, in.Base))
 }

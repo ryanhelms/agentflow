@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/consolepublish"
 	"github.com/nscaledev/devflow/internal/gitx"
 )
 
@@ -243,7 +242,7 @@ func (d *daemon) activate(r registeredWorktree) *workspace {
 	}
 	origin := "http://" + d.publicHost(r.Host)
 	s := &server{commander: &clone.commander, repo: &gitx.Repo{Dir: r.Root}, origin: origin, instanceKey: signature(d.Key, "workspace/v1", key),
-		rememberKey: signature(d.identity, "remember/v1", r.CloneID+"\x00"+origin), session: randomKey(), tabs: &clone.tabs, worktreePath: "/w/" + r.ID + "/", publishTo: consolepublish.PublishTo}
+		rememberKey: signature(d.identity, "remember/v1", r.CloneID+"\x00"+origin), session: randomKey(), tabs: &clone.tabs, worktreePath: "/w/" + r.ID + "/"}
 	ws := &workspace{server: s, clone: clone, handler: http.StripPrefix("/w/"+r.ID, s.handler())}
 	d.live[key] = ws
 	return ws

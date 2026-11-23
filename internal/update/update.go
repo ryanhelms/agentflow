@@ -203,6 +203,37 @@ func (u *Updater) Latest(ctx context.Context) (*Release, error) {
 	return best, nil
 }
 
+// LatestStable resolves the release GitHub labels Latest, the same endpoint
+// used by the bootstrap launchers. An explicit repo pin or track still applies.
+func (u *Updater) LatestStable(ctx context.Context) (*Release, error) {
+	var r Release
+	if err := u.GH.Do(ctx, "GET", "/repos/"+Repo+"/releases/latest", nil, &r); err != nil {
+		return nil, err
+	}
+	v, ok := ParseVersion(r.Tag)
+	if !ok || r.Draft || r.Prerelease || v.Pre != "" || r.Tag != "v"+v.String() {
+		return nil, fmt.Errorf("unexpected latest stable release tag %q", r.Tag)
+	}
+	if u.Opts.Pin != "" && strings.TrimPrefix(u.Opts.Pin, "v") != v.String() {
+		return nil, fmt.Errorf("latest release %s conflicts with update.pin %s; review the project setting", r.Tag, u.Opts.Pin)
+	}
+	if u.Opts.Track != nil && *u.Opts.Track != v.Major {
+		return nil, fmt.Errorf("latest release %s conflicts with update.track %d; review the project setting", r.Tag, *u.Opts.Track)
+	}
+	policy, err := u.FetchPolicy(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("verify latest release policy: %w", err)
+	}
+	if policy == nil {
+		return nil, errors.New("latest release policy is unavailable")
+	}
+	if policy.Requires(v.String()) {
+		return nil, fmt.Errorf("latest release %s is blocked by version policy", r.Tag)
+	}
+	r.version = v
+	return &r, nil
+}
+
 // NewerThanCurrent reports whether r is newer than the running build.
 func (u *Updater) NewerThanCurrent(r *Release) bool {
 	cur, ok := ParseVersion(u.Current)
@@ -483,6 +514,11 @@ func VerifyChecksum(file, sumsFile string) error {
 	if want == "" {
 		return fmt.Errorf("%s not listed in checksums.txt", filepath.Base(file))
 	}
+	return VerifyDigest(file, want)
+}
+
+// VerifyDigest compares the file with a pinned SHA-256 digest.
+func VerifyDigest(file, want string) error {
 	fh, err := os.Open(file)
 	if err != nil {
 		return err
@@ -517,12 +553,20 @@ func VerifyAttestation(ctx context.Context, file string) error {
 }
 
 func extract(archive, dest string) error {
-	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return err
-	}
 	bin := "devflow"
 	if runtime.GOOS == "windows" {
-		bin = "devflow.exe"
+		bin += ".exe"
+	}
+	return ExtractBinary(archive, dest, bin)
+}
+
+// ExtractBinary copies only the named regular executable from a verified archive.
+func ExtractBinary(archive, dest, bin string) error {
+	if filepath.Base(bin) != bin || bin == "." || bin == ".." {
+		return errors.New("expected a single executable filename")
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
 	}
 	if strings.HasSuffix(archive, ".zip") {
 		zr, err := zip.OpenReader(archive)
@@ -531,7 +575,7 @@ func extract(archive, dest string) error {
 		}
 		defer zr.Close()
 		for _, f := range zr.File {
-			if filepath.Base(f.Name) != bin {
+			if filepath.Base(f.Name) != bin || !f.Mode().IsRegular() {
 				continue
 			}
 			rc, err := f.Open()

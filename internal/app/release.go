@@ -105,6 +105,10 @@ type ReleaseInitResult struct {
 // .devflow/releases.yml and the release-please files. Existing releases.yml is kept
 // unless force is set.
 func (a *App) ReleaseInit(ctx context.Context, strategy string, force bool) (*ReleaseInitResult, error) {
+	return a.releaseInit(ctx, strategy, force, false)
+}
+
+func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveExisting bool) (*ReleaseInitResult, error) {
 	res := &ReleaseInitResult{}
 	cfg, err := release.Load(a.Repo.Dir)
 	switch {
@@ -120,8 +124,7 @@ func (a *App) ReleaseInit(ctx context.Context, strategy string, force bool) (*Re
 			cfg.Strategy = a.detectStrategy(ctx)
 		}
 		if len(cfg.Units) == 0 {
-			name := filepath.Base(a.Repo.Dir)
-			cfg.Units = []release.Unit{{Name: strings.ToLower(name), Path: ".", ReleaseType: "simple", Builds: []string{release.Binary}}}
+			cfg.Units = []release.Unit{release.RootUnit(a.Repo.Dir)}
 			res.Notes = append(res.Notes, "no deployables detected; added the repo root as one unit; edit .devflow/releases.yml")
 		}
 		if err := cfg.Validate(); err != nil {
@@ -134,7 +137,7 @@ func (a *App) ReleaseInit(ctx context.Context, strategy string, force bool) (*Re
 	default:
 		return nil, err
 	}
-	written, err := a.ReleaseSync(ctx, cfg)
+	written, err := a.releaseSync(ctx, cfg, preserveExisting)
 	res.Written = append(res.Written, written...)
 	res.Strategy, res.Units = cfg.Strategy, cfg.Units
 	res.Notes = append(res.Notes,
@@ -155,6 +158,10 @@ func (a *App) detectStrategy(ctx context.Context) string {
 // ReleaseSync regenerates release-please-config.json and .release-please-manifest.json
 // from releases.yml, keeping already-released versions.
 func (a *App) ReleaseSync(ctx context.Context, cfg *release.Config) ([]string, error) {
+	return a.releaseSync(ctx, cfg, false)
+}
+
+func (a *App) releaseSync(ctx context.Context, cfg *release.Config, preserveExisting bool) ([]string, error) {
 	if cfg == nil {
 		var err error
 		if cfg, err = release.Load(a.Repo.Dir); err != nil {
@@ -188,7 +195,20 @@ func (a *App) ReleaseSync(ctx context.Context, cfg *release.Config) ([]string, e
 		if err != nil {
 			return written, err
 		}
-		if err := os.WriteFile(filepath.Join(a.Repo.Dir, name), append(b, '\n'), 0o644); err != nil {
+		flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if preserveExisting {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_EXCL
+		}
+		file, err := os.OpenFile(filepath.Join(a.Repo.Dir, name), flags, 0o644) //nolint:gosec // Release-please files are shared, non-secret repository configuration.
+		if preserveExisting && errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return written, err
+		}
+		_, writeErr := file.Write(append(b, '\n'))
+		closeErr := file.Close()
+		if err := errors.Join(writeErr, closeErr); err != nil {
 			return written, err
 		}
 		written = append(written, name)

@@ -1,0 +1,13 @@
+{
+  "name": "nscale",
+  "owner": {
+    "name": "Nscale Engineering Enablement"
+  },
+  "plugins": [
+    {
+      "name": "devflow",
+      "source": "./",
+      "description": "Devflow project tools and installation manager"
+    }
+  ]
+}

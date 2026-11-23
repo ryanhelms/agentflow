@@ -57,7 +57,7 @@ jobs:
           fi
           handle-event.sh
       - name: Preview linked task transitions
-        if: steps.task.outputs.provider != 'jira'
+        if: steps.task.outputs.provider != 'jira' && steps.task.outputs.provider != 'none'
         env:
           DEVFLOW_HOME: ${{ runner.temp }}/devflow-transitions
           DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

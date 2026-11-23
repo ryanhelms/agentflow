@@ -5,7 +5,7 @@ argument-hint: "[--screen SCREEN] [--role ROLE] [--no-open] [--port N] [--foregr
 ---
 When the developer asks to open the console for the current worktree, call
 `devflow_ui_open`. Use `screen: "overview"` for the dashboard,
-`"providers"` for the provider editor, `"configuration"` for repository
+`"providers"` for the provider editor, `"autonomy"` for approval settings, `"configuration"` for repository
 files, or `"handoff"` for the handoff page. A provider role such as
 `task_management` opens that role directly. The tool opens the local browser
 and directs an existing tab for the clone to the requested worktree.
@@ -14,3 +14,6 @@ For an explicit directory or `--no-open` request, run `devflow ui $ARGUMENTS`
 in the intended worktree. The daemon stays running when the command returns.
 Keep the one-time launch URL on the developer’s
 machine. The developer reviews and approves configuration changes in the console.
+
+For approval settings, direct the developer to **Autonomy**. Personal preferences
+save on this workstation. Repository ceilings stage in **Configuration** for review.
