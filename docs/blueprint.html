@@ -261,10 +261,10 @@ footer .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:1
       <p class="lede">One commit message moves the ticket, updates the docs, and tells the team. This is how GitHub, Jira and Confluence work as one system at Nscale, what we automate, and the order we roll it out.</p>
     </div>
     <div class="meta">
-      <div>Status <b>Awaiting approval · v0.7</b></div>
+      <div>Status <b>Architecture approved · v0.7</b></div>
       <div>Approvers <b>Kyle Redelinghuys · Vishal Srini</b></div>
       <div>Owner <b>Ryan Helms</b></div>
-      <div>Updated <b>20 Nov 2026</b></div>
+      <div>Updated <b>23 Nov 2026</b></div>
       <div>Scope <b>GitHub.com · Jira Cloud · Confluence Cloud</b></div>
       <div>Repo <b><a href="https://github.com/nscaledev/devflow">nscaledev/devflow</a></b></div>
     </div>
@@ -1626,7 +1626,7 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
       <p class="note">The <a href="rollout.md#provider-migration-rehearsal">provider migration rehearsal</a> records caller pins, compares previews, verifies replay, and restores baseline settings before consumer rollout.</p>
       <p class="eyebrow"><span class="n">09</span>Rollout</p>
       <h2>Ten phases, one pilot team first</h2>
-      <p class="status-note"><span class="pill info">Gate</span> No phase starts until Kyle Redelinghuys and Vishal Srini approve this architecture and plan. The <code>nscaledev/devflow</code> repo is built and tested so P0 can begin as soon as they sign off.</p>
+      <p class="status-note"><span class="pill ok">Approved</span> Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Pilot rollout follows the phase exit checks below.</p>
       <p class="sub">Phases are gated by outcomes, not dates. A phase starts only when the previous one has passed its exit check, and we widen the rollout only when the pilot team says the automation saves more time than it costs.</p>
       <div class="phases">
         <div class="phase"><div class="when">P0<b>Foundations</b></div><ul><li>Install the GitHub for Jira app on the <code>nscale</code> org, all repos</li><li>Create <code>svc-devflow</code> in Atlassian with a scoped token; org secrets in GitHub</li><li>Engineering leadership nominates the pilot team and two pilot repos</li><li>Create <code>nscaledev/devflow</code> with CODEOWNERS; the pilot lead fills in the pilot project's <code>flow-map.yml</code> row</li><li>Eng managers publish the shared Confluence templates in the Engineering space</li><li>Capture baseline metrics</li></ul><div class="exit"><b>Exit</b>Pilot team named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed</div></div>
@@ -1665,9 +1665,9 @@ devflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "commit
     <section id="questions">
       <p class="eyebrow"><span class="n">11</span>Decisions</p>
       <h2>Decisions made</h2>
-      <p class="sub">The open questions from v0.1, answered in the follow-up interview on 20 Nov 2026. Two items are still open: the sign-off and the pilot team name.</p>
+      <p class="sub">The open questions from v0.1, answered in the follow-up interview on 20 Nov 2026. The pilot team nomination is still open.</p>
       <ol class="qs">
-        <li><div><b>Architecture and plan sign-off</b>Kyle Redelinghuys and Vishal Srini review this blueprint. Nothing rolls out to teams until both approve; the repo, workflows and plugin are ready and tested in the meantime.</div><span class="pill info">Pending</span></li>
+        <li><div><b>Architecture and plan sign-off</b>Kyle Redelinghuys and Vishal Srini approved this blueprint and rollout plan.</div><span class="pill ok">Approved</span></li>
         <li><div><b>Jira projects in scope: the pilot team's project only</b>Other projects join one team at a time in P8, each adding its own flow-map row and confirming it against real tickets first.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Confluence: one shared template set</b>Design doc, postmortem and release notes templates live in the Engineering space. Teams publish into their own spaces. Eng managers jointly own the templates.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Claude access: approved under the existing Anthropic agreement</b>No separate P9 review. AI assist is opt-in per repo with the <code>devflow-ai</code> topic, starting with the pilot repos.</div><span class="pill ok">Decided</span></li>
