@@ -14,6 +14,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/managedmcp"
 	"github.com/nscaledev/devflow/internal/provider/asana"
@@ -171,6 +172,12 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if err != nil {
 			selection.Detail = "cannot use managed gh: " + err.Error()
 		}
+		if selection.Command == "" && selection.Install == nil {
+			tool, _ := managedcli.ForProvider("github")
+			if path, err := managedcli.Resolve(ctx, root, tool); err == nil {
+				selection.Command, selection.Detail = path, "managed GitHub CLI passed its version check"
+			}
+		}
 		p.InstallGH = selection.Install
 		ghSelection = &selection
 		github.command = selection.Command
@@ -183,7 +190,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if role.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
 			toolProvider = "github"
 		}
-		p.addProviderTooling(role.name, toolProvider, client, ghSelection)
+		p.addProviderTooling(ctx, role.name, toolProvider, client, ghSelection)
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue

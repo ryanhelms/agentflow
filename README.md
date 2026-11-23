@@ -233,11 +233,14 @@ The user approves in Slack. Devflow checks the workspace before storing the gran
 [Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
 
 Jira work and issue context, Confluence search, and individual Asana and
-GitHub issue reads can use the client’s connected provider MCP. When a
-connector is missing, Devflow returns a setup offer so the agent can ask
-whether to connect it in the current client. Reads can still use the
-signed-in Teamwork Graph or GitHub CLI where supported. If you approve,
-the agent starts the client's setup and any required sign-in.
+GitHub issue reads can use the client’s connected provider MCP. If the
+connector is unavailable or its OAuth sign-in fails, Devflow automatically
+tries the supported vendor CLI with its own saved login. It checks the
+executable and can install a checksum-pinned release of `gh` or `twg`
+in its user cache. If the CLI cannot finish the read, the agent can offer
+connector setup or start the vendor’s sign-in. Resource access denials
+remain final for the operation.
+
 For GitHub Issues in Claude Code, Devflow can install the pinned official local
 GitHub MCP server and register it for the workspace after approval. The first
 GitHub read in a fresh session initiates browser OAuth. This registration

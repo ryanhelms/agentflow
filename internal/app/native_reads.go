@@ -12,6 +12,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/auth"
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/provider/native"
@@ -38,7 +39,7 @@ func (a *App) jiraWorkSearch(ctx context.Context, site, jql string, activeSprint
 		if cursor != "" {
 			call.Arguments["nextPageToken"] = cursor
 		}
-		page, err := native.Read(ctx, call, a.decodeJiraWork, func() (jiraWorkPage, error) {
+		page, err := readNative(ctx, a.Repo.Dir, call, a.decodeJiraWork, func(ctx context.Context) (jiraWorkPage, error) {
 			if cursor != "" {
 				return jiraWorkPage{}, fmt.Errorf("Jira MCP pagination: %w", native.ErrUnavailable)
 			}
@@ -170,10 +171,12 @@ func (a *App) nativeConfluenceSearch(ctx context.Context, site, query, space str
 	if space != "" {
 		cql += fmt.Sprintf(" AND space = %q", space)
 	}
-	return native.Read(ctx, native.Call{Provider: "confluence", Server: "atlassian", Tool: "searchConfluence",
+	return readNative(ctx, a.Repo.Dir, native.Call{Provider: "confluence", Server: "atlassian", Tool: "searchConfluence",
 		Arguments: map[string]any{"cloudId": strings.TrimRight(site, "/"), "cql": cql, "limit": 10}},
 		func(raw json.RawMessage) ([]atlassian.Page, error) { return decodeConfluencePages(raw, site, space) },
-		func() ([]atlassian.Page, error) { return a.legacyConfluencePages(ctx, site, query, space) })
+		func(ctx context.Context) ([]atlassian.Page, error) {
+			return a.legacyConfluencePages(ctx, site, query, space)
+		})
 }
 
 func (a *App) legacyConfluencePages(ctx context.Context, site, query, space string) ([]atlassian.Page, error) {
@@ -243,14 +246,14 @@ func decodeConfluencePages(raw json.RawMessage, site, space string) ([]atlassian
 	return pages, nil
 }
 
-func mappedNativeRead[T any](ctx context.Context, server string, read nativemap.Read[T], fallback func() (T, error)) (T, error) {
+func mappedNativeRead[T any](ctx context.Context, repo, server string, read nativemap.Read[T], fallback func(context.Context) (T, error)) (T, error) {
 	call := read.Call()
 	var args map[string]any
 	if err := json.Unmarshal(call.Arguments(), &args); err != nil {
 		var zero T
 		return zero, err
 	}
-	return native.Read(ctx, native.Call{
+	return readNative(ctx, repo, native.Call{
 		Provider: string(call.Capability().Kind), Server: server, Tool: call.Capability().Tool, Arguments: args,
 	}, func(raw json.RawMessage) (T, error) {
 		payload, err := native.Payload(raw)
@@ -260,6 +263,27 @@ func mappedNativeRead[T any](ctx context.Context, server string, read nativemap.
 		}
 		return read.Decode(payload)
 	}, fallback)
+}
+
+func readNative[T any](ctx context.Context, repo string, call native.Call, decode func(json.RawMessage) (T, error), fallback func(context.Context) (T, error)) (T, error) {
+	return native.Read(ctx, call, decode, func(mcpErr error) (T, error) {
+		if mcpErr == nil {
+			return fallback(ctx)
+		}
+		tool, ok := managedcli.ForProvider(call.Provider)
+		var zero T
+		if !ok {
+			if errors.Is(mcpErr, native.ErrUnavailable) {
+				return fallback(ctx)
+			}
+			return zero, mcpErr
+		}
+		path, err := managedcli.Ensure(ctx, repo, tool)
+		if err != nil {
+			return zero, fmt.Errorf("could not prepare %s fallback: %w", tool.Command, err)
+		}
+		return fallback(managedcli.WithCommand(ctx, tool, path))
+	})
 }
 
 func useAtlassianCLI(ctx context.Context, site, name string) bool {

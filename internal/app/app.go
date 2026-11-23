@@ -18,7 +18,7 @@ import (
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
@@ -73,6 +73,9 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 // GitHub uses gh's own login for workstation access. An explicit token retains
 // the existing direct client used by callers such as unattended workflows.
 func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
+	if command := managedcli.Selected(ctx, "gh"); command != "" {
+		return gh.NewCLI(command, a.Repo.Dir, "github.com"), nil
+	}
 	a.githubMu.Lock()
 	defer a.githubMu.Unlock()
 	if a.ghc != nil {
@@ -84,7 +87,8 @@ func (a *App) GitHub(ctx context.Context) (*gh.Client, error) {
 			return a.ghc, nil
 		}
 	}
-	command, err := managedgh.Command(ctx, a.Repo.Dir)
+	tool, _ := managedcli.ForProvider("github")
+	command, err := managedcli.Resolve(ctx, a.Repo.Dir, tool)
 	if err != nil {
 		return nil, err
 	}

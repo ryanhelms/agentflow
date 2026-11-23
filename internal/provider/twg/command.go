@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/provider"
 )
 
@@ -69,7 +70,17 @@ func (b binding) run(ctx context.Context, name string, args []string, dest any) 
 		return false, fmt.Errorf("%s: %w", name, errors.Join(ErrFailure, err))
 	}
 
-	cmd := exec.CommandContext(ctx, "twg", append(args, "--site", b.site, "--output", "json", "--output-summary", "none")...)
+	command := managedcli.Selected(ctx, "twg")
+	if command == "" {
+		command = "twg"
+		if _, err := exec.LookPath(command); err != nil {
+			tool, _ := managedcli.ForProvider("jira")
+			if cached, err := managedcli.Resolve(ctx, ".", tool); err == nil {
+				command = cached
+			}
+		}
+	}
+	cmd := exec.CommandContext(ctx, command, append(args, "--site", b.site, "--output", "json", "--output-summary", "none")...)
 	cmd.Env = commandEnv()
 	cmd.WaitDelay = 250 * time.Millisecond
 	stdout, stderr := output{limit: stdoutLimit}, output{limit: stderrLimit}
