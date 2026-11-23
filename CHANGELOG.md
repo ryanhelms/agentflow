@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.44.1](https://github.com/nscaledev/devflow/compare/v0.44.0...v0.44.1) - 2026-11-23
+
+### Fixes
+
+- **setup:** use browser oauth for github mcp in claude (#101) ([849e048](https://github.com/nscaledev/devflow/commit/849e048e55e8ac9162ef5572de9b872d9a09b170))
+
 ## [0.44.0](https://github.com/nscaledev/devflow/compare/v0.43.0...v0.44.0) - 2026-11-23
 
 ### Features

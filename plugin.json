@@ -1,6 +1,6 @@
 {
   "name": "devflow",
-  "version": "0.44.0",
+  "version": "0.44.1",
   "description": "Manage Devflow in a project and use its delivery workflow tools.",
   "mcpServers": "./adapters/vscode/plugin-mcp.json"
 }
