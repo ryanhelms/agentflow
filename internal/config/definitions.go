@@ -88,7 +88,10 @@ type definitionFile struct {
 }
 
 // definitions holds every layer's role definitions keyed by provider, then role.
+type definitionLoader func(*definitions, map[string]roleSchema) error
+
 type definitions struct {
+	trace  bool
 	files  []Source
 	layers map[string]map[string]map[string]roleDefinition
 }
@@ -100,12 +103,12 @@ func (d *definitions) get(layer, provider, role string) (roleDefinition, bool) {
 
 // loadDefinitions reads the release, project and user layers. Any invalid
 // file stops loading, so every command sees the same effective settings.
-func loadDefinitions(root string, schemas map[string]roleSchema) (*definitions, error) {
-	d := &definitions{layers: map[string]map[string]map[string]roleDefinition{}}
+func loadDefinitions(project definitionLoader, schemas map[string]roleSchema, trace bool) (*definitions, error) {
+	d := &definitions{trace: trace, layers: map[string]map[string]map[string]roleDefinition{}}
 	if err := d.loadFS(LayerRelease, releaseDefinitions, "release", schemas); err != nil {
 		return nil, err
 	}
-	if err := d.loadDir(LayerProject, filepath.Join(root, ".devflow", "providers"), ".devflow/providers", schemas); err != nil {
+	if err := project(d, schemas); err != nil {
 		return nil, err
 	}
 	home, err := HomeDir()
@@ -398,12 +401,20 @@ func visitSettings(prefix string, fields map[string]any, visit func(string, any)
 	}
 }
 
+// Contribution is one input to the resolution of a provider property.
+type Contribution struct {
+	Source Source `json:"source"`
+	Value  any    `json:"value"`
+	Step   string `json:"step"`
+}
+
 // Setting is one effective settings value with the layer that set it.
 type Setting struct {
-	Path       string      `json:"path"`
-	Value      any         `json:"value"`
-	Source     Source      `json:"source"`
-	Constraint *Constraint `json:"constraint,omitempty"`
+	History    []Contribution `json:"history,omitempty"`
+	Path       string         `json:"path"`
+	Value      any            `json:"value"`
+	Source     Source         `json:"source"`
+	Constraint *Constraint    `json:"constraint,omitempty"`
 }
 
 // Explain lists the selection's effective settings in path order. Values the
@@ -430,7 +441,7 @@ func (s Selection) Explain() ([]Setting, error) {
 		if !ok {
 			src = Source{Layer: LayerDefault}
 		}
-		setting := Setting{Path: p, Value: leaves[p], Source: src}
+		setting := Setting{Path: p, Value: leaves[p], Source: src, History: s.history[p]}
 		if c, ok := s.Constraints[p]; ok {
 			setting.Constraint = &c
 		}

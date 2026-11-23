@@ -385,6 +385,7 @@ Deployments and release lookup also support local JSON fixtures.
 
 | Task | Terminal | AI client |
 | --- | --- | --- |
+| Open the local repository console | `devflow ui` | `/devflow:ui` |
 | Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
@@ -401,6 +402,13 @@ Deployments and release lookup also support local JSON fixtures.
 | Standup | `devflow standup` | `/devflow:standup` |
 | End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
 | Next release version | `devflow release plan` | "what version will this ship as?" |
+
+Run `devflow ui` from the worktree you want to manage. The standalone browser
+console shows the active provider for each role, where its settings came from,
+and how a proposed edit changes the effective configuration. You can publish
+a reviewed configuration change through a GitHub pull request. The overview
+also brings together local changes, open PRs and pending Agent Commander
+questions for this worktree. [Repository console guide](docs/repository-console.md)
 
 PR readiness requires a Jira key in the branch name by default. With
 `commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
