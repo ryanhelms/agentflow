@@ -81,7 +81,7 @@ func TestKnowledgeRolesReadOKFAndRejectConfirmedOverwrite(t *testing.T) {
 			if len(pages) != 1 || pages[0].Ref != ref {
 				t.Fatalf("search = %+v", pages)
 			}
-			doc, err := a.linkedKnowledgeDocument(t.Context(), ref)
+			doc, err := a.DocsGet(t.Context(), ref)
 			if err != nil || doc.Body != "A nested concept.\n" || doc.Revision != pages[0].Revision {
 				t.Fatalf("exact lookup = %+v, %v", doc, err)
 			}

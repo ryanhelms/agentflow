@@ -971,6 +971,43 @@ closing the enrolled issue.
 
 The pilot uses the repository's existing GoReleaser release process.
 
+## Link knowledge to a GitHub issue
+
+Put a top-level section in the issue body and list one qualified document per
+bullet. This example uses the Repository knowledge provider.
+
+```markdown
+## Related Knowledge
+
+- repository/engineering/quota
+- repository/engineering%2Fplatform/scheduling
+```
+
+Use the literal heading and unindented `- ` bullets. Each bullet takes a bare
+reference or a reference enclosed in backticks. Use the escaped
+`instance/scope/id` form that Devflow prints. For example, `%2F` represents
+a slash within a scope or ID. The next heading beginning with `#` ends the list.
+Issues without the section retain their existing context.
+
+During review, run `devflow context 'owner/repo#42'` or call `devflow_context`
+with the issue key. On a review branch with the issue's `Task-Ref` trailer,
+you can omit the key. Context lists each resolved document once, in issue
+order. FileSystem reads the configured root. Repository reads the configured
+directory on the base branch. Both match the provider, scope and ID exactly.
+Context warns about invalid entries, provider mismatches and missing targets.
+Markdown links and page content are reference data. The configured provider
+supplies the lookup destination.
+
+Read the full document by passing its listed reference to `docs get`.
+
+```sh
+devflow docs get repository/engineering/quota --json
+```
+
+The equivalent read-only MCP call is `devflow_docs_get` with
+`{"ref":{"instance":"repository","scope":"engineering","id":"quota"}}`.
+Both return the document's identity, title, body and revision when available.
+
 ## Search a local knowledge directory
 
 Choose a dedicated directory for knowledge records. Relative roots resolve from
@@ -1086,7 +1123,7 @@ Pass the revision from search when updating an existing document. Reuse the
 operation ID for retries. The CLI and `devflow_docs_publish` present the
 resolved destination and document for approval and record the outcome.
 
-Use `devflow docs search QUERY --json` to check a qualified document in CI.
+Use `devflow docs get repository/engineering/quota --json` to check that exact document in CI.
 
 ## Publish a GitHub Wiki page
 

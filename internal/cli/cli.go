@@ -90,6 +90,7 @@ Work
   standup [--since 24h] [--json] activity to draft a standup
   eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
+  docs get REF [--json]          read one document by qualified reference
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
                [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document

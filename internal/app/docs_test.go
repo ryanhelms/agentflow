@@ -185,11 +185,18 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 	if docs := search(ref.Scope); len(docs) != 0 {
 		t.Fatalf("unmerged document appeared on base: %+v", docs)
 	}
+	if _, err := a.DocsGet(ctx, ref); !errors.Is(err, provider.ErrNotFound) {
+		t.Fatalf("exact lookup of pending document: %v", err)
+	}
 	// Simulate the maintainer accepting the PR in the bare fixture.
 	docsGit(t, bare, "update-ref", "refs/heads/main", docsGit(t, bare, "rev-parse", head))
 	docs := search(ref.Scope)
 	if len(docs) != 1 || docs[0].Revision != result.Revision || docs[0].Title != in.Title || docs[0].Body != in.Body || len(search("sales")) != 0 {
 		t.Fatalf("base search = %+v", docs)
+	}
+	exact, err := a.DocsGet(ctx, ref)
+	if err != nil || exact.Ref != ref || exact.Revision != docs[0].Revision || exact.Body != in.Body {
+		t.Fatalf("exact lookup after review: %+v, %v", exact, err)
 	}
 	in.ExpectedRevision, in.OperationID = "stale", "edit-2"
 	a.Gate.Autonomy.Remote = config.Auto
