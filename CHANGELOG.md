@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.49.0](https://github.com/nscaledev/devflow/compare/v0.48.0...v0.49.0) - 2026-11-23
+
+### Features
+
+- redesign the repository console with nscale themes (#115) ([dd1d7d9](https://github.com/nscaledev/devflow/commit/dd1d7d9726d067f6d3d256d826850df4a8b7f477))
+
 ## [0.48.0](https://github.com/nscaledev/devflow/compare/v0.47.0...v0.48.0) - 2026-11-23
 
 ### Breaking changes
