@@ -87,7 +87,7 @@ func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (pr
 			return doc, atlCLIError("confluence", err)
 		})
 	case "filesystem":
-		store, err := filesystem.NewKnowledge(name, a.knowledgeDirectory())
+		store, err := filesystem.NewOKFCompatibleKnowledge(name, a.knowledgeDirectory())
 		if err != nil {
 			return zero, err
 		}
@@ -98,7 +98,7 @@ func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (pr
 		if err != nil {
 			return zero, err
 		}
-		knowledge, err = repository.NewKnowledge(cfg)
+		knowledge, err = repository.NewOKFCompatibleKnowledge(cfg)
 		if err != nil {
 			return zero, err
 		}

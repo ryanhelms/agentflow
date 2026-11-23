@@ -239,7 +239,7 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]any, error) {
 	switch a.Cfg.Providers.KnowledgeBase.Provider {
 	case "filesystem":
-		knowledge, err := filesystem.NewKnowledge("filesystem", a.knowledgeDirectory())
+		knowledge, err := filesystem.NewOKFCompatibleKnowledge("filesystem", a.knowledgeDirectory())
 		if err != nil {
 			return nil, err
 		}
@@ -250,7 +250,7 @@ func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]a
 		if err != nil {
 			return nil, err
 		}
-		knowledge, err := repository.NewKnowledge(cfg)
+		knowledge, err := repository.NewOKFCompatibleKnowledge(cfg)
 		if err != nil {
 			return nil, err
 		}

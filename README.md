@@ -270,6 +270,9 @@ endpoint in your user-owned `~/.devflow/mcp-companions.yml`. Run
 discovery headlessly. Approve installation and registration separately in
 VS Code, Cursor, Claude Code or Gemini CLI. [Provider MCP setup](docs/providers.md#register-a-provider-mcp-companion).
 
+FileSystem and Repository knowledge can read nested OKF v0.3 concepts alongside
+legacy Devflow documents. See [OKF knowledge bundles](docs/providers.md#read-an-okf-knowledge-bundle).
+
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.

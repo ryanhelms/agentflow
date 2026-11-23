@@ -14,12 +14,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 )
 
 type store struct {
-	root     *os.Root
-	instance string
-	kind     string
+	root         *os.Root
+	instance     string
+	kind         string
+	okfKnowledge bool
 }
 
 func openStore(instance, directory, kind string) (*store, error) {
@@ -71,34 +73,57 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	entries, err := fs.ReadDir(s.root.FS(), ".")
-	if err != nil {
-		return nil, fmt.Errorf("list provider directory: %w", err)
-	}
 	seen := make(map[provider.Ref]string)
 	var records []record
-	for _, e := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if !strings.EqualFold(filepath.Ext(e.Name()), ".md") {
-			continue
-		}
-		if !e.Type().IsRegular() {
-			return nil, fmt.Errorf("%q must be a regular Markdown file", e.Name())
-		}
-		r, err := s.read(e.Name())
+	err := fs.WalkDir(s.root.FS(), ".", func(name string, e fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("read %q: %w", e.Name(), err)
+			return err
 		}
-		if r.Kind != s.kind || r.Ref.Instance != s.instance || (scope != "" && scope != r.Ref.Scope) {
-			continue
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if name == "." {
+			return nil
+		}
+		if s.okfKnowledge {
+			if e.IsDir() && strings.HasPrefix(e.Name(), ".") {
+				return fs.SkipDir
+			}
+			if !e.Type().IsRegular() || !IsKnowledgeCandidate(name) {
+				return nil
+			}
+		} else {
+			if strings.EqualFold(filepath.Ext(name), ".md") {
+				if !e.Type().IsRegular() {
+					return fmt.Errorf("%q must be a regular Markdown file", name)
+				}
+			} else if e.IsDir() {
+				return fs.SkipDir
+			} else {
+				return nil
+			}
+		}
+		r, err := s.read(name)
+		if errors.Is(err, okf.ErrNotConcept) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read %q: %w", name, err)
+		}
+		if r.Kind != s.kind || r.Ref.Instance != s.instance || (!s.okfKnowledge && scope != "" && scope != r.Ref.Scope) {
+			return nil
 		}
 		if other, ok := seen[r.Ref]; ok {
-			return nil, fmt.Errorf("duplicate %s in %q and %q: %w", r.Ref, other, r.name, provider.ErrConflict)
+			return fmt.Errorf("duplicate %s in %q and %q: %w", r.Ref, other, r.name, provider.ErrConflict)
 		}
 		seen[r.Ref] = r.name
-		records = append(records, r)
+		if scope == "" || scope == r.Ref.Scope {
+			records = append(records, r)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return records, nil
 }
@@ -129,7 +154,12 @@ func (s *store) read(name string) (record, error) {
 	if err != nil {
 		return record{}, err
 	}
-	r, err := parse(data)
+	var r record
+	if s.okfKnowledge {
+		r, err = parseKnowledge(s.instance, name, data)
+	} else {
+		r, err = parse(data)
+	}
 	r.name, r.mode = name, info.Mode().Perm()
 	return r, err
 }
@@ -307,6 +337,9 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 
 // prepare resolves the destination and carries forward any fields outside the mutation.
 func (r *record) prepare(op verb, old *record, expected string) error {
+	if old != nil && old.okfConcept {
+		return fmt.Errorf("OKF document %s is read-only: %w", old.Ref, provider.ErrUnsupported)
+	}
 	if expected != "" && (old == nil || expected != old.revision) {
 		return fmt.Errorf("expected revision for %s is stale, reload before writing: %w", r.Ref, provider.ErrConflict)
 	}
