@@ -48,6 +48,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 	branch := a.Repo.Branch(ctx)
 	add(Check{Name: "feature branch", OK: branch != "" && !policy.IsProtected(branch, a.Cfg.Policy.ProtectedBranches), Detail: branch})
 	key := ""
+	taskProvider := a.Cfg.Providers.TaskManagement.Provider
 	if a.UsesTaskRefs() {
 		ref, err := a.branchTask(ctx)
 		if err != nil {
@@ -57,7 +58,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 			key = taskKey(ref)
 		}
 		add(Check{Name: "branch has task reference", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
-	} else {
+	} else if taskProvider != "none" {
 		key = a.CurrentKey(ctx)
 		add(Check{Name: "branch has Jira key", OK: key != "" || !a.Cfg.Commit.KeyRequired(), Detail: key})
 	}
@@ -107,7 +108,7 @@ func (a *App) PRReady(ctx context.Context, runCmds bool) (*Readiness, error) {
 			}
 		}
 	}
-	if a.UsesTaskRefs() {
+	if a.UsesTaskRefs() || taskProvider == "none" {
 		if msgs, err := a.Repo.Messages(ctx, base+"..HEAD"); err == nil && len(msgs) > 0 {
 			r.SuggestTitle = commit.Parse(msgs[len(msgs)-1]).Subject
 		}

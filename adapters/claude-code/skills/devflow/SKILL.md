@@ -8,6 +8,8 @@ description: Use the configured Devflow providers when starting or creating task
 Follow `.devflow/config.yml` and the Devflow workflow block in `AGENTS.md`.
 Use `devflow_setup_providers` with `explain: true` to see effective provider
 settings. Use Devflow MCP tools or their CLI equivalents for configured roles.
+Task management and knowledge base require an explicit provider selection before
+you use their tools.
 
 ## Start of a task
 

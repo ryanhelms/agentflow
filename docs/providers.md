@@ -19,8 +19,8 @@ this guidance with `devflow init --guidance-only`.
 | Section | Default provider | Other schema selections |
 | --- | --- | --- |
 | `code_hosting` | `auto` | `github`, `none` |
-| `task_management` | `jira` | `asana`, `github-issues`, `filesystem`, `repository`, `none` |
-| `knowledge_base` | `confluence` | `filesystem`, `repository`, `github-wiki`, `none` |
+| `task_management` | Disabled | `jira`, `asana`, `github-issues`, `filesystem`, `repository`, `none` |
+| `knowledge_base` | Disabled | `confluence`, `filesystem`, `repository`, `github-wiki`, `none` |
 | `devops.checks` | `github` | `none` |
 | `devops.deployments` | `github` | `fixture`, `none` |
 | `devops.releases` | `github` | `fixture`, `none` |
@@ -31,6 +31,21 @@ Each selection accepts `version` (default `1`), `provider` (see the table),
 and `settings` (defaults below). The enclosing `devops` section also accepts
 a schema version (default `1`). A provider selection of `none` has an empty
 settings object. Validation errors identify the property to correct.
+
+Task management and knowledge base are enabled independently. Omit
+`provider` or select `none` to disable that role. Legacy Jira and Confluence
+fields and inline settings cannot activate a role by themselves. For a repository
+that relied on the previous implicit selection, set `task_management.provider`
+to `jira` or `knowledge_base.provider` to `confluence` for the roles you use.
+Those providers continue to use their legacy settings where applicable.
+
+Setup shows detected task and knowledge providers as suggestions. A provider
+becomes active once you select it in guided init or set it in the repository
+config. Code hosting, commit conventions, and other configured roles can run
+with either role disabled. Commit messages may omit a task key when task
+management is disabled, unless the repository sets `commit.require_key: true`.
+Hosted workflows skip task actions and knowledge publishing for unassigned
+roles, including the legacy Jira and Confluence jobs.
 
 | Provider | Settings and defaults |
 | --- | --- |

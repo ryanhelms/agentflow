@@ -197,8 +197,10 @@ devflow doctor --fix               # checks binary, hooks, flow map and client c
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules. Jira tasks
-and Confluence can use separate sites and credentials. See the
+service sections, versioned settings, defaults, and their override rules. Task
+management and knowledge base each require an explicit provider selection in
+`.devflow/config.yml`. Devflow skips the operations for an unassigned role. Jira
+tasks and Confluence can use separate sites and credentials. See the
 [migration and rollback rehearsal](docs/rollout.md#provider-migration-rehearsal)
 and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with

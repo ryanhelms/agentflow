@@ -43,6 +43,11 @@ jobs:
         run: |
           provider=$(devflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
+      - id: knowledge
+        name: Resolve knowledge provider
+        run: |
+          provider=$(devflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Render notes
         env:
           TAG: ${{ inputs.tag || github.event.release.tag_name }}
@@ -68,7 +73,7 @@ jobs:
             gh release edit "$TAG" --notes-file "$RUNNER_TEMP/body.md"
           fi
       - name: Publish to Confluence
-        if: inputs.confluence-space != '' && vars.CONFLUENCE_BASE != ''
+        if: steps.knowledge.outputs.provider == 'confluence' && inputs.confluence-space != '' && vars.CONFLUENCE_BASE != ''
         env:
           CONFLUENCE_BASE: ${{ vars.CONFLUENCE_BASE }}
           JIRA_USER: ${{ secrets.JIRA_USER }}

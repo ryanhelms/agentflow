@@ -72,6 +72,39 @@ func TestLintBranchWithoutOrigin(t *testing.T) {
 	}
 }
 
+func TestPRReadinessWithoutTaskProvider(t *testing.T) {
+	ctx := t.Context()
+	dir := newRepo(t)
+	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "commit: {require_key: true}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Open(ctx, dir, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, a.Repo, "branch", "-m", "add-quota")
+	mustGit(t, a.Repo, "add", ".devflow/config.yml")
+	mustGit(t, a.Repo, "commit", "--amend", "--no-edit")
+	mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/example/quota.git")
+
+	ready, err := a.PRReady(ctx, false)
+	if err != nil || !ready.Ready || ready.SuggestTitle != "feat(PLAT-1): add quota" || len(ready.Effects) != 0 {
+		t.Fatalf("readiness without a task provider: %+v, %v", ready, err)
+	}
+	for _, check := range ready.Checks {
+		if check.Name == "branch has Jira key" || check.Name == "branch has task reference" {
+			t.Fatalf("task prerequisite on an unassigned role: %+v", check)
+		}
+	}
+	if issues := a.Validate(ctx, "feat: add quota"); len(issues) == 0 {
+		t.Fatal("the explicitly configured commit key requirement was skipped")
+	}
+}
+
 func TestJiraPRReadinessWithoutBranchKey(t *testing.T) {
 	for _, tt := range []struct {
 		name  string

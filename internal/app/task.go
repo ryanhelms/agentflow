@@ -84,14 +84,16 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 			tc.Epic = parent.Ref.ID + " " + parent.Title
 			refs = append(refs, *parent.Ref)
 		}
-		for _, target := range append(refs, ref) {
-			links, err := remoteLinks(target)
-			var request *native.Request
-			if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
-				return nil, err
-			}
-			if err == nil {
-				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+		if a.Cfg.Providers.KnowledgeBase.Provider != "none" {
+			for _, target := range append(refs, ref) {
+				links, err := remoteLinks(target)
+				var request *native.Request
+				if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+					return nil, err
+				}
+				if err == nil {
+					tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+				}
 			}
 		}
 		checklist := a.Checklists(ctx)

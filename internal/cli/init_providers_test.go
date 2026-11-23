@@ -73,6 +73,22 @@ func TestGuidedInitCLI(t *testing.T) {
 	}
 }
 
+func TestGuideLeavesDetectedOptionalProvidersUnassigned(t *testing.T) {
+	plan := initproviders.Plan{Roles: []initproviders.Role{
+		{Role: "task_management", Default: "none", Selected: "jira", Source: "detected", Options: []string{"jira", "none"}},
+		{Role: "knowledge_base", Default: "none", Selected: "repository", Source: "detected", Options: []string{"repository", "none"}},
+	}}
+	answers := map[string]string{}
+	var output bytes.Buffer
+	if err := guideProviders(&plan, answers, strings.NewReader("\nrepository\n\n"), &output); err != nil {
+		t.Fatal(err)
+	}
+	if _, activated := answers["task_management"]; activated || answers["knowledge_base"] != "repository" ||
+		!strings.Contains(output.String(), "task_management = none") {
+		t.Fatalf("%v: %s", answers, &output)
+	}
+}
+
 func TestGuidePromptsUnknownAndAllowsRevision(t *testing.T) {
 	plan := initproviders.Plan{Roles: []initproviders.Role{
 		{Role: "code_hosting", Selected: "github", Source: "detected", Options: []string{"github", "none"}, Evidence: []initproviders.Evidence{{Provider: "github", Source: "Git remote resolves to GitHub"}}},

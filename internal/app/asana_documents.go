@@ -17,6 +17,9 @@ import (
 )
 
 func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task provider.Task) error {
+	if a.Cfg.Providers.KnowledgeBase.Provider == "none" {
+		return nil
+	}
 	links := task.Links
 	if a.usesIssues() {
 		var warnings []string

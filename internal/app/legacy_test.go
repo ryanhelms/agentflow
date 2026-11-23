@@ -357,7 +357,37 @@ exec "$FIXTURE_GIT" "$@"
 	}
 }
 
-func TestLegacyConfigWithoutProviderSections(t *testing.T) {
+func TestMissingProviderSkipsLegacyAtlassianOperations(t *testing.T) {
+	ctx := t.Context()
+	fixture := legacyApp(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("unassigned role contacted %s %s", r.Method, r.URL)
+	})
+	cfg := "jira: {site: https://shared.example}\nconfluence: {site: https://wiki.example}\n"
+	if err := os.WriteFile(filepath.Join(fixture.Repo.Dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := Open(ctx, fixture.Repo.Dir, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key := a.CurrentKey(ctx); key != "" {
+		t.Fatalf("unassigned task key = %q", key)
+	}
+	if context, err := a.Context(ctx, "PLAT-1"); err != nil || context.Key != "" {
+		t.Fatalf("unassigned task context = %+v, %v", context, err)
+	}
+	if items, err := a.MyWork(ctx); err != nil || len(items) != 0 {
+		t.Fatalf("unassigned work = %+v, %v", items, err)
+	}
+	if _, err := a.Comment(ctx, "PLAT-1", "fixture comment", ""); err == nil {
+		t.Fatal("unassigned task accepted a comment")
+	}
+	if _, err := a.DocsSearch(ctx, "fixture", ""); err == nil {
+		t.Fatal("unassigned knowledge accepted a query")
+	}
+}
+
+func TestExplicitProvidersReuseLegacyAtlassianSettings(t *testing.T) {
 	ctx := t.Context()
 	comments := 0
 	a := legacyApp(t, func(w http.ResponseWriter, r *http.Request) {
@@ -388,7 +418,7 @@ func TestLegacyConfigWithoutProviderSections(t *testing.T) {
 	t.Setenv("CONFLUENCE_USER", "")
 	t.Setenv("CONFLUENCE_TOKEN", "")
 	dir := a.Repo.Dir
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("jira: {site: https://shared.example}\nflow_map: flow.yml\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("jira: {site: https://shared.example}\ntask_management: {provider: jira}\nknowledge_base: {provider: confluence}\nflow_map: flow.yml\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	mustGit(t, a.Repo, "add", ".devflow/config.yml", "flow.yml")
