@@ -78,6 +78,11 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 	}
 	cmd := exec.Command(exe, "ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port))
 	cmd.Dir = dir
+	// Resolve custom relative socket paths in the caller's directory before
+	// the daemon starts in the repository selected by the CLI.
+	if socket := commanderSocket(); socket != "" {
+		cmd.Env = append(os.Environ(), "AGENT_COMMANDER_SOCKET="+socket)
+	}
 	return startAndWait(ctx, cmd)
 }
 
