@@ -18,29 +18,38 @@ import (
 // DEVFLOW_TEST_CHROME is an installed Chrome or Chromium executable. The test
 // loads the same embedded editor as the console and uses a private profile.
 func TestTypedEditorBrowser(t *testing.T) {
+	runBrowserFixture(t, "", func(mux *http.ServeMux, _ string) {
+		editor, err := assets.ReadFile("static/typed-editor.js")
+		if err != nil {
+			t.Fatal(err)
+		}
+		checks, err := os.ReadFile("testdata/typed-editor-test.js")
+		if err != nil {
+			t.Fatal(err)
+		}
+		mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, `<!doctype html><html><body><main id="fixture"></main><script src="/editor.js"></script><script src="/checks.js"></script></body></html>`)
+		})
+		for route, script := range map[string][]byte{"/editor.js": editor, "/checks.js": checks} {
+			mux.HandleFunc("GET "+route, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/javascript")
+				_, _ = w.Write(script)
+			})
+		}
+	})
+}
+
+func runBrowserFixture(t *testing.T, path string, configure func(*http.ServeMux, string)) {
+	t.Helper()
 	chrome := os.Getenv("DEVFLOW_TEST_CHROME")
 	if chrome == "" {
 		t.Skip("set DEVFLOW_TEST_CHROME to an installed Chrome or Chromium executable")
 	}
-	editor, err := assets.ReadFile("static/typed-editor.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checks, err := os.ReadFile("testdata/typed-editor-test.js")
-	if err != nil {
-		t.Fatal(err)
-	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, `<!doctype html><html><body><main id="fixture"></main><script src="/editor.js"></script><script src="/checks.js"></script></body></html>`)
-	})
-	for route, script := range map[string][]byte{"/editor.js": editor, "/checks.js": checks} {
-		mux.HandleFunc("GET "+route, func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/javascript")
-			_, _ = w.Write(script)
-		})
-	}
+	srv := httptest.NewUnstartedServer(mux)
+	defer srv.Close()
+	configure(mux, "http://"+srv.Listener.Addr().String())
 	result := make(chan string, 1)
 	mux.HandleFunc("POST /result", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
@@ -54,8 +63,7 @@ func TestTypedEditorBrowser(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv.Start()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	profile := t.TempDir()
@@ -72,7 +80,7 @@ func TestTypedEditorBrowser(t *testing.T) {
 	defer func() { cancel(); <-done }()
 	// Explicitly open the fixture. Managed browsers can select a startup page
 	// regardless of a URL passed on the command line.
-	openFixtureTab(t, ctx, profile, srv.URL)
+	openFixtureTab(t, ctx, profile, srv.URL+path)
 	select {
 	case status := <-result:
 		if status != "passed" {

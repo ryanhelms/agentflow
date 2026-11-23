@@ -46,8 +46,8 @@ func commanderSocket() string {
 	return absolute
 }
 
-func commanderRequest(ctx context.Context, method, path string, input any, readResponse func(*json.Decoder) error) error {
-	socket := commanderSocket()
+func (caller commanderBinding) request(ctx context.Context, method, path string, input any, readResponse func(*json.Decoder) error) error {
+	socket := caller.Socket
 	if !filepath.IsAbs(socket) {
 		return errors.New("expected an absolute Agent Commander socket path")
 	}
@@ -69,12 +69,20 @@ func commanderRequest(ctx context.Context, method, path string, input any, readR
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token := os.Getenv("AGENT_COMMANDER_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if caller.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+caller.Token)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("connect to Agent Commander: %w", err)
+		// net.OpError includes the private socket path. Keep it out of activity
+		// responses and preserve the normal absent-service state.
+		if errors.Is(err, os.ErrNotExist) {
+			return os.ErrNotExist
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return errors.New("could not connect to the Agent Commander service")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
@@ -183,13 +191,13 @@ func (inbox *commanderInbox) read(decoder *json.Decoder) error {
 	return expect('}')
 }
 
-func commanderActivity(ctx context.Context, root string) ([]item, bool, error) {
+func (caller commanderBinding) activity(ctx context.Context, root string) ([]item, bool, error) {
 	active, err := os.Stat(root)
 	if err != nil {
 		return nil, false, err
 	}
 	inbox := commanderInbox{root: active, items: []item{}}
-	err = commanderRequest(ctx, http.MethodGet, "/v1/runs", nil, inbox.read)
+	err = caller.request(ctx, http.MethodGet, "/v1/runs", nil, inbox.read)
 	if errors.Is(err, os.ErrNotExist) {
 		return []item{}, false, nil
 	}
@@ -215,7 +223,12 @@ func (s *server) replyToWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	items, _, err := commanderActivity(r.Context(), s.repo.Dir)
+	caller, scope := s.commanderFor(r)
+	if scope == "" {
+		reply(w, http.StatusForbidden, map[string]any{"error": commanderReconnect, "commander_reconnect": true})
+		return
+	}
+	items, _, err := caller.activity(r.Context(), s.repo.Dir)
 	if errors.Is(err, errCommanderDenied) {
 		problem(w, 403, err.Error())
 		return
@@ -235,7 +248,7 @@ func (s *server) replyToWorker(w http.ResponseWriter, r *http.Request) {
 		problem(w, 409, "this request is no longer pending in the current worktree")
 		return
 	}
-	payload := struct{ Root, Socket, Run, Request, Question, Answer string }{s.repo.Dir, commanderSocket(), in.Run, in.Request, selected.Detail, in.Answer}
+	payload := struct{ Root, Socket, Scope, Run, Request, Question, Answer string }{s.repo.Dir, caller.Socket, scope, in.Run, in.Request, selected.Detail, in.Answer}
 	d, err := s.checkGate(policy.Local, "console.reply", payload, in.Approval)
 	if err != nil {
 		problem(w, 409, err.Error())
@@ -250,7 +263,7 @@ func (s *server) replyToWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result struct{ ID, Status, Answer string }
-	err = commanderRequest(r.Context(), http.MethodPost, "/v1/requests/"+url.PathEscape(in.Request)+"/reply", map[string]string{"answer": in.Answer}, func(decoder *json.Decoder) error {
+	err = caller.request(r.Context(), http.MethodPost, "/v1/requests/"+url.PathEscape(in.Request)+"/reply", map[string]string{"answer": in.Answer}, func(decoder *json.Decoder) error {
 		return decoder.Decode(&result)
 	})
 	if errors.Is(err, errCommanderDenied) {

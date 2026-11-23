@@ -25,6 +25,16 @@ code, pre, .code, .source {font-family: var(--mono)}
 .skip:focus {top: .5rem}
 .sr-only {position: absolute; height: 1px; width: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap}
 .layout {display: grid; grid-template-columns: 13.5rem minmax(0,1fr); min-height: 100vh}
+.connection {max-width: 42rem; margin: clamp(1.5rem,7vh,5rem) auto; padding: 0 1rem}
+.connection .product {padding: 0 0 1.25rem; color: var(--midnight); font-size: 1.5rem}
+.connection-card {padding: clamp(1.25rem,4vw,2.25rem); background: var(--paper); border: 1px solid var(--line); border-top: 3px solid var(--blue)}
+.connection h1 {font-size: clamp(1.65rem,4vw,2.1rem)}
+#connection-message {margin-top: .65rem}
+#connection-options section {border-top: 1px solid var(--line); margin-top: 1.25rem; padding-top: 1.15rem}
+#connection-options section > p:first-of-type {margin-top: .3rem; color: var(--muted)}
+.connection-example {display: block; margin: .65rem 0; padding: .65rem .8rem; background: var(--frost); overflow-wrap: anywhere; user-select: all}
+#reconnect-command {font-size: .86rem}
+#connection-feedback:not(:empty), #connection-retry {margin-top: 1rem}
 .rail {align-self: start; background: var(--midnight); color: #fdfff8; min-height: 100vh; position: sticky; top: 0; display: flex; flex-direction: column}
 .product {display: flex; align-items: center; gap: .7rem; padding: 2rem 1.5rem 2.6rem; font-size: 1.67rem; font-weight: 700; letter-spacing: -.07em}
 .brand-mark {width: 1.7rem; height: 1.65rem; border: .35rem solid var(--green); border-top-width: 0; transform: skewY(-15deg); position: relative}

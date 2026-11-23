@@ -4,16 +4,12 @@ package webui
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"mime"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -28,9 +24,15 @@ import (
 var assets embed.FS
 
 type server struct {
-	repo                    *gitx.Repo
-	origin, launch, session string
-	launchMu                sync.Mutex
+	commander                    *commanderScope
+	repo                         *gitx.Repo
+	origin, instanceKey, session string
+	rememberKey                  string
+	usedLaunches                 map[string]int64
+	launchMu                     sync.Mutex
+	tabs                         *tabHub
+	tabsOnce                     sync.Once
+	worktreePath                 string
 	// Serialize approval consumption and publishing. Re-read policy for every save.
 	writeMu   sync.Mutex
 	gate      *policy.Gate
@@ -43,26 +45,9 @@ func randomKey() string {
 	return base64.RawURLEncoding.EncodeToString(b[:])
 }
 
-// Serve opens a loopback listener and supplies its one-time launch URL to ready.
+// Serve opens or reuses the console for dir at its overview.
 func Serve(ctx context.Context, dir string, port int, ready func(string)) error {
-	repo, err := gitx.Open(ctx, dir)
-	if err != nil {
-		return err
-	}
-	l, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		return fmt.Errorf("open console listener: %w", err)
-	}
-	s := &server{repo: repo, origin: "http://" + l.Addr().String(), launch: randomKey(), session: randomKey(), publishTo: consolepublish.PublishTo}
-	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
-	stop := context.AfterFunc(ctx, func() { _ = srv.Close() })
-	defer stop()
-	ready(s.origin + "/#launch=" + s.launch)
-	err = srv.Serve(l)
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
+	return ServeAt(ctx, dir, port, Destination{}, func(rawURL string, _ bool) { ready(rawURL) })
 }
 
 func (s *server) handler() http.Handler {
@@ -70,7 +55,11 @@ func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(files))
 	mux.HandleFunc("POST /api/session", s.exchange)
+	mux.HandleFunc("POST /api/resume", s.resume)
 	mux.HandleFunc("GET /api/state", s.state)
+	mux.HandleFunc("GET /api/tabs/events", s.tabEvents)
+	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)
+	mux.HandleFunc("POST /api/tabs/leave", s.tabLeave)
 	mux.HandleFunc("GET /api/activity", s.activity)
 	mux.HandleFunc("POST /api/readiness", s.readiness)
 	mux.HandleFunc("POST /api/reply", s.replyToWorker)
@@ -94,7 +83,7 @@ func (s *server) handler() http.Handler {
 				problem(w, 403, "expected a same-origin console request")
 				return
 			}
-			if r.URL.Path != "/api/session" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.session)) != 1 {
+			if r.URL.Path != "/api/session" && r.URL.Path != "/api/resume" && !s.authorized(r) {
 				problem(w, 401, "open the launch URL printed by devflow ui")
 				return
 			}
@@ -110,14 +99,19 @@ func (s *server) exchange(w http.ResponseWriter, r *http.Request) {
 	if !read(w, r, &in) {
 		return
 	}
-	s.launchMu.Lock()
-	defer s.launchMu.Unlock()
-	if s.launch == "" || subtle.ConstantTimeCompare([]byte(in.Launch), []byte(s.launch)) != 1 {
-		problem(w, 401, "launch URL already used or invalid")
+	if !s.consumeLaunch(in.Launch) {
+		problem(w, 401, "launch URL expired, already used or invalid")
 		return
 	}
-	s.launch = ""
-	reply(w, 200, map[string]string{"session": s.session})
+	now := time.Now()
+	credentials := map[string]string{
+		"session":  grantToken(s.session, "tab/v1", now.Add(tabSessionFor)),
+		"remember": grantToken(s.rememberKey, "browser/v1", now.Add(rememberBrowserFor)),
+	}
+	if cap := s.exchangeCommander(in.Launch, now); cap != "" {
+		credentials["commander"] = cap
+	}
+	reply(w, 200, credentials)
 }
 
 func reply(w http.ResponseWriter, status int, data any) {

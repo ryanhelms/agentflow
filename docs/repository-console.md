@@ -1,10 +1,79 @@
 # Repository console
 
-Run `devflow ui` in a Git worktree. Devflow opens a local browser tab for that
-checkout. You can also pass a directory, use `--port N` for a specific loopback
-port, or use `--no-open` to open the printed URL yourself. Keep that URL on
-your machine. Its launch code is single-use. Refreshing the same tab preserves
-the session. Stop the process with Ctrl+C.
+Run `devflow ui` from the checkout you want to manage, or ask your local AI
+harness to open a devflow screen. One daemon runs under your OS account. It
+serves the configured repositories directly on the loopback interface.
+
+## Open a screen from chat
+
+Ask Agent Commander **“Open the task management provider editor for this
+repo.”** Its coordinator calls `devflow_ui_open` in the worktree selected for
+the chat. This opens **Providers → Task management**. You can also ask for
+Overview, Configuration or Handoff. The tool defaults to Providers and accepts
+an optional provider role.
+
+```json
+{"screen":"providers","role":"task_management"}
+```
+
+Use `devflow ui --screen providers --role task_management` for the same
+destination from a terminal. An authorized harness opens the browser locally.
+Chat receives the screen, role and reuse status. Agent Commander registers
+`devflow mcp --ui-only --client agent-commander --auto-open` for its lead
+agent. The capability check omits `--auto-open` and exposes only
+`devflow_ui_open`.
+
+## Repository addresses and tabs
+
+The daemon assigns one hostname to each local clone. The first clone of
+devflow might be `http://devflow.localhost/`. A linked worktree gets a
+distinct path under the same hostname. A second clone with the same name
+gets a hostname with a short suffix. The daemon keeps the mapping in the
+developer’s private profile, so it survives restarts. No repository file or
+system DNS entry is needed. Browsers must support loopback `.localhost`
+subdomains.
+
+On first launch devflow tries port 80 so the usual address has no visible port. When it
+cannot bind that port, it selects an available loopback port and shows it in
+the URL. On subsequent starts it tries the remembered port first to keep
+bookmarks and browser drafts at the same address. Use `--port N` to
+choose a specific port when starting the daemon. `devflow ui --status`
+reports the listening port. `devflow ui --stop` stops the daemon for all
+clones. The next eligible launch starts it again. An ordinary `devflow ui`
+returns to your shell and leaves the daemon running when the terminal closes.
+Use `--foreground` to supervise a new daemon from the terminal and stop it
+with Ctrl+C.
+
+Recognized local desktop and interactive terminal sessions open one tab per
+clone. Headless sessions, CI jobs and delegated workers skip automatic opening.
+Opening another chat leaves
+a live tab on its current screen. An explicit open request directs the tab to
+the requested screen and worktree. Bringing the tab to the foreground depends
+on the browser. Dirty worktrees retain their own staged files and unfinished
+editor controls on this browser. For example, you can leave a provider list
+half-edited, work in another checkout, and return to the open field and its
+unsubmitted rows. The source selection, field search, and publication inputs
+are also restored. If the underlying file changes, the editor keeps the draft
+for recovery and requires you to review the new source before publishing.
+
+To try this with two linked worktrees, open the provider editor from the chat
+for the first one and type into a list row. Leave the field open. Ask the chat
+for the second worktree to open its configuration editor, then ask the first
+chat to reopen its provider editor. The tab returns to the original checkout
+with the unfinished row still editable. Restoring a draft never stages or
+publishes it.
+
+## Reopen a bookmark or reconnect
+
+After an authorized launch, this browser can revisit registered worktrees of
+the same clone for 30 days. The initial one-time link goes straight to the
+browser. A fresh profile, expired authorization or a different origin can show
+the reconnect screen. Copy the suggested prompt into the chat for that
+worktree, or run the displayed command from its terminal. Use
+`devflow ui --no-open` to request a fresh one-time link for a specific browser.
+Keep that link on your machine. Private browsing and clearing site data
+remove browser-local credentials and drafts. A console started with v0.43.0
+predates the daemon. Its first launch after upgrading opens the new address.
 
 ## Follow an effective setting back to its source
 
@@ -56,8 +125,8 @@ See [provider definitions and precedence](providers.md#provider-definitions).
    store. The editor withholds sources that appear to contain credentials.
 3. Preview the patch, effective changes and destination. The effective preview
    reflects this workstation. A concurrent edit, a different draft choice, or
-   a changed review requires a fresh confirmation. Browser drafts live in the
-   current page until publication, discard or reload. Use **Download patch**
+   a changed review requires a fresh confirmation. Browser drafts are saved locally for the worktree
+   until publication or discard. Use **Download patch**
    in the preview to save a diff for your usual Git review process.
 4. Choose a draft PR for team review, or confirm **Apply to default branch** for
    immediate delivery through GitHub. The publisher verifies the default
@@ -88,6 +157,10 @@ problems and recognized workflow pin. **Check activity** adds recent open
 GitHub PRs, their review and merge states, and dependencies between visible
 PRs. If Agent Commander is running locally, it also lists pending worker
 questions from this exact worktree. Review the question and confirm your
-answer to send it to the worker. **Handoff** provides a copyable summary for
+answer to send it to the worker. These operations use the permissions of the
+Agent Commander connection that opened the worktree. A remembered browser can
+continue editing configuration after that connection expires. To reconnect
+worker activity, follow the instruction on Overview to open a fresh local
+link from the intended worktree. **Handoff** provides a copyable summary for
 the next developer or agent. The local configuration editor also works with
 Agent Commander disconnected.

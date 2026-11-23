@@ -65,7 +65,7 @@
     delete control.dataset.teError;
     control.removeAttribute("aria-invalid");
   }
-  function fail(control, message) {
+  function showError(control, message) {
     clearError(control);
     const error = element("p", "te-error", message);
     error.id = id();
@@ -74,6 +74,9 @@
     control.dataset.teError = error.id;
     control.setAttribute("aria-invalid", "true");
     control.setAttribute("aria-describedby", [control.getAttribute("aria-describedby"), error.id].filter(Boolean).join(" "));
+  }
+  function fail(control, message) {
+    showError(control, message);
     control.focus();
     throw new Error(message);
   }
@@ -101,7 +104,7 @@
     root.addEventListener("input", event => clearError(event.target));
     root.addEventListener("change", event => clearError(event.target));
 
-    function node(host, field, original, label, path, allowed, optionalRoot = false) {
+    function node(host, field, original, label, path, allowed, optionalRoot = false, saved) {
       field = field || {};
       const box = group(host, label);
       const constraint = field.constraint || {};
@@ -136,6 +139,9 @@
         picker.value = mode;
         box.append(picker);
       }
+      if (picker && Array.from(picker.options).some(option => option.value === saved?.mode)) {
+        mode = picker.value = saved.mode;
+      }
       // Keep inactive alternatives mounted. Switching a nullable or mixed field
       // back to a previous type restores its unsaved edits, including invalid text.
       const bodies = new Map();
@@ -150,10 +156,11 @@
           box.append(panel);
           const selected = choices[Number(mode)];
           const initial = selected === initialType ? original : undefined;
+          const previous = saved?.bodies?.[mode];
           let edit;
-          if (selected.type === "array") edit = array(panel, selected, initial, path, allowed);
-          else if (selected.type === "object") edit = object(panel, selected, initial, path);
-          else edit = scalar(panel, selected, initial, label, path, allowed);
+          if (selected.type === "array") edit = array(panel, selected, initial, path, allowed, previous);
+          else if (selected.type === "object") edit = object(panel, selected, initial, path, previous);
+          else edit = scalar(panel, selected, initial, label, path, allowed, previous);
           bodies.set(mode, {host: panel, edit});
         }
         const active = bodies.get(mode).host;
@@ -163,6 +170,11 @@
       show();
       picker?.addEventListener("change", () => { mode = picker.value; show(); });
       return {
+        snapshot() {
+          const visited = {...saved?.bodies};
+          for (const [key, body] of bodies) visited[key] = body.edit.snapshot();
+          return {mode, bodies: visited};
+        },
         focus() { if (picker) picker.focus(); else bodies.get(mode)?.edit.focus(); },
         read() {
           if (constraint.lock === true) return original;
@@ -179,7 +191,7 @@
       };
     }
 
-    function scalar(host, field, initial, label, path, allowed) {
+    function scalar(host, field, initial, label, path, allowed, saved) {
       const type = field.type;
       const enumeration = Array.isArray(field.enum) ? field.enum : type === "boolean" ? [true, false] : null;
       let choices = enumeration;
@@ -195,24 +207,45 @@
         else if (initial !== null && initial !== undefined) {
           appendChoice(input, "", "Current value outside allowed choices (" + String(initial) + ")").selected = true;
         }
+        if (saved && typeof saved.choice === "string") input.value = saved.choice;
         host.append(input);
-        return {focus: () => input.focus(), read: () => {
+        return {snapshot: () => ({choice: input.value}), focus: () => input.focus(), read: () => {
           if (input.value === "") fail(input, "Choose a permitted value for " + label + ".");
           return choices[Number(input.value)];
         }};
       }
       if (type === "number" || type === "integer") {
         const input = element("input");
-        input.type = "number";
-        input.step = type === "integer" ? "1" : "any";
-        if (field.nonnegative) input.min = "0";
+        // Native number inputs erase incomplete text such as "1e" from .value.
+        // Keep the raw edit so switching worktrees can restore it character for character.
+        input.type = "text";
+        input.inputMode = type === "integer" ? "numeric" : "decimal";
+        input.setAttribute("role", "spinbutton");
+        if (field.nonnegative) input.setAttribute("aria-valuemin", "0");
         input.setAttribute("aria-label", label);
-        if (typeof initial === "number") input.value = String(initial);
+        input.value = typeof saved?.raw === "string" ? saved.raw : typeof initial === "number" ? String(initial) : "";
+        const numericValue = () => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(input.value) ? Number(input.value) : NaN;
+        function syncNumber() {
+          const n = numericValue();
+          if (Number.isFinite(n)) input.setAttribute("aria-valuenow", String(n));
+          else input.removeAttribute("aria-valuenow");
+        }
+        input.addEventListener("input", syncNumber);
+        input.addEventListener("keydown", event => {
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          const n = numericValue();
+          let next = (Number.isFinite(n) ? n : 0) + (event.key === "ArrowUp" ? 1 : -1);
+          if (field.nonnegative) next = Math.max(next, 0);
+          input.value = String(next);
+          input.dispatchEvent(new Event("input", {bubbles: true}));
+        });
+        syncNumber();
         host.append(input);
         hints(input, host, () => [...(field.suggestions || []), ...(options.suggestions?.(path(), field) || [])]);
-        return {focus: () => input.focus(), read: () => {
-          const n = input.valueAsNumber;
-          if (!Number.isFinite(n) || (type === "integer" && !Number.isSafeInteger(n)) || !input.validity.valid) {
+        return {snapshot: () => ({raw: input.value}), focus: () => input.focus(), read: () => {
+          const n = numericValue();
+          if (!Number.isFinite(n) || (type === "integer" && !Number.isSafeInteger(n)) || (field.nonnegative && n < 0)) {
             const expected = (field.nonnegative ? "nonnegative " : "") + (type === "integer" ? "whole number" : "number");
             fail(input, "Enter a " + expected + " for " + label + ".");
           }
@@ -251,13 +284,19 @@
       sync();
       // Textareas normalize line endings. Keep untouched source strings exact.
       const baseline = (expanded ? multiline : input).value;
-      return {focus: () => (expanded ? multiline : input).focus(), read: () => {
+      if (typeof saved?.raw === "string") {
+        expanded = Boolean(saved.multiline) || /[\r\n]/.test(saved.raw);
+        (expanded ? multiline : input).value = saved.raw;
+        sync();
+      }
+      return {snapshot: () => ({raw: (expanded ? multiline : input).value, multiline: expanded}),
+        focus: () => (expanded ? multiline : input).focus(), read: () => {
         const current = (expanded ? multiline : input).value;
         return current === baseline ? text : current;
       }};
     }
 
-    function array(host, field, initial, path, allowed) {
+    function array(host, field, initial, path, allowed, saved) {
       const rows = [];
       const list = element("div", "te-items");
       const empty = element("p", "te-empty", "Empty list");
@@ -290,8 +329,8 @@
         (action.disabled ? (direction < 0 ? row.down : row.up) : action).focus();
         changed("Moved item " + (from + 1) + " to position " + (to + 1) + ".");
       }
-      function insert(value) {
-        const row = {box: element("div", "te-item")};
+      function insert(value, sourceIndex, previous) {
+        const row = {sourceIndex, box: element("div", "te-item")};
         rows.push(row);
         list.append(row.box);
         const bar = element("div", "te-rowbar");
@@ -310,15 +349,22 @@
         });
         bar.append(row.title, row.up, row.down, row.remove);
         row.box.append(bar);
-        row.child = node(row.box, field.items, value, "Value", () => [...path(), rows.indexOf(row)], allowed);
+        row.child = node(row.box, field.items, value, "Value", () => [...path(), rows.indexOf(row)], allowed, false, previous);
         return row;
       }
-      if (Array.isArray(initial)) for (const item of initial) insert(item);
+      if (Array.isArray(saved?.rows)) {
+        for (const row of saved.rows) insert(initial?.[row.sourceIndex], row.sourceIndex, row.child);
+      } else if (Array.isArray(initial)) {
+        initial.forEach((item, index) => insert(item, index));
+      }
       refresh();
-      return {focus: () => add.focus(), read: () => rows.map(row => row.child.read())};
+      return {
+        snapshot: () => ({rows: rows.map(row => ({sourceIndex: row.sourceIndex, child: row.child.snapshot()}))}),
+        focus: () => add.focus(), read: () => rows.map(row => row.child.read())
+      };
     }
 
-    function object(host, field, initial, path) {
+    function object(host, field, initial, path, saved) {
       const props = field.properties || {};
       const rows = [];
       const list = element("div", "te-items");
@@ -345,8 +391,8 @@
         for (const key of available) appendChoice(name, key, key + (props[key].required === true ? " (required)" : ""));
         name.hidden = add.hidden = available.length === 0;
       }
-      function insert(key, value, fixed) {
-        const row = {key, fixed, emptyKeyExists: key === "" && value !== undefined, box: element("div", "te-entry")};
+      function insert(key, value, fixed, originalKey, previous) {
+        const row = {key, fixed, originalKey, emptyKeyExists: originalKey === "" && value !== undefined, box: element("div", "te-entry")};
         rows.push(row); list.append(row.box);
         const actions = element("div", "te-entry-actions");
         const required = fixed && (props[key].required === true || (Array.isArray(field.required) && field.required.includes(key)));
@@ -370,14 +416,24 @@
         if (!required && !(fixed && props[key].constraint?.lock === true)) actions.append(remove);
         if (actions.children.length) row.box.append(actions);
         const childField = fixed ? props[key] : field.additional_properties;
-        row.child = node(row.box, childField, value, fixed ? key : "Value", () => [...path(), row.key], undefined);
+        row.child = node(row.box, childField, value, fixed ? key : "Value", () => [...path(), row.key], undefined, false, previous);
         return row;
       }
-      if (record(initial)) {
-        for (const [key, value] of Object.entries(initial)) insert(key, value, own(props, key));
+      if (Array.isArray(saved?.rows)) {
+        for (const row of saved.rows) {
+          if (typeof row.key !== "string" || (row.fixed && !own(props, row.key))) continue;
+          const originalValue = typeof row.originalKey === "string" && own(initial, row.originalKey) ? initial[row.originalKey] : undefined;
+          insert(row.key, originalValue, row.fixed, row.originalKey, row.child);
+        }
+      } else if (record(initial)) {
+        for (const [key, value] of Object.entries(initial)) insert(key, value, own(props, key), key);
       }
       refresh();
+      if (saved?.next && Array.from(name.options).some(o => o.value === saved.next)) name.value = saved.next;
       return {
+        snapshot: () => ({next: name.value, rows: rows.map(row => ({
+          key: row.key, fixed: row.fixed, originalKey: row.originalKey, child: row.child.snapshot()
+        }))}),
         focus() {
           if (!name.hidden) name.focus();
           else if (openMap) addEntry.focus();
@@ -403,8 +459,43 @@
       };
     }
 
-    const content = node(root, schema, value, options.label || "Value", () => options.path || [], options.allowed, true);
-    return {read() {
+    const saved = options.restore?.version === 1 ? options.restore : null;
+    const content = node(root, schema, value, options.label || "Value", () => options.path || [], options.allowed, true, saved?.content);
+    const controls = () => Array.from(root.querySelectorAll("button,input,select,textarea")).filter(control => {
+      const hidden = control.closest("[hidden]");
+      return !hidden || !root.contains(hidden);
+    });
+    const restored = controls();
+    for (const issue of saved?.errors || []) {
+      if (restored[issue.index] && typeof issue.message === "string") showError(restored[issue.index], issue.message);
+    }
+    if (saved?.focus && restored[saved.focus.index]) {
+      const target = restored[saved.focus.index];
+      requestAnimationFrame(() => {
+        if (!target.isConnected || !target.getClientRects().length) return;
+        target.focus({preventScroll: true});
+        if (typeof saved.focus.start === "number" && typeof target.setSelectionRange === "function") {
+          target.setSelectionRange(saved.focus.start, saved.focus.end, saved.focus.direction);
+        }
+        target.scrollTop = saved.focus.scrollTop || 0;
+      });
+    }
+    function snapshot() {
+      const fields = controls();
+      const errors = [];
+      for (const [index, control] of fields.entries()) {
+        const issue = document.getElementById(control.dataset.teError);
+        if (issue && root.contains(issue)) errors.push({index, message: issue.textContent});
+      }
+      const target = document.activeElement;
+      const index = fields.indexOf(target);
+      const focus = index < 0 ? null : {index, start: target.selectionStart, end: target.selectionEnd,
+        direction: target.selectionDirection, scrollTop: target.scrollTop};
+      return {version: 1, content: content.snapshot(), errors, focus};
+    }
+    // Store only editor state, never HTML. A restored draft must pass the normal
+    // schema, repository constraints and preview checks before it can be staged.
+    return {snapshot, read() {
       root.querySelectorAll("[data-te-error]").forEach(clearError);
       return content.read();
     }};
