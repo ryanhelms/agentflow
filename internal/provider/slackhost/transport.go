@@ -90,7 +90,7 @@ func (e Enrollment) failure(err error) error {
 }
 
 // SDK, keychain and HTTP errors may contain provider data. Only return owned
-// error classes. Unavailability is reserved for selection before a grant exists.
+// error classes. Missing or expired grants are sign-in failures.
 func safeError(err error) error {
 	var result error
 	switch {

@@ -267,7 +267,7 @@ func TestNoFallbackAfterProviderDeny(t *testing.T) {
 		status  int
 		want    error
 	}{
-		{"absent", errNotEnrolled, 0, native.ErrUnavailable}, {"invalid", errLoginRequired, 0, native.ErrSignIn},
+		{"absent", errNotEnrolled, 0, native.ErrSignIn}, {"invalid", errLoginRequired, 0, native.ErrSignIn},
 		{"keychain", errors.New("private-grant-error"), 0, native.ErrDenied}, {"unauthorized", nil, 401, native.ErrSignIn}, {"forbidden", nil, 403, native.ErrDenied},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

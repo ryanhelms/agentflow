@@ -62,9 +62,6 @@ func newWriter(enrollment Enrollment, transport http.RoundTripper) *native.Sessi
 		}
 		grant, err := enrollment.BoundIdentity(ctx)
 		if err != nil {
-			if errors.Is(err, enrollment.ErrNotEnrolled) {
-				return nil, native.ErrUnavailable
-			}
 			return nil, enrollment.failure(err)
 		}
 		if grant.Generation == "" || grant.Team == "" || grant.User == "" {
