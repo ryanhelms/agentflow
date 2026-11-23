@@ -1,5 +1,7 @@
 ---
 description: Check readiness and open a pull request
 ---
-Call devflow_pr_ready and fix what you can. Then call devflow_pr_open (draft if acceptance criteria are
-incomplete). If it returns needs_confirmation, show me and wait. Give me the PR link.
+Call devflow_pr_ready and fix what you can. Use devflow_pr_prepare for the
+publication preview, as a draft if acceptance criteria are incomplete.
+Follow the returned policy status in AGENTS.md and apply with devflow_pr_open.
+Give me the PR link.

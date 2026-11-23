@@ -152,15 +152,22 @@ type PROpenInput struct {
 	Labels    []string `json:"labels,omitempty"`
 }
 
+// PRPrepare returns the exact publication decision without publishing the branch.
+func (a *App) PRPrepare(ctx context.Context, in PROpenInput) (any, error) {
+	return a.prPublication(ctx, in, "", true)
+}
+
 // PROpen pushes the branch and opens a PR.
 func (a *App) PROpen(ctx context.Context, in PROpenInput, token string) (any, error) {
-	remotes, err := a.githubRemotes(ctx)
+	return a.prPublication(ctx, in, token, false)
+}
+
+func (a *App) prPublication(ctx context.Context, in PROpenInput, token string, prepare bool) (any, error) {
+	revision, err := a.branchPublication(ctx, true)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.checkPushRemote(ctx, remotes.Source); err != nil {
-		return nil, err
-	}
+	remotes := revision.remotes
 	repo := githubTarget(remotes)
 	ready, err := a.PRReady(ctx, false)
 	if err != nil {
@@ -194,40 +201,54 @@ func (a *App) PROpen(ctx context.Context, in PROpenInput, token string) (any, er
 	if in.Draft != nil {
 		draft = *in.Draft
 	}
-	branch := a.Repo.Branch(ctx)
-	base := "main"
-	if sym, err := a.Repo.Git(ctx, "symbolic-ref", "--quiet", "refs/remotes/"+remotes.Target.Name+"/HEAD"); err == nil {
-		base = strings.TrimPrefix(strings.TrimSpace(sym), "refs/remotes/"+remotes.Target.Name+"/")
-	}
-	sha, err := a.Repo.Git(ctx, "rev-parse", "--verify", "refs/heads/"+branch)
-	if err != nil {
+	branch := revision.branch
+	base := revision.base
+	if err := revision.checkLocal(ctx, a); err != nil {
 		return nil, err
 	}
 	head := githubHead(remotes, branch)
 	summary := map[string]any{
 		"repo": repo.Path, "source_repo": remotes.Source.URL.Path, "source_remote": remotes.Source.Name,
-		"head_sha": strings.TrimSpace(sha), "head": head, "base": base,
+		"head_sha": revision.sha, "head": head, "base": base, "target_remote": remotes.Target.Name, "repository": a.Repo.Dir,
 		"title": in.Title, "body": in.Body, "draft": draft,
 		"reviewers": in.Reviewers, "labels": in.Labels, "jira_effects": ready.Effects,
 	}
-	commands := []string{
-		"git push --set-upstream -- " + shellQuote(remotes.Source.Name) + " " + shellQuote("refs/heads/"+branch+":refs/heads/"+branch),
-		"gh pr create --repo " + shellQuote(repo.Path) + " --head " + shellQuote(head) + " --base " + shellQuote(base) + " --title " + shellQuote(in.Title),
+	create := "gh pr create --repo " + shellQuote(repo.Path) + " --head " + shellQuote(head) + " --base " + shellQuote(base) + " --title " + shellQuote(in.Title) + " --body " + shellQuote(in.Body)
+	if draft {
+		create += " --draft"
 	}
-	if p, err := a.gate(policy.Remote, "pr_open", summary, token, false, commands); p != nil || err != nil {
+	for _, reviewer := range in.Reviewers {
+		create += " --reviewer " + shellQuote(strings.TrimPrefix(reviewer, "team:"))
+	}
+	for _, label := range in.Labels {
+		create += " --label " + shellQuote(label)
+	}
+	commands := []string{revision.suggest(), create}
+	action := "pr_open"
+	if draft {
+		action = "pr_open_draft"
+	}
+	related := []string{"push"}
+	if prepare {
+		return a.prepareWithActions(policy.Remote, action, related, summary, commands)
+	}
+	if p, err := a.gateWithActions(policy.Remote, action, related, summary, token, false, commands); p != nil || err != nil {
 		return p, err
 	}
 	c, err := a.GitHub(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := a.Repo.Git(ctx, "push", "--set-upstream", "--", remotes.Source.Name, "refs/heads/"+branch+":refs/heads/"+branch); err != nil {
+	if err := revision.push(ctx, a); err != nil {
 		return nil, err
 	}
 	pr, err := legacy.NewGitHub(c).OpenChange(ctx, repo, provider.ChangeDraft{Title: in.Title, Body: in.Body, Head: head, Base: base, Draft: draft})
-	a.audit(policy.Remote, "pr_open", summary, err)
+	a.audit(policy.Remote, action, summary, err)
 	if err != nil {
 		return nil, err
+	}
+	if pr.HeadSHA != "" && pr.HeadSHA != revision.sha {
+		return nil, fmt.Errorf("pull request %s was opened but its remote head changed to %s", pr.URL, pr.HeadSHA)
 	}
 	var users, teams []string
 	for _, r := range in.Reviewers {

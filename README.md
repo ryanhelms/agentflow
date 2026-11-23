@@ -426,6 +426,9 @@ Deployments and release lookup also support local JSON fixtures.
 | Preview Jira effects | `devflow preview` | shown before every commit |
 | Check PR readiness | `devflow pr --check` | `devflow_pr_ready` |
 | Open a PR | `devflow pr` | `/devflow:pr` |
+| Push a feature branch | `devflow push` | `devflow_push` |
+| Mark an existing draft ready for review | `devflow pr mark-ready` | `devflow_pr_mark_ready` |
+| Explain an approval | `devflow policy explain ACTION` | `devflow_policy_explain` |
 | Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
 | Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
 | Standup | `devflow standup` | `/devflow:standup` |
@@ -445,9 +448,55 @@ readiness if its other checks pass. To open a PR from that branch, supply a
 conventional title with `devflow pr --title "feat: add quota"` or the
 `devflow_pr_open` tool's `title` input.
 
-Each developer chooses an autonomy level per action class (`suggest`, `confirm` or
-`auto`) in `~/.devflow/config.yml`, capped by the repo's `policy.max_autonomy`. The
-default is `confirm`: the agent shows what it will do and waits.
+### Control agent approvals
+
+To allow local commits while keeping other writes under review, add this to your
+personal `~/.devflow/config.yml` (or `$DEVFLOW_HOME/config.yml`).
+
+```yaml
+autonomy:
+  local: confirm
+  remote: confirm
+  actions:
+    commit: auto
+approval_window: 15m
+```
+
+The two classes default to `confirm`. A named action overrides your class
+preference for that operation. The repository's `.devflow/config.yml` sets
+ceilings independently.
+
+```yaml
+policy:
+  max_autonomy:
+    local: auto
+    remote: confirm
+    actions:
+      review_reply: suggest
+  max_approval_window: 20m
+```
+
+A repo action ceiling can tighten its class ceiling. `suggest` returns commands
+for you to run, `confirm` requires your approval, and `auto` lets Devflow carry
+out an authorized operation. Task creation, release publication and other writes
+with mandatory review still require confirmation when set to `auto`.
+The default review window is five minutes. Configured windows accept one minute
+through one hour, subject to the repo maximum.
+
+In `devflow ui`, open **Autonomy** to inspect the effective rule for each action,
+save personal preferences or stage repository ceilings for review. Select
+**Inherit** to remove an override. Run `devflow policy explain commit` in the
+affected checkout to see which setting wins. Run `devflow policy explain` to see the supported actions. Restart
+a running Devflow MCP server after editing the configuration. Host sandbox
+permissions and provider sign-in prompts are controlled by their respective clients.
+
+Devflow runs configured Git commit hooks, including native hooks on Windows.
+It verifies the approved tree and message before Git moves the branch.
+
+Automatic draft publication requires both `push` and `pr_open_draft` to allow
+`auto`. Opening a reviewable PR uses `push` and `pr_open`. Promoting an existing
+draft uses `pr_ready_for_review`. For exact previews and approval handoff, see the
+[operations guide](docs/operations.md#prepare-and-apply-an-operation).
 
 The table above gives the terminal commands for the same day-to-day operations.
 When a provider write needs confirmation, the CLI shows the approval summary. Pass

@@ -25,6 +25,8 @@ policy:
   max_autonomy:                  # ceiling for each developer's suggest | confirm | auto
     local: auto
     remote: confirm
+    # actions: {commit: confirm}  # optional tighter ceiling for one operation
+  # max_approval_window: 15m     # caps the user's approval_window (default 5m)
   protected_branches: [main, master, develop, "release/*"]
   test_cmd: make test
   lint_cmd: make lint

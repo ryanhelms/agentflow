@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 // ErrWriteUncertain indicates that a native write may have been dispatched.
@@ -24,6 +25,9 @@ type WriteBinding struct {
 	Origin     string `json:"origin"`
 	Connection string `json:"connection"`
 	Payload    string `json:"payload_sha256,omitempty"`
+	// ExpiresAt is the last instant this exact connection can accept a write.
+	// It is independent of dispatch and receipt-read timeouts.
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
 }
 
 // WriteHost owns the authenticated connection and must enforce bindings on
@@ -38,6 +42,14 @@ type writeHostKey struct{}
 
 func WithWriteHost(ctx context.Context, host WriteHost) context.Context {
 	return context.WithValue(ctx, writeHostKey{}, host)
+}
+
+// ConfigureApprovalWindow applies the loaded repository and personal settings
+// to the native host attached to a CLI invocation.
+func ConfigureApprovalWindow(ctx context.Context, window time.Duration) {
+	if host, ok := ctx.Value(writeHostKey{}).(*SessionWriter); ok {
+		host.SetApprovalWindow(window)
+	}
 }
 
 func PrepareWrite(ctx context.Context, call Call) (WriteBinding, error) {

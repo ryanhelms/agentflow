@@ -236,7 +236,7 @@ func (s *server) replyToWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payload := struct{ Root, Socket, Run, Request, Question, Answer string }{s.repo.Dir, commanderSocket(), in.Run, in.Request, selected.Detail, in.Answer}
-	d, err := s.checkGate(policy.Local, "console.reply", payload, in.Approval)
+	d, err := s.checkGate(r.Context(), policy.Local, "console.reply", payload, in.Approval)
 	if err != nil {
 		problem(w, 409, err.Error())
 		return
@@ -245,8 +245,8 @@ func (s *server) replyToWorker(w http.ResponseWriter, r *http.Request) {
 		problem(w, 403, d.Reason)
 		return
 	}
-	if d.Outcome == policy.NeedsConfirmation {
-		reply(w, 200, map[string]string{"approval": d.Token})
+	if d.Outcome != policy.Proceed {
+		reply(w, 200, map[string]any{"approval": d.Token, "reason": d.Reason, "policy": d.Policy, "request": d.Approval})
 		return
 	}
 	var result struct{ ID, Status, Answer string }

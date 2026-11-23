@@ -440,7 +440,7 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 	}
 	summary := jiraRemoteSummary(intent, prepared.Write)
 	commands := []string{"devflow transition " + ref.ID + " " + shellQuote(event)}
-	if p, err := a.gate(policy.Remote, "transition", summary, token, desktop || token != "", commands); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "transition", summary, token, desktop || token != "", commands, prepared.Write.Binding.ExpiresAt); p != nil || err != nil {
 		return p, true, err
 	}
 	result, err := a.runJiraTransition(ctx, site, ref, plan, prepared)
@@ -590,7 +590,8 @@ func (a *App) LinkJiraRemote(ctx context.Context, key, linkURL, title, token str
 	if exists && token == "" {
 		return alreadyApplied, nil
 	}
-	if p, err := a.gate(policy.Remote, "jira_remote_link", intent, token, false, nil); p != nil || err != nil {
+	write, _ := intent["native"].(*jiraWrite)
+	if p, err := a.gate(policy.Remote, "jira_remote_link", intent, token, false, nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	if exists {

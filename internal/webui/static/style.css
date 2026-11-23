@@ -158,3 +158,20 @@ dialog::backdrop {background: rgb(4 14 39 / .45)}
 #core-values {max-height: 20rem; overflow: auto}
 
 #review-messages .notice, #published p {white-space: pre-line}
+
+.ico-policy {border-radius: 50%; background: linear-gradient(currentColor,currentColor) center/60% 1px no-repeat}
+#autonomy-controls {padding: 0; border: 0; margin: 0; min-width: 0}
+.autonomy-fields {display: grid; grid-template-columns: repeat(auto-fit,minmax(min(11rem,100%),1fr)); gap: 1rem}
+.scope-field {max-width: 24rem}
+#autonomy-scope-help {margin: .6rem 0 1.2rem}
+#autonomy-window-help, #autonomy-rules-source {margin: .65rem 0; font-size: .87rem}
+.autonomy-actions {margin-top: 1rem}
+.autonomy-actions .settings-heading {padding-top: 0; border-top: 0}
+.autonomy-toolbar {position: sticky; bottom: 0; padding: .75rem; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 -2px 8px rgb(19 32 59 / .05)}
+.autonomy-action {border-top: 1px solid var(--line); padding: .9rem 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(9rem,12rem); gap: .8rem 1.2rem; align-items: start}
+.autonomy-action h3 {margin: 0; overflow-wrap: anywhere}
+.autonomy-action .key {display: block; margin: .15rem 0 .45rem; font-size: .79rem; color: var(--muted)}
+.autonomy-action p {margin: .35rem 0 0; font-size: .85rem; overflow-wrap: anywhere}
+.autonomy-action .effective {display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .5rem}
+.autonomy-action .effective small {color: var(--muted); overflow-wrap: anywhere}
+@media (max-width: 38rem) {.autonomy-action {grid-template-columns: 1fr} .autonomy-action label {max-width: 17rem}}

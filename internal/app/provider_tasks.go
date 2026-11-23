@@ -314,12 +314,14 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		}
 	}
 	if assignment != nil || plan.To != "" {
-		level := a.Gate.Autonomy
-		if config.Min(level.Local, level.Remote) == level.Remote {
+		local := a.Gate.Explain(policy.Local, "start", nil, false).Level
+		remote := a.Gate.Explain(policy.Remote, "start", nil, false).Level
+		if config.Min(local, remote) == remote {
 			class = policy.Remote
 		}
 	}
-	if p, err := a.gate(class, "start", s, token, token != "", nil); p != nil || err != nil {
+	preview, _ := s["native_write"].(taskWritePreview)
+	if p, err := a.gate(class, "start", s, token, token != "", nil, preview.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	if err := a.ensureTaskBranch(ctx, ref, res); err != nil {
