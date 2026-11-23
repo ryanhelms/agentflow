@@ -127,8 +127,11 @@ func (a *App) jiraContextTask(ctx context.Context, ref provider.Ref) (provider.T
 			}
 			return nativemap.DecodeJiraRemoteLinks(payload)
 		}
-		unavailable := func() ([]atlassian.Page, error) {
-			return nil, native.ErrUnavailable
+		unavailable := func(reason error) ([]atlassian.Page, error) {
+			if reason == nil {
+				reason = native.ErrUnavailable
+			}
+			return nil, reason
 		}
 		pages, err := native.Read(ctx, call, decode, unavailable)
 		var request *native.Request
@@ -137,7 +140,7 @@ func (a *App) jiraContextTask(ctx context.Context, ref provider.Ref) (provider.T
 		}
 		return pages, err
 	}
-	task, err := mappedNativeRead(ctx, "atlassian", mapped, func() (provider.Task, error) {
+	task, err := mappedNativeRead(ctx, a.Repo.Dir, "atlassian", mapped, func(ctx context.Context) (provider.Task, error) {
 		if !useAtlassianCLI(ctx, site, "jira") {
 			return legacyRead()
 		}

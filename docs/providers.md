@@ -341,19 +341,26 @@ uses its existing provider connection for the exact requested tool and inputs,
 then passes the result back to the original Devflow tool in `native_results`.
 Other clients can opt into the same flow with `provider_mcp: true`.
 
-For supported providers the request includes `setup_offer` with the official
-connector details. If the connector is missing, the agent resumes the read with
-`unavailable` and presents `prompt_if_missing` once per provider per session,
-including after a successful fallback. After user approval, the agent uses the
-current client's connector setup and starts sign-in if required. A connected
-server that lacks only the requested operation can use the fallback directly.
+For supported providers the request includes `setup_offer` with official
+connector details and `cli_fallback` when Devflow implements a vendor CLI.
+Resume with `unavailable` for a missing MCP or operation, `sign_in_required`
+if connector OAuth cannot complete, `connection_failed` for transport
+failures, or `oauth_app_restricted` for an explicit OAuth application approval
+restriction. Use `access_denied` for a denied user or resource.
 
-Jira and Confluence can use the signed-in Teamwork Graph CLI when the MCP
-capability is missing. Interactive GitHub API calls use the signed-in `gh`
+Devflow checks the vendor CLI automatically and installs its pinned release
+in the user cache if needed. It then tests access by retrying the same read
+with the CLI's saved identity. The automatic installation covers GitHub CLI
+and Atlassian Teamwork Graph CLI on macOS, Linux, and Windows (amd64 and
+arm64). These are the providers with CLI adapters in Devflow. Successful
+fallback needs no intervention. If the CLI still needs sign-in, the agent can
+start the vendor's OAuth flow, or offer MCP setup when appropriate.
+
+Interactive GitHub API calls without a provider MCP use the signed-in `gh`
 client. Explicit GitHub workflow tokens retain the existing service-account
-path. When a provider rejects access, report the rejected site or scope and
-check its permissions. When authentication is required, start the provider
-client's sign-in and retry after consent. Other existing REST or webhook
+path. When a provider rejects user or resource access, report the rejected
+site or scope. When authentication is still required after fallback, start
+the vendor's sign-in and retry after consent. Other existing REST or webhook
 operations retain their current credential behavior during migration.
 Devflow-managed writes continue through its confirmation and audit policy.
 

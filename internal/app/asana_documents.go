@@ -90,7 +90,7 @@ func (a *App) DocsGet(ctx context.Context, ref provider.Ref) (provider.Document,
 		if err != nil {
 			return zero, err
 		}
-		return mappedNativeRead(ctx, "atlassian", read, func() (provider.Document, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "atlassian", read, func(ctx context.Context) (provider.Document, error) {
 			if !useAtlassianCLI(ctx, site, "confluence") {
 				return legacyRead()
 			}

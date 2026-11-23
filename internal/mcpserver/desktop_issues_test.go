@@ -104,7 +104,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 		t.Fatal(err)
 	}
 	if request.Request == nil || request.Status != "native_read_required" || request.Server != "github" ||
-		request.Tool != "issue_read" || request.ID == "" {
+		request.Tool != "issue_read" || request.ID == "" || request.CLIFallback != "gh" {
 		t.Fatalf("native issue read: %+v", request.Request)
 	}
 	if offer := request.SetupOffer; offer == nil || offer.Name != "github" ||
@@ -133,7 +133,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	if err := setup.LoginProvider(ctx, filepath.Join(dir, ".devflow"), "github-issues", "", "", nil, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	readArgs["native_results"] = []map[string]string{{"id": request.ID, "status": "unavailable"}}
+	readArgs["native_results"] = []map[string]string{{"id": request.ID, "status": "oauth_app_restricted"}}
 	if got := read(readArgs); !strings.Contains(got, "Example issue from gh") {
 		t.Fatalf("GitHub issue fallback: %s", got)
 	}

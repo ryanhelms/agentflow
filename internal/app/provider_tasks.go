@@ -108,7 +108,7 @@ func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, err
 		if err != nil {
 			return provider.Task{}, err
 		}
-		return mappedNativeRead(ctx, "asana", read, func() (provider.Task, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "asana", read, func(ctx context.Context) (provider.Task, error) {
 			return a.readTaskStore(ctx, ref)
 		})
 	case a.usesIssues():
@@ -116,7 +116,7 @@ func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, err
 		if err != nil {
 			return provider.Task{}, err
 		}
-		return mappedNativeRead(ctx, "github", read, func() (provider.Task, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "github", read, func(ctx context.Context) (provider.Task, error) {
 			return a.readTaskStore(ctx, ref)
 		})
 	default:
