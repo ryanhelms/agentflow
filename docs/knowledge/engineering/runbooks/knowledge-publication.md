@@ -4,6 +4,8 @@ title: Publish a knowledge document
 description: Publish a revision-checked Open Knowledge Format concept through a reviewed PR.
 tags: [knowledge, okf, publication]
 x-devflow-ref: {scope: engineering, id: knowledge-publication}
+x-devflow-operations:
+    devflow-okf-publication-runbook-conflicts-v1: c299b078ab1f52380335198087264d950b76c5e033b9ba317bdda125afa30a67
 ---
 # Publish a knowledge document
 
@@ -35,3 +37,9 @@ opened from its linked task.
 
 See [the task workflow](../guides/task-workflow.md) and
 [provider architecture](../decisions/provider-architecture.md).
+
+## Diagnose publication conflicts
+
+- If Devflow reports a stale revision, run `devflow docs get REF --json` again. Compare the latest body with your draft before choosing a new operation ID and confirming the update.
+- If the same operation ID returns an existing PR, open that PR to check its head and review state. After merge, replaying the original request should report `already_applied` and return the current document revision.
+- If discovery reports duplicate references, check the bundle for two files with the same `x-devflow-ref`. Review the correction in Git and verify the exact reference before retrying publication.
