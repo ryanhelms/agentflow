@@ -26,10 +26,10 @@ func registerAsanaLogin(ctx context.Context, dir, server, clientID string, inter
 	}
 	if name == "" {
 		if clientID == "" {
-			return errors.New("Asana registration requires --client-id from an approved Asana MCP app")
+			return errors.New("register an approved Asana MCP app and supply its --client-id")
 		}
 		if !interactive {
-			return errors.New("Asana registration requires an interactive terminal for Claude’s secure app prompt")
+			return errors.New("open an interactive terminal for Claude’s secure Asana app prompt")
 		}
 		if server == "" {
 			server = tool.Name
