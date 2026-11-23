@@ -29,9 +29,13 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	body := strings.ReplaceAll(string(raw), "acme/widget", fake.task.Ref.Scope)
 	body = strings.ReplaceAll(body, "issues/acme%2Fwidget/42", fake.task.Ref.String())
 	payload := filepath.Join(t.TempDir(), "pull-request.json")
-	if err := os.WriteFile(payload, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
+	writePayload := func(text string) {
+		t.Helper()
+		if err := os.WriteFile(payload, []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
+	writePayload(body)
 	preview, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, true)
 	if err != nil || len(preview.Effects) != 1 || preview.Effects[0].To != "closed" || len(fake.writes) != 0 {
 		t.Fatalf("preview = %+v, writes = %v, err = %v", preview, fake.writes, err)
@@ -41,16 +45,28 @@ func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	if _, err := a.ApplyGitHubTaskEvent(t.Context(), wrong, payload, false); err == nil || len(fake.writes) != 0 {
 		t.Fatalf("write attempted for an unapproved issue: %v, %v", fake.writes, err)
 	}
+	// Even when the enrolled issue is first, a second issue disqualifies the whole merge.
+	second := fake.task.Ref
+	second.ID = "26"
+	writePayload(strings.Replace(body, fake.task.Ref.String(), fake.task.Ref.String()+`\nTask-Ref: `+second.String(), 1))
+	if _, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, false); err == nil || len(fake.writes) != 0 {
+		t.Fatalf("multi-issue merge: writes = %v, err = %v", fake.writes, err)
+	}
+	writePayload(body)
 	applied, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, false)
 	if err != nil || len(applied.Effects) != 1 || !applied.Effects[0].Applied || len(fake.writes) != 1 {
 		t.Fatalf("apply = %+v, writes = %v, err = %v", applied, fake.writes, err)
 	}
-	if expected := applied.Plan.Transitions[0].OperationID; fake.writes[0] != expected {
-		t.Fatalf("operation ID = %q, want %q", fake.writes[0], expected)
+	intent := preview.Plan.Transitions[0]
+	if intent.Task != fake.task.Ref || intent.OperationID == "" || applied.Plan.Transitions[0] != intent || fake.writes[0] != intent.OperationID {
+		t.Fatalf("preview = %+v, apply = %+v, writes = %v", intent, applied.Plan.Transitions, fake.writes)
 	}
 	replay, err := a.ApplyGitHubTaskEvent(t.Context(), metadata, payload, false)
 	if err != nil || len(replay.Effects) != 1 || replay.Effects[0].Applied || len(fake.writes) != 1 {
 		t.Fatalf("replay = %+v, writes = %v, err = %v", replay, fake.writes, err)
+	}
+	if replay.Plan.Transitions[0] != intent || replay.Effects[0].Key != applied.Effects[0].Key || replay.Effects[0].From != "closed" {
+		t.Fatalf("replay did not observe the closed issue: %+v", replay)
 	}
 }
 

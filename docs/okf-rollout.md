@@ -66,6 +66,9 @@ The attested [v0.38.0 reader](https://github.com/nscaledev/devflow/releases/tag/
 was installed and verified against mixed FileSystem and Git-backed Repository
 fixtures and the live legacy ADR. [Issue #84](https://github.com/nscaledev/devflow/issues/84)
 records the original reference and revision.
+The attested [v0.39.0 writer](https://github.com/nscaledev/devflow/releases/tag/v0.39.0)
+passed OKF publication, legacy override, exact lookup, and replay checks before
+the Devflow bundle moved.
 
 Run `make check` for each change and `make e2e` for MCP, hook, Claude adapter,
 or initializer changes. Exercise FileSystem and Repository through the

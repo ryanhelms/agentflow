@@ -56,7 +56,7 @@ task_management:
 knowledge_base:
   provider: repository
   settings:
-    directory: docs/adr
+    directory: docs/knowledge
 ```
 
 Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
@@ -961,15 +961,25 @@ for task creation. Its catalog lives in [.devflow/task-templates.json](../.devfl
 The template requires Objective, Scope, Dependencies, Acceptance Criteria,
 and Verification sections. It supplies a default statement for Dependencies.
 
-This repository uses GitHub Issues for task management and the Repository
-provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
-enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
-variable. It applies `pr.merged` to that issue after a same-repository PR
-with a qualified `Task-Ref` merges into the default branch. The job builds
-devflow at that merge commit and uses it to find the published ADR before
-closing the enrolled issue.
+The pilot uses GitHub Issues for tasks and the Repository provider for the
+[Devflow OKF bundle](knowledge/index.md). The `provider-pilot.yml` workflow calls
+`task-events.yml` when a same-repository PR targeting `main` opens, reopens,
+becomes ready for review, or closes. The preview checks out the PR base SHA and uses read-only contents
+and issue permissions. A draft review event, an unmerged close, or a PR with
+`[devflow skip]` produces no transition. Fork PRs skip both jobs.
 
-The pilot uses the repository's existing GoReleaser release process.
+To enroll one issue, set the repository variable `DEVFLOW_PROVIDER_PILOT_ISSUE`
+to its decimal number. Link it on its own line in the PR body, for example
+`Task-Ref: github-issues/nscaledev%2Fdevflow/25` for issue 25. Only a
+default-branch merge whose preview resolves to that single issue can start
+the issue-write job. It builds devflow from the reviewed merge commit, checks
+the configured knowledge provider for `repository/engineering/provider-architecture`,
+and revalidates the event before closing the issue. Rerunning the job while
+the issue is closed reports `applied: false`.
+
+Clear `DEVFLOW_PROVIDER_PILOT_ISSUE` to stop the writer and keep previews.
+Set the repository variable `DEVFLOW_ENABLED=false` to skip both jobs on
+subsequent runs. Devflow releases continue through GoReleaser.
 
 ## Link knowledge to a GitHub issue
 
