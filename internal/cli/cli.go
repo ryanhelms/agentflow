@@ -55,7 +55,7 @@ Setup
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
-  setup login --provider NAME [--client NAME] [--server NAME] [--register]
+  setup login --provider NAME [--client NAME] [--server NAME] [--register | --public-client-id ID --team-id TEAM]
                                  start sign-in through a provider CLI or MCP client
                                  use --client devflow for Jira, Confluence or an approved Slack app
   setup logout --provider NAME --client devflow

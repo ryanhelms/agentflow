@@ -62,10 +62,26 @@ func (e *enrollment) save(g grant) error {
 	return e.put(string(raw))
 }
 
-// BoundToken is an internal snapshot for discovery and preparation. Final
-// dispatch must use WithBoundToken so logout or reconsent cannot race it.
-func BoundToken(ctx context.Context) (accessToken, generation string, err error) {
-	return local.token(ctx, "", nil)
+// GrantIdentity identifies the user and workspace of one consent.
+type GrantIdentity struct {
+	Team, User, Generation string
+}
+
+// BoundIdentity reads the identity and generation from the same OS record.
+// WithBoundToken checks that generation again when authenticating a request.
+func BoundIdentity(ctx context.Context) (GrantIdentity, error) { return local.identity(ctx) }
+
+func (e *enrollment) identity(ctx context.Context) (GrantIdentity, error) {
+	lock, err := nativeoauth.Lock(ctx, e.lockDir)
+	if err != nil {
+		return GrantIdentity{}, err
+	}
+	defer lock.Close()
+	g, err := e.load()
+	if err != nil {
+		return GrantIdentity{}, err
+	}
+	return GrantIdentity{Team: g.Team, User: g.User, Generation: g.Generation}, nil
 }
 
 // WithBoundToken runs one dispatch on the expected enrollment while holding the
@@ -84,19 +100,12 @@ func (e *enrollment) token(ctx context.Context, expected string, dispatch func(s
 		return "", "", err
 	}
 	defer lock.Close()
-	raw, err := e.get(service, account)
-	if errors.Is(err, keyring.ErrNotFound) {
-		if expected != "" {
-			return "", "", ErrGrantChanged
-		}
-		return "", "", ErrNotEnrolled
+	g, err := e.load()
+	if expected != "" && errors.Is(err, ErrNotEnrolled) {
+		return "", "", ErrGrantChanged
 	}
 	if err != nil {
-		return "", "", errStorage
-	}
-	var g grant
-	if len(raw) > maxRecord || json.Unmarshal([]byte(raw), &g) != nil || !g.valid() {
-		return "", "", ErrLoginRequired
+		return "", "", err
 	}
 	if expected != "" && expected != g.Generation {
 		return "", "", ErrGrantChanged
@@ -124,6 +133,22 @@ func (e *enrollment) token(ctx context.Context, expected string, dispatch func(s
 		return "", "", dispatch(g.Access)
 	}
 	return g.Access, g.Generation, nil
+}
+
+// load reads the current record while the caller holds the enrollment lock.
+func (e *enrollment) load() (grant, error) {
+	raw, err := e.get(service, account)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return grant{}, ErrNotEnrolled
+	}
+	if err != nil {
+		return grant{}, errStorage
+	}
+	var g grant
+	if len(raw) > maxRecord || json.Unmarshal([]byte(raw), &g) != nil || !g.valid() {
+		return grant{}, ErrLoginRequired
+	}
+	return g, nil
 }
 
 // Disconnect removes the local client credentials and the user grant together.

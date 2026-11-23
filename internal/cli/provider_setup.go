@@ -236,13 +236,27 @@ func runProviderLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("setup login", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider to authenticate")
 	client := fs.String("client", "", "MCP client, such as claude-desktop or codex")
+	publicID := fs.String("public-client-id", "", "approved Slack desktop app client ID")
+	teamID := fs.String("team-id", "", "expected Slack workspace ID for public desktop consent")
 	register := fs.Bool("register", false, "register the official Slack connector if absent in this Claude Code Desktop workspace")
 	server := fs.String("server", "", "existing MCP server name if different from the provider default")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *provider == "" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register]")
+		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register | --public-client-id ID --team-id TEAM]")
+	}
+	public := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "public-client-id" || f.Name == "team-id" {
+			public = true
+		}
+	})
+	if public {
+		if *register {
+			return errors.New("choose either --register or --public-client-id with --team-id")
+		}
+		return setup.LoginPublicSlack(ctx, *provider, *client, *server, *publicID, *teamID, os.Stdout)
 	}
 	if *register {
 		return setup.RegisterProviderLogin(ctx, ".", *provider, *client, *server, term.IsTerminal(int(os.Stdin.Fd())), os.Stdin, os.Stdout, os.Stderr)

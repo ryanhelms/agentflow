@@ -110,6 +110,12 @@ func FindSlackWorkspaceChannel(raw json.RawMessage, workspace, channel string) (
 			return true, "", nil
 		}
 	}
+	// The hosted ids_only format puts one conversation ID on each line.
+	for line := range strings.SplitSeq(result.Result, "\n") {
+		if strings.TrimSuffix(line, "\r") == channel && slackChannel.MatchString(channel) {
+			return true, "", nil
+		}
+	}
 	for _, row := range slackChannelRow.FindAllStringSubmatch(result.Result, -1) {
 		if row[1] == channel {
 			return true, "", nil

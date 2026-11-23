@@ -26,13 +26,14 @@ import (
 
 	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
+	"golang.org/x/oauth2"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (tr roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return tr(r) }
 
-// Drive the browser callback over real TLS on in-memory connections. No system
+// Drive the browser callback over HTTP or HTTPS on in-memory connections. No system
 // browser, credential store, trusted root, TCP port, or Slack account is used.
 type loopback struct {
 	conns  chan net.Conn
@@ -60,6 +61,7 @@ type fixture struct {
 	posts          int
 	openURL        string
 	callbackErr    string
+	expectedTeam   string
 }
 
 func testCertificate(t *testing.T) (tls.Certificate, *x509.CertPool) {
@@ -91,7 +93,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ss := strings.Split(scopes, ",")
 	f := &fixture{
-		app: credentials{"1234.5678", "mock-app-secret"}, records: map[string]string{},
+		app: credentials{ClientID: "1234.5678", Secret: "mock-app-secret"}, records: map[string]string{},
 		res: map[string]any{
 			"resource": Resource, "authorization_servers": []string{Resource},
 			"bearer_methods_supported": []string{"header", "form"}, "scopes_supported": ss,
@@ -137,18 +139,35 @@ func newFixture(t *testing.T) *fixture {
 	var roots *x509.CertPool
 	f.cert, roots = testCertificate(t)
 	var pipe *loopback
-	f.e.listen = func(_ context.Context, c tls.Certificate) (net.Listener, error) {
+	f.e.listen = func(_ context.Context, c *tls.Certificate) (net.Listener, error) {
 		pipe = &loopback{conns: make(chan net.Conn), closed: make(chan struct{})}
-		return tls.NewListener(pipe, &tls.Config{Certificates: []tls.Certificate{c}, MinVersion: tls.VersionTLS12}), nil
+		if c == nil {
+			return pipe, nil
+		}
+		return tls.NewListener(pipe, &tls.Config{Certificates: []tls.Certificate{*c}, MinVersion: tls.VersionTLS12}), nil
 	}
 	f.e.open = func(ctx context.Context, raw string) error {
+		previous, _ := url.Parse(f.openURL)
 		f.openURL = raw
 		u, err := url.Parse(raw)
 		if err != nil {
 			return err
 		}
 		state := u.Query().Get("state")
-		want := url.Values{"client_id": {f.app.ClientID}, "scope": {scopes}, "redirect_uri": {redirectURI}, "state": {state}, "response_type": {"code"}, "resource": {Resource}}
+		redirect := redirectURI
+		if f.app.Public {
+			redirect = "http://localhost:53668/oauth/slack/callback"
+		}
+		want := url.Values{"client_id": {f.app.ClientID}, "scope": {scopes}, "redirect_uri": {redirect}, "state": {state}, "response_type": {"code"}, "resource": {Resource}}
+		if f.app.Public {
+			want.Set("team", f.expectedTeam)
+			challenge := u.Query().Get("code_challenge")
+			if len(challenge) != 43 || challenge == previous.Query().Get("code_challenge") {
+				return errors.New("missing or reused S256 challenge")
+			}
+			want.Set("code_challenge_method", "S256")
+			want.Set("code_challenge", challenge)
+		}
 		if u.Scheme+"://"+u.Host+u.Path != authorizeEndpoint || len(state) < 24 || !reflect.DeepEqual(u.Query(), want) {
 			return errors.New("unexpected authorization request")
 		}
@@ -185,14 +204,22 @@ func newFixture(t *testing.T) *fixture {
 			target, host string
 			state        []string
 		}{
-			{redirectURI, "foreign.invalid", []string{state}},
-			{redirectURI + "/", "", []string{state}},
-			{redirectURI, "", []string{"wrong"}},
-			{redirectURI, "", []string{state, state}},
+			{redirect, "foreign.invalid", []string{state}},
+			{redirect, "localhost", []string{state}},
+			{strings.Replace(redirect, "/oauth", "/%6fauth", 1), "", []string{state}},
+			{redirect + "/", "", []string{state}},
+			{redirect, "", []string{"wrong"}},
+			{redirect, "", []string{state, state}},
 		} {
 			q["state"] = bad.state
 			if status, err := send(bad.target, bad.host, q); err != nil || status != 400 {
 				return fmt.Errorf("unexpected invalid callback status %d", status)
+			}
+		}
+		if old := previous.Query().Get("state"); old != "" {
+			q.Set("state", old)
+			if status, err := send(redirect, "", q); err != nil || status != 400 {
+				return errors.New("accepted a replayed authorization callback")
 			}
 		}
 		q.Set("state", state)
@@ -201,7 +228,7 @@ func newFixture(t *testing.T) *fixture {
 		} else if f.callbackErr != "" {
 			q.Set("error", f.callbackErr)
 		}
-		_, err = send(redirectURI, "", q)
+		_, err = send(redirect, "", q)
 		return err
 	}
 	f.e.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
@@ -216,11 +243,24 @@ func newFixture(t *testing.T) *fixture {
 			if r.Method != "POST" || r.ParseForm() != nil || r.Header.Get("Authorization") != "" {
 				t.Fatal("invalid exchange request")
 			}
-			want := url.Values{"client_id": {f.app.ClientID}, "client_secret": {f.app.Secret}, "resource": {Resource}, "grant_type": {r.Form.Get("grant_type")}}
+			want := url.Values{"client_id": {f.app.ClientID}, "resource": {Resource}, "grant_type": {r.Form.Get("grant_type")}}
+			if !f.app.Public {
+				want.Set("client_secret", f.app.Secret)
+			}
 			switch r.Form.Get("grant_type") {
 			case "authorization_code":
 				want.Set("code", "mock-code")
-				want.Set("redirect_uri", redirectURI)
+				if f.app.Public {
+					want.Set("redirect_uri", "http://localhost:53668/oauth/slack/callback")
+					verifier := r.Form.Get("code_verifier")
+					auth, _ := url.Parse(f.openURL)
+					if len(verifier) < 43 || len(verifier) > 128 || oauth2.S256ChallengeFromVerifier(verifier) != auth.Query().Get("code_challenge") {
+						t.Fatal("invalid PKCE verifier")
+					}
+					want.Set("code_verifier", verifier)
+				} else {
+					want.Set("redirect_uri", redirectURI)
+				}
 			case "refresh_token":
 				want.Set("refresh_token", "mock-refresh")
 				if f.records[account] != "{}" {
@@ -242,10 +282,27 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-func (f *fixture) login(ctx context.Context) error { return f.e.login(ctx, f.app, f.cert) }
+func newPublicFixture(t *testing.T) *fixture {
+	t.Helper()
+	f := newFixture(t)
+	f.app = credentials{ClientID: "1234.5678", Public: true}
+	f.expectedTeam = "T12345"
+	return f
+}
+
+func (f *fixture) login(ctx context.Context) error {
+	if f.app.Public {
+		return f.e.login(ctx, f.app, nil, f.expectedTeam)
+	}
+	return f.e.login(ctx, f.app, &f.cert, "")
+}
 
 func TestBrowserEnrollmentAndBoundGrant(t *testing.T) {
-	f := newFixture(t)
+	t.Run("confidential", func(t *testing.T) { testBoundGrant(t, newFixture(t)) })
+	t.Run("public", func(t *testing.T) { testBoundGrant(t, newPublicFixture(t)) })
+}
+
+func testBoundGrant(t *testing.T, f *fixture) {
 	ctx := t.Context()
 	if _, _, err := f.e.token(ctx, "", nil); !errors.Is(err, ErrNotEnrolled) {
 		t.Fatal(err)
@@ -360,9 +417,14 @@ func TestGrantResponseValidation(t *testing.T) {
 }
 
 func TestRotatingGrantIdentity(t *testing.T) {
+	t.Run("confidential", func(t *testing.T) { testRotatingGrantIdentity(t, newFixture) })
+	t.Run("public", func(t *testing.T) { testRotatingGrantIdentity(t, newPublicFixture) })
+}
+
+func testRotatingGrantIdentity(t *testing.T, fixtureFor func(*testing.T) *fixture) {
 	for _, scenario := range []string{"rotate", "changed workspace", "changed user", "changed top-level user", "changed app", "changed scope", "replayed refresh", "ambiguous response"} {
 		t.Run(scenario, func(t *testing.T) {
-			f := newFixture(t)
+			f := fixtureFor(t)
 			f.reply["expires_in"] = 3600
 			f.reply["refresh_token"] = "mock-refresh"
 			if err := f.login(t.Context()); err != nil {
@@ -462,5 +524,117 @@ func TestRefreshRequiresVerifiedSpend(t *testing.T) {
 	f.e.set = func(string, string, string) error { return nil } // silently ignored store write
 	if access, id, err := f.e.token(t.Context(), "", nil); !errors.Is(err, errStorage) || access != "" || id != "" || f.posts != 1 {
 		t.Fatal("refresh proceeded without a durable spent marker", err)
+	}
+}
+
+func TestPublicLoginBindsWorkspaceBeforeReplacingGrant(t *testing.T) {
+	f := newPublicFixture(t)
+	ctx := t.Context()
+	if err := f.login(ctx); err != nil {
+		t.Fatal(err)
+	}
+	original := f.records[account]
+	if strings.Contains(original, "client_secret") || strings.Contains(original, "code_verifier") {
+		t.Fatal("unexpected credential in public record")
+	}
+	access, gen, err := f.e.token(ctx, "", nil)
+	if err != nil || access != "mock-access" || gen == "" {
+		t.Fatal("public grant unavailable", err)
+	}
+
+	f.reply["team"] = map[string]string{"id": "T99999"}
+	if err := f.login(ctx); err == nil || !strings.Contains(err.Error(), "different workspace") || f.records[account] != original || f.posts != 2 {
+		t.Fatal("wrong workspace replaced the previous grant", err)
+	}
+	f.reply["ok"], f.reply["error"] = false, "invalid_code"
+	if err := f.login(ctx); !errors.Is(err, errToken) || f.records[account] != original || f.posts != 3 {
+		t.Fatal("rejected authorization code was retried or saved", err)
+	}
+}
+
+func TestPublicLoginPreconditions(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*fixture)
+	}{
+		{"missing team", func(f *fixture) { f.expectedTeam = "" }},
+		{"channel as team", func(f *fixture) { f.expectedTeam = "C12345" }},
+		{"invalid client ID", func(f *fixture) { f.app.ClientID = "client.invalid" }},
+		{"secret in public profile", func(f *fixture) { f.app.Secret = "mock-secret" }},
+		{"missing S256", func(f *fixture) { f.as["code_challenge_methods_supported"] = []string{"plain"} }},
+		{"unrecognized token authority", func(f *fixture) { f.as["token_endpoint"] = "https://other.invalid/api" }},
+		{"DPoP required", func(f *fixture) { f.res["dpop_bound_access_tokens_required"] = true }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPublicFixture(t)
+			tc.change(f)
+			if err := f.login(t.Context()); err == nil || f.openURL != "" || f.posts != 0 || len(f.records) != 0 {
+				t.Fatal("opened browser or used an invalid public profile", err)
+			}
+		})
+	}
+	if (credentials{ClientID: "123.456"}).valid() {
+		t.Fatal("incomplete legacy confidential enrollment became public")
+	}
+}
+
+func TestPublicRefreshLostResponseRequiresNewConsent(t *testing.T) {
+	f := newPublicFixture(t)
+	f.reply["expires_in"], f.reply["refresh_token"] = 1, "mock-refresh"
+	ctx := t.Context()
+	if err := f.login(ctx); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	f.e.client.Transport = roundTrip(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if req.URL.String() != tokenEndpoint || f.records[account] != "{}" {
+			t.Fatal("unexpected refresh attempt")
+		}
+		return nil, io.ErrUnexpectedEOF
+	})
+	for range 2 {
+		if access, _, err := f.e.token(ctx, "", nil); !errors.Is(err, ErrLoginRequired) || access != "" {
+			t.Fatal("ambiguous refresh authorized token use", err)
+		}
+	}
+	if calls != 1 {
+		t.Fatal("replayed single-use refresh", calls)
+	}
+}
+
+func TestPublicBearerIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name, user, team, bot string
+		ok                    bool
+	}{
+		{name: "matching user", user: "U54321", team: "T12345", ok: true},
+		{name: "different workspace", user: "U54321", team: "T99999"},
+		{name: "bot", user: "U54321", team: "T12345", bot: "B12345"},
+		{name: "incomplete identity", team: "T12345"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPublicFixture(t)
+			f.reply["token_type"] = "Bearer"
+			f.reply["scope"] = scopes
+			delete(f.reply, "authed_user")
+			base := f.e.client.Transport
+			checks := 0
+			f.e.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+				if r.URL.String() != identityEndpoint {
+					return base.RoundTrip(r)
+				}
+				checks++
+				if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer mock-access" {
+					t.Fatal("unexpected identity request")
+				}
+				b, err := json.Marshal(map[string]any{"ok": true, "user_id": tc.user, "team_id": tc.team, "bot_id": tc.bot})
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(b)))}, err
+			})
+			err := f.login(t.Context())
+			if checks != 1 || (err == nil) != tc.ok || (len(f.records) == 1) != tc.ok {
+				t.Fatalf("identity checks=%d, stored=%d, login error=%v", checks, len(f.records), err)
+			}
+		})
 	}
 }

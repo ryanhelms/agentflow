@@ -14,6 +14,8 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
 )
 
+const identityEndpoint = "https://slack.com/api/auth.test"
+
 var (
 	userID = regexp.MustCompile(`^[UW][A-Z0-9]{1,31}$`)
 	teamID = regexp.MustCompile(`^T[A-Z0-9]{1,31}$`)
@@ -49,7 +51,9 @@ func exactScopes(s string) bool {
 
 func (e *enrollment) exchange(ctx context.Context, g *grant, form url.Values) error {
 	form.Set("client_id", g.App.ClientID)
-	form.Set("client_secret", g.App.Secret)
+	if !g.App.Public {
+		form.Set("client_secret", g.App.Secret)
+	}
 	form.Set("resource", Resource)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -70,18 +74,39 @@ func (e *enrollment) exchange(ctx context.Context, g *grant, form url.Values) er
 	const limit = 64 << 10
 	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	var t tokenResponse
-	if err != nil || len(b) > limit || json.Unmarshal(b, &t) != nil || !t.OK || t.Error != "" || t.Type != "user" ||
+	if err != nil || len(b) > limit || json.Unmarshal(b, &t) != nil || !t.OK || t.Error != "" ||
 		!bearer.MatchString(t.Access) || (t.Resource != nil && *t.Resource != Resource) {
 		return errToken
 	}
 	refreshing := form.Get("grant_type") == "refresh_token"
-	if !refreshing && (t.Scope == nil && t.AuthedUser.Scope == nil || !userID.MatchString(t.AuthedUser.ID) || !teamID.MatchString(t.Team.ID)) {
+	if !refreshing && (t.Scope == nil && t.AuthedUser.Scope == nil || !teamID.MatchString(t.Team.ID)) {
 		return errToken
 	}
 	for _, s := range []*string{t.Scope, t.AuthedUser.Scope} {
 		if s != nil && !exactScopes(*s) {
 			return errToken
 		}
+	}
+	if g.Team != "" && t.Team.ID != "" && t.Team.ID != g.Team {
+		if !refreshing {
+			return errWrongTeam
+		}
+		return errToken
+	}
+	// Public desktop grants may use the generic OAuth bearer response. Verify
+	// the user independently before accepting a grant without a typed user.
+	if g.App.Public && strings.EqualFold(t.Type, "bearer") {
+		identity, err := e.bearerIdentity(ctx, t.Access)
+		if err != nil || (g.Team != "" && identity.Team != g.Team) || (t.Team.ID != "" && identity.Team != t.Team.ID) ||
+			(t.AuthedUser.ID != "" && identity.User != t.AuthedUser.ID) {
+			return errToken
+		}
+		t.AuthedUser.ID, t.Team.ID = identity.User, identity.Team
+	} else if t.Type != "user" {
+		return errToken
+	}
+	if !refreshing && !userID.MatchString(t.AuthedUser.ID) {
+		return errToken
 	}
 	// A refresh can omit unchanged attributes. Any repeated identity or
 	// scope must agree with the consent that supplied this refresh token.
@@ -110,4 +135,39 @@ func (e *enrollment) exchange(ctx context.Context, g *grant, form url.Values) er
 	}
 	g.Access = t.Access
 	return nil
+}
+
+type bearerIdentity struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+	User  string `json:"user_id"`
+	Team  string `json:"team_id"`
+	Bot   string `json:"bot_id"`
+}
+
+func (e *enrollment) bearerIdentity(ctx context.Context, token string) (bearerIdentity, error) {
+	var identity bearerIdentity
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, identityEndpoint, nil)
+	if err != nil {
+		return identity, errToken
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return identity, errToken
+	}
+	defer resp.Body.Close()
+	media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if resp.StatusCode != http.StatusOK || media != "application/json" {
+		return identity, errToken
+	}
+	const limit = 64 << 10
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil || len(b) > limit || json.Unmarshal(b, &identity) != nil || !identity.OK || identity.Error != "" ||
+		identity.Bot != "" || !userID.MatchString(identity.User) || !teamID.MatchString(identity.Team) {
+		return identity, errToken
+	}
+	return identity, nil
 }

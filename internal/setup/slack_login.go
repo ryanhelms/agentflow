@@ -7,7 +7,24 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/nscaledev/devflow/internal/provider/slackoauth"
 )
+
+// LoginPublicSlack enrolls the Devflow-owned desktop registration through browser consent.
+func LoginPublicSlack(ctx context.Context, provider, client, server, clientID, teamID string, output io.Writer) error {
+	if provider != "slack" || client != "devflow" || (server != "" && server != "slack") {
+		return errors.New("--public-client-id and --team-id require --provider slack --client devflow and the slack server")
+	}
+	if clientID == "" || teamID == "" {
+		return errors.New("supply both --public-client-id and --team-id for Slack desktop consent")
+	}
+	if err := slackoauth.LoginPublic(ctx, clientID, teamID); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(output, "Devflow connected Slack workspace %s through the approved app.\n", teamID)
+	return err
+}
 
 // RegisterProviderLogin handles the explicit workspace registration option on setup login.
 func RegisterProviderLogin(ctx context.Context, dir, provider, client, server string, interactive bool, input io.Reader, output, diagnostics io.Writer) error {

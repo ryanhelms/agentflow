@@ -34,7 +34,10 @@ func prepareNativeSlack(ctx context.Context, scope config.SlackNativeSettings, n
 		return nil, nil, err
 	}
 	mapped := prepared.Call()
-	call := native.Call{Provider: string(mapped.Capability().Kind), Server: mapped.Instance(), Tool: mapped.Capability().Tool}
+	call := native.Call{Provider: string(mapped.Capability().Kind), Server: mapped.Instance(), Tool: mapped.Capability().Tool, Scope: scope.WorkspaceID}
+	if scope.ActorID != "" {
+		call.Scope += "/" + scope.ActorID
+	}
 	if err := json.Unmarshal(mapped.Arguments(), &call.Arguments); err != nil {
 		return nil, nil, errors.New("invalid prepared slack arguments")
 	}
@@ -98,7 +101,7 @@ func verifySlackScope(ctx context.Context, binding native.WriteBinding, scope co
 }
 
 func verifySlackWorkspaceChannel(read func(string, map[string]any) (json.RawMessage, error), scope config.SlackNativeSettings) error {
-	args := map[string]any{"team_id": scope.WorkspaceID, "types": nativemap.SlackChannelTypes(scope.ChannelID), "exclude_archived": true, "format": "names_only"}
+	args := map[string]any{"team_id": scope.WorkspaceID, "types": nativemap.SlackChannelTypes(scope.ChannelID), "exclude_archived": true, "format": "ids_only"}
 	seen := map[string]bool{}
 	for range 8 {
 		raw, err := read("slack_list_user_channels", args)

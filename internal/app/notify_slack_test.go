@@ -119,6 +119,12 @@ func TestNotifyNativeSlackRequiresVerifiedScope(t *testing.T) {
 				`{"result":"### team\n- **ID:** ` + "`C0123456789`" + `"}`,
 			}
 		}, 1, NotificationDelivered},
+		{"ids-only Slack list", func(h *slackNotifyHost) {
+			h.channels = []string{`{"result":"C1123456789\nC0123456789\nC2223456789"}`}
+		}, 1, NotificationDelivered},
+		{"ids-only substring", func(h *slackNotifyHost) {
+			h.channels = []string{`{"result":"C01234567891\nC2223456789"}`}
+		}, 0, NotificationFailed},
 		{"wrong workspace", func(h *slackNotifyHost) {
 			h.profile = `{"user":{"id":"U0123456789","team_id":"T1123456789"}}`
 		}, 0, NotificationFailed},

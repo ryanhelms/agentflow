@@ -18,11 +18,13 @@ import (
 
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/slackoauth"
 )
 
 const (
 	targetChannel = "C0123456789"
 	targetTeam    = "T0123456789"
+	targetUser    = "U0123456789"
 	permalink     = "https://fixture.slack.com/archives/C0123456789/p1790771415332219"
 	ack           = `{"message_link":"` + permalink + `","message_context":{"channel_id":"C0123456789","message_ts":"1790771415.332219"},"ignored":"private-provider-data"}`
 )
@@ -37,13 +39,15 @@ type fixture struct {
 	t                                 *testing.T
 	mu                                sync.Mutex // simulates the enrollment worker's cross-process lock
 	locked                            bool
-	token, generation                 string
+	token                             string
+	grant                             slackoauth.GrantIdentity
 	openErr                           error
 	initStatus, sendStatus            int
 	lastAuthorization                 string
 	catalog                           []json.RawMessage
 	catalogCursor                     string
 	catalogs, writes, reads, connects int
+	replaceAfterIdentity              bool
 	replaceAfterList                  bool
 	sendErr                           error
 	sendResult                        json.RawMessage
@@ -54,8 +58,11 @@ type fixture struct {
 // All HTTP, including session cleanup, terminates here without a socket.
 func newFixture(t *testing.T) (*fixture, *native.SessionWriter) {
 	t.Helper()
-	f := &fixture{t: t, token: "fixture-only-bearer", generation: "first", sendResult: json.RawMessage(`{"structuredContent":` + ack + `,"content":[]}`),
-		profileResult: json.RawMessage(`{"user_id":"U0123456789","team_id":"T0123456789"}`)}
+	f := &fixture{
+		t: t, token: "fixture-only-bearer", grant: slackoauth.GrantIdentity{Team: targetTeam, User: targetUser, Generation: "first"},
+		sendResult:    json.RawMessage(`{"structuredContent":` + ack + `,"content":[]}`),
+		profileResult: json.RawMessage(`{"result":"- **User ID:** U0123456789"}`),
+	}
 	data, err := os.ReadFile("testdata/catalog.json")
 	if err != nil {
 		t.Fatal(err)
@@ -64,11 +71,17 @@ func newFixture(t *testing.T) (*fixture, *native.SessionWriter) {
 		t.Fatal(err)
 	}
 	writer := newWriter(Enrollment{
-		BoundToken: func(context.Context) (string, string, error) { return f.token, f.generation, f.openErr },
+		BoundIdentity: func(context.Context) (slackoauth.GrantIdentity, error) {
+			identity := f.grant
+			if f.replaceAfterIdentity {
+				f.grant.Generation = "replacement"
+			}
+			return identity, f.openErr
+		},
 		WithBoundToken: func(_ context.Context, expected string, dispatch func(string) error) error {
 			f.mu.Lock()
 			defer f.mu.Unlock()
-			if expected == "" || f.generation != expected {
+			if expected == "" || f.grant.Generation != expected {
 				return errors.New("private-grant-error")
 			}
 			f.locked = true
@@ -128,7 +141,7 @@ func (f *fixture) RoundTrip(r *http.Request) (*http.Response, error) {
 		f.catalogs++
 		result = map[string]any{"tools": f.catalog, "nextCursor": f.catalogCursor}
 		if f.replaceAfterList {
-			f.generation = "replacement"
+			f.grant.Generation = "replacement"
 		}
 	case "tools/call":
 		switch rpc.Params.Name {
@@ -157,7 +170,8 @@ func (f *fixture) RoundTrip(r *http.Request) (*http.Response, error) {
 			result = map[string]any{"structuredContent": f.profileResult, "content": []any{}}
 		case channels:
 			f.reads++
-			result = map[string]any{"content": []any{map[string]string{"type": "text", "text": `{"team_id":"T0123456789","channels":[{"id":"C0123456789"}]}`}}}
+			// A regular workspace token can ignore team_id and omit the team from its result.
+			result = map[string]any{"content": []any{map[string]string{"type": "text", "text": `{"channels":[{"id":"C0123456789"}]}`}}}
 		case thread, channelHistory:
 			f.reads++
 			result = map[string]any{"content": []any{map[string]string{"type": "text", "text": "fixture history"}}}
@@ -181,7 +195,7 @@ func (f *fixture) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func sendCall() native.Call {
-	return native.Call{Provider: "slack", Server: "slack", Tool: send, Arguments: map[string]any{"channel_id": targetChannel, "message": "Rollout"}}
+	return native.Call{Provider: "slack", Server: "slack", Tool: send, Scope: targetTeam, Arguments: map[string]any{"channel_id": targetChannel, "message": "Rollout"}}
 }
 
 func prepare(t *testing.T, w *native.SessionWriter) native.WriteBinding {
@@ -204,7 +218,7 @@ func TestBoundCalls(t *testing.T) {
 		args map[string]any
 	}{
 		{profile, nil},
-		{channels, map[string]any{"team_id": targetTeam, "types": "public_channel,private_channel", "exclude_archived": true, "format": "names_only", "cursor": "page2"}},
+		{channels, map[string]any{"team_id": targetTeam, "types": "public_channel,private_channel", "exclude_archived": true, "format": "ids_only", "cursor": "page2"}},
 		{channelHistory, map[string]any{"channel_id": targetChannel}},
 		{thread, map[string]any{"channel_id": targetChannel, "message_ts": "1790771415.332219", "limit": 20, "response_format": "detailed"}},
 	} {
@@ -223,6 +237,15 @@ func TestBoundCalls(t *testing.T) {
 	}
 	if _, err := w.Write(t.Context(), b, sendCall()); !errors.Is(err, native.ErrWriteNotDispatched) || f.writes != 1 {
 		t.Fatal("consumed binding was reused")
+	}
+}
+
+func TestGrantChangedBeforeInitialize(t *testing.T) {
+	f, w := newFixture(t)
+	f.replaceAfterIdentity = true
+	_, err := w.Prepare(t.Context(), sendCall())
+	if !errors.Is(err, native.ErrDenied) || errors.Is(err, native.ErrUnavailable) || f.connects != 0 {
+		t.Fatalf("grant changed before initialize: %v, connections=%d", err, f.connects)
 	}
 }
 
@@ -293,6 +316,7 @@ func TestSchemaAndArgumentDenials(t *testing.T) {
 	for _, change := range []func(*native.Call){
 		func(c *native.Call) { c.Tool = "slack_schedule_message" }, func(c *native.Call) { c.Server = "slack-copy" },
 		func(c *native.Call) { c.Arguments["thread_ts"] = "1234.123456" }, func(c *native.Call) { c.Arguments["channel_id"] = "#release" },
+		func(c *native.Call) { c.Scope = "" },
 	} {
 		c := sendCall()
 		change(&c)
@@ -306,12 +330,18 @@ func TestSchemaAndArgumentDenials(t *testing.T) {
 	if _, err := w.Rebind(t.Context(), b, c); !errors.Is(err, native.ErrDenied) {
 		t.Fatal("changed payload rebound")
 	}
+	c = sendCall()
+	c.Scope += "/" + targetUser
+	if _, err := w.Rebind(t.Context(), b, c); !errors.Is(err, native.ErrDenied) {
+		t.Fatal("changed scope rebound")
+	}
 	for _, tc := range []struct {
 		name string
 		args map[string]any
 	}{
 		{profile, map[string]any{"user_id": "U0123456789"}},
 		{channels, map[string]any{"team_id": targetTeam}},
+		{channels, map[string]any{"team_id": "T1123456789", "types": "public_channel,private_channel", "exclude_archived": true, "format": "ids_only", "cursor": "page2"}},
 		{channelHistory, map[string]any{"channel_id": "C1123456789"}},
 		{"slack_search_public", map[string]any{}},
 	} {
@@ -351,7 +381,7 @@ func checkPin(t *testing.T, r *http.Request) {
 	}
 }
 
-func openApp(t *testing.T) *app.App {
+func openApp(t *testing.T, actor string) *app.App {
 	t.Helper()
 	dir, home := t.TempDir(), t.TempDir()
 	t.Setenv("DEVFLOW_HOME", home)
@@ -363,7 +393,7 @@ func openApp(t *testing.T) *app.App {
 	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := fmt.Sprintf("notifications: {provider: slack, settings: {native: {workspace_id: %s, channel_id: %s}}}\n", targetTeam, targetChannel)
+	cfg := fmt.Sprintf("notifications: {provider: slack, settings: {native: {workspace_id: %s, channel_id: %s, actor_id: %q}}}\n", targetTeam, targetChannel, actor)
 	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +427,7 @@ func TestNotifyWireReceiptAndReplay(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, w := newFixture(t)
-			a := openApp(t)
+			a := openApp(t, "")
 			f.expectClaimDir = filepath.Join(a.Home, "notification-receipts")
 			f.sendStatus, f.sendErr, f.sendResult = tc.status, tc.sendErr, json.RawMessage(tc.result)
 			in := app.NotifyInput{Signal: "delivery", OperationID: "submitted/42", Body: "Rollout"}
@@ -427,10 +457,40 @@ func TestNotifyWireReceiptAndReplay(t *testing.T) {
 
 func quoted(s string) string { b, _ := json.Marshal(s); return string(b) }
 
+func TestNotifyChecksGrantBeforeConnecting(t *testing.T) {
+	for _, tc := range []struct {
+		name, team, user, configuredActor string
+		match                             bool
+	}{
+		{"wrong workspace without configured actor", "T1123456789", targetUser, "", false},
+		{"wrong enrolled user", targetTeam, "U1123456789", targetUser, false},
+		{"configured actor matches", targetTeam, targetUser, targetUser, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, w := newFixture(t)
+			f.grant.Team, f.grant.User = tc.team, tc.user
+			a := openApp(t, tc.configuredActor)
+			ctx := native.WithWriteHost(t.Context(), w)
+			res, pending, err := a.Notify(ctx, app.NotifyInput{Signal: "delivery", OperationID: "submitted/42", Body: "Rollout"}, "")
+			if err != nil || f.writes != 0 {
+				t.Fatalf("preview: %v, writes=%d", err, f.writes)
+			}
+			if tc.match {
+				if pending == nil || f.connects != 1 || f.reads != 2 {
+					t.Fatalf("expected preview after profile and membership checks, connects=%d reads=%d", f.connects, f.reads)
+				}
+			} else if pending != nil || len(res.Deliveries) != 1 || res.Deliveries[0].Status != app.NotificationFailed ||
+				f.connects != 0 || f.catalogs != 0 || f.reads != 0 {
+				t.Fatalf("grant mismatch: %+v, connects=%d catalogs=%d reads=%d", res, f.connects, f.catalogs, f.reads)
+			}
+		})
+	}
+}
+
 func TestNotifyValidatesEnrolledActor(t *testing.T) {
 	f, w := newFixture(t)
 	f.profileResult = json.RawMessage(`{"result":"profile unavailable"}`)
-	a := openApp(t)
+	a := openApp(t, "")
 	ctx := native.WithWriteHost(t.Context(), w)
 	res, pending, err := a.Notify(ctx, app.NotifyInput{Signal: "delivery", OperationID: "submitted/42", Body: "Rollout"}, "")
 	if err != nil || pending != nil || len(res.Deliveries) != 1 || res.Deliveries[0].Status != app.NotificationFailed || f.writes != 0 {
@@ -459,7 +519,7 @@ func TestDeclaredOutputSchemaIsEnforced(t *testing.T) {
 
 func TestNotifyPredispatchFailureReleasesOnlyForFreshApproval(t *testing.T) {
 	f, w := newFixture(t)
-	a := openApp(t)
+	a := openApp(t, "")
 	ctx := native.WithWriteHost(t.Context(), w)
 	in := app.NotifyInput{Signal: "delivery", OperationID: "submitted/42", Body: "Rollout"}
 	_, pending, err := a.Notify(ctx, in, "")

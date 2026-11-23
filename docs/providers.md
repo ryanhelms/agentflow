@@ -434,15 +434,15 @@ requires a confirmed write and a verified successor.
 
 ### Devflow Slack enrollment
 
-An administrator provisions a dedicated confidential Slack app approved for
-internal use or published in the Slack Marketplace. Register the exact callback
-`https://127.0.0.1:53668/oauth/slack/callback` for that app. The user running
-login needs its client ID and secret, plus a PEM certificate chain trusted by
-their browser for IP address `127.0.0.1` and its matching PEM private key.
-Use a dedicated loopback certificate. The callback listener runs only during
-login. Keep the app confidential. Devflow verifies the callback state and
-uses Slack's advertised confidential-client token exchange. Slack's PKCE
-app setting converts the registration to a public client. [Slack MCP authentication](https://docs.slack.dev/ai/slack-mcp-server/) · [Slack OAuth redirects](https://docs.slack.dev/authentication/installing-with-oauth/) · [Slack app PKCE settings](https://docs.slack.dev/authentication/using-pkce/).
+For desktop browser consent, an administrator provisions a dedicated Slack app
+approved for internal use or published in the Slack Marketplace. In the app’s
+**OAuth & Permissions** settings, enable **PKCE** (`oauth_config.pkce_enabled`
+in the manifest) and register the exact redirect URL
+`http://localhost:53668/oauth/slack/callback`. Slack treats a localhost redirect
+as a desktop redirect when the app has opted into PKCE. Enabling PKCE converts
+the app to a public client and requires Slack Support to reverse. Use this app’s
+fixed public client ID for Devflow. Claude’s workspace connector has its own
+registration and callback. [Slack PKCE settings](https://docs.slack.dev/authentication/using-pkce/) · [Slack MCP app eligibility](https://docs.slack.dev/ai/slack-mcp-server/).
 
 Configure the following **user scopes** on the approved app. Devflow requires
 the returned scope set to match the request exactly.
@@ -453,14 +453,39 @@ the returned scope set to match the request exactly.
 | Verify membership in the configured conversation | `channels:read`, `groups:read`, `im:read`, `mpim:read` |
 | Request permission to send a message | `chat:write` |
 
-Run `devflow setup login --provider slack --client devflow` in an interactive
-terminal. Enter the paths to the certificate and key, then enter the approved
-app's client ID and secret at the hidden prompts. Review the app, workspace
-and permissions in Slack's browser consent screen. On success Devflow stores
-one local enrollment in the OS keychain. New consent replaces the preceding
-enrollment and invalidates previews bound to it. Token rotation preserves
-that binding after Devflow verifies the refresh response. An ambiguous refresh
-requires another login. [Slack’s user token exchange](https://docs.slack.dev/reference/methods/oauth.v2.user.access/) · [Token rotation](https://docs.slack.dev/authentication/using-token-rotation/).
+Give the agent the approved app’s public client ID and the expected team ID
+from the destination’s `native.workspace_id`. An authorized agent or the user
+runs this command on the machine where the browser will open, substituting
+those two IDs.
+
+```sh
+devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID
+```
+
+Review the app, workspace and user permissions in Slack and approve in the
+browser. Devflow listens on IPv4 loopback during login, checks the callback
+authority, path and random state, and exchanges the code with its S256 verifier.
+The public exchange and refresh use the client ID alone as the app identifier.
+The user needs neither a client secret nor a locally trusted certificate.
+
+Slack must return the exact requested scopes and a `team.id` matching the
+expected workspace on initial consent. Devflow verifies the authenticated
+user and workspace with Slack’s `auth.test` when the public exchange returns
+a generic bearer response.
+New consent replaces the per-user enrollment in the OS keychain and invalidates
+previews bound to the prior grant. Enable token rotation in the app settings
+if rotating tokens are required for this localhost registration. Slack’s
+unconditional rotation guarantee applies to custom URI schemes. For rotating
+grants, Devflow verifies each replacement and preserves the approval generation.
+An expired refresh token or an ambiguous exchange requires fresh consent.
+[Slack user token response](https://docs.slack.dev/reference/methods/oauth.v2.user.access/) · [Slack identity verification](https://docs.slack.dev/reference/methods/auth.test/) · [Desktop PKCE and refresh](https://docs.slack.dev/authentication/using-pkce/) · [Token rotation](https://docs.slack.dev/authentication/using-token-rotation/).
+
+For a separately approved **confidential app**, register
+`https://127.0.0.1:53668/oauth/slack/callback` and run
+`devflow setup login --provider slack --client devflow` in a terminal.
+At the hidden prompts, enter the paths to the PEM certificate chain trusted by the browser
+for `127.0.0.1` and its matching private key, and the app’s client ID and
+secret. Use a dedicated loopback certificate and keep the app confidential.
 
 Run `devflow setup logout --provider slack --client devflow` to delete the
 local app credentials and grant. To revoke the app's authorization in Slack,

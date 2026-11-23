@@ -192,10 +192,12 @@ the supported vendor CLI's browser login when no MCP is available. In a Claude C
 Desktop workspace, `devflow setup login --provider slack --client claude-desktop --register`
 can register the official Slack connector locally and start Claude’s sign-in flow. See
 [interactive provider setup](docs/providers.md#interactive-provider-setup).
-For a separately approved Slack app, run
-`devflow setup login --provider slack --client devflow` in a terminal.
-Devflow opens Slack consent and stores the app credentials and user grant in
-the OS keychain. [Slack app and callback requirements](docs/providers.md#devflow-slack-enrollment).
+For Devflow’s own Slack connection, an agent or user can start browser consent
+with `devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID`.
+Use the approved PKCE-enabled app’s public client ID and the destination’s Slack workspace ID.
+The user approves in Slack. Devflow checks the workspace before storing the grant in the OS keychain.
+This path requires only a local HTTP loopback callback. [Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
+
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian
 reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
@@ -204,7 +206,9 @@ writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery. A Slack send with an uncertain outcome keeps its receipt claim and
+for delivery. When using its own Slack enrollment, Devflow checks the workspace
+and configured actor against the stored grant before connecting to Slack MCP.
+A Slack send with an uncertain outcome keeps its receipt claim and
 blocks another send for the same operation and destination.
 
 The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
