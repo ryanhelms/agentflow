@@ -42,6 +42,59 @@
   let options, identity, model, baseModel, pending, fieldEditor, lastGood;
   let fileName = "", mode = "fields", folder = [], selected, sequence = 0, timer;
   let busy = false, dirtyInput = false, loaded = false, viewLimit = 80, diagnostic;
+  // Keep a draft of the UI as well as the staged source. The saved widget is
+  // reconstructed with its original schema when its checkout base has changed.
+  const savedViews = new Map();
+  let restoring, pendingField, recovered, recoveryEditor;
+
+  function viewSnapshot() {
+    if (!identity || !fileName) return;
+    if (restoring) return restoring;
+    const source = id("source");
+    let field = pendingField;
+    if (fieldEditor && model && selected) {
+      const {schema,value} = nodeAt(selected);
+      field = {keys:selected,schema,value,raw:fieldEditor.snapshot(),dirty:dirtyInput,
+        message:id("document-field-message").textContent};
+    }
+    return {base:identity.base,mode,folder,selected,viewLimit,
+      query:id("document-search").value,key:id("document-key").value,field,
+      recovered:recovered ? {...recovered,raw:recoveryEditor?.snapshot() || recovered.raw} : undefined,
+      cursor:{start:source.selectionStart,end:source.selectionEnd,direction:source.selectionDirection,
+        top:source.scrollTop,left:source.scrollLeft,focused:document.activeElement===source}};
+  }
+
+  window.snapshotDocumentEditor = () => {
+    const current = viewSnapshot();
+    if (current) savedViews.set(fileName,current);
+    return Array.from(savedViews);
+  };
+  window.restoreDocumentEditor = entries => {
+    if (!Array.isArray(entries)) return;
+    for (const row of entries) if (Array.isArray(row) && typeof row[0]==="string" && row[1]) savedViews.set(row[0],row[1]);
+  };
+
+  function restoreCursor(saved) {
+    if (saved && Number.isSafeInteger(saved.start) && Number.isSafeInteger(saved.end)) {
+      const source = id("source");
+      source.setSelectionRange(saved.start,saved.end,saved.direction);
+      source.scrollTop = saved.top || 0; source.scrollLeft = saved.left || 0;
+      if (saved.focused && mode==="source") source.focus({preventScroll:true});
+      cursor();
+    }
+  }
+
+  function showRecovered(field) {
+    recovered = field;
+    recoveryEditor = null;
+    id("document-recovery").hidden = !field;
+    id("recovery-control").replaceChildren();
+    if (!field) return;
+    id("recovery-field-path").textContent = pretty(field.keys) + " changed on disk. Copy your saved input before editing the current value.";
+    recoveryEditor = createTypedEditor(id("recovery-control"),field.schema,field.value,{restore:field.raw,path:field.keys,label:"Saved input"});
+  }
+  id("dismiss-recovered-field").addEventListener("click",() => showRecovered(null));
+
   function stamp(opts) {
     return {path: opts.file?.path || "", base: opts.draft.base_digest, content: opts.draft.content,
       editable: Boolean(opts.file?.editable && opts.file.digest === opts.draft.base_digest)};
@@ -111,7 +164,7 @@
   function choose(keys, browse = false) {
     if (!browse && selected && samePath(keys,selected)) return;
     if (!confirmLeave()) return;
-    dirtyInput = false;
+    dirtyInput = false; pendingField=null;
     if (browse) {
       folder = [...keys];
       selected = undefined;
@@ -223,9 +276,15 @@
       control.append(dom("p","Select a field to edit it.", "muted"));
       return;
     }
+    const preserved = pendingField && samePath(pendingField.keys,selected) ? pendingField : null;
     fieldEditor = createTypedEditor(control, schema, value, {
-      path: [...selected], label: name, suggestions: options.suggestions, allowed: schema.constraint?.allow
+      restore:preserved?.raw,path: [...selected], label: name, suggestions: options.suggestions, allowed: schema.constraint?.allow
     });
+    if (preserved) {
+      dirtyInput=Boolean(preserved.dirty);
+      if (preserved.message) note("document-field-message",preserved.message,true);
+      pendingField=null;
+    }
     if (locked) {
       for (const input of control.querySelectorAll("input,select,textarea,button")) input.disabled = true;
       if (schema.constraint?.lock === true) note("document-field-message","This value is locked by its configuration policy.");
@@ -241,15 +300,18 @@
   }
   async function load(revision, ref) {
     try {
-      const info = await options.request("/api/document", {path: ref.path, base_digest: ref.base, content: ref.content});
+      const info = await options.request("api/document", {path: ref.path, base_digest: ref.base, content: ref.content});
       if (revision !== sequence || !matches(identity,ref)) return;
       model = info;
       lastGood = info;
       if (ref.content === options.file.content) baseModel = info;
       note("document-message");
-      retainPath(); renderNavigation(); renderField(); showMode();
+      if (!restoring) retainPath();
+      const savedCursor = restoring?.cursor;
+      restoring = null;
+      renderNavigation(); renderField(); showMode(); restoreCursor(savedCursor);
       if (!baseModel && ref.content !== options.file.content) {
-        const base = await options.request("/api/document",{path: ref.path,base_digest: ref.base,content: options.file.content}).catch(() => null);
+        const base = await options.request("api/document",{path: ref.path,base_digest: ref.base,content: options.file.content}).catch(() => null);
         if (revision === sequence && base) {
           baseModel = base;
           if (!dirtyInput) renderField();
@@ -258,6 +320,9 @@
     } catch (e) {
       if (revision !== sequence) return;
       model = null;
+      const savedCursor = restoring?.cursor;
+      if (pendingField?.dirty) showRecovered(pendingField);
+      restoring = null; pendingField = null;
       mode = "source";
       const source = id("source");
       diagnostic = /(?:line\s+|at line\s*)(\d+)(?:[,: ]+column\s+(\d+))?/i.exec(e.message);
@@ -270,7 +335,7 @@
         source.setSelectionRange(start,start + lines[line-1].length);
         cursor();
       },"button secondary small"));
-      showMode();
+      showMode(); restoreCursor(savedCursor);
     }
   }
   window.renderDocumentEditor = (opts) => {
@@ -290,11 +355,21 @@
     clearTimeout(timer);
     const changedFile = next.path !== fileName || next.base !== identity?.base;
     if (changedFile) {
-      folder=[]; selected=undefined; baseModel=null; lastGood=null; dirtyInput=false;
-      fileName=next.path; viewLimit=80;
-      id("document-search").value="";
-      id("document-key").value="";
-      mode = "fields";
+      const previous=viewSnapshot();
+      if (previous && fileName) savedViews.set(fileName,previous);
+      fileName=next.path;
+      restoring=savedViews.get(fileName);
+      folder=Array.isArray(restoring?.folder) ? restoring.folder : [];
+      selected=Array.isArray(restoring?.selected) ? restoring.selected : undefined;
+      baseModel=null; lastGood=null; dirtyInput=false;
+      viewLimit=Number.isSafeInteger(restoring?.viewLimit) ? restoring.viewLimit : 80;
+      id("document-search").value=restoring?.query || "";
+      id("document-key").value=restoring?.key || "";
+      mode=restoring?.mode==="source" ? "source" : "fields";
+      const stale=restoring && restoring.base!==opts.file?.digest;
+      pendingField=stale ? null : restoring?.field;
+      showRecovered(stale && restoring.field?.dirty ? restoring.field : restoring?.recovered);
+      if(stale) restoring={...restoring,field:null,recovered};
     }
     identity = next;
     loaded = visible;
@@ -307,7 +382,9 @@
     showMode();
     if (!next.editable) {
       if (opts.file?.editable) mode="source";
-      showMode(); return;
+      const savedCursor=restoring?.cursor;
+      restoring=null;
+      showMode(); restoreCursor(savedCursor); return;
     }
     if (!visible) return;
     if (mode === "fields") note("document-message","Loading fields…");
@@ -333,7 +410,7 @@
       note("document-field-message","Staging the field…");
       const payload={path:ref.path, content:ref.content, base_digest:ref.base, keys, operation};
       if (operation === "set") payload.value=value;
-      const out=await options.request("/api/document/edit",payload);
+      const out=await options.request("api/document/edit",payload);
       if (!matches(ref,identity) || pending !== token || options.disabled) return;
       if (typeof out.content !== "string") throw new Error("The server returned no editable source.");
       dirtyInput=false;

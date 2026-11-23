@@ -5,16 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>devflow · Repository console</title>
-  <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/typed-editor.css">
-  <link rel="stylesheet" href="/document-editor.css">
-  <script src="/typed-editor.js" defer></script>
-  <script src="/document-editor.js" defer></script>
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="typed-editor.css">
+  <link rel="stylesheet" href="document-editor.css">
+  <script src="typed-editor.js" defer></script>
+  <script src="document-editor.js" defer></script>
+  <script src="tab-navigation.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#main">Skip to content</a>
-  <div class="layout">
+  <main id="connection" class="connection" aria-labelledby="connection-title">
+    <div class="product"><span class="brand-mark" aria-hidden="true"></span><span>devflow</span></div>
+    <div class="connection-card">
+      <h1 id="connection-title" tabindex="-1">Opening your console…</h1>
+      <p id="connection-message" class="muted" role="status"></p>
+      <div id="connection-options" hidden>
+        <section aria-labelledby="chat-reconnect">
+          <h2 id="chat-reconnect">Ask Agent Commander</h2>
+          <p>Paste this request into the chat for your repository.</p>
+          <p class="connection-example" id="chat-prompt"></p>
+          <button id="copy-prompt" type="button" class="button primary">Copy chat request</button>
+        </section>
+        <section aria-labelledby="terminal-reconnect">
+          <h2 id="terminal-reconnect">Open from your terminal</h2>
+          <p id="terminal-instructions">Run this command in the worktree you want to manage.</p>
+          <code class="connection-example" id="reconnect-command"></code>
+          <button id="copy-command" type="button" class="button secondary">Copy command</button>
+        </section>
+        <section id="reconnect-drafts" aria-labelledby="draft-recovery-title" hidden>
+          <h2 id="draft-recovery-title">Staged edits in this tab</h2>
+          <p>Download a local copy before switching tabs or closing this one.</p>
+          <div class="actions" id="draft-downloads"></div>
+        </section>
+        <p id="connection-feedback" class="muted" role="status"></p>
+        <button id="connection-retry" type="button" class="button secondary small" hidden>Try again</button>
+      </div>
+    </div>
+  </main>
+  <div id="console-shell" class="layout" hidden>
+    <a class="skip" href="#main">Skip to content</a>
     <aside class="rail">
       <div class="product"><span class="brand-mark" aria-hidden="true"></span><span>devflow</span></div>
       <nav aria-label="Repository console">
@@ -31,6 +60,7 @@
         <button id="refresh" class="button secondary" type="button">Refresh checkout</button>
       </header>
       <main id="main" tabindex="-1">
+        <p id="workspace-save-error" class="notice error" role="status" hidden>Browser storage is full or unavailable. Keep this tab open and save your edits locally before switching worktrees.</p>
         <p id="status" class="notice" role="status">Opening the checkout…</p>
         <section id="page-overview" aria-labelledby="overview-title">
           <div class="page-heading"><h1 id="overview-title">Overview</h1></div>
@@ -89,6 +119,11 @@
               <button id="document-mode-source" type="button" aria-pressed="false">Source</button>
             </div>
             <p id="document-message" class="notice" role="status" hidden></p>
+            <section id="document-recovery" class="notice" aria-labelledby="recovery-field-name" hidden>
+              <h3 id="recovery-field-name">Saved field from an earlier revision</h3>
+              <p id="recovery-field-path"></p><div id="recovery-control"></div>
+              <button id="dismiss-recovered-field" class="button secondary small" type="button">Discard recovered field</button>
+            </section>
             <div id="document-fields" class="document-fields" hidden>
               <section class="document-outline" aria-label="Document fields">
                 <label>Find a field<input type="search" id="document-search" placeholder="Name or path" autocomplete="off"></label>
@@ -159,6 +194,7 @@
       <div class="section-heading"><h2 id="setting-dialog-title" tabindex="-1">Edit setting</h2><button class="button secondary small" type="button" id="close-setting">Close</button></div>
       <p id="setting-name" class="code wrap"></p>
       <div id="typed-control"></div>
+      <p id="setting-storage-error" class="notice error" role="status" hidden></p>
       <p id="setting-help" class="muted"></p><p id="setting-message" class="notice error" role="status" hidden></p>
       <div class="actions"><button id="stage-setting" type="submit" class="button primary">Stage value</button><button id="inherit-setting" class="button secondary" type="button">Remove inline override</button></div>
     </form>

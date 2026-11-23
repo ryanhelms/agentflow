@@ -101,6 +101,41 @@
     enter(fields("input[aria-label=name]")[0], "new");
     equal(editor.read(), [{name: "new"}]);
 
+    // A raw snapshot must survive serialization even when staging would fail.
+    const entries = {type: "object", additional_properties: {type: "array", items: {type: "integer", nullable: true}}};
+    const initial = {review: [1, 2]};
+    editor = render(entries, initial);
+    click("Move item 2 up");
+    click("Add item");
+    choose(fields("select.te-mode")[2], "Set value");
+    const rawNumber = fields("input[role=spinbutton]")[2];
+    enter(rawNumber, "1e-");
+    expectInvalid(editor, rawNumber, "whole number");
+    let restored = JSON.parse(JSON.stringify(editor.snapshot()));
+    editor = render(entries, initial, {restore: restored});
+    equal(fields("input[role=spinbutton]").map(input => input.value), ["2", "1", "1e-"]);
+    equal(fields("input[role=spinbutton]")[2].getAttribute("aria-invalid"), "true");
+    choose(fields("select.te-mode")[2], "Null");
+    restored = JSON.parse(JSON.stringify(editor.snapshot()));
+    editor = render(entries, initial, {restore: restored});
+    equal(editor.read(), {review: [2, 1, null]});
+    choose(fields("select.te-mode")[2], "Set value");
+    equal(fields("input[role=spinbutton]")[2].value, "1e-");
+    enter(fields("input[role=spinbutton]")[2], "13");
+    click("Add entry");
+    restored = JSON.parse(JSON.stringify(editor.snapshot()));
+    editor = render(entries, initial, {restore: restored});
+    equal(fields("label.te-key input").map(input => input.value), ["review", ""]);
+    expectInvalid(editor, fields("label.te-key input")[1], "Enter a key");
+    enter(fields("label.te-key input")[1], "later");
+    equal(editor.read(), {review: [2, 1, 13], later: []});
+
+    editor = render({type: "string"}, "first");
+    click("Multiple lines");
+    enter(fields("textarea")[0], "two\nlines");
+    editor = render({type: "string"}, "first", {restore: JSON.parse(JSON.stringify(editor.snapshot()))});
+    equal(fields("textarea")[0].value, "two\nlines");
+
     void fetch("/result", {method: "POST", body: "passed"});
   } catch (err) {
     void fetch("/result", {method: "POST", body: String(err.stack || err)});

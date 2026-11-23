@@ -385,7 +385,7 @@ Deployments and release lookup also support local JSON fixtures.
 
 | Task | Terminal | AI client |
 | --- | --- | --- |
-| Open the local repository console | `devflow ui` | `/devflow:ui` |
+| Open the local repository console | `devflow ui` | `devflow_ui_open` or `/devflow:ui` |
 | Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
@@ -402,6 +402,18 @@ Deployments and release lookup also support local JSON fixtures.
 | Standup | `devflow standup` | `/devflow:standup` |
 | End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
 | Next release version | `devflow release plan` | "what version will this ship as?" |
+
+Ask Agent Commander “Open the task management provider editor for this repo.”
+One local daemon serves your checkouts. Each clone gets a stable hostname
+such as `devflow.localhost`, with a separate path and editor drafts for each
+linked worktree. On an interactive harness launch, devflow opens a tab when
+the clone needs one. Asking for a screen directs that tab to the worktree
+where you asked. From a terminal, use
+`devflow ui --screen providers --role task_management`. The command returns
+once the local console has opened. Use `devflow ui --status` to check the
+daemon or `devflow ui --stop` to shut it down for all clones.
+An authorized browser can reopen bookmarks for 30 days. A reconnect screen
+offers a chat prompt and local command when authorization expires.
 
 Run `devflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,

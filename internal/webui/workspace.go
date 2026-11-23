@@ -156,9 +156,15 @@ func (s *server) activity(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	// Source failures are independent; a missing GitHub connection should not hide a worker question.
-	items, available, err := commanderActivity(ctx, s.repo.Dir)
-	if err != nil {
-		items = append(items, item{Title: "Agent Commander unavailable", Detail: err.Error()})
+	caller, scope := s.commanderFor(r)
+	var items []item
+	var available bool
+	if scope != "" {
+		var err error
+		items, available, err = caller.activity(ctx, s.repo.Dir)
+		if err != nil {
+			items = append(items, item{Title: "Agent Commander unavailable", Detail: err.Error()})
+		}
 	}
 	prs, err := s.pullQueue(ctx)
 	if err != nil {
@@ -170,5 +176,10 @@ func (s *server) activity(w http.ResponseWriter, r *http.Request) {
 	for _, it := range items {
 		fmt.Fprintf(&note, "%s — %s %s\n", it.Title, it.Detail, it.URL)
 	}
-	reply(w, 200, map[string]any{"attention": items, "handoff": note.String(), "commander_connected": available})
+	result := map[string]any{"attention": items, "handoff": note.String(), "commander_connected": available}
+	if scope == "" {
+		result["commander_reconnect"] = true
+		result["warning"] = commanderReconnect
+	}
+	reply(w, 200, result)
 }

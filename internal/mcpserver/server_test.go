@@ -90,6 +90,31 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 		return res.Content[0].(*mcp.TextContent).Text
 	}
 
+	// The console resolves the worktree on the server. Invalid destinations must
+	// fail before any process starts or any browser opens.
+	registered := false
+	for _, tool := range tools.Tools {
+		if tool.Name == "devflow_ui_open" {
+			registered = true
+			if tool.Annotations == nil || tool.Annotations.OpenWorldHint == nil || *tool.Annotations.OpenWorldHint {
+				t.Error("expected a local console tool")
+			}
+		}
+	}
+	if !registered {
+		t.Fatal("missing devflow_ui_open")
+	}
+	for _, args := range []map[string]any{
+		{"screen": "https://example.invalid"},
+		{"screen": "handoff", "role": "task_management"},
+		{"role": "other"},
+	} {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_ui_open", Arguments: args})
+		if err != nil || !res.IsError {
+			t.Fatalf("invalid console destination %v: %v, %v", args, res, err)
+		}
+	}
+
 	// Provider operations and explain must agree until this server restarts.
 	defDir := filepath.Join(os.Getenv("DEVFLOW_HOME"), "providers")
 	if err := os.MkdirAll(defDir, 0700); err != nil {
@@ -145,5 +170,37 @@ func TestDesktopWriteEntryPoints(t *testing.T) {
 				t.Errorf("%s %s writer available = %t", client, name, got)
 			}
 		}
+	}
+}
+
+func TestUIOnlyServerListsOnlyTheConsoleForAnUnconfiguredWorktree(t *testing.T) {
+	ctx := t.Context()
+	dir := gitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("devflow: ["), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server, err := newUIOnly(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ct := mcp.NewInMemoryTransports()
+	go func() { _ = server.MCP().Run(ctx, st) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "agent-commander", Version: "test"}, nil)
+	cs, err := client.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	list, err := cs.ListTools(ctx, nil)
+	if err != nil || len(list.Tools) != 1 || list.Tools[0].Name != "devflow_ui_open" {
+		t.Fatalf("launcher-only tool list: %v, %v", list, err)
+	}
+	invalid, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_ui_open", Arguments: map[string]any{"screen": "invalid"}})
+	if err != nil || !invalid.IsError {
+		t.Fatalf("UI-only companion must report a tool error for an invalid destination: %v, %v", invalid, err)
+	}
+	result, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_commit", Arguments: map[string]any{}})
+	if err == nil && !result.IsError {
+		t.Fatal("console-only server accepted a repository tool")
 	}
 }
