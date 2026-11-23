@@ -79,11 +79,15 @@ Use the setup skill to discover the provider's MCP and launch its native sign-in
 when required. When a Devflow read returns `native_read_required`, call the
 named tool with its specified arguments through the connected provider MCP.
 Resume the same Devflow tool with the request's ID, status, and JSON result in
-`native_results`. Keep earlier replies if the next read needs them. Report
-`unavailable` only for a missing operation so Devflow can use its CLI fallback.
-Use `access_denied` for permission failures. If the provider needs sign-in,
-start its native OAuth flow and retry the read after the user completes
-consent. Keep devflow-managed writes behind Devflow's previews and confirmations.
+`native_results`. Keep earlier replies if the next read needs them. If the
+connector is missing, resume with `unavailable` and present the
+`setup_offer.prompt_if_missing` question once per provider per session, even
+when the CLI fallback succeeds. On approval, use the offer's connector details
+and the current client's setup action. If a connected provider only lacks the
+requested operation, resume with `unavailable`. Use `access_denied` for
+permission failures. If the provider needs sign-in, start its native OAuth
+flow and retry after the user completes consent. Keep Devflow-managed writes
+behind its previews and confirmations.
 
 
 Use `devflow_jira_remote_link` to preview and add a web link to an existing Jira

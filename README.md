@@ -212,9 +212,12 @@ The user approves in Slack. Devflow checks the workspace before storing the gran
 [Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
 
 Jira work and issue context, Confluence search, and individual Asana and
-GitHub issue reads can use the client’s connected provider MCP. Atlassian
-reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
-use the signed-in GitHub CLI. A connected Codex MCP can also handle Jira issue
+GitHub issue reads can use the client’s connected provider MCP. When a
+connector is missing, Devflow returns a setup offer so the agent can ask
+whether to connect it in the current client. Reads can still use the
+signed-in Teamwork Graph or GitHub CLI where supported. If you approve,
+the agent starts the client's setup and any required sign-in.
+A connected Codex MCP can also handle Jira issue
 writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported

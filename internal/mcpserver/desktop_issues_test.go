@@ -90,6 +90,28 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
+	read := func(args map[string]any) string {
+		t.Helper()
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_context", Arguments: args})
+		if err != nil || res.IsError {
+			t.Fatalf("issue context: %v, %v", res, err)
+		}
+		return res.Content[0].(*mcp.TextContent).Text
+	}
+	readArgs := map[string]any{"key": "sample/project#17"}
+	var request nativeReadResponse
+	if err := json.Unmarshal([]byte(read(readArgs)), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request.Request == nil || request.Status != "native_read_required" || request.Server != "github" ||
+		request.Tool != "issue_read" || request.ID == "" {
+		t.Fatalf("native issue read: %+v", request.Request)
+	}
+	if offer := request.SetupOffer; offer == nil || offer.Name != "github" ||
+		offer.Endpoint != "https://api.githubcopilot.com/mcp/" || offer.Guide == "" ||
+		!strings.Contains(offer.PromptIfMissing, "connect github MCP") {
+		t.Fatalf("GitHub connector offer: %+v", offer)
+	}
 	const description = "Line one\nLine \"two\""
 	args := map[string]any{"summary": "Example", "description": description}
 	create := func(wantError bool) string {
@@ -109,6 +131,10 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	}
 	if err := setup.LoginProvider(ctx, filepath.Join(dir, ".devflow"), "github-issues", "", "", nil, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
+	}
+	readArgs["native_results"] = []map[string]string{{"id": request.ID, "status": "unavailable"}}
+	if got := read(readArgs); !strings.Contains(got, "Example issue from gh") {
+		t.Fatalf("GitHub issue fallback: %s", got)
 	}
 	var preview struct {
 		Status  string

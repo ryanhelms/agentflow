@@ -8,7 +8,31 @@ import (
 
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/setup"
 )
+
+const nativeInstructions = `For native_read_required, first find the requested operation in the current client's provider MCP. Use the exact arguments and retry the original Devflow tool with native_results containing the request ID, status, and provider JSON. When the connector is missing, retry with unavailable so the read can use its fallback. Present setup_offer.prompt_if_missing to the user once per provider per session, even when the fallback succeeds. If a connected provider lacks only the operation, use unavailable. Report access_denied for access restrictions. Ask for consent before registering a missing connector. On approval, use the current client's setup action and the official connector details in setup_offer. Start the client's native sign-in when authentication is needed and let the user complete consent. If the client blocks initiation, show its specific Connect or Sign in action. Keep credentials in the provider's sign-in flow. Retry the read after consent and request a fresh preview for writes.`
+
+type connectorSetupOffer struct {
+	setup.MCPTool
+	PromptIfMissing string `json:"prompt_if_missing"`
+}
+
+type nativeReadResponse struct {
+	*native.Request
+	SetupOffer *connectorSetupOffer `json:"setup_offer,omitempty"`
+}
+
+func (s *Server) nativeReadResponse(req *native.Request) nativeReadResponse {
+	response := nativeReadResponse{Request: req}
+	if tool := setup.ProviderMCP(req.Provider, s.app.Client); tool.Name != "" {
+		response.SetupOffer = &connectorSetupOffer{
+			MCPTool:         tool,
+			PromptIfMissing: fmt.Sprintf("Would you like me to connect %s MCP in this client?", tool.Name),
+		}
+	}
+	return response
+}
 
 func (s *Server) interactiveClient() bool {
 	switch s.app.Client {
