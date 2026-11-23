@@ -19,7 +19,7 @@ import (
 const projectID = "10"
 const taskID = "42"
 const createdID = "77"
-const secret = "fixture-private-message"
+const secret = "private fixture error"
 
 var errNotEnrolled = errors.New("absent")
 var errGrantDenied = errors.New("grant denied")
@@ -46,7 +46,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, tool string) (*fixture, *native.SessionWriter) {
 	t.Helper()
-	f := &fixture{t: t, binding: Binding{"gen", "22", "33"}, token: "fixture-bearer", generation: "gen"}
+	f := &fixture{t: t, binding: Binding{"gen", "22", "33"}, token: "fixture", generation: "gen"}
 	data, err := os.ReadFile("testdata/catalog.json")
 	if err != nil || json.Unmarshal(data, &f.catalog) != nil {
 		t.Fatal("invalid fixture catalog", err)
