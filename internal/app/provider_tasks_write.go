@@ -104,7 +104,7 @@ func readBoundTaskData[T any](ctx context.Context, w *boundTaskWrite, read nativ
 		return zero, err
 	}
 	raw, err := native.ReadBound(ctx, w.Binding, native.Call{
-		Provider: string(call.Capability().Kind), Server: w.Call.Server, Tool: call.Capability().Tool, Arguments: args,
+		Provider: string(call.Capability().Kind), Server: w.Call.Server, Tool: call.Capability().Tool, Scope: w.Call.Scope, Arguments: args,
 	})
 	if err != nil {
 		return zero, err

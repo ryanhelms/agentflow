@@ -1,0 +1,11 @@
+{
+  "access_token": "1/fixture-access:renewed",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "data": {
+    "id": 1201000000000011,
+    "gid": "1201000000000011",
+    "name": "Fixture User",
+    "email": "fixture@example.invalid"
+  }
+}

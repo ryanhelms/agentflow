@@ -392,7 +392,10 @@ fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
 Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
 Desktop can also use Devflow-owned connections for unlinked Jira issue creation,
-Jira comments, start and forward transitions, web links and Confluence page replacement. Each preview identifies Devflow as the connection owner.
+comments, start, forward transitions and web links, and for Confluence page
+replacement. Separate Asana and Slack enrollments enable scoped Asana task
+creation, completion and comments, and Slack delivery to a configured
+conversation. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -533,6 +536,40 @@ history response shapes. Successful publication on a hosted tenant still
 requires a confirmed write and a verified successor.
 
 [Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
+
+### Devflow-owned Asana writes in Claude Code Desktop
+
+A workspace owner must approve an Asana V2 MCP app for the intended workspace.
+For this Devflow enrollment, register the exact callback
+`http://127.0.0.1:53669/oauth/asana/callback`. Devflow uses this app registration
+for bound writes. Claude’s own V2 connector remains available for host-mediated
+reads.
+
+Run the following command to open browser sign-in. At the terminal prompts,
+supply the approved local app registration and intended workspace GID. Review
+the app and workspace in Asana. Devflow holds the registration and refresh
+grant in the OS credential store. The Asana task provider's repository settings
+continue to specify the allowed projects.
+[Asana V2 OAuth setup](https://developers.asana.com/docs/integrating-with-asanas-mcp-server).
+
+```bash
+devflow setup login --provider asana --client devflow
+```
+
+Use `devflow_ticket_create`, `devflow_comment`, or `devflow_transition` in
+Desktop. The CLI uses `devflow --native-client claude-desktop task create` or
+the same flag with `comment` and `transition`. Completion affects the whole
+task. The confirmation shows the configured project and completion effect.
+Devflow verifies project membership, grant owner, and workspace before dispatch
+and verifies the result on the same connection. A workspace denial stops the
+operation. After sign-in or enrollment replacement, request a new preview.
+
+The write schemas and receipts have been tested against provider fixtures.
+Verification in an authenticated Asana workspace is pending.
+
+Run `devflow setup logout --provider asana --client devflow` to remove local
+enrollment. Existing unattended Asana service workflows use their configured
+service authentication.
 
 ### Devflow Slack enrollment
 

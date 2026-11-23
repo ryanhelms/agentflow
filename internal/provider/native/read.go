@@ -23,7 +23,7 @@ type Call struct {
 	Provider  string         `json:"provider"`
 	Server    string         `json:"server"`
 	Tool      string         `json:"tool"`
-	Scope     string         `json:"scope,omitempty"` // Provider-specific binding included in the call digest.
+	Scope     string         `json:"scope,omitempty"` // Provider scope bound by the call digest, separate from vendor arguments.
 	Arguments map[string]any `json:"arguments"`
 }
 

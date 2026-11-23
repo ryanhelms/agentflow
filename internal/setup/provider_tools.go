@@ -12,6 +12,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/devflow/internal/provider/asanaoauth"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 	"github.com/nscaledev/devflow/internal/provider/slackoauth"
 )
@@ -138,31 +139,8 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 // LoginProvider launches the selected provider OAuth flow. The enrollment
 // owner manages its own login and credential storage.
 func LoginProvider(ctx context.Context, dir, provider, client, server string, input io.Reader, output, diagnostics io.Writer) error {
-	if client == "devflow" && provider == "slack" {
-		if server != "" && server != "slack" {
-			return errors.New("use the slack server for Devflow Slack enrollment")
-		}
-		if err := slackoauth.Login(ctx, input, diagnostics); err != nil {
-			return err
-		}
-		if output != nil {
-			_, err := fmt.Fprintln(output, "Devflow connected Slack through the approved app.")
-			return err
-		}
-		return nil
-	}
 	if client == "devflow" {
-		if server != "" && server != "atlassian" {
-			return errors.New("use the atlassian server for Devflow Rovo enrollment")
-		}
-		if err := rovooauth.Login(ctx, provider); err != nil {
-			return err
-		}
-		if output != nil {
-			_, err := fmt.Fprintf(output, "Devflow connected %s through Atlassian OAuth.\n", provider)
-			return err
-		}
-		return nil
+		return loginDevflowProvider(ctx, provider, server, input, output, diagnostics)
 	}
 	args, err := providerLoginCommand(provider, client, server)
 	if err != nil {
@@ -189,10 +167,43 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	return nil
 }
 
+func loginDevflowProvider(ctx context.Context, provider, server string, input io.Reader, output, diagnostics io.Writer) error {
+	var message string
+	var err error
+	switch provider {
+	case "asana":
+		if server != "" && server != "asana" {
+			return errors.New("use the asana server for Devflow Asana enrollment")
+		}
+		err = asanaoauth.Login(ctx, input, diagnostics)
+		message = "Devflow connected Asana through its MCP OAuth app."
+	case "slack":
+		if server != "" && server != "slack" {
+			return errors.New("use the slack server for Devflow Slack enrollment")
+		}
+		err = slackoauth.Login(ctx, input, diagnostics)
+		message = "Devflow connected Slack through the approved app."
+	default:
+		if server != "" && server != "atlassian" {
+			return errors.New("use the atlassian server for Devflow Rovo enrollment")
+		}
+		err = rovooauth.Login(ctx, provider)
+		message = fmt.Sprintf("Devflow connected %s through Atlassian OAuth.", provider)
+	}
+	if err == nil && output != nil {
+		_, err = fmt.Fprintln(output, message)
+	}
+	return err
+}
+
 // DisconnectProvider discards the selected native grant enrolled by Devflow.
 func DisconnectProvider(ctx context.Context, provider string) error {
-	if provider == "slack" {
+	switch provider {
+	case "asana":
+		return asanaoauth.Disconnect(ctx)
+	case "slack":
 		return slackoauth.Disconnect(ctx)
+	default:
+		return rovooauth.Disconnect(ctx, provider)
 	}
-	return rovooauth.Disconnect(ctx, provider)
 }

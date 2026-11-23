@@ -16,8 +16,8 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/desktophost"
 	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
@@ -53,7 +53,7 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 	case "codex":
 		s.writer = codexhost.NewWriter(a.Repo.Dir)
 	case "claude", "claude-desktop":
-		s.writer = rovohost.NewWriter()
+		s.writer = desktophost.NewWriter()
 		s.slackWriter = slackhost.NewWriter()
 	}
 	window := a.Gate.Explain(policy.Remote, "comment", nil, false).Window

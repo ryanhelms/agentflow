@@ -72,6 +72,12 @@ For the Devflow Rovo pilot in Claude Code Desktop, use
 page replacement when the user selects that connection. Each provider requires
 its own browser consent. Wait for consent before requesting a new preview.
 
+For Devflow-owned Asana writes, start
+`devflow setup login --provider asana --client devflow` in the user's terminal
+when the workspace owner has authorized the app. Let the user enter its app
+secret directly in the prompt and complete browser consent. Request a fresh
+write preview afterward. Report any app, workspace, or project access denial.
+
 When the user selects Devflow’s own Slack connection and authorizes sign-in,
 use the approved PKCE-enabled app’s public client ID and the selected Slack
 destination’s `native.workspace_id`. Start the browser from the local workspace

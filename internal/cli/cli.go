@@ -28,8 +28,8 @@ import (
 	"github.com/nscaledev/devflow/internal/mcpserver"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
+	"github.com/nscaledev/devflow/internal/provider/desktophost"
 	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/setup/initproviders"
@@ -62,7 +62,7 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for Jira, Confluence or an approved Slack app
+                                 use --client devflow for Jira, Confluence, Asana or an approved Slack app
   setup logout --provider NAME --client devflow
                                  disconnect the selected local Devflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
@@ -123,8 +123,9 @@ Work
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop COMMAND
-                                 use the enrolled Jira connection for comment, start, transition or task create
-                                 comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
+                                 use Jira for comment, start, transition or task create
+                                 use Asana for comment, completion via transition or task create
+                                 Jira comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
@@ -194,7 +195,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 	case "claude-desktop":
 		switch command {
 		case "comment", "start", "transition", "task create":
-			return rovohost.NewWriter(), nil
+			return desktophost.NewWriter(), nil
 		case "notify":
 			return slackhost.NewWriter(), nil
 		default:
