@@ -50,7 +50,7 @@ if [ "$2" = list ]; then printf '%s\n' "$INVENTORY"; fi
 			t.Setenv("FAIL", tc.fail)
 			t.Setenv("INVENTORY", tc.inventory)
 			var out strings.Builder
-			err := RegisterProviderLogin(t.Context(), root, "slack", claudeDesktop, tc.server, !tc.headless, nil, &out, &out)
+			err := RegisterProviderLogin(t.Context(), root, "slack", claudeDesktop, tc.server, "", !tc.headless, nil, &out, &out)
 			if (err == nil) != (tc.wantError == "") || err != nil && !strings.Contains(err.Error(), tc.wantError) {
 				t.Fatalf("want error containing %q, got %v", tc.wantError, err)
 			}
@@ -65,7 +65,7 @@ if [ "$2" = list ]; then printf '%s\n' "$INVENTORY"; fi
 func TestRegisterProviderLoginUnsupported(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, pair := range [][2]string{{"slack", "codex"}, {"slack", "claude"}, {"jira", claudeDesktop}} {
-		err := RegisterProviderLogin(t.Context(), ".", pair[0], pair[1], "", false, nil, nil, nil)
+		err := RegisterProviderLogin(t.Context(), ".", pair[0], pair[1], "", "", false, nil, nil, nil)
 		if err == nil || !strings.Contains(err.Error(), "--register supports only") {
 			t.Fatalf("%v: %v", pair, err)
 		}

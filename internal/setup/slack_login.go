@@ -27,21 +27,21 @@ func LoginPublicSlack(ctx context.Context, provider, client, server, clientID, t
 }
 
 // RegisterProviderLogin handles the explicit workspace registration option on setup login.
-func RegisterProviderLogin(ctx context.Context, dir, provider, client, server string, interactive bool, input io.Reader, output, diagnostics io.Writer) error {
-	if provider != "slack" || client != claudeDesktop {
-		return errors.New("--register supports only --provider slack --client claude-desktop")
+func RegisterProviderLogin(ctx context.Context, dir, provider, client, server, clientID string, interactive bool, input io.Reader, output, diagnostics io.Writer) error {
+	if client != claudeDesktop || (provider != "slack" && provider != "asana") {
+		return errors.New("--register supports only Slack and Asana in Claude Code Desktop")
+	}
+	if provider == "asana" {
+		return registerAsanaLogin(ctx, dir, server, clientID, interactive, input, output, diagnostics)
+	}
+	if clientID != "" {
+		return errors.New("--client-id is available for Asana registration")
 	}
 	if server != "" && !serverName.MatchString(server) {
 		return errors.New("supply a configured MCP server name")
 	}
-	list := exec.CommandContext(ctx, "claude", "mcp", "list")
-	list.Dir, list.Stderr = dir, diagnostics
-	inventory, err := list.Output()
-	if err != nil {
-		return fmt.Errorf("list Claude workspace connectors: %w", err)
-	}
 	tool := providerTools["slack"].MCP
-	name, status, err := slackConnector(string(inventory), server, tool)
+	name, _, status, err := claudeConnector(ctx, dir, server, tool, diagnostics)
 	if err != nil {
 		return err
 	}
@@ -59,12 +59,8 @@ func RegisterProviderLogin(ctx context.Context, dir, provider, client, server st
 			return fmt.Errorf("register Slack in Claude workspace: %w", err)
 		}
 	case status == "connected":
-		if output == nil {
-			return nil
-		}
-		_, err := fmt.Fprintf(output, "Claude reports %q connected.\n", name)
-		return err
-	case strings.Contains(status, "access denied"), strings.Contains(status, "access_denied"), strings.Contains(status, "forbidden"), strings.Contains(status, "403"):
+		return reportClaudeConnection(output, name)
+	case connectorAccessDenied(status):
 		return fmt.Errorf("access denied for Slack connector %q: check workspace approval and permissions", name)
 	case status != "needs authentication":
 		return fmt.Errorf("inspect the existing %q connection in Claude with /mcp", name)
@@ -75,8 +71,34 @@ func RegisterProviderLogin(ctx context.Context, dir, provider, client, server st
 	return LoginProvider(ctx, dir, provider, client, name, input, output, diagnostics)
 }
 
+func reportClaudeConnection(output io.Writer, name string) error {
+	if output == nil {
+		return nil
+	}
+	_, err := fmt.Fprintf(output, "Claude reports %q connected.\n", name)
+	return err
+}
+
+func connectorAccessDenied(status string) bool {
+	return strings.Contains(status, "access denied") || strings.Contains(status, "access_denied") ||
+		strings.Contains(status, "forbidden") || strings.Contains(status, "403")
+}
+
+func claudeConnector(ctx context.Context, dir, server string, tool MCPTool, diagnostics io.Writer) (name, endpoint, status string, err error) {
+	list := exec.CommandContext(ctx, "claude", "mcp", "list")
+	list.Dir, list.Stderr = dir, diagnostics
+	if tool.Name == "asana" {
+		list.Env = asanaLoginEnvironment(list.Environ())
+	}
+	inventory, err := list.Output()
+	if err != nil {
+		return "", "", "", fmt.Errorf("list Claude workspace connectors: %w", err)
+	}
+	return parseClaudeConnector(string(inventory), server, tool)
+}
+
 // Accept Claude's list rows only. An unfamiliar inventory cannot establish absence.
-func slackConnector(inventory, server string, tool MCPTool) (name, status string, err error) {
+func parseClaudeConnector(inventory, server string, tool MCPTool) (name, endpoint, status string, err error) {
 	seen := false
 	for line := range strings.SplitSeq(inventory, "\n") {
 		line = strings.TrimSpace(line)
@@ -90,21 +112,21 @@ func slackConnector(inventory, server string, tool MCPTool) (name, status string
 		key, entry, ok := strings.Cut(line, ": ")
 		address, health, hasStatus := strings.Cut(entry, " - ")
 		if !ok || !hasStatus || key == "" {
-			return "", "", errors.New("unrecognized Claude MCP inventory; inspect the workspace with /mcp")
+			return "", "", "", errors.New("unrecognized Claude MCP inventory; inspect the workspace with /mcp")
 		}
 		seen = true
-		endpoint, _, _ := strings.Cut(address, " ")
-		if server != "" && key != server || server == "" && key != tool.Name && endpoint != tool.Endpoint {
+		target, _, _ := strings.Cut(address, " ")
+		if server != "" && key != server || server == "" && key != tool.Name && target != tool.Endpoint {
 			continue
 		}
 		if name != "" {
-			return "", "", errors.New("multiple Slack connectors found; select one with --server")
+			return "", "", "", fmt.Errorf("multiple %s connectors found; select one with --server", tool.Name)
 		}
-		name = key
+		name, endpoint = key, target
 		status = strings.ToLower(strings.TrimLeft(health, "✔✓✗✘⚠️! "))
 	}
 	if !seen {
-		return "", "", errors.New("empty Claude MCP inventory; inspect the workspace with /mcp")
+		return "", "", "", errors.New("empty Claude MCP inventory; inspect the workspace with /mcp")
 	}
-	return name, status, nil
+	return name, endpoint, status, nil
 }

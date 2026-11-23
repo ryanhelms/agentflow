@@ -51,7 +51,7 @@ comment)
 esac
 `, dir))
 	a.Gate.Autonomy.Remote = config.Auto
-	ctx = WithJiraCommentCLI(ctx)
+	ctx = WithJiraWriteCLI(ctx)
 	host.prepareErr = native.ErrDenied
 	if _, err := a.Comment(ctx, "PLAT-1", "Ready", ""); !errors.Is(err, native.ErrDenied) {
 		t.Fatal("MCP denial", err)
@@ -185,7 +185,7 @@ func TestJiraCommentCLIEligibility(t *testing.T) {
 			}
 			callCtx := t.Context()
 			if tc.optIn {
-				callCtx = WithJiraCommentCLI(callCtx)
+				callCtx = WithJiraWriteCLI(callCtx)
 			}
 			if tc.name == "interactive but twg absent" {
 				t.Setenv("PATH", t.TempDir())

@@ -26,6 +26,14 @@ that workspace. Reuse an existing Slack connector. If sign-in is deferred, direc
 the user to Claude’s `/mcp` action. Report a workspace or channel access denial
 to the user. A connected status alone verifies only the host connection.
 
+For Asana in Claude Code Desktop, start
+`devflow setup login --provider asana --client claude-desktop --register`.
+Use the existing V2 connector when available. For a new registration, add
+`--client-id ID` from the approved Asana MCP app and let the user enter the
+app secret directly at Claude's hidden terminal prompt. Asana app or project
+access denials require the workspace owner's permission. Wait for browser
+consent before retrying the operation.
+
 If the MCP is unavailable for the operation, use the provider's installed CLI,
 or offer to install it. To start its sign-in, use
 `devflow setup login --provider NAME` when the plan lists a CLI. Use the

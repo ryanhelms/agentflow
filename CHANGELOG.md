@@ -5,6 +5,24 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.36.0](https://github.com/nscaledev/devflow/compare/v0.35.0...v0.36.0) - 2026-11-23
+
+### Features
+
+- **jira:** fall back to teamwork graph for creation (#82) ([7b7a18c](https://github.com/nscaledev/devflow/commit/7b7a18c3baac0225ddda7a55eecb1e97d1811043))
+
+## [0.35.0](https://github.com/nscaledev/devflow/compare/v0.34.0...v0.35.0) - 2026-11-23
+
+### Features
+
+- **asana:** guide desktop mcp sign-in (#80) ([d3f7a38](https://github.com/nscaledev/devflow/commit/d3f7a387a3184a0f33b3b097b4d3a890e5e3b175))
+
+## [0.34.0](https://github.com/nscaledev/devflow/compare/v0.33.1...v0.34.0) - 2026-11-22
+
+### Features
+
+- **jira:** verify desktop workflow writes (#79) ([bb123f4](https://github.com/nscaledev/devflow/commit/bb123f4d59eb139d60aa2b878729eaf83edbc113))
+
 ## [0.33.1](https://github.com/nscaledev/devflow/compare/v0.33.0...v0.33.1) - 2026-11-22
 
 ### Fixes

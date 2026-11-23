@@ -16,9 +16,10 @@ import (
 )
 
 type MCPTool struct {
-	Name     string `json:"name"`
-	Endpoint string `json:"endpoint"`
-	Guide    string `json:"guide"`
+	Name         string   `json:"name"`
+	Endpoint     string   `json:"endpoint"`
+	Guide        string   `json:"guide"`
+	RegisterArgs []string `json:"register_args,omitempty"`
 }
 
 type CLITool struct {
@@ -80,7 +81,7 @@ var providerTools = map[string]ProviderTooling{
 	}},
 }
 
-func (p *ProviderSetupPlan) addProviderTooling(role, provider string, ghSelection *managedgh.Selection) {
+func (p *ProviderSetupPlan) addProviderTooling(role, provider, client string, ghSelection *managedgh.Selection) {
 	tools, ok := providerTools[provider]
 	if !ok {
 		return
@@ -92,6 +93,9 @@ func (p *ProviderSetupPlan) addProviderTooling(role, provider string, ghSelectio
 		}
 	}
 	tools.Provider, tools.Roles = provider, []string{role}
+	if client == claudeDesktop && (provider == "slack" || provider == "asana") {
+		tools.MCP.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", claudeDesktop, "--register"}
+	}
 	if tools.CLI != nil {
 		cli := *tools.CLI
 		if cli.Command == "gh" && ghSelection != nil {
@@ -184,6 +188,9 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	}
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir, cmd.Stdin, cmd.Stdout, cmd.Stderr = dir, input, output, diagnostics
+	if provider == "asana" && args[0] == "claude" {
+		cmd.Env = asanaLoginEnvironment(cmd.Environ())
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("provider sign-in via %s: %w", args[0], err)
 	}

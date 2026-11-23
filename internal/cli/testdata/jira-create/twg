@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "${0%/*}"
+test -z "${TWG_USER+x}${TWG_TOKEN+x}${TWG_PROFILE+x}${TWG_SITE+x}${JIRA_TOKEN+x}"
+target=(--site https://fixture.atlassian.net --output json --output-summary none)
+profile=(--profile work)
+case "$1 $2 $3" in
+  'auth profile list')
+    expected=(auth profile list)
+    file=profile ;;
+  'jira space issue-types')
+    expected=(jira space issue-types --id-or-key ENG --first 201 "${profile[@]}")
+    file=project ;;
+  'jira workitem create')
+    echo create >> writes
+    expected=(jira workitem create --space 100 --type 101 "--summary=--fix 'kiosk'" $'--description=First\n<literal> & $HOME' --description-format plain --labels=devflow "${profile[@]}" --yes)
+    file=receipt ;;
+  'jira workitem get')
+    expected=(jira workitem get ENG-42 --fields "project,issuetype,summary,description,labels,creator" "${profile[@]}")
+    file=readback ;;
+  *) exit 2 ;;
+esac
+expected+=("${target[@]}")
+test "$#" -eq "${#expected[@]}"
+for arg in "${expected[@]}"; do
+  test "$1" = "$arg"
+  shift
+done
+exec /bin/cat "$file.json"

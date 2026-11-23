@@ -284,6 +284,23 @@ because the command has no terminal, open `/mcp` in the same workspace or
 rerun the command in a terminal. A connected status verifies the host
 connection only. [Slack’s Claude Code configuration](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/#connect-to-claude-code).
 
+For Asana in Claude Code Desktop, first reuse the registered V2 connector.
+Run the command in the enrolled workspace so Claude starts its OAuth flow
+when sign-in is needed.
+
+```bash
+devflow setup login --provider asana --client claude-desktop --register
+```
+
+For a new connection, register `http://localhost:8080/callback` on an approved
+Asana MCP app and add `--client-id ID` to the command. Claude prompts for the
+app secret in the terminal, stores it in the system keychain, and manages browser
+consent. The command uses the official Asana V2 endpoint and Claude’s local
+workspace scope. Use `--server NAME` to select a particular V2 registration or
+give a new registration a different name when a legacy connector already uses
+`asana`. A workspace denial calls for app approval or project access.
+[Asana’s Claude Code setup guide](https://developers.asana.com/docs/connecting-mcp-clients-to-asanas-v2-server#claude-code).
+
 A standalone plan cannot list the tools or sign-in state of a sibling MCP
 server owned by the host. Validate the available read capabilities in the
 agent session. Interactive setup works without exporting personal credentials.
@@ -358,6 +375,30 @@ type exists in the project and binds the title, description and labels to one
 approval. A successful result includes the new issue key. A request with a parent
 or other issue link uses the existing linked-creation route. If the outcome is
 uncertain, inspect the project before approving another creation.
+
+When MCP creation is unavailable, the same interactive callers that can post
+Jira comments can create an unlinked issue through a saved Teamwork Graph CLI
+OAuth profile. Sign in with `devflow setup login --provider jira`. For example,
+on a branch without a Jira key, preview the draft with
+`devflow --native-client claude-desktop task create --project ENG --type Task --summary "Verify kiosk check-in" --dry-run`.
+The ordinary `devflow task create` command also supports this route in a terminal.
+
+Devflow looks up the project and standard issue type with `twg jira space issue-types`.
+The confirmation binds both IDs, the selected profile and account, the exact title
+and plain-text description, and the `devflow` label. TWG trims surrounding
+whitespace and expands account mentions in descriptions. Devflow rejects those
+transformations before approval. Confirmation spends one approval before running
+`twg jira workitem create`. Devflow checks the acknowledgement and reads the issue
+back on the same site and profile to verify its key, creator and fields.
+
+A sign-in or permission failure stops the operation. An uncertain create or
+failed readback requires inspecting the project before approving again.
+An explicit link or a link inferred from the current branch uses the existing
+linked-creation route. Unattended calls, CI, operations with
+`DEVFLOW_OPERATION_ID`, and configurations with both `JIRA_USER` and
+`JIRA_TOKEN` retain the existing REST fallback. The TWG create flow has been
+exercised with offline fixtures and installed TWG 1.4.6 command help.
+[Atlassian work-item reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md).
 
 Use `devflow_transition` to apply the flow-map event for an issue. For example,
 `devflow --native-client claude-desktop transition APP-42 pr.opened --dry-run`
