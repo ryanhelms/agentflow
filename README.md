@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
+| **Status** | Devflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
 | **Current release** | <!-- devflow:version -->`v0.39.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
@@ -319,7 +319,9 @@ Reviewers can read a document with `devflow docs get REF [--json]` or
 New issues created through devflow in this repository use the
 [`engineering-task` template](.devflow/task-templates.json).
 The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
-knowledge migration, and full repository workflow.
+knowledge migration, and full repository workflow. The
+[Devflow knowledge index](docs/knowledge/index.md) lists the repository’s
+decisions, guides, and runbooks.
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.

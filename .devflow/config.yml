@@ -17,7 +17,7 @@ task_management:
 knowledge_base:
   provider: repository
   settings:
-    directory: docs/adr
+    directory: docs/knowledge
     publication: pull-request
 
 commit:

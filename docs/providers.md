@@ -56,7 +56,7 @@ task_management:
 knowledge_base:
   provider: repository
   settings:
-    directory: docs/adr
+    directory: docs/knowledge
 ```
 
 Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
