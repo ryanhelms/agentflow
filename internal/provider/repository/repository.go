@@ -53,6 +53,7 @@ type Publication struct {
 
 type adapter struct {
 	Config
+	okfKnowledge bool
 	// Tests exercise transport failures and competing pushes at the publication boundary.
 	push func(checkout, context.Context, string, string) error
 }
@@ -79,6 +80,23 @@ func NewKnowledge(c Config) (*Knowledge, error) {
 		return nil, err
 	}
 	return &Knowledge{a}, nil
+}
+
+// NewOKFCompatibleKnowledge enables recursive OKF reads for the Repository
+// knowledge role. Wiki uses NewKnowledge and its flat v1 checkout.
+func NewOKFCompatibleKnowledge(c Config) (*Knowledge, error) {
+	k, err := NewKnowledge(c)
+	if err == nil {
+		k.a.okfKnowledge = true
+	}
+	return k, err
+}
+
+func (k *Knowledge) open(instance, dir string) (*filesystem.Knowledge, error) {
+	if k.a.okfKnowledge {
+		return filesystem.NewOKFCompatibleKnowledge(instance, dir)
+	}
+	return filesystem.NewKnowledge(instance, dir)
 }
 
 func newAdapter(c Config) (adapter, error) {
@@ -157,19 +175,19 @@ func (t *Tasks) Transition(ctx context.Context, ref provider.Ref, state provider
 }
 
 func (k *Knowledge) Get(ctx context.Context, ref provider.Ref) (provider.Document, error) {
-	return read(ctx, k.a, filesystem.NewKnowledge, func(s *filesystem.Knowledge) (provider.Document, error) {
+	return read(ctx, k.a, k.open, func(s *filesystem.Knowledge) (provider.Document, error) {
 		return s.Get(ctx, ref)
 	})
 }
 
 func (k *Knowledge) Find(ctx context.Context, q provider.DocumentQuery) ([]provider.Document, error) {
-	return read(ctx, k.a, filesystem.NewKnowledge, func(s *filesystem.Knowledge) ([]provider.Document, error) {
+	return read(ctx, k.a, k.open, func(s *filesystem.Knowledge) ([]provider.Document, error) {
 		return s.Find(ctx, q)
 	})
 }
 
 func (k *Knowledge) Publish(ctx context.Context, ref provider.Ref, d provider.DocumentDraft, o provider.WriteOptions) (provider.WriteResult, error) {
-	return write(ctx, k.a, "document", ref.Scope, o, filesystem.NewKnowledge, func(s *filesystem.Knowledge, opts provider.WriteOptions) (provider.WriteResult, error) {
+	return write(ctx, k.a, "document", ref.Scope, o, k.open, func(s *filesystem.Knowledge, opts provider.WriteOptions) (provider.WriteResult, error) {
 		return s.Publish(ctx, ref, d, opts)
 	})
 }

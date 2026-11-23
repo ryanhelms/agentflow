@@ -5,7 +5,11 @@
 // The directory must exist and its parent path must be trusted. Both constructors
 // reject a symlink at the final component and pin the opened directory until Close.
 //
-// Only top-level *.md files (case-insensitive) participate. Each must be a
+// NewOKFCompatibleKnowledge also discovers OKF concepts recursively under the
+// same pinned root. Managed concepts keep their scope and ID across renames.
+// OKF concepts are read-only. New and replacement writes use the v1 format.
+//
+// In v1 storage only top-level *.md files (case-insensitive) participate. Each must be a
 // regular file with a single version 1 YAML mapping between two --- lines.
 // A task named backlog.md can have the following contents.
 //

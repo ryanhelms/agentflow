@@ -270,6 +270,9 @@ endpoint in your user-owned `~/.devflow/mcp-companions.yml`. Run
 discovery headlessly. Approve installation and registration separately in
 VS Code, Cursor, Claude Code or Gemini CLI. [Provider MCP setup](docs/providers.md#register-a-provider-mcp-companion).
 
+FileSystem and Repository knowledge can read nested OKF v0.3 concepts alongside
+legacy Devflow documents. See [OKF knowledge bundles](docs/providers.md#read-an-okf-knowledge-bundle).
+
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
 publication returns the PR link and a pending review status.
@@ -304,6 +307,8 @@ state change. See the [task template configuration](docs/providers.md#task-templ
 
 New issues created through devflow in this repository use the
 [`engineering-task` template](.devflow/task-templates.json).
+The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
+knowledge migration, and full repository workflow.
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.

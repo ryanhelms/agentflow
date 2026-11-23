@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/filesystem"
 )
 
 // The object database and index are private to one operation. Using blobs
@@ -20,6 +21,7 @@ import (
 // hashes across platforms, regardless of attributes or autocrlf settings.
 type checkout struct {
 	root, origin, branch string
+	okfKnowledge         bool
 }
 
 func (c checkout) git(ctx context.Context, input []byte, args ...string) (string, error) {
@@ -105,8 +107,12 @@ type entry struct {
 	mode, oid, name string
 }
 
-func (c checkout) entries(ctx context.Context, tree string, names ...string) ([]entry, error) {
-	args := []string{"ls-tree", "-z", tree, "--"}
+func (c checkout) entries(ctx context.Context, tree string, recursive bool, names ...string) ([]entry, error) {
+	args := []string{"ls-tree", "-z"}
+	if recursive {
+		args = append(args, "-r")
+	}
+	args = append(args, tree, "--")
 	out, err := c.git(ctx, nil, append(args, names...)...)
 	if err != nil {
 		return nil, err
@@ -142,7 +148,7 @@ func (c checkout) load(ctx context.Context, base, directory string) (snapshot, e
 		if part == "." {
 			continue
 		}
-		entries, err := c.entries(ctx, tree, part)
+		entries, err := c.entries(ctx, tree, false, part)
 		if err != nil {
 			return snapshot{}, err
 		}
@@ -154,23 +160,31 @@ func (c checkout) load(ctx context.Context, base, directory string) (snapshot, e
 		}
 		tree = entries[0].oid
 	}
-	entries, err := c.entries(ctx, tree)
+	entries, err := c.entries(ctx, tree, c.okfKnowledge)
 	if err != nil {
 		return snapshot{}, err
 	}
+	dirs := make(map[string]bool)
 	for _, e := range entries {
-		if !strings.EqualFold(path.Ext(e.name), ".md") {
+		regular := e.mode == "100644" || e.mode == "100755"
+		if c.okfKnowledge {
+			if !regular || !filesystem.IsKnowledgeCandidate(e.name) {
+				continue
+			}
+		} else if !strings.EqualFold(path.Ext(e.name), ".md") {
 			continue
 		}
-		if !safeComponent(e.name) || (e.mode != "100644" && e.mode != "100755") {
+		if !regular || !safeComponent(path.Base(e.name)) {
 			return snapshot{}, fmt.Errorf("expected a regular Markdown file at %q", e.name)
+		}
+		if err := s.makeParents(e.name, dirs); err != nil {
+			return snapshot{}, err
 		}
 		body, err := c.git(ctx, nil, "cat-file", "blob", e.oid)
 		if err != nil {
 			return snapshot{}, err
 		}
-		// Exclusive creation detects names that collide on this filesystem.
-		f, err := os.OpenFile(filepath.Join(dir, e.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		f, err := os.OpenFile(filepath.Join(s.dir, e.name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			return snapshot{}, err
 		}
@@ -178,9 +192,33 @@ func (c checkout) load(ctx context.Context, base, directory string) (snapshot, e
 		if err := errors.Join(err, f.Close()); err != nil {
 			return snapshot{}, err
 		}
-		s.modes[e.name] = e.mode
+		// Only root files are eligible v1 write destinations. Never match a
+		// nested blob merely because it has the same bytes as the write.
+		if !strings.Contains(e.name, "/") {
+			s.modes[e.name] = e.mode
+		}
 	}
 	return s, nil
+}
+
+// Materialize only directories containing candidates. Mkdir (not MkdirAll)
+// detects paths which alias a different Git spelling on this filesystem.
+func (s snapshot) makeParents(name string, dirs map[string]bool) error {
+	parent := ""
+	parts := strings.Split(name, "/")
+	for _, part := range parts[:len(parts)-1] {
+		if !safeComponent(part) {
+			return fmt.Errorf("invalid knowledge directory component %q", part)
+		}
+		parent = path.Join(parent, part)
+		if !dirs[parent] {
+			if err := os.Mkdir(filepath.Join(s.dir, parent), 0700); err != nil {
+				return err
+			}
+			dirs[parent] = true
+		}
+	}
+	return nil
 }
 
 // FileSystem returns the SHA-256 of the exact bytes it wrote. Match that
@@ -218,6 +256,18 @@ func (c checkout) commit(ctx context.Context, base, directory, operation string,
 	if err != nil {
 		return "", err
 	}
+	repoPath := path.Join(directory, name)
+	// The snapshot omits symlinks and gitlinks. An exclusive filesystem
+	// create must also be exclusive in the original Git tree.
+	if s.modes[name] == "" {
+		entries, err := c.entries(ctx, base, false, repoPath)
+		if err != nil {
+			return "", err
+		}
+		if len(entries) != 0 {
+			return "", fmt.Errorf("repository destination %q is occupied: %w", repoPath, provider.ErrConflict)
+		}
+	}
 	blob, err := c.git(ctx, body, "hash-object", "-w", "--stdin")
 	if err != nil {
 		return "", err
@@ -229,7 +279,6 @@ func (c checkout) commit(ctx context.Context, base, directory, operation string,
 	if _, err := c.git(ctx, nil, "read-tree", base); err != nil {
 		return "", err
 	}
-	repoPath := path.Join(directory, name)
 	if _, err := c.git(ctx, nil, "update-index", "--add", "--cacheinfo", mode, strings.TrimSpace(blob), repoPath); err != nil {
 		return "", err
 	}

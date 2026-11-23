@@ -37,10 +37,11 @@ type header struct {
 
 type record struct {
 	header
-	body     string
-	name     string
-	revision string
-	mode     fs.FileMode
+	body       string
+	name       string
+	revision   string
+	mode       fs.FileMode
+	okfConcept bool
 }
 
 func digest(b []byte) string {
@@ -108,7 +109,7 @@ func parse(data []byte) (record, error) {
 		dec.KnownFields(true)
 		r := record{body: string(body), revision: digest(data)}
 		if err := dec.Decode(&r.header); err != nil {
-			return record{}, fmt.Errorf("decode YAML front matter: %w", err)
+			return r, fmt.Errorf("decode YAML front matter: %w", err)
 		}
 		if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
 			return record{}, errors.New("expected a single YAML mapping in front matter")

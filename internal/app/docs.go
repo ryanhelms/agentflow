@@ -94,7 +94,7 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 		if p, err := a.gate(policy.Local, "docs_publish", summary, token, false, nil); p != nil || err != nil {
 			return p, err
 		}
-		k, err := filesystem.NewKnowledge(name, root)
+		k, err := filesystem.NewOKFCompatibleKnowledge(name, root)
 		if err != nil {
 			a.audit(policy.Local, "docs_publish", summary, err)
 			return nil, err
@@ -144,7 +144,7 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 			}
 		}
 		cfg.BeforeWrite = beforeWrite
-		knowledge, err = repository.NewKnowledge(cfg)
+		knowledge, err = repository.NewOKFCompatibleKnowledge(cfg)
 		if err != nil {
 			return nil, err
 		}

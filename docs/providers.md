@@ -1001,6 +1001,30 @@ The decision and its rationale.
 The document's qualified reference survives a rename. Generated setup files
 and authored records have separate lifecycles during removal.
 
+## Read an OKF knowledge bundle
+
+The FileSystem and Repository knowledge providers can search [OKF v0.3
+bundles](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)
+and legacy Devflow document records together. Point FileSystem at the bundle's
+`root`, or use the bundle as Repository's `directory` on its configured branch.
+Search and task document lookups use the same provider configuration.
+
+Within an OKF bundle, Devflow discovers nested Markdown concepts with a `type`
+in their YAML frontmatter. Use the first directory as the search scope, or
+`default` for a concept at the bundle root. The unmanaged document ID is its
+bundle-relative path without `.md`. For example, its qualified Repository
+reference might be `repository/engineering/engineering%2Fquota`. `index.md`
+and `log.md` are bundle navigation and history files.
+
+A managed concept can pin a scope and ID with
+`x-devflow-ref: {scope: engineering, id: quota}`. Moving that file preserves its
+qualified Devflow reference. Duplicate references are reported as conflicts.
+A migration can carry existing publication receipts in `x-devflow-operations`.
+
+The compatible reader release treats OKF concepts as read-only. Legacy
+publishing continues to use Devflow's existing record format. See the
+[OKF rollout plan](okf-rollout.md) for the release order.
+
 ## Replace a Confluence page
 
 With `knowledge_base.provider: confluence`, search for the current page ID,

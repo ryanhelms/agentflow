@@ -22,6 +22,16 @@ func NewKnowledge(instance, directory string) (*Knowledge, error) {
 	return &Knowledge{s}, nil
 }
 
+// NewOKFCompatibleKnowledge reads OKF concepts alongside top-level v1 records.
+// Publish continues to write v1 and can only replace an existing v1 record.
+func NewOKFCompatibleKnowledge(instance, directory string) (*Knowledge, error) {
+	k, err := NewKnowledge(instance, directory)
+	if err == nil {
+		k.okfKnowledge = true
+	}
+	return k, err
+}
+
 func document(r record) provider.Document {
 	return provider.Document{Ref: r.Ref, Title: r.Title, Body: r.body, Links: r.Links, Revision: r.revision}
 }
