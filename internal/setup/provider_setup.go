@@ -183,7 +183,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if role.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
 			toolProvider = "github"
 		}
-		p.addProviderTooling(role.name, toolProvider, ghSelection)
+		p.addProviderTooling(role.name, toolProvider, client, ghSelection)
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue

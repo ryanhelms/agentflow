@@ -284,6 +284,23 @@ because the command has no terminal, open `/mcp` in the same workspace or
 rerun the command in a terminal. A connected status verifies the host
 connection only. [Slack’s Claude Code configuration](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/#connect-to-claude-code).
 
+For Asana in Claude Code Desktop, first reuse the registered V2 connector.
+Run the command in the enrolled workspace so Claude starts its OAuth flow
+when sign-in is needed.
+
+```bash
+devflow setup login --provider asana --client claude-desktop --register
+```
+
+For a new connection, register `http://localhost:8080/callback` on an approved
+Asana MCP app and add `--client-id ID` to the command. Claude prompts for the
+app secret in the terminal, stores it in the system keychain, and manages browser
+consent. The command uses the official Asana V2 endpoint and Claude’s local
+workspace scope. Use `--server NAME` to select a particular V2 registration or
+give a new registration a different name when a legacy connector already uses
+`asana`. A workspace denial calls for app approval or project access.
+[Asana’s Claude Code setup guide](https://developers.asana.com/docs/connecting-mcp-clients-to-asanas-v2-server#claude-code).
+
 A standalone plan cannot list the tools or sign-in state of a sibling MCP
 server owned by the host. Validate the available read capabilities in the
 agent session. Interactive setup works without exporting personal credentials.

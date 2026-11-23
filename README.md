@@ -190,8 +190,11 @@ In an agent session, use the setup skill to reuse the provider's connected MCP
 or start its OAuth flow. Use `devflow setup login --provider NAME` to start
 the supported vendor CLI's browser login when no MCP is available. In a Claude Code
 Desktop workspace, `devflow setup login --provider slack --client claude-desktop --register`
-can register the official Slack connector locally and start Claude’s sign-in flow. See
-[interactive provider setup](docs/providers.md#interactive-provider-setup).
+can register the official Slack connector locally and start Claude’s sign-in flow.
+The same command with `--provider asana` reuses the official Asana V2 connector.
+For a new Asana connector, pass `--client-id ID` from an approved MCP app and
+enter the app secret at Claude’s secure prompt.
+[Interactive provider setup](docs/providers.md#interactive-provider-setup).
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian
 reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls

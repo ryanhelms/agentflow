@@ -111,6 +111,12 @@ func runProviderSetup(ctx context.Context, args []string) error {
 		for _, tools := range plan.Tooling {
 			fmt.Printf("%s  preferred MCP: %s (%s)\n", tools.Provider, tools.MCP.Name, tools.MCP.Endpoint)
 			fmt.Printf("  Setup: %s\n", tools.MCP.Guide)
+			if len(tools.MCP.RegisterArgs) > 0 {
+				fmt.Printf("  Register or connect: devflow %s\n", strings.Join(tools.MCP.RegisterArgs, " "))
+				if tools.Provider == "asana" {
+					fmt.Println("  For a new Asana connector, add --client-id ID from the approved MCP app.")
+				}
+			}
 			if tools.CLI != nil {
 				fmt.Printf("  CLI fallback: %s (installed: %t) · %s\n", tools.CLI.Command, tools.CLI.Installed, tools.CLI.Guide)
 			}
@@ -236,16 +242,20 @@ func runProviderLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("setup login", flag.ContinueOnError)
 	provider := fs.String("provider", "", "provider to authenticate")
 	client := fs.String("client", "", "MCP client, such as claude-desktop or codex")
-	register := fs.Bool("register", false, "register the official Slack connector if absent in this Claude Code Desktop workspace")
-	server := fs.String("server", "", "existing MCP server name if different from the provider default")
+	register := fs.Bool("register", false, "register the official Slack or Asana connector in the Claude Code Desktop workspace")
+	server := fs.String("server", "", "MCP server name if different from the provider default")
+	clientID := fs.String("client-id", "", "public OAuth client ID of your approved Asana MCP app")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *provider == "" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register]")
+		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]")
 	}
 	if *register {
-		return setup.RegisterProviderLogin(ctx, ".", *provider, *client, *server, term.IsTerminal(int(os.Stdin.Fd())), os.Stdin, os.Stdout, os.Stderr)
+		return setup.RegisterProviderLogin(ctx, ".", *provider, *client, *server, *clientID, term.IsTerminal(int(os.Stdin.Fd())), os.Stdin, os.Stdout, os.Stderr)
+	}
+	if *clientID != "" {
+		return errors.New("--client-id requires --register for Asana in Claude Code Desktop")
 	}
 	return setup.LoginProvider(ctx, ".", *provider, *client, *server, os.Stdin, os.Stdout, os.Stderr)
 }
