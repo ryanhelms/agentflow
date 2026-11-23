@@ -65,6 +65,49 @@ make check         # everything CI runs (needs golangci-lint, shellcheck, action
 make snapshot      # goreleaser --snapshot --clean
 ```
 
+### Website
+
+From the repository root, start the launch and documentation website with
+Docker Compose v2.22 or later. The container includes Node, Vite, and the Nscale
+site fonts.
+
+```sh
+docker compose up --build --wait website
+```
+
+Open [the local website](http://127.0.0.1:5173). Edit React components and CSS in
+`website/src/` with your usual editor. Vite uses React Fast Refresh and reloads
+the page for HTML edits. Installer commands live in `website/src/install.js`.
+The release index and searchable summaries live in `website/src/docs-data.js`.
+
+The site uses the Nscale design system's Dashboard and Workbench page
+templates, shared React components, and theme tokens. The published archives
+in `website/vendor/` are pinned in the npm lockfile so local Docker builds
+can install them without GitHub Packages credentials. When updating the
+design system, obtain the published archives, update the file dependencies,
+then regenerate and commit the lockfile. [Nscale design system](https://github.com/nscaledev/design-system)
+
+| Task | Command |
+| --- | --- |
+| Follow Vite logs and errors | `docker compose logs -f website` |
+| Check that the website builds for production | `docker compose exec website npm run build` |
+| Automatically rebuild the image when dependencies or Vite configuration change | `docker compose up --build --watch website` |
+| Stop the local environment | `docker compose down` |
+
+Source edits work with either startup command. With the detached server, rerun
+`docker compose up --build --wait website` after changing the package files,
+package archives, Vite configuration, or Dockerfile. To add a dependency, use npm from
+`website/` and include the updated `package-lock.json` with the change.
+
+Set `DEVFLOW_WEBSITE_PORT=5174` in your shell or a root Compose `.env` file to
+use another host port. If Docker Desktop or WSL misses file changes, set
+`VITE_USE_POLLING=1` the same way. Run the startup command again to apply
+either setting. The website binds to the loopback address on the host.
+
+For development directly with Node 24, run `npm ci` and `npm run dev` in
+`website/`. Run `npm run build` to write a static site to `website/dist/`;
+`npm run preview` serves that build locally.
+
 ## Testing the Claude Code plugin
 
 `make e2e` (or `scripts/e2e-claude.sh`) builds devflow, creates a throwaway repo with

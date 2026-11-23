@@ -1,5 +1,8 @@
 # Build output
 /dist/
+/website/dist/
+/website/node_modules/
+/.env
 /devflow
 /devflow.exe
 /bin/devflow
