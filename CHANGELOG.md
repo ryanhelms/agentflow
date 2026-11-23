@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.41.0](https://github.com/nscaledev/devflow/compare/v0.40.0...v0.41.0) - 2026-11-23
+
+### Features
+
+- **setup:** generate config-driven agent guidance (#94) ([fef9219](https://github.com/nscaledev/devflow/commit/fef921903d387b1ca208a8225a499790ca8517c4))
+
 ## [0.40.0](https://github.com/nscaledev/devflow/compare/v0.39.0...v0.40.0) - 2026-11-23
 
 ### Features
