@@ -222,44 +222,63 @@ type CommitResult struct {
 	Files   []string `json:"files"`
 }
 
-// Commit validates and commits. paths limits the commit to those files (they are staged first).
+// CommitPrepare returns the exact decision and candidate without staging or committing.
+func (a *App) CommitPrepare(ctx context.Context, msg string, paths []string) (any, error) {
+	return a.commitCandidate(ctx, msg, paths, "", true)
+}
+
+// Commit validates and commits the staged index, or just the selected paths.
 func (a *App) Commit(ctx context.Context, msg string, paths []string, token string) (any, error) {
+	return a.commitCandidate(ctx, msg, paths, token, false)
+}
+
+func (a *App) commitCandidate(ctx context.Context, msg string, paths []string, token string, prepare bool) (any, error) {
 	if !a.Cfg.Commit.AITrailer {
 		msg = commit.StripAITrailers(msg)
+	}
+	msg, err := a.Repo.CleanCommitMessage(ctx, msg)
+	if err != nil {
+		return nil, err
 	}
 	if issues := a.Validate(ctx, msg); len(issues) > 0 {
 		return map[string]any{"status": "invalid", "issues": issues}, nil
 	}
-	if len(paths) > 0 {
-		if err := a.Repo.Add(ctx, paths...); err != nil {
-			return nil, err
-		}
+	candidate, err := a.Repo.PreviewCommit(ctx, paths)
+	if err != nil {
+		return nil, err
 	}
-	files := paths
-	if len(files) == 0 {
-		var err error
-		if files, err = a.Repo.StagedFiles(ctx); err != nil {
-			return nil, err
-		}
-	}
-	if len(files) == 0 {
-		return nil, errors.New("nothing staged to commit")
-	}
-	if hits := ScanSecrets(ctx, a); len(hits) > 0 {
+	if hits := scanDiff(candidate.Diff); len(hits) > 0 {
 		return map[string]any{"status": "blocked", "reason": "possible secrets in staged changes", "findings": hits}, nil
 	}
-	effects, _, _ := a.Preview(ctx, msg)
-	summary := map[string]any{"message": msg, "files": files, "branch": a.Repo.Branch(ctx), "jira_effects": effects}
-	cmd := "git commit -F - <<'EOF'\n" + msg + "EOF"
-	if p, err := a.gate(policy.Local, "commit", summary, token, false, []string{cmd}); p != nil || err != nil {
-		return p, err
+	effects, _, err := a.Preview(ctx, msg)
+	if err != nil {
+		return nil, err
 	}
-	sha, err := a.Repo.Commit(ctx, msg, paths)
+	summary := map[string]any{"repository": candidate.Repository, "git_dir": candidate.GitDir, "selected_paths": paths, "ref": candidate.Ref, "parent": candidate.Parent,
+		"parents": candidate.Parents, "tree": candidate.Tree, "message": msg, "files": candidate.Files,
+		"branch": strings.TrimPrefix(candidate.Ref, "refs/heads/"), "jira_effects": effects}
+	cmd := "git commit -m " + shellQuote(msg)
+	if len(paths) > 0 {
+		var quoted []string
+		for _, path := range paths {
+			quoted = append(quoted, shellQuote(path))
+		}
+		args := strings.Join(quoted, " ")
+		cmd = "git add -- " + args + " && " + cmd + " -- " + args
+	}
+	commands := []string{cmd}
+	if prepare {
+		return a.prepareWithActions(policy.Local, "commit", nil, summary, commands)
+	}
+	if pending, err := a.gate(policy.Local, "commit", summary, token, false, commands); pending != nil || err != nil {
+		return pending, err
+	}
+	sha, err := a.Repo.CommitExact(ctx, candidate, msg, paths)
 	a.audit(policy.Local, "commit", summary, err)
 	if err != nil {
 		return nil, err
 	}
-	return CommitResult{Status: "committed", SHA: sha, Message: strings.SplitN(msg, "\n", 2)[0], Files: files}, nil
+	return CommitResult{Status: "committed", SHA: sha, Message: strings.SplitN(msg, "\n", 2)[0], Files: candidate.Files}, nil
 }
 
 // LintBranch validates every commit on the branch since it left the default branch.

@@ -114,8 +114,10 @@ func (c *Client) File(ctx context.Context, repo, ref, path, etag string) ([]byte
 
 // PR is a pull request summary.
 type PR struct {
+	NodeID  string `json:"node_id"`
 	Number  int    `json:"number"`
 	Title   string `json:"title"`
+	Body    string `json:"body"`
 	State   string `json:"state"`
 	Draft   bool   `json:"draft"`
 	HTMLURL string `json:"html_url"`
@@ -134,18 +136,33 @@ type PR struct {
 
 // PRForBranch returns the open PR whose head is branch, if any.
 func (c *Client) PRForBranch(ctx context.Context, repo, branch string) (*PR, error) {
+	prs, err := c.pullsForBranch(ctx, repo, branch)
+	if err != nil || len(prs) == 0 {
+		return nil, err
+	}
+	return &prs[0], nil
+}
+
+// UniquePRForBranch refuses to select one of multiple possible mutation targets.
+func (c *Client) UniquePRForBranch(ctx context.Context, repo, branch string) (*PR, error) {
+	prs, err := c.pullsForBranch(ctx, repo, branch)
+	if err != nil || len(prs) == 0 {
+		return nil, err
+	}
+	if len(prs) > 1 {
+		return nil, fmt.Errorf("multiple open pull requests use head %q in %s", branch, repo)
+	}
+	return &prs[0], nil
+}
+
+func (c *Client) pullsForBranch(ctx context.Context, repo, branch string) ([]PR, error) {
 	if !strings.Contains(branch, ":") {
 		owner, _, _ := strings.Cut(repo, "/")
 		branch = owner + ":" + branch
 	}
 	var prs []PR
-	if err := c.Do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls?state=open&head=%s", repo, url.QueryEscape(branch)), nil, &prs); err != nil {
-		return nil, err
-	}
-	if len(prs) == 0 {
-		return nil, nil
-	}
-	return &prs[0], nil
+	err := c.Do(ctx, "GET", fmt.Sprintf("/repos/%s/pulls?state=open&head=%s", repo, url.QueryEscape(branch)), nil, &prs)
+	return prs, err
 }
 
 // OpenPRs lists open PRs in a repo (first 100).
@@ -176,6 +193,29 @@ func (c *Client) CreatePR(ctx context.Context, repo, title, body, head, base str
 	in := map[string]any{"title": title, "body": body, "head": head, "base": base, "draft": draft}
 	err := c.Do(ctx, "POST", "/repos/"+repo+"/pulls", in, &pr)
 	return &pr, err
+}
+
+// MarkReady promotes one GitHub draft PR and checks the revision returned by GitHub.
+// The GraphQL mutation accepts a PR ID but no expected head revision.
+func (c *Client) MarkReady(ctx context.Context, nodeID, sha string) error {
+	const mutation = `mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){pullRequest{id isDraft headRefOid}}}`
+	var result struct {
+		MarkPullRequestReadyForReview struct {
+			PullRequest struct {
+				ID         string
+				IsDraft    bool
+				HeadRefOid string
+			}
+		}
+	}
+	if err := c.GraphQL(ctx, mutation, map[string]any{"id": nodeID}, &result); err != nil {
+		return err
+	}
+	pr := result.MarkPullRequestReadyForReview.PullRequest
+	if pr.ID != nodeID || pr.IsDraft || pr.HeadRefOid != sha {
+		return fmt.Errorf("GitHub ready-for-review result differed from the approved pull request or revision: %w", ErrWriteOutcomeUnknown)
+	}
+	return nil
 }
 
 // RequestReviewers requests reviews from users and teams.

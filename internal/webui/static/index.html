@@ -16,6 +16,7 @@
       <nav aria-label="Repository console">
         <a href="#overview" data-page="overview" aria-current="page"><span class="nav-icon ico-grid" aria-hidden="true"></span>Overview</a>
         <a href="#providers" data-page="providers"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
+        <a href="#autonomy" data-page="autonomy"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
         <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
         <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
       </nav>
@@ -72,6 +73,36 @@
               <p id="role-empty" class="muted">No provider data available.</p>
             </div>
           </div>
+        </section>
+        <section id="page-autonomy" aria-labelledby="autonomy-title" hidden>
+          <div class="page-heading"><h1 id="autonomy-title">Autonomy</h1><p>Choose which actions Devflow can take and how long an approval stays valid.</p></div>
+          <p id="autonomy-status" class="notice" role="status" hidden></p>
+          <form id="autonomy-form">
+            <fieldset id="autonomy-controls" disabled>
+              <div class="panel">
+                <div class="section-heading"><h2>Approval settings</h2><span id="autonomy-state" class="tag"></span></div>
+                <label class="scope-field">Editing<select id="autonomy-scope"><option value="personal">Personal preferences</option><option value="repository">Repository ceilings</option></select></label>
+                <p id="autonomy-scope-help" class="muted"></p>
+                <div class="autonomy-fields">
+                  <label>Local writes<select id="autonomy-local"></select></label>
+                  <label>Remote writes<select id="autonomy-remote"></select></label>
+                  <label>Approval window<input type="text" id="autonomy-window" placeholder="Inherit" aria-describedby="autonomy-window-help" autocomplete="off"></label>
+                </div>
+                <p id="autonomy-window-help" class="muted">Enter a duration from 1m to 1h. Clear the field to inherit.</p>
+                <p id="autonomy-reason" class="notice" role="status" hidden></p>
+              </div>
+              <div class="panel autonomy-actions">
+                <div class="settings-heading"><h2>Actions</h2><label class="search"><span class="sr-only">Find an action</span><input type="search" id="autonomy-filter" placeholder="Find an action"></label></div>
+                <p id="autonomy-rules-source" class="muted"></p>
+                <div id="autonomy-actions"></div>
+              </div>
+              <div class="actions autonomy-toolbar">
+                <button type="submit" id="save-autonomy" class="button primary" disabled>Save preferences</button>
+                <button type="button" id="reset-autonomy" class="button secondary" disabled>Discard form edits</button>
+                <a id="review-autonomy" href="#configuration" hidden>Review staged configuration</a>
+              </div>
+            </fieldset>
+          </form>
         </section>
         <section id="page-configuration" aria-labelledby="configuration-title" hidden>
           <div class="page-heading"><h1 id="configuration-title">Configuration</h1><p>Edit a repository file and preview its effect before publishing.</p></div>

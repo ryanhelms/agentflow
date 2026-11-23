@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/url"
@@ -205,29 +204,25 @@ func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkT
 	if err != nil {
 		return nil, err
 	}
-	operationID := issueOperation()
-	// Interactive PR creation needs its operation ID before approval because the
-	// ID determines the review branch. Carry it alongside the gate's signed
-	// token so a new process can reproduce the exact approved destination.
-	repo, repositoryTask := a.Cfg.Providers.TaskManagement.Settings.(*config.RepositoryTaskSettings)
-	interactiveReview := repositoryTask && repo.Publication != "push" && operationID == ""
-	if interactiveReview {
-		if token == "" {
-			operationID = rand.Text()
-		} else {
-			var ok bool
-			token, operationID, ok = strings.Cut(token, ".")
-			if !ok || operationID == "" || token == "" {
-				return nil, policy.ErrToken
-			}
-		}
-	}
 	// Omit a missing pin to preserve the approval payload and operation IDs
 	// for tasks created before TaskDraft carried a template.
 	approvedDraft := struct {
 		Template *provider.TaskTemplateRef `json:",omitempty"`
 		provider.TaskDraft
 	}{draft.Template, draft}
+	operationID := issueOperation()
+	repo, repositoryTask := a.Cfg.Providers.TaskManagement.Settings.(*config.RepositoryTaskSettings)
+	interactiveReview := repositoryTask && repo.Publication != "push" && operationID == ""
+	// Repository PRs name their review branch before the complete destination
+	// is known. All agents preparing this draft share that branch until the
+	// receipt closes, even when a different process executes the approved write.
+	proposal := map[string]any{"provider": instance, "task": approvedDraft, "repository": repo}
+	if interactiveReview {
+		operationID, err = a.Gate.ProposalNonce(policy.Remote, "ticket_create", proposal, token)
+		if err != nil {
+			return nil, err
+		}
+	}
 	summary := map[string]any{"provider": instance, "task": approvedDraft, "operation_id": operationID}
 	opts, err := issueWriteOptions("ticket_create", summary, token)
 	if err != nil {
@@ -237,8 +232,10 @@ func (a *App) createFileTask(ctx context.Context, scope, typ, title, body, linkT
 		return tasks.Create(ctx, draft, opts)
 	})
 	if p != nil || err != nil {
-		if interactiveReview && p != nil && p.ConfirmToken != "" {
-			p.ConfirmToken = p.ConfirmToken + "." + operationID
+		if interactiveReview && p != nil && p.Approval != nil {
+			if bindErr := a.Gate.BindProposal(policy.Remote, "ticket_create", proposal, p.Approval.OperationID, operationID); bindErr != nil {
+				return nil, bindErr
+			}
 		}
 		return p, err
 	}

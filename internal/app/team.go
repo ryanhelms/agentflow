@@ -189,7 +189,7 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 	var approval any = summary
 	writes := make([]*jiraWrite, 0, len(keys))
 	for _, key := range keys {
-		write, err := a.prepareJiraComment(ctx, site, refs[key], "End of day: "+notes[key]+viaNote(a))
+		write, err := a.prepareJiraComment(ctx, site, refs[key], "End of day: "+notes[key]+viaNote(a, "eod"))
 		if err != nil {
 			return nil, err
 		}
@@ -228,7 +228,7 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 	}
 	posted := map[string]bool{}
 	for _, k := range keys {
-		_, err := j.Comment(ctx, refs[k], "End of day: "+notes[k]+viaNote(a), provider.WriteOptions{})
+		_, err := j.Comment(ctx, refs[k], "End of day: "+notes[k]+viaNote(a, "eod"), provider.WriteOptions{})
 		a.audit(policy.Remote, "eod", map[string]string{"site": site, "key": k, "comment": notes[k]}, err)
 		posted[k] = err == nil
 	}
@@ -305,7 +305,7 @@ func (a *App) ADRDraft(ctx context.Context, title, ctxText, decision, consequenc
 %s
 `, n, title, time.Now().Format("2006-01-02"), orTBD(key), orTBD(ctxText), orTBD(decision), orTBD(consequences))
 	rel, _ := filepath.Rel(a.Repo.Dir, path)
-	summary := map[string]string{"path": rel, "title": title}
+	summary := map[string]string{"worktree": a.Repo.Dir, "path": rel, "title": title, "document": body}
 	if p, err := a.gate(policy.Local, "adr_draft", summary, token, false, nil); p != nil || err != nil {
 		return p, err
 	}
