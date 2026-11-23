@@ -444,7 +444,11 @@ console shows the active provider for each role, where its settings came from,
 and how a proposed edit changes the effective configuration. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
-questions for this worktree. From a connected chat, ask “Show which rule governs
+questions for this worktree. The console uses the Nscale design system. The
+**Appearance** control follows your system theme or selects light or dark mode.
+[Repository console guide](docs/repository-console.md)
+
+From a connected chat, ask “Show which rule governs
 local commits here” or “Set my local commits to automatic and show me the change
 before saving.” You can also edit provider settings, repository ceilings and the
 other editable files in the console inventory. Devflow returns the proposed

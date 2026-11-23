@@ -126,7 +126,10 @@ function showPage(focus = false) {
     if (link.dataset.page === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
-  if (focus) $("main").focus();
+  if (focus) {
+    $("main").focus({preventScroll: true});
+    window.scrollTo(0, 0);
+  }
 }
 
 function go(page) {
@@ -138,6 +141,10 @@ window.addEventListener("hashchange", () => showPage(true));
 function renderOverview() {
   const name = state.repository || state.root?.split(/[\\/]/).pop() || "Local checkout";
   $("top-repo").textContent = name;
+  const branch = $("context-branch");
+  branch.textContent = state.branch || (state.head ? state.head.slice(0, 12) : "");
+  branch.hidden = !branch.textContent;
+  branch.title = state.branch || "Detached HEAD";
   $("checkout-name").textContent = name;
   $("root-path").textContent = state.root || "Worktree path unavailable";
   $("rail-version").textContent = state.version || "";
@@ -147,7 +154,7 @@ function renderOverview() {
   $("working-state").classList.toggle("changed", dirty);
   const metadata = $("repo-metadata");
   metadata.replaceChildren();
-  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["CLI version",state.version], ["Caller pin",state.pin]]) {
+  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["Running CLI",state.version], ["Workflow pin",state.pin]]) {
     const group = element("div");
     group.append(element("dt",label),element("dd",value || "Unavailable"));
     metadata.append(group);
@@ -533,6 +540,7 @@ function renderProviders() {
   const error = staged && !roles().length ? "Preview your edited repository configuration to inspect its provider settings." : problems();
   notice("provider-error",error,true);
   const available = roles();
+  $("role-count").textContent = String(available.length);
   if (!role()) roleID = available[0]?.role || "";
   const items = $("roles");
   items.replaceChildren();
@@ -541,7 +549,10 @@ function renderProviders() {
     button.type = "button";
     button.setAttribute("aria-pressed",String(item.role === roleID));
     button.append(element("span",item.selected || "Unconfigured"));
-    button.addEventListener("click",() => chooseRole(item.role));
+    button.addEventListener("click", () => {
+      chooseRole(item.role);
+      items.querySelector('[aria-pressed="true"]')?.focus({preventScroll: true});
+    });
     items.append(button);
   }
   const active = role();
