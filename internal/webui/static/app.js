@@ -576,12 +576,14 @@ async function loadState() {
 $("refresh").addEventListener("click", loadState);
 
 function settingsFrom(value = {}) {
-  return { local: value.local || "", remote: value.remote || "", window: value.window || "",
+  const settings = { local: value.local || "", remote: value.remote || "", window: value.window || "",
     actions: { ...value.actions } };
+  if (typeof value.allow_auto_pr_publication === "boolean") settings.allow_auto_pr_publication = value.allow_auto_pr_publication;
+  return settings;
 }
 
 function sameSettings(left, right) {
-  return ["local","remote","window"].every((key) => left[key] === right[key]) &&
+  return ["local","remote","window","allow_auto_pr_publication"].every((key) => left[key] === right[key]) &&
     Object.keys(left.actions).length === Object.keys(right.actions).length &&
     Object.keys(left.actions).every((action) => left.actions[action] === right.actions[action]);
 }
@@ -663,13 +665,15 @@ function renderAutonomyActions() {
     detail.append(element("h3", title), element("code", item.action, "key"));
     for (const rule of item.rules || []) {
       const effective = element("div", "", "effective");
-      const part = rule.action && rule.action !== item.action ? rule.action + " · " : "";
+      const part = item.includes?.includes(rule.action) ? "Included " + rule.action + " · " : "";
       effective.append(element("strong", part + rule.class + " · " + (autonomyLevels[rule.level] || rule.level)),
         element("small", "Rule " + rule.source + " · review window " + rule.approval_window + " (" + rule.window_source + ")"));
       detail.append(effective);
     }
-    if (item.rules?.some((rule) => rule.action && rule.action !== item.action)) {
-      detail.append(element("p", "Publication also requires a branch push. The more restrictive rule applies."));
+    if (item.includes?.includes("push")) {
+      detail.append(element("p", "The more restrictive of the PR and included push rules applies to publication."));
+    } else if (item.action === "push") {
+      detail.append(element("p", "This effective rule is for a standalone push. An explicit push preference or ceiling also applies when opening a pull request."));
     }
     if (item.confirmation) detail.append(element("p", (item.mandatory ? "Required review. " : "Provider rule. ") + item.confirmation));
     const label = element("label", scope === "personal" ? "Personal preference" : "Repository ceiling");
@@ -696,11 +700,16 @@ function renderAutonomy() {
     ? "These preferences apply across your checkouts. An action preference overrides your class preference within repository ceilings."
     : "These ceilings limit everyone in this checkout. Repository changes go through Configuration for review and publication.";
   $("autonomy-rules-source").textContent = drafts.has(repositoryFile)
-    ? "Effective rules use saved personal preferences and the staged repository configuration."
+    ? "This preview uses saved personal preferences and the staged repository configuration."
     : "Effective rules use saved personal preferences and the repository configuration on disk.";
+  if (autonomyView.repository?.allow_auto_pr_publication) {
+    $("autonomy-rules-source").textContent += " The pull request’s target branch must also enable automatic publication.";
+  }
   const values = layerForm().settings;
   for (const field of ["local","remote"]) fillAutonomyLevels($("autonomy-" + field), values[field]);
   $("autonomy-window").value = values.window;
+  $("autonomy-publication-policy").hidden = personal;
+  $("autonomy-publication").checked = values.allow_auto_pr_publication === true;
   renderAutonomyActions();
 }
 
@@ -727,6 +736,7 @@ async function loadAutonomy() {
 }
 
 $("autonomy-scope").addEventListener("change", renderAutonomy);
+$("autonomy-publication").addEventListener("change", (event) => recordAutonomyEdit("allow_auto_pr_publication", event.target.checked));
 $("autonomy-filter").addEventListener("input", renderAutonomyActions);
 $("autonomy-filter").addEventListener("keydown", (event) => {
   if (event.key === "Enter") event.preventDefault();

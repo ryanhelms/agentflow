@@ -17,10 +17,17 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 tmp="$(mktemp -d)"
+jira_pid=
+cleanup() {
+  if [ -n "$jira_pid" ]; then
+    kill "$jira_pid" 2>/dev/null || true
+    wait "$jira_pid" 2>/dev/null || true
+  fi
+  if [ "${KEEP:-}" != 1 ]; then rm -rf "$tmp"; fi
+}
+trap cleanup EXIT
 if [ "${KEEP:-}" = 1 ]; then
   echo "temp dir: $tmp"
-else
-  trap 'rm -rf "$tmp"' EXIT
 fi
 
 pass=0
@@ -44,6 +51,22 @@ ln -sfn dev "$XDG_CACHE_HOME/devflow/current"
 # Keep incidental CLI calls in the test on the fixture binary even if the
 # developer already has a different Devflow release on PATH.
 export PATH="$XDG_CACHE_HOME/devflow/current:$PATH"
+
+# Supply a real issue to the hook without consulting the developer's Jira account.
+(cd "$root" && go build -o "$tmp/jira-fixture" ./scripts/testdata/jira)
+mkfifo "$tmp/jira-url"
+"$tmp/jira-fixture" >"$tmp/jira-url" &
+jira_pid=$!
+IFS= read -r -t 10 jira_url <"$tmp/jira-url"
+mkdir -p "$DEVFLOW_HOME/providers"
+cat >"$DEVFLOW_HOME/providers/jira.yml" <<YAML
+version: 1
+providers:
+  jira:
+    task_management:
+      settings: {site: "$jira_url"}
+YAML
+export JIRA_USER=fixture@example.invalid JIRA_TOKEN=e2e-fixture
 
 repo="$tmp/repo"
 mkdir -p "$repo"
@@ -76,7 +99,7 @@ check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:devfl
 check "25 devflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_devflow_devflow__"))] | length >= 25' <<<"$init"
 check "21 skills" jq -e '[.slash_commands[] | select(startswith("devflow:"))] | length >= 21' <<<"$init"
 check "manager skill available" jq -e '.slash_commands | index("devflow:manager") != null' <<<"$init"
-check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("devflow · PLAT-123"))' "$tmp/1.jsonl"
+check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("devflow · PLAT-123") and contains("Fixture GPU quota task"))' "$tmp/1.jsonl"
 
 echo "2. /devflow:commit"
 run_claude "$tmp/2.jsonl" "/devflow:commit — I approve every devflow confirmation in advance: when a tool returns needs_confirmation, call it again with the confirm_token." "mcp__plugin_devflow_devflow"

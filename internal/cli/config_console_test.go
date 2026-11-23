@@ -164,9 +164,20 @@ func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 			Content  string
 			Autonomy consolecfg.ApprovalView
 		}
-		call(t, query, map[string]any{"operation": "stage_autonomy", "base_digest": f.Digest, "content": composed.Content, "patch": map[string]any{"remote": "confirm"}}, "", &staged)
+		call(t, query, map[string]any{"operation": "stage_autonomy", "base_digest": f.Digest, "content": composed.Content, "patch": map[string]any{"remote": "confirm", "allow_auto_pr_publication": true}}, "", &staged)
 		if !strings.Contains(staged.Content, "limit: 25") || staged.Autonomy.Repository.Remote != config.Confirm {
 			t.Fatal("staging lost the provider edit or repository ceiling")
+		}
+		if enabled := staged.Autonomy.Repository.AllowAutoPRPublication; enabled == nil || !*enabled {
+			t.Fatal("repository PR publication policy missing from MCP preview")
+		}
+		if staged.Autonomy.Personal.AllowAutoPRPublication != nil {
+			t.Fatal("personal autonomy includes repository-only publication policy")
+		}
+		call(t, query, map[string]any{"operation": "preview_personal", "user_revision": staged.Autonomy.UserRevision, "patch": map[string]any{"allow_auto_pr_publication": false}}, "repository policy setting", nil)
+		command(t, "stage_autonomy", map[string]any{"base_digest": f.Digest, "content": staged.Content, "patch": map[string]any{"allow_auto_pr_publication": false}}, &staged)
+		if !strings.Contains(staged.Content, "allow_auto_pr_publication: false") || !strings.Contains(staged.Content, "limit: 25") || staged.Autonomy.Repository.Remote != config.Confirm {
+			t.Fatal("CLI failed to disable PR publication in the same draft")
 		}
 		params := map[string]any{"path": f.Path, "base_digest": f.Digest, "content": staged.Content, "title": "chore: adjust task search settings"}
 		var preview struct {

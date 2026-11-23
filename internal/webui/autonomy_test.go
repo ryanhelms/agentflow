@@ -28,6 +28,12 @@ func TestPersonalAutonomySave(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	in := autonomyEdit{Scope: "personal", UserRevision: v.UserRevision, Settings: &consolecfg.ApprovalSettings{Actions: map[string]config.Level{"console.reply": config.Suggest, "commit": config.Auto}, Window: "15m"}}
+	optIn := true
+	in.Settings.AllowAutoPRPublication = &optIn
+	if w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in); w.Code != 422 || !strings.Contains(w.Body.String(), "repository policy setting") {
+		t.Fatalf("personal publication policy: %d %s", w.Code, w.Body.String())
+	}
+	in.Settings.AllowAutoPRPublication = nil
 	w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in)
 	if w.Code != 200 || bytes.Contains(w.Body.Bytes(), []byte("private-user-data")) {
 		t.Fatal(w.Code, w.Body.String())
@@ -57,6 +63,8 @@ func TestRepositoryAutonomyStagesAgainstReviewedRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	in := autonomyEdit{Scope: "repository", Base: hash(src), Content: string(src) + "# existing staged change\n", Settings: &consolecfg.ApprovalSettings{Actions: map[string]config.Level{"push": config.Confirm}, Window: "10m"}}
+	optIn := true
+	in.Settings.AllowAutoPRPublication = &optIn
 	w := request(t, s, "POST", "/api/autonomy", s.origin, "session", in)
 	var result struct {
 		Content  string
@@ -64,6 +72,9 @@ func TestRepositoryAutonomyStagesAgainstReviewedRevision(t *testing.T) {
 	}
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || !strings.Contains(result.Content, "existing staged change") || result.Autonomy.Repository.Actions["push"] != config.Confirm {
 		t.Fatal(w.Code, w.Body.String())
+	}
+	if enabled := result.Autonomy.Repository.AllowAutoPRPublication; enabled == nil || !*enabled || !strings.Contains(result.Content, "allow_auto_pr_publication: true") {
+		t.Fatal("missing staged repository opt-in", result.Content)
 	}
 	onDisk, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(onDisk, src) {

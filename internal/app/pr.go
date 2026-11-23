@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nscaledev/devflow/internal/commit"
+	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/flowmap"
 	"github.com/nscaledev/devflow/internal/gh"
 	"github.com/nscaledev/devflow/internal/policy"
@@ -230,11 +231,33 @@ func (a *App) prPublication(ctx context.Context, in PROpenInput, token string, p
 		action = "pr_open_draft"
 	}
 	related := []string{"push"}
-	if prepare {
-		return a.prepareWithActions(policy.Remote, action, related, summary, commands)
+	local, err := a.currentPublicationConfig()
+	if err != nil {
+		return nil, err
 	}
-	if p, err := a.gateWithActions(policy.Remote, action, related, summary, token, false, commands); p != nil || err != nil {
-		return p, err
+	gate := a.Gate
+	if local.Policy.AllowAutoPRPublication || a.Cfg.Policy.AllowAutoPRPublication {
+		target := remotes.Target.Name
+		if len(in.Reviewers) != 0 || len(in.Labels) != 0 {
+			// Requesting reviewers and applying labels are additional remote writes.
+			target = ""
+		}
+		cfg := a.reviewedPRPolicy(ctx, target, base, local)
+		if policy.IsProtected(branch, cfg.Policy.ProtectedBranches) {
+			return nil, errors.New("a feature branch is required for publication")
+		}
+		user, err := config.LoadUser()
+		if err != nil {
+			return nil, errors.New("cannot read personal approval settings")
+		}
+		gate = gate.WithConfiguration(a.Repo.GitDir(ctx), user, cfg)
+	}
+	decision, err := gate.CheckActionsUntil(policy.Remote, action, related, summary, token, false, prepare, time.Time{})
+	if err != nil {
+		return nil, err
+	}
+	if pending := PendingDecision(gate, decision, summary, commands); pending != nil {
+		return pending, nil
 	}
 	c, err := a.GitHub(ctx)
 	if err != nil {

@@ -38,7 +38,7 @@ func runPolicy(ctx context.Context, args []string) error {
 	}
 	switch cmd {
 	case "explain":
-		return writeResult(a.PolicyExplain(id))
+		return writeResult(a.PolicyExplain(ctx, id))
 	case "status":
 		if id == "" {
 			return errors.New("usage: devflow policy status ID")

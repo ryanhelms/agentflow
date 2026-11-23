@@ -170,7 +170,7 @@ func TestPersonalApprovalUsesCurrentPolicyAndPrivateErrors(t *testing.T) {
 	}
 }
 func TestStageRepositoryPatchPreservesStagedDraft(t *testing.T) {
-	const original = "devflow: 1\npolicy: {max_autonomy: {actions: {push: confirm, commit: suggest}}}\n"
+	const original = "devflow: 1\npolicy: {allow_auto_pr_publication: true, max_autonomy: {actions: {push: confirm, commit: suggest}}}\n"
 	a, _ := autonomyFixture(t, original, "")
 	draft := original + "# staged edit\n"
 	base := hash([]byte(original))
@@ -181,6 +181,9 @@ func TestStageRepositoryPatchPreservesStagedDraft(t *testing.T) {
 	}
 	if !strings.Contains(staged.Content, "staged edit") || staged.Autonomy.Repository.Actions["push"] != config.Confirm || len(staged.Autonomy.Repository.Actions) != 2 {
 		t.Fatalf("lost staged values: %s", staged.Content)
+	}
+	if !strings.Contains(staged.Content, "allow_auto_pr_publication: true") {
+		t.Fatal("an unrelated action edit removed the publication policy")
 	}
 	data, _ := os.ReadFile(filepath.Join(a.Repo.Dir, consolecfg.MainFile))
 	if string(data) != original {

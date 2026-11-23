@@ -132,6 +132,10 @@
                   <label>Approval window<input type="text" id="autonomy-window" placeholder="Inherit" aria-describedby="autonomy-window-help" autocomplete="off"></label>
                 </div>
                 <p id="autonomy-window-help" class="muted">Enter a duration from 1m to 1h. Clear the field to inherit.</p>
+                <div id="autonomy-publication-policy" hidden>
+                  <label><input type="checkbox" id="autonomy-publication" aria-describedby="autonomy-publication-help">Allow automatic PR publication</label>
+                  <p id="autonomy-publication-help" class="muted">Allow a draft or ready PR and its branch push to run automatically under a remote ceiling of “Ask for confirmation”. Personal preferences and action ceilings must allow both actions. Adding reviewers or labels uses the usual remote ceiling.</p>
+                </div>
                 <p id="autonomy-reason" class="notice" role="status" hidden></p>
               </div>
               <div class="panel autonomy-actions">

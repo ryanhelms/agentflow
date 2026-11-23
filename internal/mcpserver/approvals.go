@@ -18,7 +18,7 @@ func (s *Server) registerApprovalTools() {
 		ConfirmToken string `json:"confirm_token" jsonschema:"original review token, only after the user agrees to the exact operation"`
 	}
 	add(s, "devflow_policy_explain", "Explain the personal settings, repository ceilings, review requirements and window for an action.", readOnly,
-		func(_ context.Context, in explainIn) (any, error) { return s.app.PolicyExplain(in.Action) })
+		func(ctx context.Context, in explainIn) (any, error) { return s.app.PolicyExplain(ctx, in.Action) })
 	add(s, "devflow_approval_status", "Read shared approval state, prompt owner and expiry without exposing its confirmation token.", readOnly,
 		func(_ context.Context, in statusIn) (any, error) { return s.app.ApprovalStatus(in.OperationID) })
 	add(s, "devflow_approval_approve", "After explicit user approval, authorize one worker to resume the reviewed operation. This only records the decision.", local,

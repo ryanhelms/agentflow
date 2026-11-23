@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,6 +20,10 @@ type ActionPolicy struct {
 }
 
 func ExplainPolicy(user *config.User, repo *config.Repo, action string) ([]ActionPolicy, error) {
+	return explainPolicy(user, repo, user, repo, action)
+}
+
+func explainPolicy(user *config.User, repo *config.Repo, publicationUser *config.User, publicationRepo *config.Repo, action string) ([]ActionPolicy, error) {
 	names := config.AutonomyActions()
 	if action != "" {
 		if !config.ValidAutonomyAction(action) {
@@ -29,22 +35,41 @@ func ExplainPolicy(user *config.User, repo *config.Repo, action string) ([]Actio
 	for _, name := range names {
 		spec, _ := config.DescribeAutonomyAction(name)
 		item := ActionPolicy{Action: name, AutonomyAction: spec}
+		actionUser, actionRepo := user, repo
 		if name == "pr_open" || name == "pr_open_draft" {
 			item.Includes = []string{"push"}
+			actionUser, actionRepo = publicationUser, publicationRepo
 		}
 		for _, class := range spec.Classes {
-			item.Rules = append(item.Rules, config.ResolveAutonomy(user, repo, class, name, spec.Mandatory))
-			for _, related := range item.Includes {
-				item.Rules = append(item.Rules, config.ResolveAutonomy(user, repo, class, related, false))
-			}
+			item.Rules = append(item.Rules, config.ResolveOperationAutonomy(actionUser, actionRepo, class, name, item.Includes, spec.Mandatory)...)
 		}
 		result = append(result, item)
 	}
 	return result, nil
 }
 
-func (a *App) PolicyExplain(action string) ([]ActionPolicy, error) {
-	return ExplainPolicy(a.User, a.Cfg, action)
+func (a *App) PolicyExplain(ctx context.Context, action string) ([]ActionPolicy, error) {
+	if action != "" && action != "pr_open" && action != "pr_open_draft" {
+		return ExplainPolicy(a.User, a.Cfg, action)
+	}
+	local, err := a.currentPublicationConfig()
+	if err != nil {
+		return nil, err
+	}
+	if !a.Cfg.Policy.AllowAutoPRPublication && !local.Policy.AllowAutoPRPublication {
+		return ExplainPolicy(a.User, a.Cfg, action)
+	}
+	var target, base string
+	if remotes, err := a.githubRemotes(ctx); err == nil {
+		target = remotes.Target.Name
+		base = a.publicationBase(ctx, target)
+	}
+	reviewed := a.reviewedPRPolicy(ctx, target, base, local)
+	publicationUser, err := config.LoadUser()
+	if err != nil {
+		return nil, errors.New("cannot read personal approval settings")
+	}
+	return explainPolicy(a.User, a.Cfg, publicationUser, reviewed, action)
 }
 
 func (a *App) gateWithActions(class policy.Class, primary string, related []string, summary any, token string, force bool, commands []string, bounds ...time.Time) (*Pending, error) {
