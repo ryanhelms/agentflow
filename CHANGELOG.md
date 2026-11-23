@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.46.1](https://github.com/nscaledev/devflow/compare/v0.46.0...v0.46.1) - 2026-11-23
+
+### Fixes
+
+- **setup:** prepare provider clis for standalone reads (#110) ([680cfca](https://github.com/nscaledev/devflow/commit/680cfca8f21bdf0445e89bbb9aed92006af0f254))
+
 ## [0.46.0](https://github.com/nscaledev/devflow/compare/v0.45.0...v0.46.0) - 2026-11-23
 
 ### Features
