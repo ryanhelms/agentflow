@@ -168,7 +168,7 @@ func runComment(ctx context.Context, args []string) error {
 		return err
 	}
 	if term.IsTerminal(int(os.Stdin.Fd())) {
-		ctx = app.WithJiraCommentCLI(ctx)
+		ctx = app.WithJiraWriteCLI(ctx)
 	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.Comment(ctx, key, text, tok) })
 }

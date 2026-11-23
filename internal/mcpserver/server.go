@@ -298,8 +298,11 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_scope_check", "Find changes and new TODOs that look outside the current ticket.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.ScopeCheck(ctx) })
-	add(s, "devflow_ticket_create", "Create a linked task with confirmation. Repository publication can return a pending review PR.", remote,
+	add(s, "devflow_ticket_create", "Create a task with confirmation and an optional related task. Repository publication can return a pending review PR.", remote,
 		func(ctx context.Context, in ticketIn) (any, error) {
+			if s.interactiveClient() {
+				ctx = app.WithJiraWriteCLI(ctx)
+			}
 			return a.CreateTicketWithTemplate(ctx, in.Project, in.Type, in.Summary, in.Description, in.LinkTo, tasktemplate.Ref{Name: in.Template, Revision: in.TemplateRevision}, in.ConfirmToken)
 		})
 	add(s, "devflow_transition", "Move a task by configured event or verb. Use dry_run to preview. A pending_review result requires a PR merge.", remote,
@@ -309,7 +312,7 @@ func (s *Server) register() {
 	add(s, "devflow_comment", "Comment on a task when its provider supports comments.", remote,
 		func(ctx context.Context, in commentIn) (any, error) {
 			if s.interactiveClient() {
-				ctx = app.WithJiraCommentCLI(ctx)
+				ctx = app.WithJiraWriteCLI(ctx)
 			}
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})

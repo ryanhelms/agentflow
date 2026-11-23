@@ -116,6 +116,15 @@ func TestDesktopJiraCreate(t *testing.T) {
 	if _, err := create(token); !errors.Is(err, policy.ErrToken) || writes != 2 {
 		t.Fatal("replayed create with uncertain result", err, writes)
 	}
+	server.RemoveTools(createTool)
+	call, err := nativemap.JiraCreate(site, provider.TaskDraft{Scope: "DEV", Type: "Task", Title: "Fixture", Labels: []string{"devflow"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Prepare(ctx, call); !errors.Is(err, native.ErrUnavailable) {
+		t.Fatal("completed catalog omitted create", err)
+	}
+
 }
 
 func TestDesktopJiraCreateAllowlist(t *testing.T) {

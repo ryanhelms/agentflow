@@ -40,6 +40,9 @@ func runTask(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		ctx = app.WithJiraWriteCLI(ctx)
+	}
 	create := func(token string) (any, error) {
 		return a.CreateTicketWithTemplate(ctx, *project, *typ, *title, *description, *link, pin, token)
 	}

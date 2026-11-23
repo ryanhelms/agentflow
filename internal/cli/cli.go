@@ -108,8 +108,8 @@ Work
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop COMMAND
-                                 use the enrolled Jira connection for comment, start or transition
-                                 comments can fall back to the signed-in Teamwork Graph CLI
+                                 use the enrolled Jira connection for comment, start, transition or task create
+                                 comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -124,15 +124,19 @@ func Main(args []string) int {
 			fmt.Fprintln(os.Stderr, "usage: devflow --native-client NAME COMMAND")
 			return 1
 		}
-		writer, err := nativeWriter(args[1], args[2])
+		command := args[2]
+		if command == "task" && len(args) > 3 && args[3] == "create" {
+			command = "task create"
+		}
+		writer, err := nativeWriter(args[1], command)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "devflow:", err)
 			return 1
 		}
 		defer writer.Close()
 		ctx = native.WithWriteHost(ctx, writer)
-		if args[2] == "comment" {
-			ctx = app.WithJiraCommentCLI(ctx)
+		if command == "comment" || command == "task create" {
+			ctx = app.WithJiraWriteCLI(ctx)
 		}
 		args = args[2:]
 	}
@@ -171,8 +175,8 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" && command != "start" && command != "transition" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start or transition)")
+		if command != "comment" && command != "start" && command != "transition" && command != "task create" {
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition or task create)")
 		}
 		return rovohost.NewWriter(), nil
 	default:

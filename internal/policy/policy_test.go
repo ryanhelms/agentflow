@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/nscaledev/devflow/internal/config"
@@ -18,6 +20,11 @@ func TestGateConfirmFlow(t *testing.T) {
 	}
 	if _, err := g.Check(Local, "commit", map[string]any{"message": "changed"}, d.Token, false); err == nil {
 		t.Fatal("token accepted for a different payload")
+	}
+	for _, malformed := range []string{strings.TrimPrefix(d.Token, "cf_"), d.Token + "\n"} {
+		if _, err := g.Check(Local, "commit", payload, malformed, false); !errors.Is(err, ErrToken) {
+			t.Fatal("accepted noncanonical confirmation token", err)
+		}
 	}
 	ok, err := g.Check(Local, "commit", payload, d.Token, false)
 	if err != nil || ok.Outcome != Proceed {
