@@ -329,6 +329,13 @@ qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
 read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
 covers runner credentials, event replay, release outputs and pin rollback.
 
+The Devflow repository rollout for [#88](https://github.com/nscaledev/devflow/issues/88)
+adds read-only previews from the PR base configuration. Its merge writer requires
+one qualified issue matching `DEVFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
+to pause writes, or set `DEVFLOW_ENABLED=false` to pause both jobs. Activation
+awaits the signed compatible reader and the live OKF bundle cutover.
+[Repository pilot](docs/providers.md#devflow-repository-pilot)
+
 Use `devflow secops triage` to preview tasks from configured GitHub findings
 and fixture incidents. Apply a source reference to create a linked task using
 the selected task provider's template and approval policy. The reusable

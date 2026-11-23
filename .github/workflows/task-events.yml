@@ -3,6 +3,10 @@ name: task-events
 
 on:
   workflow_call:
+    outputs:
+      merged-issue:
+        description: Single linked issue that a default-branch merge would close or finds already closed
+        value: ${{ jobs.transitions.outputs.merged-issue }}
 
 permissions:
   contents: read
@@ -12,6 +16,8 @@ jobs:
   transitions:
     if: vars.DEVFLOW_ENABLED != 'false' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    outputs:
+      merged-issue: ${{ steps.preview.outputs.merged-issue }}
     concurrency:
       group: devflow-task-events-${{ github.repository_id }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false
@@ -25,8 +31,18 @@ jobs:
         with:
           binary: true
       - name: Preview linked task transitions
+        id: preview
         env:
           GH_TOKEN: ${{ github.token }}
           DEVFLOW_HOME: ${{ runner.temp }}/devflow-task-events
           DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: devflow transition --github-event --dry-run
+        shell: bash
+        run: |
+          devflow transition --github-event --dry-run | tee "$RUNNER_TEMP/task-preview.json"
+          jq -r --arg repo "$GITHUB_REPOSITORY" '
+            select((.effects | length) == 1 and (.effects[0].to == "closed" or .effects[0].from == "closed"))
+            | .plan | select(.lifecycle == "pr.merged" and (.transitions | length) == 1)
+            | .transitions[0].task
+            | select(.instance == "github-issues" and .scope == ($repo | ascii_downcase))
+            | .id | select(test("\\A[1-9][0-9]*\\z")) | "merged-issue=\(.)"
+          ' "$RUNNER_TEMP/task-preview.json" >> "$GITHUB_OUTPUT"
