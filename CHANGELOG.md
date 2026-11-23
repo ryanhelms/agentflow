@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.42.0](https://github.com/nscaledev/devflow/compare/v0.41.0...v0.42.0) - 2026-11-23
+
+### Features
+
+- **setup:** offer missing provider mcp connections (#97) ([341a5d7](https://github.com/nscaledev/devflow/commit/341a5d70051d5403fa6be34985f71a9abae504dd))
+
 ## [0.41.0](https://github.com/nscaledev/devflow/compare/v0.40.0...v0.41.0) - 2026-11-23
 
 ### Features
