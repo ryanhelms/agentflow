@@ -54,7 +54,7 @@ Setup
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
-  setup login --provider NAME [--client NAME] [--server NAME] [--register]
+  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]
                                  start sign-in through a provider CLI or MCP client
                                  use --client devflow for the Jira or Confluence pilot
   setup logout --provider NAME --client devflow
