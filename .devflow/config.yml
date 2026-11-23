@@ -10,3 +10,22 @@ commit:
   # Jira keys are optional here until devflow work has its own Jira project. Remove this
   # line to require type(KEY-123): ... like every devflow-managed repo.
   require_key: false
+
+task_management:
+  provider: github-issues
+  settings:
+    repository: nscaledev/devflow
+    transitions:
+      pr.merged: closed
+      "#done": none
+  templates:
+    catalog: .devflow/task-templates.json
+    default:
+      name: engineering-task
+      revision: "1"
+
+knowledge_base:
+  provider: repository
+  settings:
+    directory: docs/knowledge
+    publication: pull-request
