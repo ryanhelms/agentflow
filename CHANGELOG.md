@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.51.0](https://github.com/nscaledev/devflow/compare/v0.50.0...v0.51.0) - 2026-11-23
+
+### Features
+
+- add type-aware configuration editors (#100) ([6e114ea](https://github.com/nscaledev/devflow/commit/6e114ea049bfb5ce1816d2333a5d320721a63c47))
+
 ## [0.50.0](https://github.com/nscaledev/devflow/compare/v0.49.0...v0.50.0) - 2026-11-23
 
 ### Features
