@@ -45,6 +45,7 @@ var mcpToCLI = map[string]string{
 	"devflow_ship_status":      "status",
 	"devflow_standup":          "standup",
 	"devflow_eod_post":         "eod post",
+	"devflow_docs_get":         "docs get",
 	"devflow_docs_search":      "docs search",
 	"devflow_docs_publish":     "docs publish",
 	"devflow_adr_draft":        "adr new",

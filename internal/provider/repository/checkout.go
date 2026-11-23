@@ -132,9 +132,15 @@ func (c checkout) entries(ctx context.Context, tree string, recursive bool, name
 	return entries, nil
 }
 
+type originalBlob struct {
+	mode   string
+	digest [sha256.Size]byte
+}
+
 type snapshot struct {
-	dir   string
-	modes map[string]string
+	dir       string
+	originals map[string]originalBlob
+	rootNames map[string]bool
 }
 
 func (c checkout) load(ctx context.Context, base, directory string) (snapshot, error) {
@@ -142,7 +148,7 @@ func (c checkout) load(ctx context.Context, base, directory string) (snapshot, e
 	if err != nil {
 		return snapshot{}, err
 	}
-	s := snapshot{dir, make(map[string]string)}
+	s := snapshot{dir: dir, originals: make(map[string]originalBlob)}
 	tree := base
 	for _, part := range strings.Split(directory, "/") {
 		if part == "." {
@@ -192,11 +198,17 @@ func (c checkout) load(ctx context.Context, base, directory string) (snapshot, e
 		if err := errors.Join(err, f.Close()); err != nil {
 			return snapshot{}, err
 		}
-		// Only root files are eligible v1 write destinations. Never match a
-		// nested blob merely because it has the same bytes as the write.
-		if !strings.Contains(e.name, "/") {
-			s.modes[e.name] = e.mode
-		}
+		s.originals[e.name] = originalBlob{mode: e.mode, digest: sha256.Sum256([]byte(body))}
+	}
+	// ReadDir may normalize Git's spelling. Track the host names too so
+	// an existing blob can never be mistaken for a newly created root file.
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return snapshot{}, err
+	}
+	s.rootNames = make(map[string]bool, len(files))
+	for _, file := range files {
+		s.rootNames[file.Name()] = true
 	}
 	return s, nil
 }
@@ -231,11 +243,11 @@ func (s snapshot) changedFile(revision string) (string, []byte, error) {
 	// Use existing Git spellings first. A filesystem may return a different
 	// Unicode normalization from ReadDir for the very same file.
 	var names []string
-	for name := range s.modes {
+	for name := range s.originals {
 		names = append(names, name)
 	}
 	for _, f := range files {
-		if _, known := s.modes[f.Name()]; !known && f.Type().IsRegular() && strings.EqualFold(path.Ext(f.Name()), ".md") {
+		if !s.rootNames[f.Name()] && f.Type().IsRegular() && strings.EqualFold(path.Ext(f.Name()), ".md") {
 			names = append(names, f.Name())
 		}
 	}
@@ -244,7 +256,11 @@ func (s snapshot) changedFile(revision string) (string, []byte, error) {
 		if err != nil {
 			return "", nil, err
 		}
-		if fmt.Sprintf("%x", sha256.Sum256(data)) == revision {
+		sum := sha256.Sum256(data)
+		if original, ok := s.originals[name]; ok && sum == original.digest {
+			continue
+		}
+		if fmt.Sprintf("%x", sum) == revision {
 			return name, data, nil
 		}
 	}
@@ -259,7 +275,7 @@ func (c checkout) commit(ctx context.Context, base, directory, operation string,
 	repoPath := path.Join(directory, name)
 	// The snapshot omits symlinks and gitlinks. An exclusive filesystem
 	// create must also be exclusive in the original Git tree.
-	if s.modes[name] == "" {
+	if s.originals[name].mode == "" {
 		entries, err := c.entries(ctx, base, false, repoPath)
 		if err != nil {
 			return "", err
@@ -272,7 +288,7 @@ func (c checkout) commit(ctx context.Context, base, directory, operation string,
 	if err != nil {
 		return "", err
 	}
-	mode := s.modes[name]
+	mode := s.originals[name].mode
 	if mode == "" {
 		mode = "100644"
 	}

@@ -34,8 +34,8 @@ settings object. Validation errors identify the property to correct.
 | DevOps fixture | Set `path` to a repository-relative JSON file for each role. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
 | GitHub Wiki | `repository` defaults to unset, so Git forge detection selects the GitHub.com target. Set an explicit `owner/name` to use another GitHub.com repository. |
-| FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
-| Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. |
+| FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. For knowledge, `format` defaults to `okf` and accepts `legacy`. |
+| Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. For knowledge, `format` defaults to `okf` and accepts `legacy`. |
 | SecOps | `findings` defaults to Dependabot and code scanning. `min_severity` defaults to `high`. `repository` and the optional incident fixture start unset. See [SecOps configuration](secops.md). |
 | Slack | `destination` and `credential_ref` default to unset. |
 | Webhook and router | A webhook uses an environment credential reference and can declare safe rejection codes. A router maps named destinations and signals. See [notification settings](notifications.md). |
@@ -971,6 +971,43 @@ closing the enrolled issue.
 
 The pilot uses the repository's existing GoReleaser release process.
 
+## Link knowledge to a GitHub issue
+
+Put a top-level section in the issue body and list one qualified document per
+bullet. This example uses the Repository knowledge provider.
+
+```markdown
+## Related Knowledge
+
+- repository/engineering/quota
+- repository/engineering%2Fplatform/scheduling
+```
+
+Use the literal heading and unindented `- ` bullets. Each bullet takes a bare
+reference or a reference enclosed in backticks. Use the escaped
+`instance/scope/id` form that Devflow prints. For example, `%2F` represents
+a slash within a scope or ID. The next heading beginning with `#` ends the list.
+Issues without the section retain their existing context.
+
+During review, run `devflow context 'owner/repo#42'` or call `devflow_context`
+with the issue key. On a review branch with the issue's `Task-Ref` trailer,
+you can omit the key. Context lists each resolved document once, in issue
+order. FileSystem reads the configured root. Repository reads the configured
+directory on the base branch. Both match the provider, scope and ID exactly.
+Context warns about invalid entries, provider mismatches and missing targets.
+Markdown links and page content are reference data. The configured provider
+supplies the lookup destination.
+
+Read the full document by passing its listed reference to `docs get`.
+
+```sh
+devflow docs get repository/engineering/quota --json
+```
+
+The equivalent read-only MCP call is `devflow_docs_get` with
+`{"ref":{"instance":"repository","scope":"engineering","id":"quota"}}`.
+Both return the document's identity, title, body and revision when available.
+
 ## Search a local knowledge directory
 
 Choose a dedicated directory for knowledge records. Relative roots resolve from
@@ -984,7 +1021,7 @@ knowledge_base:
     root: handbook
 ```
 
-Place a Markdown document in `handbook/` with devflow front matter.
+Search also finds existing legacy records such as this Markdown file in `handbook/`.
 
 ```markdown
 ---
@@ -1021,9 +1058,38 @@ A managed concept can pin a scope and ID with
 qualified Devflow reference. Duplicate references are reported as conflicts.
 A migration can carry existing publication receipts in `x-devflow-operations`.
 
-The compatible reader release treats OKF concepts as read-only. Legacy
-publishing continues to use Devflow's existing record format. See the
-[OKF rollout plan](okf-rollout.md) for the release order.
+### Publish and update concepts
+
+For FileSystem and Repository knowledge, `knowledge_base.settings.format`
+selects the encoding for new documents. The default `okf` writes Markdown
+with YAML frontmatter and a concept type of `Document` when you omit the type.
+Set `format: legacy` to create Devflow v1 records. Task management and GitHub
+Wiki keep their existing schemas.
+
+```bash
+devflow docs publish filesystem/engineering/quota \
+  --title "Quota policy" --body "Each team owns its quota." \
+  --type Policy --description "How teams allocate GPU quota" \
+  --tags '["gpu","capacity"]' --operation-id quota-policy-1
+```
+
+For MCP, pass the optional strings `type` and `description` and the string
+array `tags` to `devflow_docs_publish`. These fields require an OKF document.
+The approval shows the configured format for new documents, the destination,
+and the requested changes. GitHub pull-request publication uses the saved `gh`
+sign-in and Git’s configured access to the repository.
+
+To update a document, supply its current revision from search. An update uses
+the file’s existing encoding even when the configured default differs. OKF
+updates preserve omitted concept metadata and unknown YAML fields. Pass an
+empty tags array to clear the tags. Retry the same request with the same
+operation ID.
+
+To convert a legacy record, migrate it explicitly in a reviewed change.
+Carry its scope and ID into `x-devflow-ref`, its operation receipts into
+`x-devflow-operations`, and its structured links into `x-devflow-links`.
+Preserve its title and Markdown body and choose a concept type. See the
+[OKF rollout plan](okf-rollout.md) for the reader verification and migration order.
 
 ## Replace a Confluence page
 
@@ -1086,7 +1152,7 @@ Pass the revision from search when updating an existing document. Reuse the
 operation ID for retries. The CLI and `devflow_docs_publish` present the
 resolved destination and document for approval and record the outcome.
 
-Use `devflow docs search QUERY --json` to check a qualified document in CI.
+Use `devflow docs get repository/engineering/quota --json` to check that exact document in CI.
 
 ## Publish a GitHub Wiki page
 

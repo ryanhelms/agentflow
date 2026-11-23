@@ -76,7 +76,11 @@ func (a *App) repositoryPublisher(ctx context.Context, origin, kind string, ref 
 	if err != nil {
 		return nil, err
 	}
-	if c.Token == "" {
+	account, err := c.SignedInCLIAccount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authenticate GitHub pull-request publication: %w", err)
+	}
+	if account == nil && c.Token == "" {
 		return nil, errors.New("GitHub authentication is required for pull-request publication")
 	}
 	return &repositoryPublisher{client: c, origin: origin, repo: remote.Path, kind: kind, ref: ref}, nil

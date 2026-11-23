@@ -109,9 +109,9 @@ knowledge_base:
 	if tasks.Repository == nil || *tasks.Repository != "" || tasks.Search.OpenOnly || tasks.Search.Limit != 30 || tasks.Labels == nil {
 		t.Fatalf("github-issues settings = %+v", tasks)
 	}
-	docs := c.Providers.KnowledgeBase.Settings.(*RepositorySettings)
+	docs := c.Providers.KnowledgeBase.Settings.(*RepositoryKnowledgeSettings)
 	if docs.Repository == nil || *docs.Repository != "org/handbook" || docs.Branch != nil ||
-		docs.Directory != "docs/adr" || docs.Publication != "pull-request" {
+		docs.Directory != "docs/adr" || docs.Publication != "pull-request" || docs.Format != "okf" {
 		t.Fatalf("repository settings = %+v", docs)
 	}
 
@@ -150,12 +150,13 @@ knowledge_base: {provider: filesystem, settings: {root: ../handbook}}
 	}
 	tasks := p.TaskManagement.Settings.(*RepositoryTaskSettings)
 	if tasks.Directory != ".devflow/tasks" || *tasks.Branch != "tasks" || tasks.Publication != "push" ||
-		p.KnowledgeBase.Settings.(*FileSystemSettings).Root != "../handbook" {
+		p.KnowledgeBase.Settings.(*FileSystemKnowledgeSettings).Root != "../handbook" ||
+		p.KnowledgeBase.Settings.(*FileSystemKnowledgeSettings).Format != "okf" {
 		t.Fatalf("file-backed roles = %+v, %+v", tasks, p.KnowledgeBase)
 	}
 	c = loadConfig(t, "task_management: {provider: filesystem}\nknowledge_base: {provider: repository}")
 	if c.Providers.TaskManagement.Settings.(*FileSystemTaskSettings).Root != ".devflow/tasks" ||
-		c.Providers.KnowledgeBase.Settings.(*RepositorySettings).Directory != "docs" {
+		c.Providers.KnowledgeBase.Settings.(*RepositoryKnowledgeSettings).Directory != "docs" {
 		t.Fatal("both roles must support each file-backed provider with its own defaults")
 	}
 }
@@ -202,6 +203,12 @@ func TestInvalidProviderConfig(t *testing.T) {
 		{"task_management: {settings: {projects: [OK, false]}}", "task_management.settings.projects[1]"},
 		{"knowledge_base: {provider: repository, settings: {publication: overwrite}}", "knowledge_base.settings.publication"},
 		{"knowledge_base: {provider: filesystem, settings: {root: null}}", "knowledge_base.settings.root"},
+		{"knowledge_base: {provider: filesystem, settings: {format: other}}", "knowledge_base.settings.format"},
+		{"knowledge_base: {provider: repository, settings: {format: null}}", "knowledge_base.settings.format"},
+		{"knowledge_base: {provider: github-wiki, settings: {format: legacy}}", "knowledge_base.settings.format"},
+		{"knowledge_base: {provider: confluence, settings: {format: okf}}", "knowledge_base.settings.format"},
+		{"task_management: {provider: filesystem, settings: {format: okf}}", "task_management.settings.format"},
+		{"task_management: {provider: repository, settings: {format: legacy}}", "task_management.settings.format"},
 		{"knowledge_base: {provider: github-wiki, settings: {origin: /local/wiki.git}}", "knowledge_base.settings.origin"},
 		{"knowledge_base: {provider: github-wiki, settings: {repository: 123}}", "knowledge_base.settings.repository"},
 		{"knowledge_base: {provider: github-wiki, settings: {repository: ''}}", "knowledge_base.settings.repository"},

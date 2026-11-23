@@ -173,6 +173,21 @@ type RepositorySettings struct {
 	Publication string  `yaml:"publication" allowed:"pull-request,push"`
 }
 
+// FileKnowledgeSettings select the encoding for newly published knowledge documents.
+type FileKnowledgeSettings struct {
+	Format string `yaml:"format" allowed:"okf,legacy"`
+}
+
+type FileSystemKnowledgeSettings struct {
+	FileSystemSettings    `yaml:",inline"`
+	FileKnowledgeSettings `yaml:",inline"`
+}
+
+type RepositoryKnowledgeSettings struct {
+	RepositorySettings    `yaml:",inline"`
+	FileKnowledgeSettings `yaml:",inline"`
+}
+
 // FileTaskSettings apply only to file-backed task management.
 type FileTaskSettings struct {
 	Scope       string            `yaml:"scope"`
@@ -271,9 +286,20 @@ func providerSchemas() map[string]roleSchema {
 			Transitions: defaultTransitions(),
 		}
 	}
+	knowledgeDefaults := FileKnowledgeSettings{Format: "okf"}
 	knowledge := map[string]settingsFactory{
-		"filesystem": func() any { return &FileSystemSettings{Root: "docs"} },
-		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
+		"filesystem": func() any {
+			return &FileSystemKnowledgeSettings{
+				FileSystemSettings:    FileSystemSettings{Root: "docs"},
+				FileKnowledgeSettings: knowledgeDefaults,
+			}
+		},
+		"repository": func() any {
+			return &RepositoryKnowledgeSettings{
+				RepositorySettings:    RepositorySettings{Directory: "docs", Publication: "pull-request"},
+				FileKnowledgeSettings: knowledgeDefaults,
+			}
+		},
 	}
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: DefaultSite} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }

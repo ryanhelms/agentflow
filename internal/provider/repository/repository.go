@@ -23,6 +23,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 )
 
 // Config takes a resolved origin URL or absolute repository path. The caller
@@ -54,6 +55,7 @@ type Publication struct {
 type adapter struct {
 	Config
 	okfKnowledge bool
+	format       string
 	// Tests exercise transport failures and competing pushes at the publication boundary.
 	push func(checkout, context.Context, string, string) error
 }
@@ -79,7 +81,7 @@ func NewKnowledge(c Config) (*Knowledge, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Knowledge{a}, nil
+	return &Knowledge{a: a}, nil
 }
 
 // NewOKFCompatibleKnowledge enables recursive OKF reads for the Repository
@@ -92,7 +94,23 @@ func NewOKFCompatibleKnowledge(c Config) (*Knowledge, error) {
 	return k, err
 }
 
+// NewOKFKnowledge publishes new documents in format and preserves the encoding
+// of existing records, including imported OKF concepts in nested directories.
+func NewOKFKnowledge(cfg Config, format string) (*Knowledge, error) {
+	if err := okf.ValidateFormat(format); err != nil {
+		return nil, err
+	}
+	k, err := NewOKFCompatibleKnowledge(cfg)
+	if err == nil {
+		k.a.format = format
+	}
+	return k, err
+}
+
 func (k *Knowledge) open(instance, dir string) (*filesystem.Knowledge, error) {
+	if k.a.format != "" {
+		return filesystem.NewOKFKnowledge(instance, dir, k.a.format)
+	}
 	if k.a.okfKnowledge {
 		return filesystem.NewOKFCompatibleKnowledge(instance, dir)
 	}

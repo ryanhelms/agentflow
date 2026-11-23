@@ -34,6 +34,7 @@ func TestLegacyProviderToolFields(t *testing.T) {
 		"devflow_ticket_create":    {"project", "type", "summary", "description", "link_to", "confirm_token"},
 		"devflow_jira_remote_link": {"key", "url", "title", "confirm_token"},
 		"devflow_ac_update":        {"key", "item", "done", "evidence", "post", "confirm_token"},
+		"devflow_docs_publish":     {"ref", "title", "body", "operation_id", "links", "expected_revision", "confirm_token", "type", "description", "tags"},
 		"devflow_docs_search":      {"query", "space"},
 		"devflow_pr_open":          {"title", "body", "draft", "reviewers", "labels", "confirm_token"},
 	}

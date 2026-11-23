@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -185,11 +186,18 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 	if docs := search(ref.Scope); len(docs) != 0 {
 		t.Fatalf("unmerged document appeared on base: %+v", docs)
 	}
+	if _, err := a.DocsGet(ctx, ref); !errors.Is(err, provider.ErrNotFound) {
+		t.Fatalf("exact lookup of pending document: %v", err)
+	}
 	// Simulate the maintainer accepting the PR in the bare fixture.
 	docsGit(t, bare, "update-ref", "refs/heads/main", docsGit(t, bare, "rev-parse", head))
 	docs := search(ref.Scope)
 	if len(docs) != 1 || docs[0].Revision != result.Revision || docs[0].Title != in.Title || docs[0].Body != in.Body || len(search("sales")) != 0 {
 		t.Fatalf("base search = %+v", docs)
+	}
+	exact, err := a.DocsGet(ctx, ref)
+	if err != nil || exact.Ref != ref || exact.Revision != docs[0].Revision || exact.Body != in.Body {
+		t.Fatalf("exact lookup after review: %+v, %v", exact, err)
 	}
 	in.ExpectedRevision, in.OperationID = "stale", "edit-2"
 	a.Gate.Autonomy.Remote = config.Auto
@@ -203,11 +211,67 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 	}
 }
 
+func TestRepositoryPublicationUsesSignedInGitHubCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses shell fixtures")
+	}
+	a, bare := repositoryFixture(t, "knowledge_base")
+	command := filepath.Join(t.TempDir(), "gh")
+	const script = `#!/bin/sh
+set -eu
+if [ "$1" = "--version" ]; then exit 0; fi
+test -z "${GH_TOKEN+x}${GITHUB_TOKEN+x}"
+test "$1 $2 $3 $4" = 'api --hostname github.com --method'
+for endpoint do :; done
+case "$5 $endpoint" in
+  'GET user')
+    [ "$DEVFLOW_FIXTURE_GH_LOGIN" = 'true' ] || exit 4
+    printf 'HTTP/2.0 200 OK\r\n\r\n{"id":42,"login":"fixture"}' ;;
+  'GET repos/docs-team/handbook/pulls?'*)
+    printf 'HTTP/2.0 200 OK\r\n\r\n[]' ;;
+  'POST repos/docs-team/handbook/pulls')
+    cat >/dev/null
+    printf 'HTTP/2.0 201 Created\r\n\r\n{"html_url":"https://github.com/docs-team/handbook/pull/42"}' ;;
+  *) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(command, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Dir(command)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "false")
+	in := DocsPublishInput{
+		Ref:   provider.Ref{Instance: "repository", Scope: "engineering", ID: "knowledge"},
+		Title: "Knowledge", Body: "An OKF concept.", OperationID: "publish-native-cli",
+	}
+	before := docsGit(t, bare, "show-ref")
+	if _, err := a.DocsPublish(t.Context(), in, ""); !errors.Is(err, gh.ErrAuthentication) {
+		t.Fatalf("missing native login = %v", err)
+	}
+	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "true")
+	out, err := a.DocsPublish(t.Context(), in, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approval, ok := out.(*Pending)
+	if !ok || approval.ConfirmToken == "" || docsGit(t, bare, "show-ref") != before {
+		t.Fatalf("preview = %+v", out)
+	}
+	out, err = a.DocsPublish(t.Context(), in, approval.ConfirmToken)
+	result, ok := out.(provider.WriteResult)
+	if err != nil || !ok || result.Status != provider.PendingReview || result.Ref != in.Ref ||
+		result.URL != "https://github.com/docs-team/handbook/pull/42" {
+		t.Fatalf("approved native CLI publication = %+v, %v", out, err)
+	}
+}
+
 func TestDocsPublicationPreflight(t *testing.T) {
 	a, bare := repositoryFixture(t, "knowledge_base")
 	// Exercise the implicit origin and HEAD of a local repository.
 	docsGit(t, a.Repo.Dir, "remote", "set-url", "origin", bare)
-	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositorySettings)
+	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositoryKnowledgeSettings)
 	slug := "docs-team/handbook"
 	cfg.Repository = &slug
 	if dest, err := a.knowledgeRepository(t.Context()); err != nil || dest.Origin != "https://github.com/"+slug {
