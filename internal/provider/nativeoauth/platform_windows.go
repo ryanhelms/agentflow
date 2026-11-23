@@ -1,4 +1,4 @@
-package rovooauth
+package nativeoauth
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func openBrowser(ctx context.Context, address string) error {
+func OpenBrowser(ctx context.Context, address string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

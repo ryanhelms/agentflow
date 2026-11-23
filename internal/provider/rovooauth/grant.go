@@ -6,10 +6,9 @@ import (
 	"errors"
 	"net/url"
 	"os"
-	"os/user"
-	"path/filepath"
-	"runtime"
 	"time"
+
+	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
 )
 
 const (
@@ -29,47 +28,13 @@ type accessGrant struct {
 	expiry     time.Time
 }
 
-func userLockDir() (string, error) {
-	// Every process using this OS user's credential store must share the lock,
-	// regardless of checkout, DEVFLOW_HOME or XDG configuration.
-	u, err := user.Current()
-	if err != nil || !filepath.IsAbs(u.HomeDir) {
-		return "", errLock
-	}
-	return filepath.Join(u.HomeDir, ".devflow-rovo"), nil
-}
-
+func userLockDir() (string, error) { return nativeoauth.UserLockDir(".devflow-rovo") }
 func (e *enrollment) lock(ctx context.Context) (*os.File, error) {
-	dir, err := e.lockDir()
-	if err != nil || os.MkdirAll(dir, 0700) != nil {
-		return nil, errLock
-	}
-	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) {
-		return nil, errLock
-	}
-	f, err := os.OpenFile(filepath.Join(dir, "grant.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	f, err := nativeoauth.Lock(ctx, e.lockDir)
 	if err != nil {
-		return nil, errLock
+		return nil, errors.Join(errLock, err)
 	}
-	for {
-		if err := ctx.Err(); err != nil {
-			_ = f.Close()
-			return nil, errors.Join(errLock, err)
-		}
-		ok, err := tryLock(f)
-		if err != nil {
-			_ = f.Close()
-			return nil, errLock
-		}
-		if ok {
-			return f, nil
-		}
-		select {
-		case <-ctx.Done():
-		case <-time.After(25 * time.Millisecond):
-		}
-	}
+	return f, nil
 }
 
 func (e *enrollment) disconnect(ctx context.Context) error {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
 )
@@ -109,6 +110,12 @@ func FindSlackWorkspaceChannel(raw json.RawMessage, workspace, channel string) (
 			return true, "", nil
 		}
 	}
+	// The hosted ids_only format puts one conversation ID on each line.
+	for line := range strings.SplitSeq(result.Result, "\n") {
+		if strings.TrimSuffix(line, "\r") == channel && slackChannel.MatchString(channel) {
+			return true, "", nil
+		}
+	}
 	for _, row := range slackChannelRow.FindAllStringSubmatch(result.Result, -1) {
 		if row[1] == channel {
 			return true, "", nil
@@ -127,4 +134,16 @@ func FindSlackWorkspaceChannel(raw json.RawMessage, workspace, channel string) (
 		return false, "", fmt.Errorf("%w: invalid slack channel list cursor", ErrInvalidResult)
 	}
 	return false, cursor, nil
+}
+
+// SlackChannelTypes selects Slack's workspace membership filter for a conversation.
+func SlackChannelTypes(channel string) string {
+	switch {
+	case strings.HasPrefix(channel, "D"):
+		return "im"
+	case strings.HasPrefix(channel, "G"):
+		return "private_channel,mpim"
+	default:
+		return "public_channel,private_channel"
+	}
 }

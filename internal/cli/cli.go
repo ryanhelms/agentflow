@@ -30,6 +30,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/rovohost"
+	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -54,11 +55,11 @@ Setup
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
-  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]
+  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for the Jira or Confluence pilot
+                                 use --client devflow for Jira, Confluence or an approved Slack app
   setup logout --provider NAME --client devflow
-                                 disconnect the local Devflow Rovo enrollment
+                                 disconnect the selected local Devflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login
@@ -110,6 +111,8 @@ Runtime
   --native-client claude-desktop COMMAND
                                  use the enrolled Jira connection for comment, start, transition or task create
                                  comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
+  --native-client claude-desktop notify SIGNAL --operation-id ID
+                                 use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -175,10 +178,14 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" && command != "start" && command != "transition" && command != "task create" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition or task create)")
+		switch command {
+		case "comment", "start", "transition", "task create":
+			return rovohost.NewWriter(), nil
+		case "notify":
+			return slackhost.NewWriter(), nil
+		default:
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition, task create or notify)")
 		}
-		return rovohost.NewWriter(), nil
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)
 	}

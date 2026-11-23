@@ -1,6 +1,6 @@
 //go:build !windows
 
-package rovooauth
+package nativeoauth
 
 import (
 	"context"
@@ -12,12 +12,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func openBrowser(ctx context.Context, address string) error {
+func OpenBrowser(ctx context.Context, address string) error {
 	command := "/usr/bin/xdg-open"
 	if runtime.GOOS == "darwin" {
 		command = "/usr/bin/open"
 	} else if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-		return errors.New("a graphical desktop is required for Rovo enrollment")
+		return errors.New("a graphical desktop is required for OAuth enrollment")
 	}
 	return exec.CommandContext(ctx, command, address).Run()
 }
