@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.37.0](https://github.com/nscaledev/devflow/compare/v0.36.0...v0.37.0) - 2026-11-23
+
+### Features
+
+- **slack:** add a devflow desktop mcp connection (#77) ([f31c465](https://github.com/nscaledev/devflow/commit/f31c465afa1e8fa74e2814d3979f34d4667243cb))
+
 ## [0.36.0](https://github.com/nscaledev/devflow/compare/v0.35.0...v0.36.0) - 2026-11-23
 
 ### Features
