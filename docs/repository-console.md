@@ -6,6 +6,10 @@ port, or use `--no-open` to open the printed URL yourself. Keep that URL on
 your machine. Its launch code is single-use. Refreshing the same tab preserves
 the session. Stop the process with Ctrl+C.
 
+The repository name and branch stay visible while you navigate. Under
+**Appearance**, choose **System**, **Light** or **Dark**. The console remembers
+your choice for this browser origin when browser storage is available.
+
 ## Follow an effective setting back to its source
 
 Open **Providers**, select a role, then select a setting. For example, open
@@ -105,3 +109,25 @@ questions from this exact worktree. Review the question and confirm your
 answer to send it to the worker. **Handoff** provides a copyable summary for
 the next developer or agent. The local configuration editor also works with
 Agent Commander disconnected.
+
+## Update the console design tokens
+
+The Go binary embeds the published `package/tokens.css` from
+`@nscaledev/design-tokens@0.1.0` as `internal/webui/static/nscale-tokens.css`.
+This keeps both themes available offline. The Nscale Design System MCP's
+`list_design_packages` tool reports the package version and archive SHA-256.
+
+To reproduce the checked-in asset, run these commands from the repository root
+with GitHub Packages read access. You can also use the same archive from the
+design-system plugin's `vendor/` directory.
+
+```bash
+token_dir=$(mktemp -d)
+npm pack @nscaledev/design-tokens@0.1.0 --registry=https://npm.pkg.github.com --pack-destination="$token_dir"
+token_archive="$token_dir/nscaledev-design-tokens-0.1.0.tgz"
+printf '%s  %s\n' cf7592b43e4a0fe0f2fdee54213b7b23b5267203e9866733cd6abcc1f4435362 "$token_archive" | shasum -a 256 -c - &&
+  tar -xOzf "$token_archive" package/tokens.css > internal/webui/static/nscale-tokens.css
+```
+
+For a package upgrade, update the version and archive checksum together,
+replace the stylesheet, and check the console in light and dark mode.

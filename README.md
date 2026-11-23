@@ -441,7 +441,9 @@ console shows the active provider for each role, where its settings came from,
 and how a proposed edit changes the effective configuration. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
-questions for this worktree. [Repository console guide](docs/repository-console.md)
+questions for this worktree. The console uses the Nscale design system. The
+**Appearance** control follows your system theme or selects light or dark mode.
+[Repository console guide](docs/repository-console.md)
 
 PR readiness requires a Jira key in the branch name by default. With
 `commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
