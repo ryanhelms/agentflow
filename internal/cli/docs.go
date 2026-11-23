@@ -14,9 +14,36 @@ import (
 
 func runDocs(ctx context.Context, args []string) error {
 	if len(args) < 2 {
-		return errors.New("usage: devflow docs search QUERY [--space S] | devflow docs publish REF --title T --body TEXT --operation-id ID [--expected-revision REV] [--links JSON] [--yes]")
+		return errors.New("usage: devflow docs get REF [--json] | devflow docs search QUERY [--space S] | devflow docs publish REF --title T --body TEXT --operation-id ID [--expected-revision REV] [--links JSON] [--yes]")
 	}
 	switch args[0] {
+	case "get":
+		fs := flag.NewFlagSet("docs get", flag.ContinueOnError)
+		asJSON := fs.Bool("json", false, "print the document as JSON")
+		pos, err := parseInterleaved(fs, args[1:])
+		if err != nil {
+			return err
+		}
+		if len(pos) != 1 {
+			return errors.New("usage: devflow docs get REF [--json]")
+		}
+		ref, err := provider.ParseRef(pos[0])
+		if err != nil {
+			return err
+		}
+		a, err := open(ctx)
+		if err != nil {
+			return err
+		}
+		doc, err := a.DocsGet(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(doc)
+		}
+		printDocument(doc)
+		return nil
 	case "search":
 		fs := flag.NewFlagSet("docs search", flag.ContinueOnError)
 		space := fs.String("space", "", "knowledge base scope (e.g. a Confluence space)")
@@ -42,11 +69,7 @@ func runDocs(ctx context.Context, args []string) error {
 			}
 		case []provider.Document:
 			for _, p := range pages {
-				fmt.Printf("%s [%s]\n  revision %s\n", p.Title, p.Ref, p.Revision)
-				if p.URL != "" {
-					fmt.Printf("  %s\n", p.URL)
-				}
-				fmt.Printf("  %s\n", p.Body)
+				printDocument(p)
 			}
 		default:
 			return errors.New("unknown knowledge search result")
@@ -97,4 +120,12 @@ func runDocs(ctx context.Context, args []string) error {
 		return confirmLoop(*yes, func(token string) (any, error) { return a.DocsPublish(app.WithConfluenceCLI(ctx), in, token) })
 	}
 	return fmt.Errorf("unknown docs command %q", args[0])
+}
+
+func printDocument(p provider.Document) {
+	fmt.Printf("%s [%s]\n  revision %s\n", p.Title, p.Ref, p.Revision)
+	if p.URL != "" {
+		fmt.Printf("  %s\n", p.URL)
+	}
+	fmt.Printf("  %s\n", p.Body)
 }

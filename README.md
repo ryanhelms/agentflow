@@ -305,6 +305,12 @@ with template defaults, required sections and checklist items. Devflow records
 the selected revision and validates the issue against it before a comment or
 state change. See the [task template configuration](docs/providers.md#task-templates).
 
+To link a design decision to a GitHub issue, add a `## Related Knowledge`
+heading and one bullet such as `- repository/engineering/quota` per document.
+`devflow context` and `devflow_context` show the resolved titles and references.
+Reviewers can read a document with `devflow docs get REF [--json]` or
+`devflow_docs_get`. [Issue format and review example](docs/providers.md#link-knowledge-to-a-github-issue)
+
 New issues created through devflow in this repository use the
 [`engineering-task` template](.devflow/task-templates.json).
 The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,

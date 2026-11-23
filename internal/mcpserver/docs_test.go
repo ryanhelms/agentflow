@@ -37,6 +37,19 @@ func TestRepositoryDocsTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
+	list, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var readOnlyGet bool
+	for _, tool := range list.Tools {
+		if tool.Name == "devflow_docs_get" {
+			readOnlyGet = tool.Annotations != nil && tool.Annotations.ReadOnlyHint
+		}
+	}
+	if !readOnlyGet {
+		t.Fatal("expected read-only devflow_docs_get")
+	}
 	call := func(name string, args map[string]any, result any) {
 		t.Helper()
 		resp, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})

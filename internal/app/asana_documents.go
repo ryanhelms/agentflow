@@ -9,26 +9,40 @@ import (
 	"github.com/nscaledev/devflow/internal/atlassian"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/githubissues"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/provider/repository"
 	"github.com/nscaledev/devflow/internal/provider/twg"
 )
 
-func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []provider.Link) error {
+func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task provider.Task) error {
+	links := task.Links
+	if a.usesIssues() {
+		var warnings []string
+		links, warnings = githubissues.RelatedKnowledge(task.Description)
+		tc.Warnings = append(tc.Warnings, warnings...)
+	}
 	for _, link := range links {
 		ref := link.Ref
-		if ref == nil || ref.Instance == "asana" {
+		if ref == nil || (a.usesAsana() && ref.Instance == "asana") {
 			continue
 		}
 		page := atlassian.Page{ID: ref.String(), Title: link.Title, URL: link.URL, Space: ref.Scope}
-		doc, err := a.linkedKnowledgeDocument(ctx, *ref)
+		doc, err := a.DocsGet(ctx, *ref)
 		if err != nil {
 			var request *native.Request
 			if errors.As(err, &request) {
 				return err
 			}
-			tc.Warnings = append(tc.Warnings, fmt.Sprintf("document %s: %v", ref, err))
+			if a.usesIssues() && errors.Is(err, provider.ErrNotFound) {
+				tc.Warnings = append(tc.Warnings, fmt.Sprintf("document %s not found", ref))
+			} else {
+				tc.Warnings = append(tc.Warnings, fmt.Sprintf("document %s: %v", ref, err))
+			}
+			if a.usesIssues() {
+				continue
+			}
 		} else {
 			page.Title = doc.Title
 			page.Revision = doc.Revision
@@ -44,8 +58,12 @@ func (a *App) addAsanaDocuments(ctx context.Context, tc *TicketContext, links []
 	return nil
 }
 
-func (a *App) linkedKnowledgeDocument(ctx context.Context, ref provider.Ref) (provider.Document, error) {
+// DocsGet reads one document by its full identity from the selected provider.
+func (a *App) DocsGet(ctx context.Context, ref provider.Ref) (provider.Document, error) {
 	var zero provider.Document
+	if err := ref.Validate(); err != nil {
+		return zero, err
+	}
 	name := a.Cfg.Providers.KnowledgeBase.Provider
 	if ref.Instance != name {
 		return zero, fmt.Errorf("selected knowledge provider is %q", name)

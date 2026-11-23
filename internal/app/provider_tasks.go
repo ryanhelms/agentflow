@@ -168,8 +168,8 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 		} else if len(cl.Items) > 0 {
 			tc.Criteria = cl
 		}
-		if a.usesAsana() {
-			if err := a.addAsanaDocuments(ctx, tc, t.Links); err != nil {
+		if a.usesAsana() || a.usesIssues() {
+			if err := a.addTaskDocuments(ctx, tc, t); err != nil {
 				return nil, err
 			}
 		}

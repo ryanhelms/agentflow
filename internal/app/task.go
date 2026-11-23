@@ -144,7 +144,9 @@ func (a *App) renderContext(tc *TicketContext) string {
 	}
 	for _, d := range tc.Docs {
 		target := d.URL
-		if target == "" && a.usesAsana() {
+		if a.usesIssues() && target != "" {
+			target = d.ID + " " + target
+		} else if target == "" && (a.usesAsana() || a.usesIssues()) {
 			target = d.ID
 		}
 		fmt.Fprintf(&b, "Doc: %s %s\n", d.Title, target)
@@ -171,8 +173,7 @@ func (a *App) renderContext(tc *TicketContext) string {
 		}
 		fmt.Fprintf(&b, "\n%s: %s\n", heading, strings.Join(parts, " · "))
 	}
-	// GitHub Issues context currently has task data only. Report collaboration
-	// details when they were queried.
+	// Report collaboration details when they were queried.
 	if !a.UsesTaskRefs() || tc.OpenPR != "" || len(tc.Others) > 0 {
 		pr := "none"
 		if tc.OpenPR != "" {

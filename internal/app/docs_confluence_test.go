@@ -92,12 +92,12 @@ func TestConfluenceLookupAndApprovedReplacement(t *testing.T) {
 	ctx := t.Context()
 	a, f, in := newConfluenceFixture(t)
 	const pageURL = "https://docs.example/wiki/pages/viewpage.action?pageId=42"
-	doc, err := a.linkedKnowledgeDocument(ctx, in.Ref)
+	doc, err := a.DocsGet(ctx, in.Ref)
 	if err != nil || doc.Ref != in.Ref || doc.Title != "Design" || doc.Revision != "7" || doc.Body != "Page text" || doc.URL != pageURL {
 		t.Fatalf("lookup: %+v, %v", doc, err)
 	}
 	var tc TicketContext
-	if err := a.addAsanaDocuments(ctx, &tc, []provider.Link{{Ref: &in.Ref, URL: "https://stale.example", Title: "Old"}}); err != nil {
+	if err := a.addTaskDocuments(ctx, &tc, provider.Task{Links: []provider.Link{{Ref: &in.Ref, URL: "https://stale.example", Title: "Old"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(tc.Warnings) != 0 || len(tc.Docs) != 1 || tc.Docs[0].URL != pageURL || tc.Docs[0].Title != doc.Title || tc.Docs[0].Revision != doc.Revision {
@@ -201,7 +201,7 @@ func TestConfluenceWritePreconditions(t *testing.T) {
 		t.Fatal("accepted a negative revision")
 	}
 	f.space = "OTHER"
-	if _, err := a.linkedKnowledgeDocument(ctx, in.Ref); !errors.Is(err, provider.ErrNotFound) {
+	if _, err := a.DocsGet(ctx, in.Ref); !errors.Is(err, provider.ErrNotFound) {
 		t.Fatalf("foreign space lookup: %v", err)
 	}
 	if _, err := a.DocsPublish(ctx, in, ""); !errors.Is(err, provider.ErrNotFound) {

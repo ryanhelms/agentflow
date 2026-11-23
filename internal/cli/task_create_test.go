@@ -26,6 +26,11 @@ func (f taskTransport) RoundTrip(r *http.Request) (*http.Response, error) { retu
 
 func taskCLI(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return captureCLI(t, "task", append([]string{"create"}, args...)...)
+}
+
+func captureCLI(t *testing.T, command string, args ...string) (string, error) {
+	t.Helper()
 	output, err := os.CreateTemp(t.TempDir(), "output")
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +39,7 @@ func taskCLI(t *testing.T, args ...string) (string, error) {
 	stdout := os.Stdout
 	os.Stdout = output
 	defer func() { os.Stdout = stdout }()
-	err = run(t.Context(), "task", append([]string{"create"}, args...))
+	err = run(t.Context(), command, args)
 	if _, seekErr := output.Seek(0, 0); seekErr != nil {
 		t.Fatal(seekErr)
 	}
