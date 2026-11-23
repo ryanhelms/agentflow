@@ -203,6 +203,37 @@ func (u *Updater) Latest(ctx context.Context) (*Release, error) {
 	return best, nil
 }
 
+// LatestStable resolves the release GitHub labels Latest, the same endpoint
+// used by the bootstrap launchers. An explicit repo pin or track still applies.
+func (u *Updater) LatestStable(ctx context.Context) (*Release, error) {
+	var r Release
+	if err := u.GH.Do(ctx, "GET", "/repos/"+Repo+"/releases/latest", nil, &r); err != nil {
+		return nil, err
+	}
+	v, ok := ParseVersion(r.Tag)
+	if !ok || r.Draft || r.Prerelease || v.Pre != "" || r.Tag != "v"+v.String() {
+		return nil, fmt.Errorf("unexpected latest stable release tag %q", r.Tag)
+	}
+	if u.Opts.Pin != "" && strings.TrimPrefix(u.Opts.Pin, "v") != v.String() {
+		return nil, fmt.Errorf("latest release %s conflicts with update.pin %s; review the project setting", r.Tag, u.Opts.Pin)
+	}
+	if u.Opts.Track != nil && *u.Opts.Track != v.Major {
+		return nil, fmt.Errorf("latest release %s conflicts with update.track %d; review the project setting", r.Tag, *u.Opts.Track)
+	}
+	policy, err := u.FetchPolicy(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("verify latest release policy: %w", err)
+	}
+	if policy == nil {
+		return nil, errors.New("latest release policy is unavailable")
+	}
+	if policy.Requires(v.String()) {
+		return nil, fmt.Errorf("latest release %s is blocked by version policy", r.Tag)
+	}
+	r.version = v
+	return &r, nil
+}
+
 // NewerThanCurrent reports whether r is newer than the running build.
 func (u *Updater) NewerThanCurrent(r *Release) bool {
 	cur, ok := ParseVersion(u.Current)

@@ -106,11 +106,13 @@ jobs:
         run: scripts/check-agent-docs.sh
       - name: shellcheck
         run: |
-          shellcheck -x bin/*.sh scripts/*.sh .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
+          shellcheck -x install.sh bin/*.sh scripts/*.sh .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
             templates/repo/.devflow/bin/devflow \
             templates/repo/.githooks/commit-msg \
             adapters/claude-code/bin/launch \
             adapters/claude-code/bin/devflow
+      - name: Test project installer
+        run: bash scripts/test-install-sh.sh
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
@@ -119,6 +121,14 @@ jobs:
         run: |
           find . -name '*.json' -not -path './.git/*' -print0 | xargs -0 -n1 jq empty
           find . \( -name '*.yml' -o -name '*.yaml' \) -not -path './.git/*' -print0 | xargs -0 -n1 yq eval 'true' > /dev/null
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test PowerShell installer
+        shell: pwsh
+        run: ./scripts/test-install-ps1.ps1
 
   goreleaser:
     runs-on: ubuntu-latest
