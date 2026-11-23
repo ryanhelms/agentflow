@@ -115,3 +115,30 @@ func TestNativeWriteFailureCannotFallBackOrReplay(t *testing.T) {
 	}
 	checkTrace(t, trace)
 }
+
+func TestJiraCreateRequiresGenuineCapabilityAbsence(t *testing.T) {
+	const inventory = `{"id":3,"result":{"data":[{"name":"atlassian","httpOrigin":"https://mcp.atlassian.com","authStatus":"oAuth","runtimeStatus":"connected","tools":{"createJiraIssue":{"inputSchema":{"type":"object","required":["summary"]}}}}]}}`
+	for _, tc := range []struct {
+		name, change, to string
+		want             error
+	}{
+		{"missing operation", "createJiraIssue", "other", native.ErrUnavailable},
+		{"missing origin", "https://mcp.atlassian.com", "", native.ErrDenied},
+		{"unverified profile", "oAuth", "unknown", native.ErrDenied},
+		{"signed out", "oAuth", "notLoggedIn", native.ErrSignIn},
+		{"signed out without catalog entry", `"oAuth","runtimeStatus":"connected","tools":{"createJiraIssue"`, `"notLoggedIn","runtimeStatus":"connected","tools":{"other"`, native.ErrSignIn},
+		{"incompatible input", "summary", "different", native.ErrDenied},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			trace := setupFake(t, dir, append(handshake(t, dir), exchange{strings.Replace(writeInventory, "slack", "atlassian", 1), []string{strings.Replace(inventory, tc.change, tc.to, 1)}}))
+			host := NewWriter(dir)
+			t.Cleanup(host.Close)
+			_, err := host.Prepare(t.Context(), native.Call{Provider: "jira", Server: "atlassian", Tool: "createJiraIssue", Arguments: map[string]any{"summary": "Fixture"}})
+			if !errors.Is(err, tc.want) || errors.Is(tc.want, native.ErrUnavailable) != errors.Is(err, native.ErrUnavailable) {
+				t.Fatal(err)
+			}
+			checkTrace(t, trace)
+		})
+	}
+}

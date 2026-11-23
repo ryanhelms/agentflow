@@ -184,27 +184,31 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 	return write, err
 }
 
-type jiraCommentCLIKey struct{}
+type jiraWriteCLIKey struct{}
 
-// WithJiraCommentCLI opts a single interactive comment entry point into the
+// WithJiraWriteCLI opts interactive comment and create entry points into the
 // saved workstation login. CI and configured service identities keep their route.
-func WithJiraCommentCLI(ctx context.Context) context.Context {
+func WithJiraWriteCLI(ctx context.Context) context.Context {
 	ci, _ := strconv.ParseBool(os.Getenv("CI"))
 	actions, _ := strconv.ParseBool(os.Getenv("GITHUB_ACTIONS"))
 	if ci || actions || os.Getenv("DEVFLOW_OPERATION_ID") != "" ||
 		(os.Getenv("JIRA_USER") != "" && os.Getenv("JIRA_TOKEN") != "") {
 		return ctx
 	}
-	return context.WithValue(ctx, jiraCommentCLIKey{}, true)
+	return context.WithValue(ctx, jiraWriteCLIKey{}, true)
 }
 
-func (a *App) prepareCLIComment(ctx context.Context, site string, ref provider.Ref, body string) (*twg.PreparedJiraComment, error) {
-	enabled, _ := ctx.Value(jiraCommentCLIKey{}).(bool)
+func (a *App) interactiveJiraCLI(ctx context.Context, site string) (*twg.Jira, error) {
+	enabled, _ := ctx.Value(jiraWriteCLIKey{}).(bool)
 	if !enabled || !jiraMCPOrigin(site) {
 		return nil, nil
 	}
-	cli, err := twg.NewJira("jira", site, a.jiraSettings().Projects)
-	if err != nil {
+	return twg.NewJira("jira", site, a.jiraSettings().Projects)
+}
+
+func (a *App) prepareCLIComment(ctx context.Context, site string, ref provider.Ref, body string) (*twg.PreparedJiraComment, error) {
+	cli, err := a.interactiveJiraCLI(ctx, site)
+	if cli == nil || err != nil {
 		return nil, err
 	}
 	prepared, err := cli.PrepareComment(ctx, ref, body)
@@ -233,7 +237,7 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 		return nil, err
 	}
 	write, err := prepareJiraWrite(ctx, call)
-	if errors.Is(err, native.ErrUnavailable) {
+	if errors.Is(err, native.ErrUnavailable) && !errors.Is(err, native.ErrDenied) && !errors.Is(err, native.ErrSignIn) && !errors.Is(err, native.ErrWriteUncertain) {
 		return nil, nil
 	}
 	if err != nil {
@@ -251,6 +255,18 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 		}
 	}
 	return write, nil
+}
+
+func (w *jiraWrite) create(ctx context.Context, project string) (provider.Ref, error) {
+	payload, err := w.run(ctx)
+	if err != nil {
+		return provider.Ref{}, err
+	}
+	created, err := nativemap.DecodeJiraCreated(payload, "jira", project)
+	if err != nil {
+		return provider.Ref{}, errors.Join(native.ErrWriteUncertain, err)
+	}
+	return created, nil
 }
 
 var errJiraStartAssigneeChanged = fmt.Errorf("jira issue is no longer assigned to the approved account: %w", provider.ErrConflict)

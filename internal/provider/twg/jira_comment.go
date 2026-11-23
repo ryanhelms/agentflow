@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
-	"strconv"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/native"
@@ -18,79 +15,9 @@ import (
 // TWG converts these tokens into Jira mentions even in plain text mode.
 var jiraMention = regexp.MustCompile(`(?i)\[~accountId:(?:[0-9a-f]{24}|[0-9]+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]`)
 
-type commentProfile struct {
-	ID, Name, Environment, AuthMethod, UserID string
-	Site, Domain                              string
-	Revision                                  int
-	Sites                                     []struct{ Site string }
-}
-
-func (p commentProfile) coversSite(origin string) bool {
-	host := strings.TrimPrefix(origin, "https://")
-	slug, cloud := strings.CutSuffix(host, ".atlassian.net")
-	matches := func(site string) bool {
-		site = strings.ToLower(strings.TrimSuffix(site, "/"))
-		return site == origin || site == host || cloud && site == slug
-	}
-	if matches(p.Site) || matches(p.Domain) {
-		return true
-	}
-	for _, site := range p.Sites {
-		if matches(site.Site) {
-			return true
-		}
-	}
-	return false
-}
-
-func (j *Jira) commentProfile(ctx context.Context) (commentProfile, string, error) {
-	// The vendor command only returns profile identities, never their secrets.
-	var catalog struct {
-		Storage, ActiveEnvironment string
-		Defaults                   map[string]string
-		Profiles                   []commentProfile
-	}
-	if err := j.read(ctx, "select jira OAuth profile", []string{"auth", "profile", "list"}, &catalog); err != nil {
-		return commentProfile{}, "", err
-	}
-	if catalog.Profiles == nil || catalog.ActiveEnvironment == "" {
-		return commentProfile{}, "", fmt.Errorf("twg omitted its profile catalog: %w", ErrFailure)
-	}
-	defaultID := catalog.Defaults[catalog.ActiveEnvironment]
-	var candidates []commentProfile
-	for _, profile := range catalog.Profiles {
-		if profile.Environment != catalog.ActiveEnvironment || profile.AuthMethod != "oauth" || !profile.coversSite(j.site) {
-			continue
-		}
-		selector := profile.Name
-		if catalog.Storage == "legacy" {
-			// Before profile migration the CLI only accepts the default alias.
-			if profile.ID != defaultID {
-				continue
-			}
-			selector = "default"
-		}
-		if profile.ID == "" || selector == "" || profile.UserID == "" {
-			return commentProfile{}, "", fmt.Errorf("twg OAuth profile omitted its login identity: %w", ErrFailure)
-		}
-		if profile.ID == defaultID {
-			return profile, selector, nil
-		}
-		candidates = append(candidates, profile)
-	}
-	switch len(candidates) {
-	case 0:
-		return commentProfile{}, "", ErrAuthRequired
-	case 1:
-		return candidates[0], candidates[0].Name, nil
-	default:
-		return commentProfile{}, "", fmt.Errorf("multiple twg OAuth profiles cover the configured Jira site: %w", ErrAccessDenied)
-	}
-}
-
 type PreparedJiraComment struct {
 	client   *Jira
-	profile  commentProfile
+	profile  jiraProfile
 	selector string
 	ref      provider.Ref
 	issueID  string
@@ -99,9 +26,10 @@ type PreparedJiraComment struct {
 
 // Intent describes the exact append and the saved login that will perform it.
 func (p *PreparedJiraComment) Intent() map[string]string {
-	return map[string]string{"backend": "twg", "site": p.client.site, "project": p.ref.Scope, "key": p.ref.ID, "issue_id": p.issueID,
-		"profile": p.profile.Name, "profile_id": p.profile.ID, "account_id": p.profile.UserID,
-		"profile_selector": p.selector, "profile_revision": strconv.Itoa(p.profile.Revision), "body_format": "plain", "comment": p.body}
+	intent := p.profile.intent(p.selector)
+	maps.Copy(intent, map[string]string{"backend": "twg", "site": p.client.site, "project": p.ref.Scope,
+		"key": p.ref.ID, "issue_id": p.issueID, "body_format": "plain", "comment": p.body})
+	return intent
 }
 
 // PrepareComment resolves the approved key to its stable ID on the configured
@@ -111,7 +39,7 @@ func (j *Jira) PrepareComment(ctx context.Context, ref provider.Ref, body string
 	if err != nil {
 		return nil, err
 	}
-	profile, selector, err := j.commentProfile(ctx)
+	profile, selector, err := j.jiraProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +72,7 @@ func (j *Jira) PrepareComment(ctx context.Context, ref provider.Ref, body string
 		}
 	}
 	// The vendor CLI trims the body and expands mention markup before writing.
-	if body == "" || !utf8.ValidString(body) || strings.ContainsRune(body, 0) || jiraMention.MatchString(body) ||
-		strings.TrimFunc(body, func(r rune) bool { return unicode.IsSpace(r) || r == '\uFEFF' }) != body {
+	if body == "" || !literalCLIValue(body) || jiraMention.MatchString(body) {
 		return nil, errors.New("twg requires literal comment text without surrounding whitespace, NUL or Jira mention markup")
 	}
 	return &PreparedJiraComment{client: j, profile: profile, selector: selector, ref: ref, issueID: row.ID, body: body}, nil

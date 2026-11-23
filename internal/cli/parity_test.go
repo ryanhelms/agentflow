@@ -217,7 +217,7 @@ func TestParityCommandsRunLocally(t *testing.T) {
 }
 
 func TestDesktopNativeClientRoutesJiraCommands(t *testing.T) {
-	for _, command := range []string{"comment", "start", "transition"} {
+	for _, command := range []string{"comment", "start", "transition", "task create"} {
 		writer, err := nativeWriter("claude-desktop", command)
 		if err != nil {
 			t.Fatal(err)

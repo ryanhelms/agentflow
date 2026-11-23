@@ -48,6 +48,11 @@ func openWriteSession(ctx context.Context, dir string, call native.Call) (native
 		return nil, writeTransportError(call.Provider, err)
 	}
 	session.target, err = h.findTool(session.thread, call.Server, call.Tool)
+	// A signed-out server can advertise an empty catalog.
+	if call.Provider == "jira" && call.Tool == "createJiraIssue" && session.target != nil &&
+		session.target.RuntimeStatus != "disabled" && session.target.AuthStatus == "notLoggedIn" {
+		return nil, native.ErrSignIn
+	}
 	if err != nil {
 		return nil, writeTransportError(call.Provider, err)
 	}

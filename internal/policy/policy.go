@@ -151,7 +151,9 @@ var ErrToken = errors.New("confirmation token is invalid, expired, already used,
 
 func (g *Gate) redeem(token string, digest []byte) error {
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "cf_"))
-	if err != nil || len(raw) != 8+18 {
+	// The replay ledger and durable write claims use the token as their key.
+	// Accept only the exact spelling issued by the gate.
+	if err != nil || len(raw) != 8+18 || token != "cf_"+base64.RawURLEncoding.EncodeToString(raw) {
 		return ErrToken
 	}
 	exp := binary.BigEndian.Uint64(raw[:8])

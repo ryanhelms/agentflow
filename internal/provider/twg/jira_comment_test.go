@@ -13,7 +13,7 @@ const commentReceipt = `{"command":"jira.workitem.comment.create","request":{"si
 
 const oauthProfile = `{"data":{"storage":"keychain","activeEnvironment":"prod","defaults":{"prod":"fixture-id"},"profiles":[{"id":"fixture-id","name":"work","authMethod":"oauth","environment":"prod","userId":"fixture-user","site":"example"}]}}`
 
-func commentTarget(t *testing.T, result string) string {
+func jiraWriteTarget(t *testing.T, result string) string {
 	t.Helper()
 	return fakeTWG(t, `if [ "$1 $2 $3" = "auth profile list" ]; then
 `+printJSON(oauthProfile)+"\nexit 0\nfi\n"+printJSON(result))
@@ -22,7 +22,7 @@ func commentTarget(t *testing.T, result string) string {
 func TestJiraCommentCommand(t *testing.T) {
 	const text = "--literal '<tag>' & $"
 	j := newTestJira(t, "ENG")
-	trace := commentTarget(t, `{"data":[{"id":"10042","key":"ENG-42","project":{"key":"ENG"}}]}`)
+	trace := jiraWriteTarget(t, `{"data":[{"id":"10042","key":"ENG-42","project":{"key":"ENG"}}]}`)
 	p, err := j.PrepareComment(t.Context(), j.ref("eng", "eng-42"), text)
 	if err != nil {
 		t.Fatal(err)
@@ -78,12 +78,12 @@ func TestJiraCommentTargetAndLiteralText(t *testing.T) {
 		`{"key":"ENG-42","project":{"key":"ENG"}}`,
 		`{"id":"10042","key":"ENG-42","project":{"key":"ENG"},"url":"https://foreign.example/browse/ENG-42"}`,
 	} {
-		commentTarget(t, `{"data":[`+row+`]}`)
+		jiraWriteTarget(t, `{"data":[`+row+`]}`)
 		if p, err := j.PrepareComment(t.Context(), ref, "test"); p != nil || !errors.Is(err, ErrAccessDenied) {
 			t.Fatal(row, p, err)
 		}
 	}
-	commentTarget(t, `{"data":[{"id":"10042","key":"ENG-42","project":{"key":"ENG"}}]}`)
+	jiraWriteTarget(t, `{"data":[{"id":"10042","key":"ENG-42","project":{"key":"ENG"}}]}`)
 	for _, body := range []string{"", " ends ", "starts\uFEFF", "NUL\x00", "[~accountId:123456789012345678901234]"} {
 		if p, err := j.PrepareComment(t.Context(), ref, body); p != nil || err == nil {
 			t.Fatalf("accepted %q", body)
@@ -99,16 +99,16 @@ func TestJiraCommentSelectsSiteProfile(t *testing.T) {
 		return `{"data":{"storage":"file","activeEnvironment":"prod","defaults":{"prod":"foreign-id"},"profiles":[` + profiles + `]}}`
 	}
 	fakeTWG(t, printJSON(catalog(foreign+","+target)))
-	profile, selector, err := j.commentProfile(t.Context())
+	profile, selector, err := j.jiraProfile(t.Context())
 	if err != nil || selector != "by-site" || profile.UserID != "fixture-user" {
 		t.Fatal(selector, err)
 	}
 	fakeTWG(t, printJSON(catalog(foreign)))
-	if _, _, err := j.commentProfile(t.Context()); !errors.Is(err, ErrAuthRequired) {
+	if _, _, err := j.jiraProfile(t.Context()); !errors.Is(err, ErrAuthRequired) {
 		t.Fatal("foreign profile selected", err)
 	}
 	fakeTWG(t, printJSON(catalog(foreign+","+target+","+strings.ReplaceAll(target, "local-id", "other-id"))))
-	if _, _, err := j.commentProfile(t.Context()); !errors.Is(err, ErrAccessDenied) {
+	if _, _, err := j.jiraProfile(t.Context()); !errors.Is(err, ErrAccessDenied) {
 		t.Fatal("ambiguous site profile selected", err)
 	}
 }

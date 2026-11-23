@@ -228,9 +228,15 @@ publication to space keys in `knowledge_base.settings.publish_spaces`.
 
 In a regular Claude Code Desktop session, `devflow_ticket_create` can create an
 unlinked Jira issue through the Devflow Rovo enrollment. Devflow checks the Jira
-project and issue type, then requests approval for the exact issue. The same
-tool can create a GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
-account and repository. If sign-in is needed, run
+project and issue type, then requests approval for the exact issue. When the MCP
+create operation is unavailable, an interactive `devflow_ticket_create` or
+`devflow task create` can use the signed-in Teamwork Graph CLI. The preview
+binds the OAuth profile, site, project, issue type, title, description and
+labels. Devflow returns the key after verifying the new issue on that profile.
+This fallback has been tested with fixtures.
+
+The same tool can create a GitHub issue through signed-in `gh`. Its interactive
+preview shows the GitHub account and repository. If sign-in is needed, run
 `devflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·
 [Slack destination configuration](docs/notifications.md)
