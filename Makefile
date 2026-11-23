@@ -7,7 +7,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG     := github.com/nscaledev/devflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
-SHELL_SCRIPTS := $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
+SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
 	templates/repo/.devflow/bin/devflow \
 	templates/repo/.githooks/commit-msg \
 	adapters/claude-code/bin/launch adapters/claude-code/bin/devflow
@@ -35,7 +35,9 @@ actionlint:
 agent-docs: ## CLAUDE.md files must only contain @AGENTS.md
 	scripts/check-agent-docs.sh
 
-check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs
+check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs locally
+	bash scripts/test-install-sh.sh
+	@if command -v pwsh >/dev/null; then pwsh -NoProfile -File scripts/test-install-ps1.ps1; fi
 
 snapshot: ## Local multi-platform build, no publish
 	goreleaser release --snapshot --clean

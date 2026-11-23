@@ -32,6 +32,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/rovohost"
 	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/devflow/internal/setup/initproviders"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
 )
@@ -43,6 +44,9 @@ Usage: devflow <command> [flags]
 Setup
   ui [--no-open] [--port N] [directory]   open the repository console on loopback
   init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
+  init --detect-providers        show local selection evidence and supported choices as JSON
+  init [--guided|--non-interactive] [--provider ROLE=ID ...]
+                                 review and persist provider choices; the terminal guides by default
   init --guidance-only           refresh the managed AGENTS.md block
   remove [--dry-run] [--force] [--keep-releases]
                                  undo init: delete devflow's files, strip its entries from
@@ -117,7 +121,7 @@ Runtime
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
-  update [--rollback] [--quiet]  install the latest release now, or go back one version
+  update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
 `
 
@@ -153,7 +157,7 @@ func Main(args []string) int {
 	if cmd == "doctor" && len(rest) > 0 && rest[0] == "--providers" {
 		cmd, rest = "setup", append([]string{"verify"}, rest[1:]...)
 	}
-	if !quietCommand(cmd) {
+	if !quietCommand(cmd) && (cmd != "init" || !initInspection(rest)) {
 		maybeUpdate(ctx)
 	}
 	err := run(ctx, cmd, rest)
@@ -416,28 +420,74 @@ func runInit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	force := fs.Bool("force", false, "overwrite existing files")
 	guidanceOnly := fs.Bool("guidance-only", false, "refresh only the generated AGENTS.md block")
+	guided := fs.Bool("guided", false, "prompt for unknown providers and review selections")
+	headless := fs.Bool("non-interactive", false, "use existing selections and defaults without prompting")
+	detect := fs.Bool("detect-providers", false, "print repository provider evidence as JSON without changing anything")
+	answers := map[string]string{}
+	fs.Func("provider", "persist a provider for ROLE=ID (repeatable)", func(value string) error { return providerArgument(answers, value) })
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	dir, _ := os.Getwd()
+	if fs.NArg() != 0 {
+		return errors.New("init operates on the current checkout; unexpected positional argument")
+	}
+	if *guided && *headless {
+		return errors.New("choose either --guided or --non-interactive")
+	}
+	if *detect && (*guided || *headless || *force || *guidanceOnly || len(answers) > 0) {
+		return errors.New("run init --detect-providers separately from initialization")
+	}
+	if *guidanceOnly && (*guided || *headless || len(answers) > 0) {
+		return errors.New("provider selection is unavailable with --guidance-only")
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	repo, err := gitx.Open(ctx, dir)
+	if err != nil {
+		return err
+	}
 	if *guidanceOnly {
 		if *force {
 			return errors.New("init --guidance-only cannot be combined with --force")
-		}
-		repo, err := gitx.Open(ctx, dir)
-		if err != nil {
-			return err
 		}
 		res, err := setup.RefreshAgentInstructions(repo.Dir)
 		printResult(res)
 		return err
 	}
-	res, err := app.InitRepo(ctx, dir, "cli", *force)
+	prompt := *guided || (!*headless && term.IsTerminal(int(os.Stdin.Fd())))
+	var edit *initproviders.Edit
+	if *detect || prompt || len(answers) > 0 {
+		plan, err := initproviders.Detect(ctx, repo)
+		if err != nil {
+			return err
+		}
+		if *detect {
+			return printJSON(plan)
+		}
+		if prompt {
+			if err := guideProviders(plan, answers, os.Stdin, os.Stderr); err != nil {
+				return err
+			}
+		}
+		edit, err = plan.Prepare(answers, *force)
+		if err != nil {
+			return err
+		}
+	}
+	res, err := app.InitRepo(ctx, repo.Dir, "cli", *force)
 	if res != nil {
 		printResult(res.Files)
 	}
 	if err != nil {
 		return err
+	}
+	if edit != nil {
+		if err := setup.SaveInitProviderConfig(repo.Dir, edit.Before, edit.After); err != nil {
+			return err
+		}
+		fmt.Println("  updated  .devflow/config.yml provider selections")
 	}
 	rel := res.Release
 	fmt.Printf("Release units (%s strategy):\n", rel.Strategy)
@@ -976,6 +1026,7 @@ func spawnBackgroundUpdate(u *update.Updater) {
 func runUpdate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("update", flag.ContinueOnError)
 	rollback := fs.Bool("rollback", false, "switch back to the previous version")
+	stable := fs.Bool("latest-stable", false, "install GitHub's latest stable release, respecting project version restrictions")
 	quiet := fs.Bool("quiet", false, "no output; leave a notice for the next run")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -985,6 +1036,9 @@ func runUpdate(ctx context.Context, args []string) error {
 		return err
 	}
 	if *rollback {
+		if *stable {
+			return errors.New("choose either --latest-stable or --rollback")
+		}
 		v, err := u.Rollback()
 		if err == nil {
 			fmt.Printf("devflow now runs %s. Restart AI sessions to use it.\n", v)
@@ -992,12 +1046,18 @@ func runUpdate(ctx context.Context, args []string) error {
 		return err
 	}
 	u.Touch()
-	rel, err := u.Latest(ctx)
+	resolve := u.Latest
+	if *stable {
+		resolve = u.LatestStable
+	}
+	rel, err := resolve(ctx)
 	if err != nil {
 		return err
 	}
-	if rel == nil || !u.NewerThanCurrent(rel) || u.Installed(rel.Version().String()) {
-		if !*quiet {
+	if rel == nil || (!*stable && !u.NewerThanCurrent(rel)) || u.Installed(rel.Version().String()) {
+		if *stable && rel != nil && !*quiet {
+			fmt.Printf("Devflow %s is already active in the verified installation cache.\n", rel.Tag)
+		} else if !*quiet {
 			fmt.Printf("devflow %s is up to date (channel %s)\n", version.Version, u.Opts.Channel)
 		}
 		return nil
