@@ -81,6 +81,15 @@ var providerTools = map[string]ProviderTooling{
 	}},
 }
 
+// ProviderMCP returns the official connector details for a provider and client.
+func ProviderMCP(provider, client string) MCPTool {
+	tool := providerTools[provider].MCP
+	if client == claudeDesktop && (provider == "slack" || provider == "asana") {
+		tool.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", claudeDesktop, "--register"}
+	}
+	return tool
+}
+
 func (p *ProviderSetupPlan) addProviderTooling(role, provider, client string, ghSelection *managedgh.Selection) {
 	tools, ok := providerTools[provider]
 	if !ok {
@@ -93,9 +102,7 @@ func (p *ProviderSetupPlan) addProviderTooling(role, provider, client string, gh
 		}
 	}
 	tools.Provider, tools.Roles = provider, []string{role}
-	if client == claudeDesktop && (provider == "slack" || provider == "asana") {
-		tools.MCP.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", claudeDesktop, "--register"}
-	}
+	tools.MCP = ProviderMCP(provider, client)
 	if tools.CLI != nil {
 		cli := *tools.CLI
 		if cli.Command == "gh" && ghSelection != nil {

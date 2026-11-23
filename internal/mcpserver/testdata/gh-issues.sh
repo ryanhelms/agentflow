@@ -19,6 +19,8 @@ case "$method $2" in
         /bin/cat "$GH_FIXTURE/actor" ;;
     'GET repos/sample/project/issues?'*)
         printf 'HTTP/2.0 200 OK\r\n\r\n[]' ;;
+    'GET repos/sample/project/issues/17')
+        printf 'HTTP/2.0 200 OK\r\n\r\n{"number":17,"title":"Example issue from gh","state":"open","html_url":"https://github.com/sample/project/issues/17"}' ;;
     'POST repos/sample/project/issues')
         /bin/cat >> "$GH_FIXTURE/posts"
         printf '\n' >> "$GH_FIXTURE/posts"

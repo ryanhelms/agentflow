@@ -23,8 +23,6 @@ import (
 	"github.com/nscaledev/devflow/internal/version"
 )
 
-const nativeInstructions = `For native_read_required, use the named operation and exact arguments with the connected provider MCP. Call the original devflow tool again with native_results containing the request ID, status, and provider JSON from that read. Use unavailable only when the client lacks the operation, and report access_denied for permission denials. If OAuth is required, launch the client’s native sign-in or run devflow setup login --provider NAME --client CLIENT --server SERVER for Claude Code or Codex. For a vendor CLI, run devflow setup login --provider NAME. Wait for user consent and request a fresh preview for writes. For a product or resource permission denial, report the denied scope.`
-
 // Server wraps the MCP server and the app.
 type Server struct {
 	mcp         *mcp.Server
@@ -138,7 +136,7 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 			var providerRequest *native.Request
 			switch {
 			case errors.As(err, &providerRequest):
-				out = providerRequest
+				out = s.nativeReadResponse(providerRequest)
 			case err != nil:
 				return errResult(err), nil, nil
 			}

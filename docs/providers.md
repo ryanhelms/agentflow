@@ -321,6 +321,13 @@ uses its existing provider connection for the exact requested tool and inputs,
 then passes the result back to the original Devflow tool in `native_results`.
 Other clients can opt into the same flow with `provider_mcp: true`.
 
+For supported providers the request includes `setup_offer` with the official
+connector details. If the connector is missing, the agent resumes the read with
+`unavailable` and presents `prompt_if_missing` once per provider per session,
+including after a successful fallback. After user approval, the agent uses the
+current client's connector setup and starts sign-in if required. A connected
+server that lacks only the requested operation can use the fallback directly.
+
 Jira and Confluence can use the signed-in Teamwork Graph CLI when the MCP
 capability is missing. Interactive GitHub API calls use the signed-in `gh`
 client. Explicit GitHub workflow tokens retain the existing service-account
