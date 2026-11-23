@@ -115,13 +115,22 @@ releases:
 
 | File | Purpose |
 | --- | --- |
-| `.devflow/config.yml` | Jira site and projects, commit rules, autonomy ceiling, update channel |
+| `.devflow/config.yml` | Provider selections, task templates, commit rules, autonomy ceiling, update channel |
 | `.devflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
 | `.devflow/bin/devflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
 | `.github/workflows/devflow.yml` | The one caller workflow for every devflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
-| `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/`, `AGENTS.md` | AI client configuration |
+| `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/` | AI client configuration |
+| `AGENTS.md` | Devflow-managed instructions that direct agents to the effective provider configuration |
+
+`devflow init` and `devflow install` write the same managed block in `AGENTS.md`
+and preserve project instructions around it. The block tells agents to use
+Devflow for task context, task creation, acceptance criteria, and linked
+knowledge. Devflow reads the provider selections and task template from
+`.devflow/config.yml`. The MCP server and Claude Code session hook report the
+resolved task and knowledge providers. For an already-initialized project,
+`devflow init --guidance-only` refreshes just the managed instruction block.
 
 Disable devflow in a repo at any time with the repository variable `DEVFLOW_ENABLED=false`:
 every job in the caller workflow checks it.
@@ -310,7 +319,10 @@ with template defaults, required sections and checklist items. Devflow records
 the selected revision and validates the issue against it before a comment or
 state change. See the [task template configuration](docs/providers.md#task-templates).
 
-To link a design decision to a GitHub issue, add a `## Related Knowledge`
+When creating a GitHub issue through Devflow, pass a qualified document
+reference such as `--link-to repository/engineering/quota`. Devflow adds the
+reference to the issue and includes it in the creation preview.
+For an existing issue, add a `## Related Knowledge`
 heading and one bullet such as `- repository/engineering/quota` per document.
 `devflow context` and `devflow_context` show the resolved titles and references.
 Reviewers can read a document with `devflow docs get REF [--json]` or

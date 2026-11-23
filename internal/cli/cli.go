@@ -41,8 +41,8 @@ const usage = `devflow links git work to your configured task, knowledge and cod
 Usage: devflow <command> [flags]
 
 Setup
-  init [--force]                 write .devflow/, hooks, workflow, client configs and release
-                                 setup (units, release-please files) into this repo
+  init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
+  init --guidance-only           refresh the managed AGENTS.md block
   remove [--dry-run] [--force] [--keep-releases]
                                  undo init: delete devflow's files, strip its entries from
                                  AGENTS.md and client configs, stop automatic init here
@@ -78,8 +78,8 @@ Work
   scope [--json]                 changes and new TODOs that look outside the ticket
   comment [KEY] TEXT [--yes]     comment on the task
   collisions [KEY] [--json]      other PRs on this task or touching your files
-  commit [-m MSG] [--split] [--dry-run] [--yes]   guided Jira-linked commit
-  preview [MSG]                  Jira effects of a message or of unpushed commits
+  commit [-m MSG] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
+  preview [MSG]                  configured task effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
   secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
                                  preview or create tasks from configured security events
@@ -412,10 +412,23 @@ func runHook(ctx context.Context, args []string) error {
 func runInit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	force := fs.Bool("force", false, "overwrite existing files")
+	guidanceOnly := fs.Bool("guidance-only", false, "refresh only the generated AGENTS.md block")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	dir, _ := os.Getwd()
+	if *guidanceOnly {
+		if *force {
+			return errors.New("init --guidance-only cannot be combined with --force")
+		}
+		repo, err := gitx.Open(ctx, dir)
+		if err != nil {
+			return err
+		}
+		res, err := setup.RefreshAgentInstructions(repo.Dir)
+		printResult(res)
+		return err
+	}
 	res, err := app.InitRepo(ctx, dir, "cli", *force)
 	if res != nil {
 		printResult(res.Files)

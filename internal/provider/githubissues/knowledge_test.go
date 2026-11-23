@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/nscaledev/devflow/internal/provider"
 )
 
 func TestRelatedKnowledge(t *testing.T) {
@@ -30,5 +32,24 @@ func TestRelatedKnowledge(t *testing.T) {
 				t.Fatalf("related knowledge = %v, warnings = %v", got, warnings)
 			}
 		})
+	}
+}
+
+func TestAppendRelatedKnowledgePreservesAuthoredBody(t *testing.T) {
+	const body = "Intro\n\n## Related Knowledge\n\n- repository/eng/first\n\n## Verification\nKeep this.\n"
+	ref := provider.Ref{Instance: "repository", Scope: "eng", ID: "new/doc"}
+	next, err := AppendRelatedKnowledge(body, ref)
+	if err != nil || strings.Count(next, "## Related Knowledge") != 1 || !strings.HasSuffix(next, "## Verification\nKeep this.\n") {
+		t.Fatalf("append = %q, %v", next, err)
+	}
+	links, warnings := RelatedKnowledge(next)
+	if len(warnings) != 0 || len(links) != 2 || *links[0].Ref != ref || links[1].Ref.ID != "first" {
+		t.Fatalf("related knowledge = %v, %v", links, warnings)
+	}
+	if replay, err := AppendRelatedKnowledge(next, ref); err != nil || replay != next {
+		t.Fatalf("replay = %q, %v", replay, err)
+	}
+	if _, err := AppendRelatedKnowledge("```markdown\nexample", ref); err == nil {
+		t.Fatal("accepted link hidden by an unclosed fence")
 	}
 }
