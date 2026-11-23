@@ -75,14 +75,19 @@ func Compose(ctx context.Context, root, base string, content *string, role, oper
 	if err != nil {
 		return Composition{}, err
 	}
+	return DescribeComposition(ctx, root, consolecfg.MainFile, source, base), nil
+}
+
+// DescribeComposition inspects a staged source, including partially edited documents.
+func DescribeComposition(ctx context.Context, root, path, source, base string) Composition {
 	result := Composition{Content: source}
-	plan, err := consolecfg.Preview(ctx, root, consolecfg.MainFile, source, base)
+	plan, err := consolecfg.Preview(ctx, root, path, source, base)
 	if err != nil {
 		result.Warning = err.Error()
 	} else {
 		result.Providers = plan.Providers
 	}
-	return result, nil
+	return result
 }
 
 func (c Candidate) publication() (Edit, error) {

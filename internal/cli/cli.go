@@ -35,6 +35,7 @@ import (
 	"github.com/nscaledev/devflow/internal/setup/initproviders"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
+	"github.com/nscaledev/devflow/internal/webui"
 )
 
 const usage = `devflow links git work to your configured task, knowledge and code providers.
@@ -42,7 +43,9 @@ const usage = `devflow links git work to your configured task, knowledge and cod
 Usage: devflow <command> [flags]
 
 Setup
-  ui [--no-open] [--port N] [directory]   open the repository console on loopback
+  ui [--screen NAME] [--role ROLE] [--no-open] [--port N] [--foreground] [directory]
+                                 open or reuse the local repository console
+  ui --status | --stop           inspect or stop the shared local UI daemon
   init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
   init --detect-providers        show local selection evidence and supported choices as JSON
   init [--guided|--non-interactive] [--provider ROLE=ID ...]
@@ -128,7 +131,7 @@ Runtime
                                  Jira comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
-  mcp [--client NAME]            MCP server on stdio
+  mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
@@ -228,11 +231,13 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "mcp":
 		fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 		client := fs.String("client", "", "calling client name")
+		uiOnly := fs.Bool("ui-only", false, "expose only devflow_ui_open for local console requests")
+		autoOpen := fs.Bool("auto-open", false, "the host explicitly identifies an interactive lead session; open its local console at startup")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
 		u, _ := newUpdater(ctx)
-		return mcpserver.Serve(ctx, *client, u)
+		return mcpserver.Serve(ctx, *client, u, *uiOnly, *autoOpen)
 	case "hook":
 		return runHook(ctx, args)
 	case "lint-msg":
@@ -419,7 +424,16 @@ func runHook(ctx context.Context, args []string) error {
 			}
 			spawnBackgroundUpdate(u)
 		}
-		return hooks.SessionStart(ctx, *client, notice, os.Stdout)
+		if err := hooks.SessionStart(ctx, *client, notice, os.Stdout); err != nil {
+			return err
+		}
+		if *client == "claude" {
+			// A manual hook invocation in a terminal has no event to consume.
+			if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice == 0 {
+				webui.OpenClaudeSession(ctx, os.Stdin)
+			}
+		}
+		return nil
 	case "pre-bash":
 		return hooks.PreBash(ctx, os.Stdin, os.Stderr, *conventionOnly)
 	case "stop":

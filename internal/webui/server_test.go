@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nscaledev/devflow/internal/consolepublish"
 	"github.com/nscaledev/devflow/internal/gitx"
@@ -37,10 +38,10 @@ func testServer(t *testing.T) *server {
 	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("devflow: 1\ncommit:\n  require_key: false\ntask_management:\n  provider: github-issues\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return &server{repo: &gitx.Repo{Dir: dir}, origin: "http://127.0.0.1:41511", launch: "launch", session: "session"}
+	return &server{repo: &gitx.Repo{Dir: dir}, origin: "http://127.0.0.1:41511", instanceKey: randomKey(), session: randomKey(), rememberKey: randomKey()}
 }
 
-func request(t *testing.T, s *server, method, path, origin, key string, body any) *httptest.ResponseRecorder {
+func request(t *testing.T, s *server, method, path, origin, key string, body any, commander ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -50,8 +51,14 @@ func request(t *testing.T, s *server, method, path, origin, key string, body any
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
+	if key == "session" {
+		key = grantToken(s.session, "tab/v1", time.Now().Add(time.Hour))
+	}
 	if key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	if len(commander) == 1 {
+		req.Header.Set("X-Devflow-Commander", commander[0])
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Devflow-Request", "console")
@@ -62,6 +69,7 @@ func request(t *testing.T, s *server, method, path, origin, key string, body any
 
 func TestConsoleSessionBoundary(t *testing.T) {
 	s := testServer(t)
+	launch := mintLaunch(s.instanceKey, time.Now())
 	initial := request(t, s, "GET", "/", "", "", nil)
 	if initial.Code != 200 || !strings.Contains(initial.Body.String(), "<!") {
 		t.Fatal(initial.Code)
@@ -72,9 +80,9 @@ func TestConsoleSessionBoundary(t *testing.T) {
 		want                      int
 	}{
 		{"/api/state", "GET", "", "", nil, 401},
-		{"/api/session", "POST", "https://example.invalid", "", map[string]string{"launch": "launch"}, 403},
-		{"/api/session", "POST", s.origin, "", map[string]string{"launch": "launch"}, 200},
-		{"/api/session", "POST", s.origin, "", map[string]string{"launch": "launch"}, 401},
+		{"/api/session", "POST", "https://example.invalid", "", map[string]string{"launch": launch}, 403},
+		{"/api/session", "POST", s.origin, "", map[string]string{"launch": launch}, 200},
+		{"/api/session", "POST", s.origin, "", map[string]string{"launch": launch}, 401},
 		{"/api/state", "GET", "", "session", nil, 200},
 		{"/api/preview", "POST", "", "session", nil, 403},
 	} {

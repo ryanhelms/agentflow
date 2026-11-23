@@ -13,6 +13,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/configconsole"
+	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
@@ -23,10 +24,12 @@ import (
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
+	"github.com/nscaledev/devflow/internal/webui"
 )
 
 // Server wraps the MCP server and the app.
 type Server struct {
+	startup     *consoleStartup
 	mcp         *mcp.Server
 	app         *app.App
 	blocked     error
@@ -59,7 +62,7 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 	window := a.Gate.Explain(policy.Remote, "comment", nil, false).Window
 	s.writer.SetApprovalWindow(window)
 	s.slackWriter.SetApprovalWindow(window)
-	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: setup.AgentProviderSelection(a.Cfg) + "\n" + setup.AgentInstructions() + "\n\n" + nativeInstructions})
+	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{InitializedHandler: s.initialized, Instructions: setup.AgentProviderSelection(a.Cfg) + "\n" + setup.AgentInstructions() + "\n\n" + nativeInstructions})
 	s.register()
 	return s, s.registerConfig()
 }
@@ -120,6 +123,9 @@ func ptr[T any](v T) *T { return &v }
 // The Desktop grant is opt-in per Devflow entry point. In particular, batch
 // EOD and checklist updates also call the Jira comment implementation.
 func (s *Server) writerForTool(name string) *native.SessionWriter {
+	if s.app == nil {
+		return nil // The UI-only companion has no provider write host.
+	}
 	if s.app.Client != "claude" && s.app.Client != "claude-desktop" {
 		return s.writer
 	}
@@ -302,6 +308,7 @@ func (s *Server) register() {
 	s.registerProviderSetup()
 	s.registerNotifications()
 	a := s.app
+	s.registerUI(a.Repo.Dir)
 	s.registerApprovalTools()
 	// Task awareness
 	add(s, "devflow_context", "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.", readOnly,
@@ -432,16 +439,44 @@ func (s *Server) register() {
 		func(ctx context.Context, in releaseIn) (any, error) { return a.ReleasePreview(ctx, in.Since) })
 }
 
+func (s *Server) registerUI(root string) {
+	add(s, "devflow_ui_open", "Open the local repository console for the current worktree in the developer's browser. Use this when asked to open the provider editor, autonomy settings, configuration, overview or handoff. Reuse the running console and navigate to the requested screen and provider role.", local,
+		func(ctx context.Context, in webui.Destination) (any, error) {
+			return webui.Open(ctx, root, in)
+		})
+}
+
+// A host can offer the console without granting its agents any repository tools.
+// Opening the editor must also work when the repository configuration needs repair.
+func newUIOnly(ctx context.Context, dir string) (*Server, error) {
+	repo, err := gitx.Open(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	s := &Server{}
+	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{
+		InitializedHandler: s.initialized, Instructions: "When the user asks to open devflow, open the requested local console screen for this worktree.",
+	})
+	s.registerUI(repo.Dir)
+	return s, nil
+}
+
 // Serve is the entry point for `devflow mcp`.
-func Serve(ctx context.Context, client string, u *update.Updater) error {
+func Serve(ctx context.Context, client string, u *update.Updater, uiOnly, autoOpen bool) error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	s, err := New(ctx, dir, client)
+	var s *Server
+	if uiOnly {
+		s, err = newUIOnly(ctx, dir)
+	} else {
+		s, err = New(ctx, dir, client)
+	}
 	if err != nil {
 		return err
 	}
+	s.enableConsoleStartup(&consoleStartup{ctx: ctx, root: dir, client: client, uiOnly: uiOnly, explicit: autoOpen, open: webui.OpenAutomatic})
 	if u != nil {
 		s.SetUpdater(u)
 	}

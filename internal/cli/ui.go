@@ -6,52 +6,117 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/nscaledev/devflow/internal/webui"
 )
 
+// A single daemon serves unrelated Git repositories. Git's per-invocation
+// environment must never redirect its later operations into the first checkout.
+func clearWorktreeGitEnv() {
+	for _, key := range []string{
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+		"GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+		"GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+		"GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_QUARANTINE_PATH",
+	} {
+		_ = os.Unsetenv(key)
+	}
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(key, "GIT_CONFIG_KEY_") || strings.HasPrefix(key, "GIT_CONFIG_VALUE_") {
+			_ = os.Unsetenv(key)
+		}
+	}
+}
+
 func runUI(ctx context.Context, args []string) error {
+	clearWorktreeGitEnv()
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	defer stop()
+	// Only the parent process reads this private readiness pipe.
+	if len(args) == 5 && args[0] == "--serve-child" {
+		port, err := strconv.Atoi(args[4])
+		if err != nil || port < 0 || port > 65535 {
+			return errors.New("invalid console port")
+		}
+		return webui.ServeChild(ctx, webui.Destination{Screen: args[1], Role: args[2]}, args[3], port, os.Stdout)
+	}
+
+	if len(args) == 1 {
+		switch args[0] {
+		case "--status":
+			running, port, err := webui.DaemonStatus(ctx)
+			if err == nil {
+				if running {
+					fmt.Printf("devflow UI daemon is running on loopback port %d\n", port)
+				} else {
+					fmt.Println("devflow UI daemon is stopped")
+				}
+			}
+			return err
+		case "--stop":
+			running, _, err := webui.StopDaemon(ctx)
+			if err != nil {
+				return err
+			}
+			if running {
+				fmt.Println("Requested shutdown of the devflow UI daemon")
+			} else {
+				fmt.Println("devflow UI daemon is already stopped")
+			}
+			return nil
+		}
+	}
+
 	f := flag.NewFlagSet("ui", flag.ContinueOnError)
-	port := f.Int("port", 0, "loopback port (default: choose an available port)")
+	f.Usage = func() {
+		fmt.Fprintln(f.Output(), "Usage: devflow ui [options] [directory] | --status | --stop")
+		f.PrintDefaults()
+	}
+	port := f.Int("port", 0, "loopback port for the daemon (default: reuse its port, otherwise try 80, then an available port)")
 	noOpen := f.Bool("no-open", false, "print the one-time launch URL without opening a browser")
+	foreground := f.Bool("foreground", false, "keep a newly started daemon attached to this terminal")
+	screen := f.String("screen", "", "open overview, providers, autonomy, configuration, or handoff (default: overview)")
+	role := f.String("role", "", "select a role in the provider editor, such as task_management")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
 	if f.NArg() > 1 || *port < 0 || *port > 65535 {
-		return errors.New("usage: devflow ui [--no-open] [--port N] [directory]")
+		return errors.New("usage: devflow ui [--screen NAME] [--role ROLE] [--no-open] [--foreground] [--port N] [directory]")
+	}
+	dest, err := (webui.Destination{Screen: *screen, Role: *role}).Normalize("overview")
+	if err != nil {
+		return err
 	}
 	dir := "."
 	if f.NArg() == 1 {
 		dir = f.Arg(0)
 	}
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
-	defer stop()
-	return webui.Serve(ctx, dir, *port, func(url string) {
-		fmt.Fprintln(os.Stdout, url)
+	ready := func(address string, _ bool) {
+		if address == "" {
+			fmt.Fprintln(os.Stdout, "Opened the requested screen in the existing devflow tab.")
+			return
+		}
+		fmt.Fprintln(os.Stdout, address)
 		if !*noOpen {
-			if err := openConsoleBrowser(url); err != nil {
+			if err := webui.OpenBrowser(ctx, address); err != nil {
 				fmt.Fprintln(os.Stderr, "Open the printed URL in a local browser.")
 			}
 		}
-	})
-}
-
-func openConsoleBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
 	}
-	if err := cmd.Start(); err != nil {
-		return err
+	if *foreground {
+		serve := webui.ServeForeground
+		if *noOpen {
+			serve = webui.ServeAt
+		}
+		return serve(ctx, dir, *port, dest, ready)
 	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	address, err := webui.LaunchCLI(ctx, dir, *port, dest, *noOpen)
+	if err == nil {
+		ready(address, false)
+	}
+	return err
 }

@@ -2,20 +2,38 @@
 const $ = (id) => document.getElementById(id);
 const repositoryFile = ".devflow/config.yml";
 const drafts = new Map();
-const sessionKey = "devflow.session";
-const views = ["overview", "providers", "autonomy", "configuration", "handoff"];
+const sessionKey = "devflow.session:" + location.pathname;
+const commanderKey = "devflow.commander:" + location.pathname;
+const reconnectCommander = "Open this worktree again from its Agent Commander session to see worker requests or send a reply.";
+let commanderContext = "";
+let commanderEpoch = 0;
+try { commanderContext = sessionStorage.getItem(commanderKey) || ""; } catch { /* A fresh launch still works in memory. */ }
+const savedDraftKey = "devflow.drafts:" + location.pathname;
+const rememberKey = "devflow.browser"; // localStorage is isolated by clone origin.
+let memoryGrant = "";
+let resumeAttempt;
+let leavingForWorktree = false;
+let rememberedModal;
+let modalContext;
+let pendingProviderChoice;
+let saveTimer;
+let loadSequence = 0;
+const screenNames = {overview: "repository overview", providers: "provider editor", autonomy: "autonomy settings", configuration: "configuration editor", handoff: "handoff screen"};
+const views = Object.keys(screenNames);
 const roleNames = {
   code_hosting: "Code hosting", task_management: "Task management", knowledge_base: "Knowledge base",
   "devops.checks": "Checks", "devops.deployments": "Deployments", "devops.releases": "Releases",
   secops: "Security operations", notifications: "Notifications"
 };
 let session = "";
+let authAttempt = 0;
 let state = null;
 let activity = null;
 let roleID = "";
 let filePath = "";
 let review = null;
 let settingBeingEdited = null;
+let settingEditor = null;
 let publishing = false;
 let previewSequence = 0;
 let connectionSequence = 0;
@@ -81,9 +99,82 @@ function outbound(label, target) {
   return a;
 }
 
-async function request(path, body) {
+function rememberGrant() {
+  try { return localStorage.getItem(rememberKey) || ""; } catch { return memoryGrant; }
+}
+
+// Worker questions, reply approvals, and their credential belong to the
+// launching Commander session. They never enter remembered browser grants or drafts.
+function clearCommanderActivity() {
+  commanderEpoch++;
+  activity = null;
+  if (state) renderActivity();
+}
+
+function setCommanderContext(value) {
+  const previous = commanderContext;
+  commanderContext = typeof value === "string" ? value : "";
+  try {
+    if (commanderContext) sessionStorage.setItem(commanderKey,commanderContext);
+    else sessionStorage.removeItem(commanderKey);
+  } catch { /* Use the context only in this page. */ }
+  clearCommanderActivity();
+  if (commanderContext !== previous && state && !$("console-shell").hidden) {
+    tabs.stop();
+    if (session) tabs.start();
+  }
+}
+
+function acceptSession(data, freshLaunch = false) {
+  if (typeof data.session !== "string" || !data.session) throw new Error("The local console could not start this session.");
+  if (freshLaunch) tabs.stop();
+  session = data.session;
+  if (freshLaunch) setCommanderContext(data.commander);
+  try { sessionStorage.setItem(sessionKey,session); } catch { /* Keep this worktree session in memory. */ }
+  if (typeof data.remember === "string" && data.remember) {
+    memoryGrant = data.remember;
+    try { localStorage.setItem(rememberKey,memoryGrant); } catch { /* Use the grant in this tab. */ }
+  }
+}
+
+async function resumeSession(previous) {
+  if (session && session !== previous) return true;
+  if (resumeAttempt) return resumeAttempt;
+  const grant = rememberGrant();
+  if (!grant) return false;
+  resumeAttempt = (async () => {
+    try {
+      const result = await request("api/resume",{remember:grant});
+      if (session === previous) acceptSession(result);
+      return Boolean(session);
+    } catch (error) {
+      if (error.status === 401 && rememberGrant() === grant) {
+        memoryGrant = "";
+        try { localStorage.removeItem(rememberKey); } catch { /* Memory was cleared. */ }
+      }
+      return false;
+    } finally { resumeAttempt = null; }
+  })();
+  return resumeAttempt;
+}
+
+function expireSession(previous) {
+  if (session !== previous) return;
+  session = "";
+  setCommanderContext("");
+  try { sessionStorage.removeItem(sessionKey); } catch { /* Memory was cleared. */ }
+  showConnection("Your local console session has ended.");
+}
+
+async function request(path, body, retried = false) {
   const headers = { Accept: "application/json" };
-  if (session) headers.Authorization = "Bearer " + session;
+  const credential = session;
+  const bootstrap = path === "api/session" || path === "api/resume";
+  const commanderRequest = path === "api/activity" || path === "api/reply";
+  const epoch = commanderEpoch;
+  if (path === "api/reply" && !commanderContext) throw new Error(reconnectCommander);
+  if (commanderRequest && commanderContext) headers["X-Devflow-Commander"] = commanderContext;
+  if (credential && !bootstrap) headers.Authorization = "Bearer " + credential;
   const options = { headers, cache: "no-store", credentials: "omit", redirect: "error" };
   if (body !== undefined) {
     options.method = "POST";
@@ -95,48 +186,297 @@ async function request(path, body) {
   try { response = await fetch(path, options); }
   catch { throw new Error("Cannot reach the local devflow process. Check that devflow ui is still running."); }
   const data = await response.json().catch(() => ({}));
+  if (commanderRequest) {
+    if (epoch !== commanderEpoch) throw new Error("The Commander session changed. Check activity again.");
+    if (data.commander_reconnect === true) {
+      setCommanderContext("");
+      if (path === "api/reply") {
+        $("activity-note").textContent = data.error || reconnectCommander;
+        throw new Error(data.error || reconnectCommander);
+      }
+    }
+  }
   if (!response.ok) {
-    if (response.status === 401) throw new Error("This session has expired. Reopen the launch URL printed by devflow ui.");
+    if (response.status === 401) {
+      const error = new Error(path === "api/session" ? "This one-time link was already used or has expired." : "Your local console session has ended.");
+      error.status = response.status;
+      if (!bootstrap) {
+        if (!retried && await resumeSession(credential)) {
+          if (commanderRequest && epoch !== commanderEpoch) throw new Error("The Commander session changed. Check activity again.");
+          return request(path,body,true);
+        }
+        expireSession(credential);
+      }
+      throw error;
+    }
     throw new Error(data.error || "Request failed (" + response.status + ").");
   }
   return data;
 }
 
-async function authenticate() {
-  const launch = new URLSearchParams(location.hash.slice(1)).get("launch");
-  if (launch) {
-    history.replaceState(null, "", location.pathname + location.search);
-    const result = await request("/api/session", { launch });
-    if (!result.session) throw new Error("Launch could not be verified. Open the URL printed by devflow ui.");
-    session = result.session;
-    try { sessionStorage.setItem(sessionKey, session); } catch { /* Keep this tab usable without storage. */ }
-  } else {
-    try { session = sessionStorage.getItem(sessionKey) || ""; } catch { /* Show the launch instructions below. */ }
+// The launch credential lives only in the fragment and is removed before exchange.
+// Only known destinations can become a route, a chat request or a terminal command.
+function destination() {
+  const hash = location.hash.slice(1);
+  const split = hash.indexOf("?");
+  const launchParams = new URLSearchParams(hash);
+  const launching = launchParams.has("launch");
+  const params = launching ? launchParams : new URLSearchParams(split < 0 ? "" : hash.slice(split + 1));
+  const screen = launching ? params.get("screen") : split < 0 ? hash : hash.slice(0,split);
+  const role = params.get("role");
+  return {
+    screen: views.includes(screen) ? screen : "overview",
+    role: screen === "providers" && Object.hasOwn(roleNames,role) ? role : "",
+    launch: launching ? params.get("launch") : null
+  };
+}
+
+function route(screen, role) {
+  return "#" + screen + (role ? "?role=" + encodeURIComponent(role) : "");
+}
+
+function updateConnectionOptions() {
+  const {screen,role} = destination();
+  const name = role ? labelRole(role).toLowerCase() + " provider editor" : screenNames[screen];
+  $("chat-prompt").textContent = "Open the devflow " + name + " for this repository.";
+  const resume = drafts.size > 0;
+  $("reconnect-command").textContent = "devflow ui --screen " + screen + (role ? " --role " + role : "");
+  $("terminal-instructions").textContent = resume
+    ? "Run this command in the same worktree to resume its saved edits."
+    : "Run this command in the worktree you want to manage.";
+  $("reconnect-drafts").hidden = !resume;
+  const downloads = $("draft-downloads");
+  downloads.replaceChildren();
+  for (const [path,draft] of drafts) {
+    const button = element("button","Download " + path,"button secondary small wrap");
+    button.type = "button";
+    button.addEventListener("click",() => downloadText(path.split("/").pop(),draft.content));
+    downloads.append(button);
   }
-  if (!session) throw new Error("Open the launch URL printed by devflow ui to access this checkout.");
+}
+
+function showConnection(message) {
+  const leavingConsole = !$("console-shell").hidden;
+  if (!$("console-shell").hidden) {
+    storeDrafts();
+    if ($("setting-dialog").open) rememberedModal = modalSnapshot();
+  }
+  tabs.stop();
+  $("console-shell").hidden = true;
+  if ($("setting-dialog").open) $("setting-dialog").close();
+
+  $("connection-title").textContent = "Reconnect to devflow";
+  $("connection-message").textContent = message;
+  $("connection-options").hidden = false;
+  $("connection-retry").hidden = !session;
+  $("connection").hidden = false;
+  document.title = "Reconnect · devflow";
+  updateConnectionOptions();
+  if (leavingConsole) $("connection-title").focus();
+}
+
+async function copyText(node, status, success) {
+  try {
+    await navigator.clipboard.writeText(node.textContent);
+    status.textContent = success;
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    status.textContent = "Text selected. Use your browser’s Copy command.";
+  }
+}
+
+$("copy-prompt").addEventListener("click",() => copyText($("chat-prompt"),$("connection-feedback"),"Chat request copied."));
+$("copy-command").addEventListener("click",() => copyText($("reconnect-command"),$("connection-feedback"),"Command copied."));
+$("connection-retry").addEventListener("click",loadState);
+
+async function connect() {
+  const attempt = ++authAttempt;
+  const {screen,role,launch} = destination();
+  if (!session) {
+    try { session = sessionStorage.getItem(sessionKey) || ""; } catch { /* A launch also works without storage. */ }
+  }
+  let reason = "Open a local session for this worktree to continue.";
+  if (launch !== null) {
+    history.replaceState(null,"",location.pathname + location.search + route(screen,role));
+    try {
+      const result = await request("api/session",{launch});
+      if (attempt !== authAttempt) return;
+      acceptSession(result,true);
+    } catch (e) {
+      if (attempt !== authAttempt) return;
+      if (e.status !== 401) { showConnection(e.message); return; }
+      // A bookmarked or spent link may still have a valid browser grant.
+      reason = e.message;
+    }
+  }
+  if (!session) await resumeSession("");
+  if (attempt !== authAttempt) return;
+  if (session) await loadState();
+  else showConnection(reason);
 }
 
 function showPage(focus = false) {
-  let page = location.hash.slice(1);
-  if (!views.includes(page)) page = "overview";
-  if (page === "providers") renderProviders();
-  if (page === "autonomy" && state) loadAutonomy();
-  for (const name of views) $("page-" + name).hidden = page !== name;
+  const {screen,role} = destination();
+  if ($("console-shell").hidden) { updateConnectionOptions(); return; }
+  if (screen === "providers") {
+    if (role && role !== roleID) { roleID = role; $("setting-filter").value = ""; }
+    renderProviders();
+    if (pendingProviderChoice?.role === roleID) {
+      const select=$("provider-choice");
+      if ([...select.options].some(o => o.value === pendingProviderChoice.choice)) {
+        select.value = pendingProviderChoice.choice;
+        windowChoice();
+      }
+      pendingProviderChoice = null;
+    }
+    if (rememberedModal?.role === roleID && !$("setting-dialog").open) {
+      const previous=rememberedModal;
+      openSetting(previous.setting,previous);
+    }
+  }
+  if (screen === "autonomy" && state) loadAutonomy();
+  for (const name of views) $("page-" + name).hidden = screen !== name;
   for (const link of document.querySelectorAll("[data-page]")) {
-    if (link.dataset.page === page) link.setAttribute("aria-current", "page");
+    if (link.dataset.page === screen) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  if (screen === "configuration" && state) renderEditor();
   if (focus) {
     $("main").focus({preventScroll: true});
     window.scrollTo(0, 0);
   }
 }
 
-function go(page) {
-  if (location.hash === "#" + page) showPage(true);
-  else location.hash = page;
+function go(screen, role = "") {
+  const hash = route(screen,role);
+  if (location.hash === hash) showPage(true);
+  else location.hash = hash;
 }
-window.addEventListener("hashchange", () => showPage(true));
+window.addEventListener("hashchange", () => {
+  if (destination().launch !== null) connect();
+  else showPage(true);
+});
+document.querySelector(".skip").addEventListener("click",event => { event.preventDefault(); $("main").focus(); });
+
+document.addEventListener("input",event => {
+  const editor = event.target.closest(".te-editor");
+  if (editor) editor.dataset.modified = "true";
+});
+
+// Store only editable browser state. Each clone has its own origin and each
+// worktree has its own key. Credentials and review approvals live elsewhere.
+function modalSnapshot() {
+  if (!$("setting-dialog").open || !settingEditor || !modalContext) return rememberedModal;
+  return {...modalContext,raw:settingEditor.snapshot(),message:$("setting-message").textContent};
+}
+
+function storeDrafts() {
+  if (!state || $("console-shell").hidden) return true;
+  const raw = {root:state.root,files:Array.from(drafts),filePath,role:roleID,roleFilter:$("setting-filter").value,
+    providerChoice:pendingProviderChoice?.choice || $("provider-choice").value,screen:destination().screen,modal:modalSnapshot(),
+    document:window.snapshotDocumentEditor(),title:$("commit-title").value,task:$("task-ref").value,delivery:$("delivery").value};
+  try {
+    localStorage.setItem(savedDraftKey,JSON.stringify(raw));
+    $("workspace-save-error").hidden = true;
+    $("setting-storage-error").hidden = true;
+    return true;
+  } catch {
+    $("workspace-save-error").hidden = false;
+    return false;
+  }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(storeDrafts,120);
+}
+for (const type of ["input","change","click","keyup","select","focusout"]) document.addEventListener(type,scheduleSave);
+window.addEventListener("hashchange",scheduleSave);
+document.addEventListener("visibilitychange",() => { if (document.hidden) storeDrafts(); });
+window.addEventListener("pagehide",() => { if (!leavingForWorktree) storeDrafts(); });
+
+function restoreDrafts(next) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(savedDraftKey));
+    if (!saved || saved.root !== next.root || !Array.isArray(saved.files)) return;
+    for (const row of saved.files) {
+      if (Array.isArray(row) && typeof row[0] === "string" && typeof row[1]?.content === "string" && typeof row[1]?.base_digest === "string") drafts.set(row[0],row[1]);
+    }
+    if (typeof saved.filePath === "string") filePath = saved.filePath;
+    if (Object.hasOwn(roleNames,saved.role)) roleID = saved.role;
+    if (typeof saved.roleFilter === "string") $("setting-filter").value = saved.roleFilter;
+    if (typeof saved.providerChoice === "string") pendingProviderChoice = {role:roleID,choice:saved.providerChoice};
+    if (typeof saved.title === "string") $("commit-title").value = saved.title;
+    if (typeof saved.task === "string") $("task-ref").value = saved.task;
+    if (["apply","draft"].includes(saved.delivery)) $("delivery").value = saved.delivery;
+    if (saved.modal && Object.hasOwn(roleNames,saved.modal.role) && saved.modal.setting?.path) rememberedModal = saved.modal;
+    window.restoreDocumentEditor(saved.document);
+    if (!location.hash && views.includes(saved.screen)) history.replaceState(null,"",route(saved.screen,saved.screen==="providers" ? roleID : ""));
+  } catch { /* An invalid or unavailable local draft cannot authorize a write. */ }
+}
+
+function hideSettingForNavigation() {
+  if ($("setting-dialog").open) {
+    rememberedModal = modalSnapshot();
+    $("setting-dialog").close();
+  }
+}
+
+const tabs = consoleTabs({
+  credential: () => session, commander: () => commanderContext, request,
+  async unauthorized(previous) {
+    if (await resumeSession(previous)) return true;
+    expireSession(previous);
+    return false;
+  },
+  navigate({screen,role="",target}) {
+    if (!views.includes(screen) || (role && (screen !== "providers" || !Object.hasOwn(roleNames,role)))) return null;
+    let next;
+    if (target) {
+      try { next = new URL(target); } catch { return null; }
+      if (next.origin !== location.origin || next.username || next.password || next.search || !/^\/w\/[a-z0-9][a-z0-9-]{0,62}\/$/.test(next.pathname)) return null;
+    }
+    window.focus();
+    clearCommanderActivity();
+    const current = destination();
+    if (!next && current.screen === screen && (!role || roleID === role)) return {handled:true};
+    if (publishing || autonomySaving) {
+      notice("status","A save is in progress. Request the editor again once it finishes.");
+      return {blocked:"publishing"};
+    }
+    if (next && autonomyForms.size) {
+      notice("status","Save or discard the edits in Autonomy before switching worktrees.");
+      return {blocked:"autonomy"};
+    }
+    if (next && !storeDrafts()) {
+      if ($("setting-dialog").open) notice("setting-storage-error",$("workspace-save-error").textContent,true);
+      return {blocked:"storage"};
+    }
+    return {handled:true,perform() {
+      if (next) {
+        leavingForWorktree = true;
+        location.assign(next.href);
+      } else {
+        hideSettingForNavigation();
+        go(screen,role);
+      }
+    }};
+  }
+});
+window.addEventListener("pagehide",() => tabs.stop());
+window.addEventListener("pageshow",event => {
+  leavingForWorktree = false;
+  if (!$("console-shell").hidden) {
+    if (event.persisted) {
+      clearCommanderActivity();
+      loadState();
+    } else tabs.start();
+  }
+});
 
 function renderOverview() {
   const name = state.repository || state.root?.split(/[\\/]/).pop() || "Local checkout";
@@ -165,7 +505,7 @@ function renderOverview() {
     const row = element("li","","route");
     const button = element("button",labelRole(item.role));
     button.type = "button";
-    button.addEventListener("click", () => { chooseRole(item.role); go("providers"); });
+    button.addEventListener("click", () => chooseRole(item.role));
     row.append(button,element("code",item.selected || "Unconfigured"));
     routing.append(row);
   }
@@ -178,6 +518,7 @@ function renderActivity() {
   const target = $("attention-list");
   target.replaceChildren();
   for (const entry of entries) {
+    if ((entry.run_id || entry.request_id) && !commanderContext) continue;
     const li = element("li");
     const header = element("div", "", "attention-item");
     header.append(element("strong", entry.title));
@@ -198,8 +539,15 @@ function renderActivity() {
 
 async function loadState() {
   $("refresh").disabled = true;
+  const revision = ++loadSequence;
   try {
-    const next = await request("/api/state");
+    const next = await request("api/state");
+    if (!session || revision !== loadSequence) return;
+    if (state && drafts.size && state.root !== next.root) {
+      showConnection("This address now serves a different worktree. Reopen the console from the worktree where you started editing.");
+      return;
+    }
+    if (!state) restoreDrafts(next);
     state = next;
     activity = null;
     connectionSequence++;
@@ -209,12 +557,20 @@ async function loadState() {
     $("connection-status").textContent = "Check the providers selected in the configuration on disk.";
     invalidateReview();
     $("activity").disabled = false;
+    const reconnecting = !$("connection-options").hidden && $("console-shell").hidden;
     renderOverview();
-    renderProviders();
-    renderEditor();
-    if (location.hash === "#autonomy") await loadAutonomy();
+    $("connection").hidden = true;
+    $("connection-options").hidden = true;
+    $("connection-feedback").textContent = "";
+    $("console-shell").hidden = false;
+    showPage(reconnecting);
+    tabs.start();
     notice("status");
-  } catch (e) { notice("status", e.message, true); }
+  } catch (e) {
+    if (!session || revision !== loadSequence) return;
+    if ($("console-shell").hidden) showConnection(e.message);
+    else notice("status",e.message,true);
+  }
   finally { $("refresh").disabled = !session; }
 }
 $("refresh").addEventListener("click", loadState);
@@ -356,8 +712,8 @@ async function loadAutonomy() {
   notice("autonomy-status", "Loading approval settings…");
   try {
     const draft = drafts.get(repositoryFile);
-    const next = draft ? await request("/api/autonomy/inspect", {content: draft.content, base_digest: draft.base_digest})
-      : await request("/api/autonomy");
+    const next = draft ? await request("api/autonomy/inspect", {content: draft.content, base_digest: draft.base_digest})
+      : await request("api/autonomy");
     if (seq !== autonomySequence) return;
     autonomyView = next;
     notice("autonomy-status");
@@ -400,7 +756,7 @@ $("autonomy-form").addEventListener("submit", async (event) => {
   updateAutonomyControls();
   notice("autonomy-status", scope === "personal" ? "Saving preferences…" : "Staging repository settings…");
   try {
-    const result = await request("/api/autonomy", payload);
+    const result = await request("api/autonomy", payload);
     if (scope === "repository") {
       if (typeof result.content !== "string" || !result.autonomy) throw new Error("The server returned an incomplete staged configuration.");
       const latest = localDraft(repositoryFile);
@@ -422,7 +778,7 @@ $("autonomy-form").addEventListener("submit", async (event) => {
 async function loadActivity() {
   $("activity").disabled = true;
   $("activity-note").textContent = "Checking repository activity…";
-  try { activity = await request("/api/activity"); renderActivity(); }
+  try { activity = await request("api/activity"); renderActivity(); }
   catch (e) { $("activity-note").textContent = e.message; }
   finally { $("activity").disabled = false; }
 }
@@ -455,7 +811,7 @@ function replyForm(entry) {
     try {
       const body = {run_id:entry.run_id,request_id:entry.request_id,answer};
       if (approval) body.approval = approval;
-      const result = await request("/api/reply",body);
+      const result = await request("api/reply",body);
       if (result.approval) {
         approval = result.approval;
         send.textContent = "Confirm send";
@@ -473,18 +829,9 @@ function replyForm(entry) {
   return form;
 }
 
-$("copy-handoff").addEventListener("click", async () => {
-  try {
-    await navigator.clipboard.writeText($("handoff-text").textContent);
-    notice("copy-message","Copied the repository brief.");
-  } catch {
-    const selection = getSelection();
-    const range = document.createRange();
-    range.selectNodeContents($("handoff-text"));
-    selection.removeAllRanges();
-    selection.addRange(range);
-    notice("copy-message","The brief is selected. Use your browser’s Copy command.");
-  }
+$("copy-handoff").addEventListener("click",() => {
+  $("copy-message").hidden = false;
+  return copyText($("handoff-text"),$("copy-message"),"Copied the repository brief.");
 });
 
 $("check-connections").addEventListener("click", async () => {
@@ -498,7 +845,7 @@ $("check-connections").addEventListener("click", async () => {
   results.hidden = true;
   list.replaceChildren();
   try {
-    const checks = await request("/api/readiness", {});
+    const checks = await request("api/readiness", {});
     if (attempt !== connectionSequence) return;
     const requirements = checks.requirements || [];
     let ready = 0, verify = 0;
@@ -531,9 +878,7 @@ function selectOption(select, value, label) {
   select.append(option);
 }
 function chooseRole(id) {
-  roleID = id;
-  $("setting-filter").value = "";
-  renderProviders();
+  go("providers",id);
 }
 function renderProviders() {
   const staged = drafts.has(repositoryFile);
@@ -611,78 +956,99 @@ function renderSettings() {
     edit.setAttribute("aria-label","Edit " + setting.path);
     edit.addEventListener("click",() => openSetting(setting));
     head.append(edit);
-    row.append(head,element("div",value,"value"),element("p",origin,"source-line"));
+    row.append(head,settingSummary(setting.value),element("p",origin,"source-line"));
     appendHistory(row,setting);
     target.append(row);
   }
   if (!target.children.length) target.append(element("p",filter ? "No matching settings." : "This role has no settings to display.","muted"));
 }
+
+function settingSummary(value) {
+  if (Array.isArray(value)) {
+    if (!value.length) return element("div","Empty list","value muted");
+    const list = element("div","","collection-values");
+    for (const item of value.slice(0,8)) list.append(element("code", display(item)));
+    if (value.length > 8) list.append(element("span", "+" + (value.length - 8) + " more","muted"));
+    return list;
+  }
+  if (value && typeof value === "object") {
+    const count = Object.keys(value).length;
+    return element("div", count + (count === 1 ? " entry" : " entries"), "value muted");
+  }
+  return element("div",display(value),"value");
+}
 $("setting-filter").addEventListener("input",renderSettings);
+
+function settingPath(path) {
+  return (path.match(/(?:\\.|[^.\\])+/g) || []).map(part => part.replace(/\\(.)/g, "$1"));
+}
 
 function propertySchema(setting) {
   let schema = state?.config?.schemas?.[roleID]?.[role()?.selected];
-  const parts = setting.path.match(/(?:\\.|[^.\\])+/g) || [];
-  for (const part of parts) {
-    const key = part.replace(/\\(.)/g,"$1");
-    schema = schema?.properties?.[key] || schema?.additional_properties;
+  for (const key of settingPath(setting.path)) {
+    schema = schema?.properties && Object.hasOwn(schema.properties,key)
+      ? schema.properties[key] : schema?.additional_properties;
   }
   return schema || {};
 }
 
-function openSetting(setting) {
-  settingBeingEdited = setting;
-  $("setting-name").textContent = labelRole(roleID) + " / " + setting.path;
-  const schema = propertySchema(setting);
-  const type = schema.type || setting.type || valueType(setting.value);
-  const nullable = schema.nullable === true;
-  const choices = Array.isArray(schema.enum) ? schema.enum : [];
-  let input;
-  let format;
-  if (choices.length || type === "boolean") {
-    input = element("select");
-    for (const choice of choices.length ? choices : [true,false]) selectOption(input,String(choice),String(choice));
-    format = type === "boolean" ? "boolean" : "string";
-  } else if (type === "string") {
-    input = element("input"); input.type = "text"; format = "string";
-  } else if (["integer","number"].includes(type)) {
-    input = element("input"); input.type = "number"; input.step = type === "integer" ? "1" : "any";
-    if (schema.nonnegative) input.min = "0";
-    format = "number";
-  } else {
-    input = element("textarea"); input.className = "setting-input"; input.spellcheck = false; format = "json";
+function editorSuggestions(path) {
+  const key = path.filter(part => typeof part === "string").at(-1);
+  const git = state?.completions || {};
+  switch (key) {
+    case "branch":
+    case "protected_branches":
+      return [state?.branch,...(git.branches || [])].filter(Boolean);
+    case "source_remote":
+    case "target_remote":
+      return git.remotes || [];
+    case "repository":
+      return git.repositories || [];
+    case "catalog":
+      return files().filter(f => f.kind === "Task templates").map(f => f.path);
+    case "flow_map":
+      return files().filter(f => f.kind === "Flow map").map(f => f.path);
   }
-  input.id = "setting-value";
-  input.dataset.format = format;
-  const raw = setting.value;
-  if (raw !== null && raw !== undefined) input.value = format === "json" ? JSON.stringify(raw,null,2) : String(raw);
-  else if (format === "json") input.value = "null";
-  $("typed-control").replaceChildren(input);
-  $("setting-null-label").hidden = !nullable;
-  $("setting-null").checked = nullable && raw === null;
-  input.disabled = $("setting-null").checked;
-  $("setting-help").textContent = format === "json" ? "Use JSON for this value. Staging edits the repository’s inline settings." : "Staging writes an inline repository override. Personal settings may take precedence.";
-  const {source,history} = setting;
-  $("inherit-setting").disabled = !(source?.file === repositoryFile || history?.some((item) => item.source?.file === repositoryFile));
-  notice("setting-message");
-  $("setting-dialog").showModal();
-  (input.disabled ? $("setting-null") : input).focus();
+  if (path.includes("routes") && typeof path.at(-1) === "number" && path.includes("notifications")) {
+    const routeRole = roles().find(item => item.role === "notifications");
+    const destinations = routeRole?.settings?.find(item => item.path === "destinations")?.value;
+    return Object.keys(destinations || {});
+  }
+  return [];
 }
-$("setting-null").addEventListener("change",() => { $("setting-value").disabled = $("setting-null").checked; });
 
-function settingInputValue() {
-  const input = $("setting-value");
-  if (!$("setting-null-label").hidden && $("setting-null").checked) return null;
-  if (input.dataset.format === "number") {
-    if (!input.value || !input.validity.valid) throw new Error("Enter a valid number for this field.");
-    return input.valueAsNumber;
-  }
-  if (input.dataset.format === "boolean") return input.value === "true";
-  if (input.dataset.format === "string") return input.value;
-  return JSON.parse(input.value);
+function openSetting(setting, previous) {
+  settingBeingEdited = setting;
+  const schema = previous?.schema || propertySchema(setting);
+  const base = file(repositoryFile)?.digest;
+  const stale = previous && (previous.base !== base || previous.provider !== role()?.selected || !role()?.settings?.some(s => s.path === setting.path));
+  modalContext = previous || {role:roleID,provider:role()?.selected,setting,schema,base};
+  rememberedModal = undefined;
+  const inline = setting.history?.find(item => item.step === "inline");
+  // Map overrides merge by key. Start with what the team file actually owns,
+  // so editing one entry cannot copy personal or inherited entries into Git.
+  let value = inline ? inline.value : setting.value;
+  const isMap = schema.type === "object" && Boolean(schema.additional_properties);
+  if (isMap && !inline) value = {};
+  $("setting-dialog").toggleAttribute("data-collection", schema.type === "array" || schema.type === "object");
+  const parts = [...roleID.split("."), "settings", ...settingPath(setting.path)];
+  settingEditor = createTypedEditor($("typed-control"), schema, value, {
+    label: setting.path, path: parts, suggestions: editorSuggestions, allowed: setting.constraint?.allow, restore:previous?.raw
+  });
+  $("setting-name").textContent = labelRole(roleID) + " / " + setting.path;
+  const help = isMap
+    ? "Edit the keys owned by this repository. Removing a key restores any inherited value."
+    : "Stage a repository override, then preview its effective value before publishing.";
+  $("setting-help").textContent = help + (setting.source?.layer === "user" ? " A personal definition overrides this setting on your machine." : "");
+  $("stage-setting").disabled = Boolean(stale);
+  $("inherit-setting").disabled = !inline || Boolean(stale);
+  notice("setting-message",stale ? "The checkout changed since this edit began. Copy your input, then close and reopen the field to edit the current value." : (previous?.message || ""),Boolean(stale || previous?.message));
+  $("setting-dialog").showModal();
+  $("setting-dialog-title").focus();
 }
 
 $("close-setting").addEventListener("click",() => $("setting-dialog").close());
-$("setting-dialog").addEventListener("close",() => { settingBeingEdited = null; });
+$("setting-dialog").addEventListener("close",() => { settingBeingEdited = null; settingEditor = null; modalContext = null; scheduleSave(); });
 
 function localDraft(path) {
   const saved = drafts.get(path);
@@ -699,7 +1065,7 @@ async function compose(operation, setting, value) {
   if (!item?.editable) throw new Error("The repository configuration is read-only.");
   const draft = localDraft(repositoryFile);
   if (draft.base_digest !== item.digest) throw new Error("The base file changed. Review the current checkout in Configuration.");
-  const result = await request("/api/compose", {
+  const result = await request("api/compose", {
     path: repositoryFile, content: draft.content, base_digest: draft.base_digest,
     role: roleID, operation, setting, value
   });
@@ -721,16 +1087,17 @@ $("select-provider").addEventListener("submit",async (event) => {
 });
 async function stageSetting(operation) {
   const setting = settingBeingEdited;
-  if (!setting) return;
+  if (!setting || $("stage-setting").disabled) return;
   const revert = $("inherit-setting");
   const wasDisabled = revert.disabled;
   $("stage-setting").disabled = true;
   revert.disabled = true;
   try {
-    const value = operation === "remove" ? null : settingInputValue();
+    const value = operation === "remove" ? null : settingEditor.read();
+    if (value === undefined) throw new Error("Choose a value to stage.");
     await compose(operation,setting.path,value);
     $("setting-dialog").close();
-  } catch (e) { notice("setting-message",e instanceof SyntaxError ? "Enter a valid JSON value." : e.message,true); }
+  } catch (e) { notice("setting-message",e.message,true); }
   finally { $("stage-setting").disabled = false; revert.disabled = wasDisabled; }
 }
 $("setting-form").addEventListener("submit",(event) => { event.preventDefault(); stageSetting("set"); });
@@ -767,6 +1134,28 @@ function renderEditor() {
   $("file-reason").hidden = !reason;
   $("edit-controls").hidden = !active?.editable;
   refreshEditorControls();
+  updateDocumentEditor();
+}
+
+function updateDocumentEditor() {
+  if ($("page-configuration").hidden) return;
+  const path = filePath;
+  const draft = localDraft(path);
+  renderDocumentEditor({
+    file: file(), draft, disabled: publishing || draft.base_digest !== file()?.digest,
+    request, suggestions: editorSuggestions,
+    openProvider: chooseRole,
+    stage(result) {
+      const current = localDraft(path);
+      if (publishing || path !== filePath || current.base_digest !== draft.base_digest || current.content !== draft.content) {
+        throw new Error("The draft changed. Reopen the field to apply this edit.");
+      }
+      putDraft(path,result.content,draft.base_digest,result.providers);
+      invalidateReview();
+      renderEditor();
+      notice("edit-message",result.warning || "Field staged. Preview the change before publishing.",Boolean(result.warning));
+    }
+  });
 }
 
 function refreshEditorControls() {
@@ -790,6 +1179,7 @@ $("source").addEventListener("input",() => {
   putDraft(filePath,$("source").value,draft.base_digest);
   invalidateReview();
   refreshEditorControls();
+  updateDocumentEditor();
 });
 for (const id of ["commit-title","task-ref","delivery"]) {
   $(id).addEventListener("input",() => { invalidateReview(); refreshEditorControls(); });
@@ -848,7 +1238,7 @@ $("preview").addEventListener("click",async () => {
   $("preview").disabled = true;
   notice("edit-message","Validating the candidate…");
   try {
-    const data = await request("/api/preview",intent);
+    const data = await request("api/preview",intent);
     if (sequence !== previewSequence) return;
     if (intent.path === repositoryFile && drafts.has(repositoryFile)) {
       drafts.get(repositoryFile).providers = data.plan?.providers;
@@ -860,23 +1250,26 @@ $("preview").addEventListener("click",async () => {
     if (sequence === previewSequence) notice("edit-message",e.message,true);
   } finally { refreshEditorControls(); }
 });
-$("download-patch").addEventListener("click",() => {
-  const patch = review?.data.plan?.diff;
-  if (!patch) return;
+function downloadText(name, text, type = "text/plain;charset=utf-8") {
   const link = document.createElement("a");
-  const url = URL.createObjectURL(new Blob([patch],{type:"text/x-diff;charset=utf-8"}));
+  const url = URL.createObjectURL(new Blob([text],{type}));
   link.href = url;
-  link.download = "devflow-config.patch";
+  link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url),1000);
+}
+$("download-patch").addEventListener("click",() => {
+  const patch = review?.data.plan?.diff;
+  if (patch) downloadText("devflow-config.patch",patch,"text/x-diff;charset=utf-8");
 });
-$("back-to-edit").addEventListener("click",() => { invalidateReview(); $("source").focus(); });
+$("back-to-edit").addEventListener("click",() => { invalidateReview(); documentEditorFocus(); });
 
 function setPublishing(busy) {
   publishing = busy;
   $("source").readOnly = busy || !file()?.editable;
   for (const key of ["file","commit-title","task-ref","delivery","publish","back-to-edit","refresh"]) $(key).disabled = busy;
   refreshEditorControls();
+  updateDocumentEditor();
 }
 
 $("publish").addEventListener("click",async () => {
@@ -885,7 +1278,7 @@ $("publish").addEventListener("click",async () => {
   setPublishing(true);
   notice("publish-message","Publishing the reviewed change…");
   try {
-    const result = await request("/api/publish",{ ...current.intent, approval: current.data.approval });
+    const result = await request("api/publish",{ ...current.intent, approval: current.data.approval });
     const receipt = $("published");
     receipt.replaceChildren(element("strong",result.state || "Submitted"));
     if (result.branch) receipt.append(document.createTextNode(" · " + result.branch));
@@ -907,26 +1300,17 @@ $("publish").addEventListener("click",async () => {
   }
 });
 
+function hasPendingEdits() {
+  return drafts.size || $("setting-dialog").open || $("document-control").querySelector("[data-modified]") || $("commit-title").value !== $("commit-title").defaultValue || $("task-ref").value || $("delivery").value === "draft";
+}
 window.addEventListener("beforeunload",(event) => {
-  if (drafts.size || autonomyForms.size) { event.preventDefault(); event.returnValue = ""; }
+  if (!leavingForWorktree && (autonomyForms.size || (!storeDrafts() && hasPendingEdits()))) { event.preventDefault(); event.returnValue = ""; }
 });
 
-async function start() {
-  showPage();
-  $("refresh").disabled = true;
-  $("activity").disabled = true;
-  $("copy-handoff").disabled = true;
-  try {
-    await authenticate();
-    await loadState();
-    $("activity").disabled = !state;
-  } catch (e) {
-    notice("status",e.message,true);
-    $("top-repo").textContent = "Session unavailable";
-    $("working-state").textContent = "Unavailable";
-  }
-}
-start();
+$("refresh").disabled = true;
+$("activity").disabled = true;
+$("copy-handoff").disabled = true;
+connect();
 
 function approvalExplanation(data) {
   if (!data.policy) return data.reason || "";

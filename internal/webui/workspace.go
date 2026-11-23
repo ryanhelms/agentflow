@@ -14,6 +14,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/consolecfg"
+	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/version"
 )
@@ -77,7 +78,18 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 	for _, c := range changes {
 		fmt.Fprintf(&note, "%s %s\n", c.Status, c.Path)
 	}
-	reply(w, 200, map[string]any{"root": s.repo.Dir, "repository": filepath.Base(s.repo.Dir), "branch": branch, "head": head, "version": version.Version, "dirty": len(changes) > 0, "dirty_count": len(changes), "pin": pin, "config": snapshot, "attention": attention, "handoff": note.String()})
+	reply(w, 200, map[string]any{"root": s.repo.Dir, "repository": filepath.Base(s.repo.Dir), "branch": branch, "head": head, "version": version.Version, "dirty": len(changes) > 0, "dirty_count": len(changes), "pin": pin, "config": snapshot, "attention": attention, "handoff": note.String(), "completions": s.checkoutCompletions(ctx)})
+}
+
+// Offer locally known names, including when the workstation is offline.
+func (s *server) checkoutCompletions(ctx context.Context) map[string][]string {
+	branches, _ := s.repo.Git(ctx, "for-each-ref", "--sort=-committerdate", "--count=100", "--format=%(refname:lstrip=2)", "refs/heads")
+	remotes, _ := s.repo.Git(ctx, "remote")
+	hints := map[string][]string{"branches": strings.Fields(branches), "remotes": strings.Fields(remotes)}
+	if repo := s.repo.RemoteRepo(ctx); gitx.ValidateGitHubSlug(repo) == nil {
+		hints["repositories"] = []string{repo}
+	}
+	return hints
 }
 
 type pull struct {
@@ -144,9 +156,15 @@ func (s *server) activity(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	// Source failures are independent; a missing GitHub connection should not hide a worker question.
-	items, available, err := commanderActivity(ctx, s.repo.Dir)
-	if err != nil {
-		items = append(items, item{Title: "Agent Commander unavailable", Detail: err.Error()})
+	caller, scope := s.commanderFor(r)
+	var items []item
+	var available bool
+	if scope != "" {
+		var err error
+		items, available, err = caller.activity(ctx, s.repo.Dir)
+		if err != nil {
+			items = append(items, item{Title: "Agent Commander unavailable", Detail: err.Error()})
+		}
 	}
 	prs, err := s.pullQueue(ctx)
 	if err != nil {
@@ -158,5 +176,10 @@ func (s *server) activity(w http.ResponseWriter, r *http.Request) {
 	for _, it := range items {
 		fmt.Fprintf(&note, "%s — %s %s\n", it.Title, it.Detail, it.URL)
 	}
-	reply(w, 200, map[string]any{"attention": items, "handoff": note.String(), "commander_connected": available})
+	result := map[string]any{"attention": items, "handoff": note.String(), "commander_connected": available}
+	if scope == "" {
+		result["commander_reconnect"] = true
+		result["warning"] = commanderReconnect
+	}
+	reply(w, 200, result)
 }

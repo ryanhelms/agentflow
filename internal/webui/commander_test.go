@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func serveCommander(t *testing.T, handler http.HandlerFunc) {
@@ -28,7 +29,9 @@ func serveCommander(t *testing.T, handler http.HandlerFunc) {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENT_COMMANDER_SOCKET", socket)
-	t.Setenv("AGENT_COMMANDER_TOKEN", "")
+	for _, k := range []string{"AGENT_COMMANDER_TOKEN", "AGENT_COMMANDER_WORKER_ID", "AGENT_COMMANDER_RUN_ID", "AGENT_COMMANDER_ROLE"} {
+		t.Setenv(k, "")
+	}
 	srv := &http.Server{Handler: handler}
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(listener) }()
@@ -86,15 +89,16 @@ func TestCommanderReplyScopedConfirmedOnce(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	items, connected, err := commanderActivity(t.Context(), s.repo.Dir)
+	items, connected, err := launchCommanderBinding().activity(t.Context(), s.repo.Dir)
 	if err != nil || !connected || len(items) != 1 || items[0].Request != "open" || items[0].Run != "local" ||
 		items[0].Detail != "Which branch?" || !strings.Contains(items[0].Title, "Reviewer") {
 		t.Fatalf("activity = %#v, connected = %t: %v", items, connected, err)
 	}
+	capability := issueCommanderCapability(t, s, launchCommanderBinding())
 	send := func(run, id, answer, approval string, want int) string {
 		t.Helper()
 		body := map[string]string{"run_id": run, "request_id": id, "answer": answer, "approval": approval}
-		w := request(t, s, "POST", "/api/reply", s.origin, "session", body)
+		w := request(t, s, "POST", "/api/reply", s.origin, "session", body, capability)
 		if w.Code != want {
 			t.Fatalf("reply to %s/%s: %d, want %d: %s", run, id, w.Code, want, w.Body)
 		}
@@ -135,15 +139,16 @@ func TestCommanderHonorsWorkerIdentity(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{"runs":[{"id":"run","path":%q,"requests":[{"id":"q","status":"pending","question":"Choose?"}]}]}`, s.repo.Dir)
 	})
 	t.Setenv("AGENT_COMMANDER_TOKEN", "fixture-worker")
+	capability := issueCommanderCapability(t, s, launchCommanderBinding())
 	body := map[string]string{"run_id": "run", "request_id": "q", "answer": "yes"}
-	w := request(t, s, "POST", "/api/reply", s.origin, "session", body)
+	w := request(t, s, "POST", "/api/reply", s.origin, "session", body, capability)
 	var review struct{ Approval string }
 	if err := json.Unmarshal(w.Body.Bytes(), &review); w.Code != 200 || err != nil || review.Approval == "" {
 		t.Fatalf("preview: %d %s", w.Code, w.Body)
 	}
 	body["approval"] = review.Approval
 	for range 2 {
-		w = request(t, s, "POST", "/api/reply", s.origin, "session", body)
+		w = request(t, s, "POST", "/api/reply", s.origin, "session", body, capability)
 		if w.Code != 403 || !strings.Contains(w.Body.String(), "denied") || strings.Contains(w.Body.String(), "fixture-worker") {
 			t.Fatalf("permission denial: %d %s", w.Code, w.Body)
 		}
@@ -163,8 +168,22 @@ func TestCommanderLongTranscriptHistory(t *testing.T) {
 		}
 		_, _ = fmt.Fprintf(w, `{"path":%q,"requests":[{"id":"q","question":"After history?","status":"pending"}]}]}`, active)
 	})
-	items, connected, err := commanderActivity(t.Context(), active)
+	items, connected, err := launchCommanderBinding().activity(t.Context(), active)
 	if err != nil || !connected || len(items) != 1 || items[0].Detail != "After history?" {
 		t.Fatalf("large run list: %#v, %t, %v", items, connected, err)
 	}
+}
+
+func issueCommanderCapability(t *testing.T, s *server, binding commanderBinding) string {
+	t.Helper()
+	if s.commander == nil {
+		s.commander = &commanderScope{}
+	}
+	ticket := s.scopedLaunch(time.Now(), s.commander.bind(binding))
+	w := request(t, s, "POST", "/api/session", s.origin, "", map[string]string{"launch": ticket})
+	var response struct{ Commander string }
+	if err := json.Unmarshal(w.Body.Bytes(), &response); w.Code != 200 || err != nil || response.Commander == "" {
+		t.Fatalf("missing Commander grant; HTTP %d", w.Code)
+	}
+	return response.Commander
 }
