@@ -228,6 +228,11 @@ func unitName(root, dir string) string {
 	return sanitize(filepath.Base(dir))
 }
 
+// RootUnit supplies a valid release unit for a project with no detected deployables.
+func RootUnit(root string) Unit {
+	return Unit{Name: unitName(root, "."), Path: ".", ReleaseType: "simple", Builds: []string{Binary}}
+}
+
 var nonName = regexp.MustCompile(`[^a-z0-9-]+`)
 
 func sanitize(s string) string {

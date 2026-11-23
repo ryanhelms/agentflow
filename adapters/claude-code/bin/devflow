@@ -9,7 +9,13 @@
 set -eu
 
 home="${XDG_CACHE_HOME:-$HOME/.cache}/devflow"
-if [ -x "$home/current/devflow" ]; then
+tag=
+if [ "${1:-}" = --bootstrap-release ]; then
+  tag=${2:-}
+  printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo 'devflow: invalid stable release tag' >&2; exit 1; }
+  shift 2
+fi
+if [ -x "$home/current/devflow" ] && { [ -z "$tag" ] || [ "$(cd "$home/current" && pwd -P)" = "$(cd "$home" && pwd -P)/${tag#v}" ]; }; then
   exec "$home/current/devflow" "$@"
 fi
 
@@ -25,7 +31,7 @@ case "$(uname -m)" in
   *) echo "devflow: unsupported architecture $(uname -m)" >&2; exit 1 ;;
 esac
 
-tag=$(gh release view --repo nscaledev/devflow --json tagName -q .tagName)
+if [ -z "$tag" ]; then tag=$(gh release view --repo nscaledev/devflow --json tagName -q .tagName); fi
 ver=${tag#v}
 pkg="devflow_${ver}_${os}_${arch}.tar.gz"
 tmp=$(mktemp -d)

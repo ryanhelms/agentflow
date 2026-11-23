@@ -65,6 +65,9 @@ changelog:
       - '^Merge '
 
 release:
+  extra_files:
+    - glob: install.sh
+    - glob: install.ps1
   github:
     owner: nscaledev
     name: devflow
