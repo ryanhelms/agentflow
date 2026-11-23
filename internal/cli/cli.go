@@ -83,6 +83,9 @@ Work
   scope [--json]                 changes and new TODOs that look outside the ticket
   comment [KEY] TEXT [--yes]     comment on the task
   collisions [KEY] [--json]      other PRs on this task or touching your files
+  config OP [--input FILE|-]     inspect or prepare repository console settings from JSON
+  config publish [--input FILE|-]   publish the exact approved repository change
+  config save_personal [--input FILE|-]   save the exact approved preferences
   policy explain [ACTION]          show autonomy, repository ceilings and review windows
   policy status ID                inspect a shared approval
   policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker
@@ -205,7 +208,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
+	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -213,6 +216,8 @@ func quietCommand(cmd string) bool {
 
 func run(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
+	case "config":
+		return runConfig(ctx, args)
 	case "policy":
 		return runPolicy(ctx, args)
 	case "push":

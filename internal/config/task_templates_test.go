@@ -8,7 +8,7 @@ import (
 )
 
 func TestTaskTemplateSettings(t *testing.T) {
-	legacy := loadConfig(t, "jira: {projects: [OPS]}\ntask_management: {settings: {site: old}}")
+	legacy := loadConfig(t, "jira: {projects: [OPS]}\ntask_management: {provider: jira, settings: {site: old}}")
 	if legacy.Providers.TaskTemplates != nil || legacy.Providers.TaskManagement.Settings.(*JiraSettings).Site != "old" {
 		t.Fatalf("legacy configuration changed: %+v", legacy.Providers)
 	}

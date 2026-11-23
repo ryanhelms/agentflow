@@ -22,6 +22,8 @@ import (
 // runs the same internal/app operation. A new static tool must add a CLI
 // command and a row here.
 var mcpToCLI = map[string]string{
+	"devflow_config":                "config",
+	"devflow_config_apply":          "config publish",
 	"devflow_policy_explain":        "policy explain",
 	"devflow_approval_status":       "policy status",
 	"devflow_approval_approve":      "policy approve",
@@ -170,7 +172,7 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	if err := os.Mkdir(".devflow", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\n"), 0o600); err != nil {
+	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\ntask_management: {provider: jira}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile("todo.go", []byte("package x\n// TODO: unrelated cleanup\n"), 0o600); err != nil {

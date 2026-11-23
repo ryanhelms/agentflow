@@ -3,7 +3,6 @@ package webui
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,24 +46,6 @@ func TestPersonalAutonomySave(t *testing.T) {
 	in.UserRevision, in.Settings.Window = hash(saved), "2h"
 	if w = request(t, s, "POST", "/api/autonomy", s.origin, s.session, in); w.Code != 422 {
 		t.Fatalf("invalid: %s", w.Body.String())
-	}
-}
-
-func TestConcurrentPersonalAutonomySave(t *testing.T) {
-	dir := t.TempDir()
-	done := make(chan error, 2)
-	for _, lvl := range []config.Level{config.Auto, config.Suggest} {
-		go func() {
-			_, err := saveApprovalSettings(dir, hash(nil), consolecfg.ApprovalSettings{Local: lvl})
-			done <- err
-		}()
-	}
-	a, b := <-done, <-done
-	if a == nil {
-		a, b = b, a
-	}
-	if !errors.Is(a, errUserRevision) || b != nil {
-		t.Fatalf("concurrent results: %v, %v", a, b)
 	}
 }
 

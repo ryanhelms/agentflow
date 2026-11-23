@@ -56,6 +56,9 @@ func (a *App) SecOpsTriage(ctx context.Context, in SecOpsTriageInput, token stri
 		return plans, nil
 	}
 	instance := a.Cfg.Providers.TaskManagement.Provider
+	if instance == "none" && !in.Apply {
+		return plans, nil
+	}
 	if !a.usesIssues() && !a.usesFileTasks() {
 		return nil, provider.Unsupported(instance, "replayable secops task creation")
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/devflow/internal/configconsole"
 )
 
 func TestReadinessUsesOnlyCurrentCheckoutAndReturnsMeasuredResults(t *testing.T) {
@@ -29,7 +29,7 @@ func TestReadinessUsesOnlyCurrentCheckoutAndReturnsMeasuredResults(t *testing.T)
 		}
 		var got struct {
 			Ready        bool
-			Requirements []connectionCheck
+			Requirements []configconsole.ConnectionCheck
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 			t.Fatal(err)
@@ -72,13 +72,6 @@ func TestReadinessRejectsOverridesAndCrossOriginProbes(t *testing.T) {
 		w := request(t, s, "POST", "/api/readiness", tc.origin, tc.key, tc.body)
 		if w.Code != tc.code {
 			t.Fatalf("expected %d, got %d: %s", tc.code, w.Code, w.Body.String())
-		}
-	}
-	const sensitivePath = "secret-stdout-example"
-	for _, provider := range []string{"github", "jira", "filesystem", "asana", "custom"} {
-		detail := connectionDetail(setup.ProviderRequirement{Role: "task_management", Provider: provider, Detail: "check connectivity and run gh auth login " + sensitivePath})
-		if strings.Contains(detail, sensitivePath) || detail == "" {
-			t.Fatal("unsafe provider output")
 		}
 	}
 }

@@ -28,7 +28,9 @@ func blobID(s string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func dependencies(root string, files []consolecfg.File, name, original string) (map[string]string, error) {
+// SourceBaseline captures the inputs that the remote default branch must match,
+// including an existing caller workflow pin. A missing path maps to an empty ID.
+func SourceBaseline(root string, files []consolecfg.File, name, original string) (map[string]string, error) {
 	deps := map[string]string{workflow: ""}
 	for _, p := range consolecfg.StandardSourcePaths() {
 		deps[p] = ""

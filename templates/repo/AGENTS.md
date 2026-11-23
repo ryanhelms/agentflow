@@ -4,8 +4,13 @@
 Follow the effective settings in `.devflow/config.yml`. Use `devflow_setup_providers`
 with `explain: true` or `devflow setup providers --explain` to resolve the active
 providers and configuration layers. Use Devflow's MCP tools when available and
-its CLI otherwise. Skip operations for roles configured as `none`.
+its CLI otherwise. Run task and knowledge operations only for roles with a
+selected provider. An omitted provider or `none` disables the role.
 
+- For configuration changes, use `devflow_config` or `devflow config` to
+  inspect the current values and preview the requested edit. Apply the reviewed
+  personal save or repository publication with `devflow_config_apply` or the
+  corresponding CLI operation.
 - Use `devflow_context` or `devflow context` to find the current task. Reuse a
   matching task from `devflow_my_work` or `devflow work`. For authorized new work,
   use `devflow_ticket_create` or `devflow task create` with the configured task

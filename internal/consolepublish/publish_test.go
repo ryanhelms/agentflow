@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nscaledev/devflow/internal/consolecfg"
 	"github.com/nscaledev/devflow/internal/gh"
 )
 
@@ -326,11 +327,23 @@ func TestPublishToApprovedRepositoryLeavesWorktreeAndIndexUntouched(t *testing.T
 	if err != nil || repo != "org/repo" {
 		t.Fatalf("destination %q: %v", repo, err)
 	}
-	_, err = PublishTo(ctx, root, "org/other", f.change.Path, f.change.Original, f.change.Content, f.change.Title, true)
+	snapshot, err := consolecfg.View(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := SourceBaseline(root, snapshot.Files, f.change.Path, f.change.Original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = PublishTo(ctx, root, repo, f.change.Path, f.change.Original, f.change.Content, f.change.Title, true, nil)
+	if err == nil || !strings.Contains(err.Error(), "configuration inputs changed") || f.pr || f.commits != 0 {
+		t.Fatalf("published with a different baseline: %v", err)
+	}
+	_, err = PublishTo(ctx, root, "org/other", f.change.Path, f.change.Original, f.change.Content, f.change.Title, true, baseline)
 	if err == nil || f.pr || f.commits != 0 {
 		t.Fatalf("unexpected wrong-target publish: %v", err)
 	}
-	got, err := PublishTo(ctx, root, repo, f.change.Path, f.change.Original, f.change.Content, f.change.Title, true)
+	got, err := PublishTo(ctx, root, repo, f.change.Path, f.change.Original, f.change.Content, f.change.Title, true, baseline)
 	if err != nil || got.State != "draft" {
 		t.Fatalf("draft: %+v, %v", got, err)
 	}

@@ -84,7 +84,7 @@ func Detect(ctx context.Context, repo *gitx.Repo) (*Plan, error) {
 	plan := &Plan{Root: repo.Dir, original: data, definitions: defs}
 	for _, r := range config.ProviderCatalog() {
 		role := Role{Role: r.Role, Default: r.Default, Options: r.Providers, Source: "unknown", Evidence: signals[r.Role]}
-		if local, ok := property(fields, r.Role+".settings").(map[string]any); ok && len(local) > 0 {
+		if local, ok := property(fields, r.Role+".settings").(map[string]any); ok && len(local) > 0 && r.Default != "none" {
 			role.Evidence = append(role.Evidence, Evidence{r.Default, configFile + " " + r.Role + ".settings uses the default provider schema"})
 		}
 		if id, ok := property(fields, r.Role+".provider").(string); ok {

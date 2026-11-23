@@ -68,6 +68,11 @@ func TestLegacyWorkflowWritersRemainSelected(t *testing.T) {
 		commands               []string
 	}{
 		{".github/workflows/transitions.yml", "Apply legacy Jira transitions", "steps.task.outputs.provider == 'jira'", []string{"handle-event.sh"}},
+		{".github/workflows/auto-issues.yml", "Mirror labelled GitHub issue", "steps.task.outputs.provider == 'jira'", []string{"jira-create.sh"}},
+		{".github/workflows/ai-pr-draft.yml", "Fetch Jira context", "steps.task.outputs.provider == 'jira'", []string{"jira-context.sh"}},
+		{".github/workflows/docs-sync.yml", "Publish pages", "steps.knowledge.outputs.provider == 'confluence'", []string{"confluence-upsert.sh"}},
+		{".github/workflows/release-notes.yml", "Publish to Confluence", "steps.knowledge.outputs.provider == 'confluence'", []string{"confluence-upsert.sh"}},
+		{".github/workflows/sprint-report.yml", "Publish to Confluence", "steps.providers.outputs.knowledge == 'confluence'", []string{"confluence-upsert.sh"}},
 		{"actions/ship/action.yml", "Apply Jira effects for shipped commits", "steps.keys.outputs.provider == 'jira'", []string{"transition.sh", "jira-fix-version.sh"}},
 		{".github/workflows/semver-release.yml", "Record released task references", "", []string{`[ "$PROVIDER" = jira ]`, "jira-fix-version.sh"}},
 	} {
@@ -92,16 +97,16 @@ func TestLegacyWorkflowWritersRemainSelected(t *testing.T) {
 					continue
 				}
 				if tc.selection != "" && !strings.Contains(call.If, tc.selection) {
-					t.Errorf("writer is missing its Jira selection: %q", call.If)
+					t.Errorf("step is missing its provider selection: %q", call.If)
 				}
 				for _, command := range tc.commands {
 					if !strings.Contains(call.Run, command) {
-						t.Errorf("existing Jira writer no longer runs %q", command)
+						t.Errorf("existing workflow step no longer runs %q", command)
 					}
 				}
 				return
 			}
-			t.Fatalf("missing legacy writer %q", tc.title)
+			t.Fatalf("missing provider workflow step %q", tc.title)
 		})
 	}
 }

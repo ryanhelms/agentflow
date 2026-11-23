@@ -209,13 +209,16 @@ func parseRepoFile(b []byte) (*Repo, map[string]yaml.Node, bool, error) {
 	c.applyDefaults()
 	// The repo alone selects the task provider. Its commit convention must
 	// remain available even when an unrelated definition cannot be loaded.
-	if node, ok := file.Extra["task_management"]; ok && c.Commit.RequireKey == nil {
+	if c.Commit.RequireKey == nil {
 		var task struct {
 			Provider string `yaml:"provider"`
 		}
-		if err := node.Decode(&task); err == nil && (task.Provider == "github-issues" || task.Provider == "asana") {
-			optional := false
-			c.Commit.RequireKey = &optional
+		if node, ok := file.Extra["task_management"]; !ok || node.Decode(&task) == nil {
+			switch task.Provider {
+			case "", "none", "github-issues", "asana":
+				optional := false
+				c.Commit.RequireKey = &optional
+			}
 		}
 	}
 	return c, file.Extra, found, nil

@@ -43,6 +43,13 @@ type App struct {
 	fm       *flowmap.Map
 }
 
+// ConfigLoadError identifies a configuration file that prevented a full session
+// from starting. The configuration editor can still inspect its safe sources.
+type ConfigLoadError struct{ err error }
+
+func (e *ConfigLoadError) Error() string { return e.err.Error() }
+func (e *ConfigLoadError) Unwrap() error { return e.err }
+
 // Open opens the repo containing dir. client names the calling AI client.
 func Open(ctx context.Context, dir, client string) (*App, error) {
 	repo, err := gitx.Open(ctx, dir)
@@ -51,11 +58,11 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	}
 	cfg, found, err := config.LoadRepo(repo.Dir)
 	if err != nil {
-		return nil, err
+		return nil, &ConfigLoadError{err}
 	}
 	user, err := config.LoadUser()
 	if err != nil {
-		return nil, err
+		return nil, &ConfigLoadError{err}
 	}
 	home, err := config.Home()
 	if err != nil {
@@ -144,6 +151,9 @@ func (a *App) detectForgeWith(ctx context.Context, settings any) (gitx.Detection
 
 // CurrentKey returns the resolved task key for the current branch, or "".
 func (a *App) CurrentKey(ctx context.Context) string {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return ""
+	}
 	if a.UsesTaskRefs() {
 		if ref, err := a.branchTask(ctx); err == nil && ref.ID != "" {
 			return taskKey(ref)
@@ -154,6 +164,9 @@ func (a *App) CurrentKey(ctx context.Context) string {
 }
 
 func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return "", provider.Unsupported("none", "task operations")
+	}
 	if a.UsesTaskRefs() {
 		ref, err := a.taskRef(ctx, key)
 		if err != nil {

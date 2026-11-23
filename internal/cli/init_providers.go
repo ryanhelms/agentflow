@@ -62,7 +62,7 @@ func guideProviders(plan *initproviders.Plan, answers map[string]string, in io.R
 		for _, e := range r.Evidence {
 			fmt.Fprintf(out, "    %s: %s\n", e.Provider, e.Source)
 		}
-		if r.Selected != "" {
+		if r.Selected != "" && (r.Default != "none" || r.Source == "saved") {
 			if _, given := answers[r.Role]; !given {
 				answers[r.Role] = r.Selected
 			}
@@ -80,6 +80,9 @@ func guideProviders(plan *initproviders.Plan, answers map[string]string, in io.R
 				return err
 			}
 			if id == "" {
+				if fallback == "none" && answers[r.Role] == "" {
+					return nil
+				}
 				id = fallback
 			}
 			if slices.Contains(r.Options, id) {
@@ -99,7 +102,11 @@ func guideProviders(plan *initproviders.Plan, answers map[string]string, in io.R
 	for {
 		fmt.Fprintln(out, "Provider choices (switching a provider replaces that role's inline settings):")
 		for _, r := range plan.Roles {
-			fmt.Fprintf(out, "  %s = %s\n", r.Role, answers[r.Role])
+			id := answers[r.Role]
+			if id == "" {
+				id = r.Default
+			}
+			fmt.Fprintf(out, "  %s = %s\n", r.Role, id)
 		}
 		fmt.Fprint(out, "Enter a role to change, or press Enter to use these choices: ")
 		role, err := read()

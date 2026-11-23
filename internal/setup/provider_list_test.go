@@ -35,8 +35,8 @@ func TestListProviders(t *testing.T) {
 	}
 	want := map[string]ProviderOption{
 		"github-issues": {ID: "github-issues", Selected: true, Readiness: ReadinessBuiltIn},
-		"jira":          {ID: "jira", Default: true, Readiness: ReadinessClient},
-		"none":          {ID: "none", Readiness: ReadinessNone},
+		"jira":          {ID: "jira", Readiness: ReadinessClient},
+		"none":          {ID: "none", Default: true, Readiness: ReadinessNone},
 	}
 	for _, o := range tasks.Options {
 		if w, ok := want[o.ID]; ok && o != w {
