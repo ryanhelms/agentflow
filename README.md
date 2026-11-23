@@ -280,7 +280,7 @@ frontmatter. Converting a legacy record takes an explicit migration. [OKF knowle
 
 Choose the `repository` knowledge provider to search a Git destination and
 publish managed Markdown with `devflow docs publish`. A GitHub review
-publication returns the PR link and a pending review status.
+publication uses the saved `gh` sign-in and returns the PR link and review status.
 
 Select `knowledge_base.provider: github-wiki` to search and publish managed
 pages with the same CLI and MCP tools. Enable Wikis, create the first page on

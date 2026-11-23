@@ -1076,7 +1076,8 @@ devflow docs publish filesystem/engineering/quota \
 For MCP, pass the optional strings `type` and `description` and the string
 array `tags` to `devflow_docs_publish`. These fields require an OKF document.
 The approval shows the configured format for new documents, the destination,
-and the requested changes.
+and the requested changes. GitHub pull-request publication uses the saved `gh`
+sign-in and Git’s configured access to the repository.
 
 To update a document, supply its current revision from search. An update uses
 the file’s existing encoding even when the configured default differs. OKF

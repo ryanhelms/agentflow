@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -207,6 +208,62 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 	audit, err := os.ReadFile(filepath.Join(a.Home, "audit.log"))
 	if err != nil || !strings.Contains(string(audit), `"action":"docs_publish"`) || !strings.Contains(string(audit), `"class":"remote"`) || !strings.Contains(string(audit), `"result":"ok"`) {
 		t.Fatalf("missing publish audit: %s, %v", audit, err)
+	}
+}
+
+func TestRepositoryPublicationUsesSignedInGitHubCLI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses shell fixtures")
+	}
+	a, bare := repositoryFixture(t, "knowledge_base")
+	command := filepath.Join(t.TempDir(), "gh")
+	const script = `#!/bin/sh
+set -eu
+if [ "$1" = "--version" ]; then exit 0; fi
+test -z "${GH_TOKEN+x}${GITHUB_TOKEN+x}"
+test "$1 $2 $3 $4" = 'api --hostname github.com --method'
+for endpoint do :; done
+case "$5 $endpoint" in
+  'GET user')
+    [ "$DEVFLOW_FIXTURE_GH_LOGIN" = 'true' ] || exit 4
+    printf 'HTTP/2.0 200 OK\r\n\r\n{"id":42,"login":"fixture"}' ;;
+  'GET repos/docs-team/handbook/pulls?'*)
+    printf 'HTTP/2.0 200 OK\r\n\r\n[]' ;;
+  'POST repos/docs-team/handbook/pulls')
+    cat >/dev/null
+    printf 'HTTP/2.0 201 Created\r\n\r\n{"html_url":"https://github.com/docs-team/handbook/pull/42"}' ;;
+  *) exit 1 ;;
+esac
+`
+	if err := os.WriteFile(command, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", filepath.Dir(command)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "false")
+	in := DocsPublishInput{
+		Ref:   provider.Ref{Instance: "repository", Scope: "engineering", ID: "knowledge"},
+		Title: "Knowledge", Body: "An OKF concept.", OperationID: "publish-native-cli",
+	}
+	before := docsGit(t, bare, "show-ref")
+	if _, err := a.DocsPublish(t.Context(), in, ""); !errors.Is(err, gh.ErrAuthentication) {
+		t.Fatalf("missing native login = %v", err)
+	}
+	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "true")
+	out, err := a.DocsPublish(t.Context(), in, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	approval, ok := out.(*Pending)
+	if !ok || approval.ConfirmToken == "" || docsGit(t, bare, "show-ref") != before {
+		t.Fatalf("preview = %+v", out)
+	}
+	out, err = a.DocsPublish(t.Context(), in, approval.ConfirmToken)
+	result, ok := out.(provider.WriteResult)
+	if err != nil || !ok || result.Status != provider.PendingReview || result.Ref != in.Ref ||
+		result.URL != "https://github.com/docs-team/handbook/pull/42" {
+		t.Fatalf("approved native CLI publication = %+v, %v", out, err)
 	}
 }
 
