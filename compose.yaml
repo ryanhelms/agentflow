@@ -1,0 +1,31 @@
+services:
+  website:
+    build: ./website
+    init: true
+    ports:
+      - "127.0.0.1:${DEVFLOW_WEBSITE_PORT:-5173}:5173"
+    volumes:
+      - type: bind
+        source: ./website/src
+        target: /home/node/src
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      VITE_USE_POLLING: "${VITE_USE_POLLING:-0}"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./website/package.json
+        - action: rebuild
+          path: ./website/package-lock.json
+        - action: rebuild
+          path: ./website/vite.config.js
+        - action: rebuild
+          path: ./website/Dockerfile

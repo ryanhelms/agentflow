@@ -603,6 +603,11 @@ scripts/                  e2e test, blueprint build, agent-docs check
 
 ## Contributing
 
+To view the launch and documentation website locally, run
+`docker compose up --build --wait website` from the repository root and open
+[the local website](http://127.0.0.1:5173). Edit `website/src/` to see changes
+in the browser. [Website development guide](CONTRIBUTING.md#website)
+
 ```bash
 make check     # vet, race tests, golangci-lint, shellcheck, actionlint, agent docs
 make e2e       # end-to-end Claude Code plugin test
