@@ -17,7 +17,7 @@ import (
 
 type MCPTool struct {
 	Name         string   `json:"name"`
-	Endpoint     string   `json:"endpoint"`
+	Endpoint     string   `json:"endpoint,omitempty"`
 	Guide        string   `json:"guide"`
 	RegisterArgs []string `json:"register_args,omitempty"`
 }
@@ -84,6 +84,11 @@ var providerTools = map[string]ProviderTooling{
 // ProviderMCP returns the official connector details for a provider and client.
 func ProviderMCP(provider, client string) MCPTool {
 	tool := providerTools[provider].MCP
+	if tool.Name == githubMCP.Name && runtimeClient(client) == "claude" {
+		tool.Endpoint = ""
+		tool.Guide = githubOAuthGuide
+		tool.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", client, "--register"}
+	}
 	if client == claudeDesktop && (provider == "slack" || provider == "asana") {
 		tool.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", claudeDesktop, "--register"}
 	}

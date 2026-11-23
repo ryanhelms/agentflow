@@ -109,7 +109,11 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			fmt.Printf("%s  %s (%s)  %s\n", state, r.Role, r.Provider, r.Detail)
 		}
 		for _, tools := range plan.Tooling {
-			fmt.Printf("%s  preferred MCP: %s (%s)\n", tools.Provider, tools.MCP.Name, tools.MCP.Endpoint)
+			fmt.Printf("%s  preferred MCP: %s", tools.Provider, tools.MCP.Name)
+			if tools.MCP.Endpoint != "" {
+				fmt.Printf(" (%s)", tools.MCP.Endpoint)
+			}
+			fmt.Println()
 			fmt.Printf("  Setup: %s\n", tools.MCP.Guide)
 			if len(tools.MCP.RegisterArgs) > 0 {
 				fmt.Printf("  Register or connect: devflow %s\n", strings.Join(tools.MCP.RegisterArgs, " "))
