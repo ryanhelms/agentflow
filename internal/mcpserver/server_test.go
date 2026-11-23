@@ -32,7 +32,7 @@ func gitRepo(t *testing.T) string {
 	run("commit", "-q", "--allow-empty", "-m", "chore(PLAT-1): init")
 	run("switch", "-q", "-c", "PLAT-123-gpu-quota")
 	_ = os.MkdirAll(filepath.Join(dir, ".devflow"), 0o755)
-	_ = os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("devflow: 1\njira: {site: http://127.0.0.1}\nflow_map: flow-map.yml\npolicy:\n  max_autonomy: {local: auto, remote: confirm}\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("devflow: 1\njira: {site: http://127.0.0.1}\ntask_management: {provider: jira}\nflow_map: flow-map.yml\npolicy:\n  max_autonomy: {local: auto, remote: confirm}\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "flow-map.yml"), []byte("defaults:\n  pr.opened: In Review\nprojects:\n  PLAT: {}\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "quota.go"), []byte("package quota\n"), 0o644)
 	return dir

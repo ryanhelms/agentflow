@@ -7,10 +7,9 @@ update:
   check_every: 6h
   # pin: 0.5.2                   # incident use only; devflow warns on every run while set
 
-jira:
-  site: https://nscale.atlassian.net   # confirm your Atlassian site URL
-  projects: [PLAT]                     # projects this repo works in (pilot only for now)
-flow_map: nscaledev/devflow@v0:flow-map.yml
+# Task management and knowledge base are disabled until a provider is selected.
+# task_management: {provider: github-issues}
+# knowledge_base: {provider: repository}
 
 commit:
   types: [feat, fix, perf, refactor, docs, test, build, ci, chore, revert]

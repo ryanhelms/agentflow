@@ -24,7 +24,8 @@ func TestLegacyLintMessage(t *testing.T) {
 		exit                  int
 	}{
 		{"jira scope", "devflow: 1\n", "feat(PLAT-42): add fixture\n", 0},
-		{"required jira scope", "devflow: 1\n", "feat: add fixture (#57)\n", 1},
+		{"required jira scope", "task_management: {provider: jira}\n", "feat: add fixture (#57)\n", 1},
+		{"unassigned task provider", "devflow: 1\n", "feat: add fixture (#57)\n", 0},
 		{"optional jira scope", "devflow: 1\ncommit: {require_key: false}\n", "feat: add fixture (#57)\n", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

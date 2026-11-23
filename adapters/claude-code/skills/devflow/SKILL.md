@@ -8,6 +8,8 @@ description: Use the configured Devflow providers when starting or creating task
 Follow `.devflow/config.yml` and the Devflow workflow block in `AGENTS.md`.
 Use `devflow_setup_providers` with `explain: true` to see effective provider
 settings. Use Devflow MCP tools or their CLI equivalents for configured roles.
+Task management and knowledge base require an explicit provider selection before
+you use their tools.
 
 ## Start of a task
 
@@ -76,6 +78,13 @@ Use `devflow_docs_publish` to publish a managed document through its selected
 knowledge provider. Include its stable operation ID. FileSystem and Repository
 accept optional `type`, `description` and `tags` for OKF concepts. Include the
 selected format and document in the approval when the tool returns a preview.
+
+### Edit Devflow configuration
+
+Use `devflow_config` to inspect sources and effective settings, compose an edit
+and preview it. Present the scope and exact change. Use `devflow_config_apply`
+to save personal preferences or publish a repository file after approval.
+The config skill describes both workflows.
 
 ### Configured provider setup
 

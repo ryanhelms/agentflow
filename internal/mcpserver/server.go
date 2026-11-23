@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/devflow/internal/configconsole"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
@@ -39,7 +40,13 @@ type Server struct {
 func New(ctx context.Context, dir, client string) (*Server, error) {
 	a, err := app.Open(ctx, dir, client)
 	if err != nil {
-		return nil, err
+		a, err = configconsole.Recovery(ctx, dir, client, err)
+		if err != nil {
+			return nil, err
+		}
+		s := &Server{app: a}
+		s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: "Configuration recovery mode. Inspect the repository using devflow_config. Restart Devflow after repairing its configuration."})
+		return s, s.registerConfig()
 	}
 	s := &Server{app: a}
 	switch a.Client {
@@ -54,7 +61,7 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 	s.slackWriter.SetApprovalWindow(window)
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: setup.AgentProviderSelection(a.Cfg) + "\n" + setup.AgentInstructions() + "\n\n" + nativeInstructions})
 	s.register()
-	return s, nil
+	return s, s.registerConfig()
 }
 
 // MCP returns the underlying server (used in tests).
@@ -128,12 +135,16 @@ func (s *Server) writerForTool(name string) *native.SessionWriter {
 
 // add registers a tool whose handler returns any JSON-serialisable value.
 func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (any, error)) {
-	mcp.AddTool(s.mcp, &mcp.Tool{Name: name, Description: desc, Annotations: ann},
+	addTool(s, &mcp.Tool{Name: name, Description: desc, Annotations: ann}, fn)
+}
+
+func addTool[In any](s *Server, tool *mcp.Tool, fn func(context.Context, In) (any, error)) {
+	mcp.AddTool(s.mcp, tool,
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 			if s.blocked != nil {
 				return errResult(s.blocked), nil, nil
 			}
-			if writer := s.writerForTool(name); writer != nil {
+			if writer := s.writerForTool(tool.Name); writer != nil {
 				ctx = native.WithWriteHost(ctx, writer)
 			}
 			out, err := fn(ctx, in)

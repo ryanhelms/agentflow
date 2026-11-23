@@ -303,11 +303,11 @@ providers:
 
 func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
 	root, _ := layers(t, "version: 1\nproviders:\n  jira: {task_management: {constraints: {projects: {allow: [PLAT]}}}}")
-	config(t, root, "jira: {projects: [OPS]}")
+	config(t, root, "jira: {projects: [OPS]}\ntask_management: {provider: jira}")
 	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "value OPS is not allowed") {
 		t.Fatalf("invalid inherited projects: %v", err)
 	}
-	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}")
+	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}\ntask_management: {provider: jira}\nknowledge_base: {provider: confluence}")
 	c, _, err := LoadRepo(root)
 	if err != nil {
 		t.Fatal(err)
@@ -319,7 +319,7 @@ func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
 
 func TestRepositoryScopeSurvivesReleaseAndUserDefaults(t *testing.T) {
 	root, home := layers(t, constrained)
-	config(t, root, "jira: {projects: [INFRA]}")
+	config(t, root, "jira: {projects: [INFRA]}\ntask_management: {provider: jira}")
 	user(t, home, "user.yml", "version: 1\nproviders:\n  jira: {task_management: {settings: {projects: []}}}")
 	c, _, err := LoadRepo(root)
 	if err != nil {

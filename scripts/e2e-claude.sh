@@ -52,7 +52,7 @@ git init -q -b main
 git config user.email "e2e@nscale.com"
 git config user.name "devflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
-"$XDG_CACHE_HOME/devflow/current/devflow" init >/dev/null
+"$XDG_CACHE_HOME/devflow/current/devflow" init --non-interactive --provider task_management=jira >/dev/null
 rm -f .claude/settings.json # load the plugin from this checkout instead of the marketplace
 git add -A
 git commit -q -m "chore(PLAT-1): add devflow configuration"

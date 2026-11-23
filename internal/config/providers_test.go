@@ -41,7 +41,7 @@ func TestProviderDefaults(t *testing.T) {
 		got Selection
 		id  string
 	}{
-		{p.CodeHosting, "auto"}, {p.TaskManagement, "jira"}, {p.KnowledgeBase, "confluence"},
+		{p.CodeHosting, "auto"}, {p.TaskManagement, "none"}, {p.KnowledgeBase, "none"},
 		{p.DevOps.Checks, "github"}, {p.DevOps.Deployments, "github"}, {p.DevOps.Releases, "github"},
 		{p.SecOps, "github"}, {p.Notifications, "slack"},
 	} {
@@ -49,12 +49,40 @@ func TestProviderDefaults(t *testing.T) {
 			t.Errorf("default selection for %s = %+v", tc.id, tc.got)
 		}
 	}
-	if p.DevOps.Version != 1 || p.TaskManagement.Settings.(*JiraSettings).Site != DefaultSite ||
-		p.KnowledgeBase.Settings.(*ConfluenceSettings).Site != DefaultSite || p.Notifications.Settings.(*SlackSettings).Destination != nil {
+	if p.DevOps.Version != 1 || c.Commit.KeyRequired() || p.Notifications.Settings.(*SlackSettings).Destination != nil {
 		t.Fatalf("unexpected defaults: %+v", p)
 	}
 	if got := loadConfig(t, "devflow: 1\nfuture_extension: {nested: true}\n"); !reflect.DeepEqual(got.Providers, p) {
 		t.Fatalf("legacy config changed defaults: %+v", got.Providers)
+	}
+}
+
+func TestUnassignedProvidersKeepLegacyAndInlineSettingsDormant(t *testing.T) {
+	cfg := loadConfig(t, `
+jira: {site: https://jira.example, projects: [OPS]}
+confluence: {site: https://wiki.example}
+task_management: {settings: {projects: [OPS]}}
+knowledge_base: {settings: {site: https://other.example}}
+`)
+	for _, selection := range []Selection{cfg.Providers.TaskManagement, cfg.Providers.KnowledgeBase} {
+		if selection.Provider != "none" {
+			t.Fatalf("settings unexpectedly activated a provider: %+v", selection)
+		}
+		if _, ok := selection.Settings.(*DisabledSettings); !ok {
+			t.Fatalf("unassigned role has active settings: %+v", selection)
+		}
+	}
+	if cfg.Commit.KeyRequired() {
+		t.Fatal("unassigned tasks implicitly require a ticket key")
+	}
+
+	tasks := loadConfig(t, "task_management: {provider: jira}")
+	if tasks.Providers.TaskManagement.Provider != "jira" || tasks.Providers.KnowledgeBase.Provider != "none" || !tasks.Commit.KeyRequired() {
+		t.Fatalf("explicit task role changed its independent defaults: %+v", tasks.Providers)
+	}
+	knowledge := loadConfig(t, "knowledge_base: {provider: confluence}")
+	if knowledge.Providers.KnowledgeBase.Provider != "confluence" || knowledge.Providers.TaskManagement.Provider != "none" || knowledge.Commit.KeyRequired() {
+		t.Fatalf("explicit knowledge role changed its independent defaults: %+v", knowledge.Providers)
 	}
 }
 
@@ -63,7 +91,8 @@ func TestLegacyProviderSettings(t *testing.T) {
 devflow: 1
 jira: {site: "https://jira.example", projects: [OLD]}
 commit: {require_key: false}
-task_management: {settings: {site: "https://tasks.example"}}
+task_management: {provider: jira, settings: {site: "https://tasks.example"}}
+knowledge_base: {provider: confluence}
 `)
 	task := c.Providers.TaskManagement.Settings.(*JiraSettings)
 	if !c.Providers.TaskManagement.Configured || task.Site != "https://tasks.example" || !slices.Equal(task.Projects, []string{"OLD"}) {
@@ -84,7 +113,7 @@ task_management: {settings: {site: "https://tasks.example"}}
 	}{
 		{"[NEW]", []string{"NEW"}}, {"[]", []string{}},
 	} {
-		cfg := loadConfig(t, "jira: {projects: [OLD]}\ntask_management: {settings: {projects: "+tc.override+"}}")
+		cfg := loadConfig(t, "jira: {projects: [OLD]}\ntask_management: {provider: jira, settings: {projects: "+tc.override+"}}")
 		if got := cfg.Providers.TaskManagement.Settings.(*JiraSettings).Projects; !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("projects = %#v, want %#v", got, tc.want)
 		}
@@ -200,7 +229,7 @@ func TestInvalidProviderConfig(t *testing.T) {
 		{"task_management: {provider: github-issues, settings: {projects: []}}", "task_management.settings.projects"},
 		{"task_management: {provider: github-issues, settings: {search: {limit: -1}}}", "task_management.settings.search.limit"},
 		{"task_management: {provider: github-issues, settings: {search: {open_only: 'false'}}}", "task_management.settings.search.open_only"},
-		{"task_management: {settings: {projects: [OK, false]}}", "task_management.settings.projects[1]"},
+		{"task_management: {provider: jira, settings: {projects: [OK, false]}}", "task_management.settings.projects[1]"},
 		{"knowledge_base: {provider: repository, settings: {publication: overwrite}}", "knowledge_base.settings.publication"},
 		{"knowledge_base: {provider: filesystem, settings: {root: null}}", "knowledge_base.settings.root"},
 		{"knowledge_base: {provider: filesystem, settings: {format: other}}", "knowledge_base.settings.format"},

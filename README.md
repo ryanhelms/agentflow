@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Devflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Devflow PR validation on its default branch. |
-| **Current release** | <!-- devflow:version -->`v0.46.1`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.48.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -197,8 +197,10 @@ devflow doctor --fix               # checks binary, hooks, flow map and client c
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
-service sections, versioned settings, defaults, and their override rules. Jira tasks
-and Confluence can use separate sites and credentials. See the
+service sections, versioned settings, defaults, and their override rules. Task
+management and knowledge base each require an explicit provider selection in
+`.devflow/config.yml`. Devflow skips the operations for an unassigned role. Jira
+tasks and Confluence can use separate sites and credentials. See the
 [migration and rollback rehearsal](docs/rollout.md#provider-migration-rehearsal)
 and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with
@@ -416,6 +418,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Task | Terminal | AI client |
 | --- | --- | --- |
 | Open the local repository console | `devflow ui` | `/devflow:ui` |
+| Inspect, edit and review configuration | `devflow config OP` | `devflow_config`, `devflow_config_apply` |
 | Create a task | `devflow task create` | `devflow_ticket_create` |
 | Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
 | See the ticket context | `devflow context` | loaded automatically at session start |
@@ -441,7 +444,12 @@ console shows the active provider for each role, where its settings came from,
 and how a proposed edit changes the effective configuration. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
-questions for this worktree. [Repository console guide](docs/repository-console.md)
+questions for this worktree. From a connected chat, ask “Show which rule governs
+local commits here” or “Set my local commits to automatic and show me the change
+before saving.” You can also edit provider settings, repository ceilings and the
+other editable files in the console inventory. Devflow returns the proposed
+change for review before saving personal preferences or publishing a repository
+change. [Configure Devflow from chat](docs/repository-console.md#configure-devflow-from-chat)
 
 PR readiness requires a Jira key in the branch name by default. With
 `commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
@@ -562,7 +570,7 @@ Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `k
 CI.
 
 The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
-`install`, `setup`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
+`install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
 `eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos devflow has not set up yet. Skills that
@@ -655,6 +663,12 @@ scripts/                  e2e test, blueprint build, agent-docs check
 ```
 
 ## Contributing
+
+To view the launch and documentation website locally, run
+`docker compose up --build --wait website` from the repository root and open
+[the local website](http://127.0.0.1:5173). Edit `website/src/` to see changes
+in the browser. The site uses Nscale's shared page layouts, components, and
+tokens. [Website development guide](CONTRIBUTING.md#website)
 
 ```bash
 make check     # vet, race tests, golangci-lint, shellcheck, actionlint, agent docs
