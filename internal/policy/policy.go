@@ -4,20 +4,14 @@
 package policy
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/nscaledev/devflow/internal/config"
@@ -39,134 +33,125 @@ const (
 	Proceed           Outcome = "proceed"
 	SuggestOnly       Outcome = "suggest"
 	NeedsConfirmation Outcome = "needs_confirmation"
+	AwaitingApproval  Outcome = "awaiting_approval"
+	Prepared          Outcome = "prepared"
 )
 
-// TokenTTL is how long a confirmation token stays valid.
-const TokenTTL = 5 * time.Minute
+// TokenTTL is also the lifetime of an existing native provider write lease.
+const TokenTTL = config.DefaultApprovalWindow
 
-// Gate applies autonomy levels and confirmation tokens.
+// Gate applies the effective policy and shares pending approvals within a repository.
 type Gate struct {
 	Autonomy config.Autonomy
 	Client   string
-	secret   []byte
-	mu       sync.Mutex
-	used     map[string]bool
-	auditDir string
+	// PreviewOnly is set by a CLI that displays an informational preview and exits.
+	// Such a preview neither dispatches the operation nor acquires the prompt.
+	PreviewOnly bool
+	secret      []byte
+	owner       string
+	auditDir    string
+	scope       string
+	user        *config.User
+	repo        *config.Repo
+	initial     config.Autonomy
+	now         func() time.Time
 }
 
-// NewGate loads (or creates) the per-user token secret under dir.
-func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
-	keyPath := filepath.Join(dir, "confirm.key")
-	secret, err := os.ReadFile(keyPath)
-	if errors.Is(err, os.ErrNotExist) || len(secret) < 32 {
-		secret = make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(keyPath, secret, 0o600); err != nil {
-			return nil, err
-		}
-	} else if err != nil {
-		return nil, err
+// Configure scopes operations to the repository and enables action-specific policy.
+// The caller uses the common Git directory as the identity for linked worktrees.
+// Configure is called before the gate begins serving requests.
+func (g *Gate) Configure(repository string, user *config.User, repo *config.Repo) {
+	if resolved, err := filepath.EvalSymlinks(repository); err == nil {
+		repository = resolved
 	}
-	return &Gate{Autonomy: a, Client: client, secret: secret, used: map[string]bool{}, auditDir: dir}, nil
+	g.scope, g.user, g.repo = repository, user, repo
 }
 
-// Decision is the result of Check.
+// WithConfiguration keeps the prompt owner and journal while resolving each
+// operation against a new on-disk policy. Existing callers keep their snapshot.
+func (g *Gate) WithConfiguration(repository string, user *config.User, repo *config.Repo) *Gate {
+	current := *g
+	current.Autonomy = config.Effective(user, repo)
+	current.initial = current.Autonomy
+	current.Configure(repository, user, repo)
+	return &current
+}
+
+// Decision is the result of a policy check.
 type Decision struct {
-	Outcome Outcome `json:"status"`
-	Token   string  `json:"confirm_token,omitempty"`
-	Reason  string  `json:"reason,omitempty"`
+	Outcome  Outcome                  `json:"status"`
+	Token    string                   `json:"confirm_token,omitempty"`
+	Reason   string                   `json:"reason,omitempty"`
+	Approval *Approval                `json:"approval,omitempty"`
+	Policy   *config.AutonomyDecision `json:"policy,omitempty"`
 }
 
-// Check decides whether action with payload may run. forceConfirm raises
-// "auto" to "confirm" (used when the payload came from ticket or page text).
-// A valid token for the same action and payload lets it proceed once.
-func (g *Gate) Check(class Class, action string, payload any, token string, forceConfirm bool) (Decision, error) {
+// Explain returns the strictest rule among the effects of the operation.
+func (g *Gate) Explain(class Class, action string, related []string, force bool) config.AutonomyDecision {
+	u := config.User{Autonomy: g.Autonomy}
+	if g.user != nil {
+		u = *g.user
+		// Honor callers that override the class level after constructing a gate.
+		if g.initial.Local != g.Autonomy.Local {
+			u.Autonomy.Local = g.Autonomy.Local
+		}
+		if g.initial.Remote != g.Autonomy.Remote {
+			u.Autonomy.Remote = g.Autonomy.Remote
+		}
+	}
+	result := config.ResolveAutonomy(&u, g.repo, string(class), action, force)
+	for _, other := range related {
+		candidate := config.ResolveAutonomy(&u, g.repo, string(class), other, force)
+		if candidate.Level != result.Level && config.Min(candidate.Level, result.Level) == candidate.Level {
+			result = candidate
+		}
+	}
+	return result
+}
+
+func (g *Gate) Check(class Class, action string, payload any, token string, force bool) (Decision, error) {
+	return g.CheckActions(class, action, nil, payload, token, force, false)
+}
+
+func (g *Gate) CheckActions(class Class, action string, related []string, payload any, token string, force, prepareOnly bool) (Decision, error) {
+	return g.CheckActionsUntil(class, action, related, payload, token, force, prepareOnly, time.Time{})
+}
+
+// CheckActionsUntil also enforces the expiry of an already-bound provider session.
+func (g *Gate) CheckActionsUntil(class Class, action string, related []string, payload any, token string, force, prepareOnly bool, deadline time.Time) (Decision, error) {
+	rule := g.Explain(class, action, related, force)
+	d := Decision{Policy: &rule, Outcome: Proceed}
+	if !deadline.IsZero() && !g.now().Before(deadline) {
+		return Decision{}, ErrExpired
+	}
 	if class == Read {
-		return Decision{Outcome: Proceed}, nil
+		return d, nil
 	}
-	level := g.Autonomy.Local
-	if class == Remote {
-		level = g.Autonomy.Remote
+	if rule.Level == config.Suggest {
+		d.Outcome, d.Reason = SuggestOnly, fmt.Sprintf("%s sets %s to suggest. Run it yourself", rule.Source, rule.Action)
+		return d, nil
 	}
-	if forceConfirm && level == config.Auto {
-		level = config.Confirm
+	if g.PreviewOnly {
+		d.Outcome, d.Reason = Prepared, "informational preview only"
+		return d, nil
 	}
-	switch level {
-	case config.Suggest:
-		return Decision{Outcome: SuggestOnly, Reason: fmt.Sprintf("%s actions are set to suggest; run it yourself", class)}, nil
-	case config.Auto:
-		return Decision{Outcome: Proceed}, nil
+	if rule.Level == config.Auto && token == "" && !prepareOnly {
+		return d, nil
 	}
-	digest, err := g.digest(action, payload)
+	digest, err := g.fingerprint(class, action, related, payload)
 	if err != nil {
 		return Decision{}, err
 	}
-	if token != "" {
-		if err := g.redeem(token, digest); err != nil {
-			return Decision{}, err
+	err = g.locked(func() error {
+		if token != "" {
+			if prepareOnly {
+				return fmt.Errorf("preparing an operation cannot redeem an approval")
+			}
+			return g.consume(&d, token, digest)
 		}
-		return Decision{Outcome: Proceed}, nil
-	}
-	return Decision{Outcome: NeedsConfirmation, Token: g.issue(digest),
-		Reason: "show this summary to the user and call again with confirm_token after they agree"}, nil
-}
-
-func (g *Gate) digest(action string, payload any) ([]byte, error) {
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	h := sha256.Sum256(append([]byte(action+"\x00"), b...))
-	return h[:], nil
-}
-
-func (g *Gate) mac(digest []byte, exp uint64) []byte {
-	m := hmac.New(sha256.New, g.secret)
-	var e [8]byte
-	binary.BigEndian.PutUint64(e[:], exp)
-	m.Write(e[:])
-	m.Write(digest)
-	return m.Sum(nil)[:18]
-}
-
-func (g *Gate) issue(digest []byte) string {
-	exp := unixNow() + uint64(TokenTTL/time.Second)
-	var e [8]byte
-	binary.BigEndian.PutUint64(e[:], exp)
-	return "cf_" + base64.RawURLEncoding.EncodeToString(append(e[:], g.mac(digest, exp)...))
-}
-
-func unixNow() uint64 {
-	n := time.Now().Unix()
-	if n < 0 {
-		return 0
-	}
-	return uint64(n)
-}
-
-// ErrToken is returned for expired, reused or mismatched tokens.
-var ErrToken = errors.New("confirmation token is invalid, expired, already used, or the request changed; ask the user again")
-
-func (g *Gate) redeem(token string, digest []byte) error {
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(token, "cf_"))
-	// The replay ledger and durable write claims use the token as their key.
-	// Accept only the exact spelling issued by the gate.
-	if err != nil || len(raw) != 8+18 || token != "cf_"+base64.RawURLEncoding.EncodeToString(raw) {
-		return ErrToken
-	}
-	exp := binary.BigEndian.Uint64(raw[:8])
-	if unixNow() > exp || !hmac.Equal(raw[8:], g.mac(digest, exp)) {
-		return ErrToken
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.used[token] {
-		return ErrToken
-	}
-	g.used[token] = true
-	return nil
+		return g.prepare(&d, class, action, related, digest, force, deadline)
+	})
+	return d, err
 }
 
 // Audit appends one JSON line to ~/.devflow/audit.log.

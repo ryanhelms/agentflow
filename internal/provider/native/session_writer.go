@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/devflow/internal/config"
 )
 
 const (
@@ -41,6 +41,7 @@ type SessionWriter struct {
 	owner    string
 	open     func(context.Context, Call) (WriteSession, error)
 	mu       sync.Mutex
+	window   time.Duration
 	leases   map[[sha256.Size]byte]*writeLease
 	readback map[string]*writeLease
 }
@@ -55,7 +56,8 @@ type writeLease struct {
 }
 
 func NewSessionWriter(owner string, open func(context.Context, Call) (WriteSession, error)) *SessionWriter {
-	return &SessionWriter{owner: owner, open: open, leases: make(map[[sha256.Size]byte]*writeLease), readback: make(map[string]*writeLease)}
+	return &SessionWriter{owner: owner, open: open, window: config.DefaultApprovalWindow,
+		leases: make(map[[sha256.Size]byte]*writeLease), readback: make(map[string]*writeLease)}
 }
 
 // NewRoutedSessionWriter selects a provider's session factory before preparing
@@ -75,6 +77,20 @@ func NewRoutedSessionWriter(owner string, byProvider map[string]*SessionWriter) 
 }
 
 var _ WriteHost = (*SessionWriter)(nil)
+
+// SetApprovalWindow sets the lifetime of newly prepared writes. Existing
+// bindings retain their original expiry and authenticated connection.
+func (w *SessionWriter) SetApprovalWindow(window time.Duration) {
+	if w == nil {
+		return
+	}
+	if window < config.MinApprovalWindow || window > config.MaxApprovalWindow {
+		window = config.DefaultApprovalWindow
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.window = window
+}
 
 // Close ends any outstanding previews. Already consumed bindings are never
 // recreated by this method.
@@ -133,7 +149,7 @@ func (w *SessionWriter) Prepare(ctx context.Context, call Call) (WriteBinding, e
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if existing := w.leases[key]; existing != nil {
-		if existing.ctx.Err() != nil {
+		if !existing.active() {
 			w.drop(key, existing)
 			return zero, errors.New("native provider connection expired; request a fresh preview")
 		}
@@ -143,7 +159,9 @@ func (w *SessionWriter) Prepare(ctx context.Context, call Call) (WriteBinding, e
 		return zero, errors.New("too many outstanding native write previews")
 	}
 
-	hold, cancel := context.WithTimeout(context.WithoutCancel(ctx), policy.TokenTTL+writeCallTimeout)
+	// The held connection covers setup, the review window, dispatch and
+	// receipt verification. Each phase still enforces its own deadline.
+	hold, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeCallTimeout+w.window+writeCallTimeout+writeReadbackTTL)
 	ready, stop := context.WithTimeout(ctx, writeCallTimeout)
 	defer stop()
 	stopCancel := context.AfterFunc(ready, cancel)
@@ -178,10 +196,10 @@ func (w *SessionWriter) Prepare(ctx context.Context, call Call) (WriteBinding, e
 	lease.binding = WriteBinding{
 		Provider: call.Provider, Owner: w.owner, Server: call.Server, Tool: call.Tool,
 		Origin: session.Origin(), Connection: hex.EncodeToString(nonce[:]),
-		Payload: hex.EncodeToString(key[:]),
+		Payload: hex.EncodeToString(key[:]), ExpiresAt: time.Now().UTC().Add(w.window),
 	}
 	lease.payload = key
-	lease.timer = time.AfterFunc(policy.TokenTTL, func() {
+	lease.timer = time.AfterFunc(time.Until(lease.binding.ExpiresAt), func() {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		w.drop(key, lease)
@@ -221,7 +239,7 @@ func (w *SessionWriter) Write(ctx context.Context, binding WriteBinding, call Ca
 	if err := ctx.Err(); err != nil {
 		return nil, errors.Join(ErrWriteNotDispatched, err)
 	}
-	if err := lease.ctx.Err(); err != nil {
+	if !lease.active() {
 		return nil, errors.Join(ErrWriteNotDispatched, fmt.Errorf("%w: prepared provider connection ended", ErrDenied))
 	}
 	limit, cancel := context.WithTimeout(ctx, writeCallTimeout)
@@ -263,7 +281,7 @@ func (w *SessionWriter) Rebind(ctx context.Context, binding WriteBinding, call C
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for _, lease := range w.leases {
-		if lease.binding == binding && lease.ctx.Err() == nil {
+		if lease.binding == binding && lease.active() {
 			if err := lease.session.Check(call); err != nil {
 				return zero, err
 			}
@@ -370,6 +388,10 @@ func (w *SessionWriter) ReadBound(ctx context.Context, binding WriteBinding, cal
 		if lease.binding != binding {
 			continue
 		}
+		if !lease.active() {
+			w.drop(key, lease)
+			return nil, fmt.Errorf("%w: prepared provider connection expired", ErrDenied)
+		}
 		raw, err := lease.read(ctx, call)
 		if err != nil && !errors.Is(err, ErrUnavailable) {
 			w.drop(key, lease)
@@ -410,4 +432,8 @@ func (l *writeLease) close() {
 	}
 	l.session.Close()
 	l.cancel()
+}
+
+func (l *writeLease) active() bool {
+	return l.ctx.Err() == nil && time.Now().Before(l.binding.ExpiresAt)
 }

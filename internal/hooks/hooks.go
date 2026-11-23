@@ -69,7 +69,7 @@ func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
 	return &ExitError{Code: 1, Msg: "invalid commit message"}
 }
 
-// SessionStart prints the ticket context for the AI client to load.
+// SessionStart prints the selected providers and task context for the AI client.
 func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) error {
 	dir, _ := os.Getwd()
 	a, err := app.Open(ctx, dir, client)
@@ -78,12 +78,15 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 	}
 	if !a.HasCfg {
 		autoInit(ctx, a, client, stdout)
-	} else if tc, err := a.Context(ctx, ""); err != nil {
-		fmt.Fprintf(stdout, "devflow: could not load ticket context: %v\n", err)
 	} else {
-		fmt.Fprint(stdout, tc.Text)
-	}
-	if a.HasCfg {
+		fmt.Fprint(stdout, setup.AgentProviderSelection(a.Cfg))
+		if a.Cfg.Providers.TaskManagement.Provider != "none" {
+			if tc, err := a.Context(ctx, ""); err != nil {
+				fmt.Fprintf(stdout, "devflow: could not load task context: %v\n", err)
+			} else {
+				fmt.Fprint(stdout, tc.Text)
+			}
+		}
 		if from := setup.PinBehind(a.Repo.Dir); from != "" {
 			fmt.Fprintf(stdout, "devflow: %s is pinned to devflow %s, older than the installed devflow. "+
 				"Offer the developer `/devflow:pin`, which re-pins it and opens a PR for review.\n", setup.CallerWorkflow, from)
@@ -119,8 +122,8 @@ func autoInit(ctx context.Context, a *app.App, client string, stdout io.Writer) 
 		fmt.Fprintf(stdout, "devflow set this repo up automatically (init.auto in ~/.devflow/config.yml). "+
 			"It wrote %d files and committed nothing: %s.\n"+
 			"At the start of your first reply, tell the developer in one or two lines, then offer to: review .devflow/config.yml "+
-			"(jira.projects, policy.test_cmd) and .devflow/releases.yml, commit the files on a new branch as "+
-			"`chore(KEY): set up devflow` (ask for the Jira key; commits need one unless commit.require_key is false) and open a PR. If they don't want devflow here, offer `/devflow:remove`, "+
+			"(providers and policy.test_cmd) and .devflow/releases.yml, commit the files on a new branch following "+
+			"the configured commit convention, and open a PR. If they don't want devflow here, offer `/devflow:remove`, "+
 			"which deletes the files and stops automatic init in this clone.\n",
 			len(files), strings.Join(files, ", "))
 	}

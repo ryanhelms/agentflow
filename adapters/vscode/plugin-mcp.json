@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "devflow": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/adapters/plugin-mcp.cjs",
+        "vscode"
+      ],
+      "tools": [
+        "*"
+      ]
+    }
+  }
+}

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,10 +38,13 @@ type header struct {
 
 type record struct {
 	header
-	body     string
-	name     string
-	revision string
-	mode     fs.FileMode
+	body        string
+	name        string
+	revision    string
+	mode        fs.FileMode
+	concept     okf.Concept
+	info        fs.FileInfo
+	explicitRef bool
 }
 
 func digest(b []byte) string {
@@ -108,7 +112,7 @@ func parse(data []byte) (record, error) {
 		dec.KnownFields(true)
 		r := record{body: string(body), revision: digest(data)}
 		if err := dec.Decode(&r.header); err != nil {
-			return record{}, fmt.Errorf("decode YAML front matter: %w", err)
+			return r, fmt.Errorf("decode YAML front matter: %w", err)
 		}
 		if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
 			return record{}, errors.New("expected a single YAML mapping in front matter")
@@ -119,6 +123,9 @@ func parse(data []byte) (record, error) {
 }
 
 func (r record) markdown() ([]byte, error) {
+	if r.concept.Frontmatter != nil {
+		return okf.Marshal(r.concept.Frontmatter, r.body)
+	}
 	h, err := yaml.Marshal(r.header)
 	if err != nil {
 		return nil, fmt.Errorf("encode YAML front matter: %w", err)

@@ -106,7 +106,10 @@ func TestRemoveUndoesInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, gone := range []string{".devflow", ".github", ".githooks", ".claude", ".codex", ".cursor", ".gemini", ".grok", ".jira", "release-please-config.json"} {
+	if b, err := os.ReadFile(filepath.Join(dir, "release-please-config.json")); err != nil || string(b) != "{}\n" {
+		t.Fatal("pre-existing release configuration changed")
+	}
+	for _, gone := range []string{".devflow", ".github", ".githooks", ".claude", ".codex", ".cursor", ".gemini", ".grok", ".jira"} {
 		if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
 			t.Errorf("%s still exists (removed=%v)", gone, res.Removed)
 		}

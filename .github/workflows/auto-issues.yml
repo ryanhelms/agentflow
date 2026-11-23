@@ -68,11 +68,22 @@ jobs:
       PROJECT: ${{ inputs.project }}
       REPO_SLUG: ${{ github.event.repository.name }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
       - uses: nscaledev/devflow/actions/setup@v0
+        with:
+          binary: true
+      - id: task
+        name: Resolve task provider
+        run: |
+          provider=$(devflow keys --provider)
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
 
       # Dependabot alerts need a GitHub App token with "Dependabot alerts: read".
       - id: app
-        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.DEVFLOW_APP_ID != ''
+        if: steps.task.outputs.provider == 'jira' && ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.DEVFLOW_APP_ID != '')
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.DEVFLOW_APP_ID }}
@@ -81,7 +92,7 @@ jobs:
           repositories: ${{ github.event.repository.name }}
 
       - name: Security alerts
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: steps.task.outputs.provider == 'jira' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
           APP_TOKEN: ${{ steps.app.outputs.token }}
           GH_TOKEN: ${{ github.token }}
@@ -107,7 +118,7 @@ jobs:
             done || echo "::notice::code scanning not enabled or not readable"
 
       - name: Failed default-branch workflow
-        if: github.event_name == 'workflow_run'
+        if: steps.task.outputs.provider == 'jira' && (github.event_name == 'workflow_run')
         env:
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -126,7 +137,7 @@ jobs:
             "$REPO_SLUG: '$WF' failing on $DEFAULT" "Run: $URL"$'\n'"Commit: $SHA" ci-failure
 
       - name: Mirror labelled GitHub issue
-        if: github.event_name == 'issues' && github.event.label.name == 'jira'
+        if: steps.task.outputs.provider == 'jira' && (github.event_name == 'issues' && github.event.label.name == 'jira')
         env:
           GH_TOKEN: ${{ github.token }}
           NUMBER: ${{ github.event.issue.number }}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/managedmcp"
 	"github.com/nscaledev/devflow/internal/provider/asana"
@@ -171,6 +172,12 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if err != nil {
 			selection.Detail = "cannot use managed gh: " + err.Error()
 		}
+		if selection.Command == "" && selection.Install == nil {
+			tool, _ := managedcli.ForProvider("github")
+			if path, err := managedcli.Resolve(ctx, root, tool); err == nil {
+				selection.Command, selection.Detail = path, "managed GitHub CLI passed its version check"
+			}
+		}
 		p.InstallGH = selection.Install
 		ghSelection = &selection
 		github.command = selection.Command
@@ -183,7 +190,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 		if role.Provider == "auto" && detection.OK() && detection.Forge == gitx.ForgeGitHub {
 			toolProvider = "github"
 		}
-		p.addProviderTooling(role.name, toolProvider, client, ghSelection)
+		p.addProviderTooling(ctx, role.name, toolProvider, client, ghSelection)
 		switch settings := role.Settings.(type) {
 		case *config.DisabledSettings:
 			continue
@@ -210,7 +217,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			p.checkProviderTool(role, "check the Atlassian MCP in the client or use signed-in Teamwork Graph CLI")
 		case *config.SlackSettings:
 			p.checkProviderTool(role, "check the Slack MCP in the client")
-		case *config.FileSystemSettings:
+		case *config.FileSystemKnowledgeSettings:
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
 			p.checkDirectory(role, settings.Root)
@@ -220,9 +227,9 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			} else {
 				p.check(role.name, role.Provider, true, fmt.Sprintf("can read fixture %q", settings.Path))
 			}
-		case *config.RepositorySettings:
+		case *config.RepositoryKnowledgeSettings:
 			if gitOK {
-				p.checkRepository(ctx, role, settings, repo)
+				p.checkRepository(ctx, role, &settings.RepositorySettings, repo)
 			}
 		case *config.RepositoryTaskSettings:
 			if gitOK {

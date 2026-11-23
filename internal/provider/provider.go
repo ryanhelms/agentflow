@@ -119,12 +119,15 @@ type TaskAssignment interface {
 }
 
 type Document struct {
-	Ref      Ref    `json:"ref"`
-	Title    string `json:"title"`
-	Body     string `json:"body,omitempty"`
-	URL      string `json:"url,omitempty"`
-	Revision string `json:"revision,omitempty"`
-	Links    []Link `json:"links,omitempty"`
+	Ref         Ref      `json:"ref"`
+	Title       string   `json:"title"`
+	Body        string   `json:"body,omitempty"`
+	URL         string   `json:"url,omitempty"`
+	Revision    string   `json:"revision,omitempty"`
+	Links       []Link   `json:"links,omitempty"`
+	Type        string   `json:"type,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 type DocumentQuery struct {
@@ -134,9 +137,12 @@ type DocumentQuery struct {
 }
 
 type DocumentDraft struct {
-	Title string
-	Body  string
-	Links []Link
+	Title       string
+	Body        string
+	Links       []Link
+	Type        string   `json:"type,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // Knowledge reads and publishes documents. The publish reference identifies the

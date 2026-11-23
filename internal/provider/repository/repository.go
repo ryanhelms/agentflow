@@ -23,6 +23,7 @@ import (
 	"github.com/nscaledev/devflow/internal/gitx"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 )
 
 // Config takes a resolved origin URL or absolute repository path. The caller
@@ -53,6 +54,8 @@ type Publication struct {
 
 type adapter struct {
 	Config
+	okfKnowledge bool
+	format       string
 	// Tests exercise transport failures and competing pushes at the publication boundary.
 	push func(checkout, context.Context, string, string) error
 }
@@ -78,7 +81,40 @@ func NewKnowledge(c Config) (*Knowledge, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Knowledge{a}, nil
+	return &Knowledge{a: a}, nil
+}
+
+// NewOKFCompatibleKnowledge enables recursive OKF reads for the Repository
+// knowledge role. Wiki uses NewKnowledge and its flat v1 checkout.
+func NewOKFCompatibleKnowledge(c Config) (*Knowledge, error) {
+	k, err := NewKnowledge(c)
+	if err == nil {
+		k.a.okfKnowledge = true
+	}
+	return k, err
+}
+
+// NewOKFKnowledge publishes new documents in format and preserves the encoding
+// of existing records, including imported OKF concepts in nested directories.
+func NewOKFKnowledge(cfg Config, format string) (*Knowledge, error) {
+	if err := okf.ValidateFormat(format); err != nil {
+		return nil, err
+	}
+	k, err := NewOKFCompatibleKnowledge(cfg)
+	if err == nil {
+		k.a.format = format
+	}
+	return k, err
+}
+
+func (k *Knowledge) open(instance, dir string) (*filesystem.Knowledge, error) {
+	if k.a.format != "" {
+		return filesystem.NewOKFKnowledge(instance, dir, k.a.format)
+	}
+	if k.a.okfKnowledge {
+		return filesystem.NewOKFCompatibleKnowledge(instance, dir)
+	}
+	return filesystem.NewKnowledge(instance, dir)
 }
 
 func newAdapter(c Config) (adapter, error) {
@@ -157,19 +193,19 @@ func (t *Tasks) Transition(ctx context.Context, ref provider.Ref, state provider
 }
 
 func (k *Knowledge) Get(ctx context.Context, ref provider.Ref) (provider.Document, error) {
-	return read(ctx, k.a, filesystem.NewKnowledge, func(s *filesystem.Knowledge) (provider.Document, error) {
+	return read(ctx, k.a, k.open, func(s *filesystem.Knowledge) (provider.Document, error) {
 		return s.Get(ctx, ref)
 	})
 }
 
 func (k *Knowledge) Find(ctx context.Context, q provider.DocumentQuery) ([]provider.Document, error) {
-	return read(ctx, k.a, filesystem.NewKnowledge, func(s *filesystem.Knowledge) ([]provider.Document, error) {
+	return read(ctx, k.a, k.open, func(s *filesystem.Knowledge) ([]provider.Document, error) {
 		return s.Find(ctx, q)
 	})
 }
 
 func (k *Knowledge) Publish(ctx context.Context, ref provider.Ref, d provider.DocumentDraft, o provider.WriteOptions) (provider.WriteResult, error) {
-	return write(ctx, k.a, "document", ref.Scope, o, filesystem.NewKnowledge, func(s *filesystem.Knowledge, opts provider.WriteOptions) (provider.WriteResult, error) {
+	return write(ctx, k.a, "document", ref.Scope, o, k.open, func(s *filesystem.Knowledge, opts provider.WriteOptions) (provider.WriteResult, error) {
 		return s.Publish(ctx, ref, d, opts)
 	})
 }

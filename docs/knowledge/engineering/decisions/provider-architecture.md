@@ -1,15 +1,16 @@
 ---
-version: 1
-kind: document
-instance: repository
-scope: engineering
-id: provider-architecture
+type: Decision
 title: Provider contracts and repository configuration
-links:
+description: How Devflow selects providers, resolves configuration, and preserves stable references.
+tags: [architecture, providers]
+x-devflow-ref:
+  scope: engineering
+  id: provider-architecture
+x-devflow-links:
     - title: Devflow provider pilot
       url: https://github.com/nscaledev/devflow/issues/25
       ref: null
-operations:
+x-devflow-operations:
     provider-pilot-adr-issue-25: a85433bd0efdb7cf295801ae753690c153534a18a99fd9ffa7f4422a2c5d9f39
     provider-pilot-adr-issue-25-verified-checkout: 7eb56be3fddae81068c3768e4ec28d793adce4136fddd38fd0da3787d3750e4d
 ---

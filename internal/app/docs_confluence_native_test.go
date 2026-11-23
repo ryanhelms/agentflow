@@ -110,6 +110,23 @@ func newConfluenceMCPFixture(t *testing.T) (*App, *confluenceFixture, *confluenc
 	return a, legacy, host, in
 }
 
+func TestConfluenceRejectsConceptMetadataBeforeRouting(t *testing.T) {
+	a, rest, host, in := newConfluenceMCPFixture(t)
+	ctx := native.WithWriteHost(t.Context(), host)
+	for _, set := range []func(*DocsPublishInput){
+		func(i *DocsPublishInput) { i.Type = "Guide" },
+		func(i *DocsPublishInput) { i.Description = "Limits" },
+		func(i *DocsPublishInput) { i.Tags = []string{} },
+	} {
+		changed := in
+		set(&changed)
+		if out, err := a.DocsPublish(ctx, changed, ""); out != nil || !errors.Is(err, provider.ErrUnsupported) ||
+			host.prepares+host.reads+host.puts+rest.writes != 0 {
+			t.Fatalf("unsupported metadata = %v, %v; host %+v, REST writes %d", out, err, host, rest.writes)
+		}
+	}
+}
+
 func TestConfluenceNativeConfirmationBindsSnapshotAndRoute(t *testing.T) {
 	a, rest, host, in := newConfluenceMCPFixture(t)
 	a.Gate.Autonomy.Remote = config.Confirm

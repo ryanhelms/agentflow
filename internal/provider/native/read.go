@@ -14,6 +14,7 @@ import (
 
 var (
 	ErrUnavailable = errors.New("provider MCP capability unavailable")
+	ErrConnection  = errors.New("provider MCP connection failed")
 	ErrSignIn      = errors.New("provider sign-in required")
 	ErrDenied      = errors.New("provider access denied")
 )
@@ -50,7 +51,7 @@ func HasClientReplies(ctx context.Context) bool {
 	return len(client.Replies) != 0
 }
 
-func Read[T any](ctx context.Context, call Call, decode func(json.RawMessage) (T, error), fallback func() (T, error)) (T, error) {
+func Read[T any](ctx context.Context, call Call, decode func(json.RawMessage) (T, error), fallback func(error) (T, error)) (T, error) {
 	host, _ := ctx.Value(hostKey{}).(Host)
 	if host != nil {
 		payload, err := host.Read(ctx, call)
@@ -58,11 +59,20 @@ func Read[T any](ctx context.Context, call Call, decode func(json.RawMessage) (T
 			return decode(payload)
 		}
 		var zero T
-		if !errors.Is(err, ErrUnavailable) {
+		if !CanFallback(err) || ctx.Err() != nil {
 			return zero, err
 		}
+		return fallback(err)
 	}
-	return fallback()
+	return fallback(nil)
+}
+
+// CanFallback distinguishes an unavailable connector from a denial of access
+// to the resource. The caller must still ensure it is safe to use another route.
+func CanFallback(err error) bool {
+	return !errors.Is(err, ErrDenied) && !errors.Is(err, ErrWriteUncertain) &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) &&
+		(errors.Is(err, ErrUnavailable) || errors.Is(err, ErrSignIn) || errors.Is(err, ErrConnection))
 }
 
 // Request tells a client how to complete a read using a sibling provider MCP.
@@ -79,7 +89,7 @@ func (r *Request) Error() string {
 
 type Reply struct {
 	ID     string `json:"id"`
-	Status string `json:"status" jsonschema:"ok, unavailable, sign_in_required, access_denied, or failed"`
+	Status string `json:"status" jsonschema:"ok, unavailable, sign_in_required, oauth_app_restricted, connection_failed, access_denied, or failed"`
 	Result any    `json:"result,omitempty" jsonschema:"The provider MCP JSON result without any credentials."`
 }
 
@@ -113,7 +123,9 @@ func (c Client) Read(ctx context.Context, call Call) (json.RawMessage, error) {
 			return raw, nil
 		case "unavailable":
 			return nil, ErrUnavailable
-		case "sign_in_required":
+		case "connection_failed":
+			return nil, ErrConnection
+		case "sign_in_required", "oauth_app_restricted":
 			return nil, fmt.Errorf("%s: %w; start the client's provider OAuth flow", call.Provider, ErrSignIn)
 		case "access_denied":
 			return nil, fmt.Errorf("%s: %w", call.Provider, ErrDenied)

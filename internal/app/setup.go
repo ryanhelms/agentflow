@@ -29,7 +29,7 @@ func InitRepo(ctx context.Context, dir, client string, force bool) (*InitResult,
 	if err != nil {
 		return res, err
 	}
-	if res.Release, err = a.ReleaseInit(ctx, "", false); err != nil {
+	if res.Release, err = a.releaseInit(ctx, "", false, true); err != nil {
 		return res, fmt.Errorf("release setup: %w (fix it, then run devflow release init)", err)
 	}
 	return res, nil

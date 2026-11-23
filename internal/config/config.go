@@ -4,8 +4,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -48,8 +50,11 @@ func Min(a, b Level) Level {
 
 // Autonomy holds levels for local and remote actions.
 type Autonomy struct {
-	Local  Level `yaml:"local"`
-	Remote Level `yaml:"remote"`
+	Local   Level            `yaml:"local"`
+	Remote  Level            `yaml:"remote"`
+	Actions map[string]Level `yaml:"actions,omitempty"`
+
+	defaultLocal, defaultRemote bool
 }
 
 // Repo is .devflow/config.yml.
@@ -73,10 +78,11 @@ type Repo struct {
 	FlowMap string `yaml:"flow_map"`
 	Commit  Commit `yaml:"commit"`
 	Policy  struct {
-		MaxAutonomy       Autonomy `yaml:"max_autonomy"`
-		ProtectedBranches []string `yaml:"protected_branches"`
-		TestCmd           string   `yaml:"test_cmd"`
-		LintCmd           string   `yaml:"lint_cmd"`
+		MaxAutonomy       Autonomy       `yaml:"max_autonomy"`
+		MaxApprovalWindow *time.Duration `yaml:"max_approval_window,omitempty"`
+		ProtectedBranches []string       `yaml:"protected_branches"`
+		TestCmd           string         `yaml:"test_cmd"`
+		LintCmd           string         `yaml:"lint_cmd"`
 	} `yaml:"policy"`
 
 	legacyJiraSite, legacyConfluenceSite bool
@@ -98,8 +104,9 @@ func (c Commit) KeyRequired() bool {
 
 // User is ~/.devflow/config.yml.
 type User struct {
-	Autonomy Autonomy `yaml:"autonomy"`
-	Update   struct {
+	Autonomy       Autonomy       `yaml:"autonomy"`
+	ApprovalWindow *time.Duration `yaml:"approval_window,omitempty"`
+	Update         struct {
 		Auto *bool `yaml:"auto"`
 	} `yaml:"update"`
 	Atlassian struct {
@@ -129,7 +136,33 @@ func LoadRepo(root string) (*Repo, bool, error) {
 	if err != nil {
 		return nil, found, err
 	}
-	providers, err := resolveProviders(c, extra, root)
+	return resolveRepo(c, extra, found, func(d *definitions, schemas map[string]roleSchema) error {
+		return d.loadDir(LayerProject, filepath.Join(root, ".devflow", "providers"), ".devflow/providers", schemas)
+	}, false)
+}
+
+// InspectRepo resolves a snapshot of the repository inputs against the current
+// release and personal layers. A nil content represents an absent config.
+// No candidate data is written to the working tree or used to call a provider.
+func InspectRepo(content []byte, projectFiles map[string][]byte) (*Repo, bool, error) {
+	c, extra, found, err := parseRepoFile(content)
+	if err != nil {
+		return nil, found, err
+	}
+	return resolveRepo(c, extra, found, func(d *definitions, schemas map[string]roleSchema) error {
+		for _, name := range slices.Sorted(maps.Keys(projectFiles)) {
+			src := Source{Layer: LayerProject, File: name}
+			if err := d.add(src, projectFiles[name], schemas); err != nil {
+				return &DefinitionError{Source: src, Err: err}
+			}
+			d.files = append(d.files, src)
+		}
+		return nil
+	}, true)
+}
+
+func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project definitionLoader, trace bool) (*Repo, bool, error) {
+	providers, err := resolveProviders(c, extra, project, trace)
 	var defErr *DefinitionError
 	if errors.As(err, &defErr) {
 		return nil, found, err
@@ -149,33 +182,43 @@ func LoadRepoCore(root string) (*Repo, bool, error) {
 }
 
 func loadRepoFile(root string) (*Repo, map[string]yaml.Node, bool, error) {
+	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, false, err
+	}
+	return parseRepoFile(b)
+}
+
+func parseRepoFile(b []byte) (*Repo, map[string]yaml.Node, bool, error) {
 	var file struct {
 		Repo  `yaml:",inline"`
 		Extra map[string]yaml.Node `yaml:",inline"`
 	}
-	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
-	found := err == nil
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, false, err
-	}
+	found := b != nil
 	if found {
 		if err := yaml.Unmarshal(b, &file); err != nil {
 			return nil, nil, true, fmt.Errorf(".devflow/config.yml: %w", err)
 		}
 	}
 	c := &file.Repo
+	if err := validateAutonomy(c.Policy.MaxAutonomy, "policy.max_autonomy", c.Policy.MaxApprovalWindow, "policy.max_approval_window"); err != nil {
+		return nil, nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
+	}
 	c.legacyJiraSite = c.Jira.Site != ""
 	c.legacyConfluenceSite = c.Confluence.Site != "" || c.legacyJiraSite
 	c.applyDefaults()
 	// The repo alone selects the task provider. Its commit convention must
 	// remain available even when an unrelated definition cannot be loaded.
-	if node, ok := file.Extra["task_management"]; ok && c.Commit.RequireKey == nil {
+	if c.Commit.RequireKey == nil {
 		var task struct {
 			Provider string `yaml:"provider"`
 		}
-		if err := node.Decode(&task); err == nil && (task.Provider == "github-issues" || task.Provider == "asana") {
-			optional := false
-			c.Commit.RequireKey = &optional
+		if node, ok := file.Extra["task_management"]; !ok || node.Decode(&task) == nil {
+			switch task.Provider {
+			case "", "none", "github-issues", "asana":
+				optional := false
+				c.Commit.RequireKey = &optional
+			}
 		}
 	}
 	return c, file.Extra, found, nil
@@ -204,9 +247,11 @@ func (c *Repo) applyDefaults() {
 		c.Policy.ProtectedBranches = DefaultProtected
 	}
 	if c.Policy.MaxAutonomy.Local == "" {
+		c.Policy.MaxAutonomy.defaultLocal = true
 		c.Policy.MaxAutonomy.Local = Auto
 	}
 	if c.Policy.MaxAutonomy.Remote == "" {
+		c.Policy.MaxAutonomy.defaultRemote = true
 		c.Policy.MaxAutonomy.Remote = Auto
 	}
 }
@@ -255,10 +300,15 @@ func LoadUser() (*User, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
+	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
+		return nil, fmt.Errorf("~/.devflow/config.yml: %w", err)
+	}
 	if u.Autonomy.Local == "" {
+		u.Autonomy.defaultLocal = true
 		u.Autonomy.Local = Confirm
 	}
 	if u.Autonomy.Remote == "" {
+		u.Autonomy.defaultRemote = true
 		u.Autonomy.Remote = Confirm
 	}
 	if u.Init.Auto == "" {
@@ -272,6 +322,9 @@ func LoadUser() (*User, error) {
 
 // SaveUser writes ~/.devflow/config.yml.
 func SaveUser(u *User) error {
+	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
+		return fmt.Errorf("~/.devflow/config.yml: %w", err)
+	}
 	dir, err := Home()
 	if err != nil {
 		return err

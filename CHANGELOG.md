@@ -5,6 +5,88 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.48.0](https://github.com/nscaledev/devflow/compare/v0.47.0...v0.48.0) - 2026-11-23
+
+### Breaking changes
+
+- make task and knowledge providers opt-in (#118) ([d17aff2](https://github.com/nscaledev/devflow/commit/d17aff28afdf812d92d76f2eeaf44f717bf10b76))
+
+### Features
+
+- make task and knowledge providers opt-in (#118) ([d17aff2](https://github.com/nscaledev/devflow/commit/d17aff28afdf812d92d76f2eeaf44f717bf10b76))
+
+## [0.47.0](https://github.com/nscaledev/devflow/compare/v0.46.1...v0.47.0) - 2026-11-23
+
+### Features
+
+- manage console configuration through MCP (#116) ([839dac0](https://github.com/nscaledev/devflow/commit/839dac0fc2e35ecd53457d98686db44a0720e18f))
+
+## [0.46.1](https://github.com/nscaledev/devflow/compare/v0.46.0...v0.46.1) - 2026-11-23
+
+### Fixes
+
+- **setup:** prepare provider clis for standalone reads (#110) ([680cfca](https://github.com/nscaledev/devflow/commit/680cfca8f21bdf0445e89bbb9aed92006af0f254))
+
+## [0.46.0](https://github.com/nscaledev/devflow/compare/v0.45.0...v0.46.0) - 2026-11-23
+
+### Features
+
+- scope and share action approvals across agents (#105) ([8aeb8c5](https://github.com/nscaledev/devflow/commit/8aeb8c56c2d16a1923fae4e6fdf5ff4edfabb068))
+
+## [0.45.0](https://github.com/nscaledev/devflow/compare/v0.44.1...v0.45.0) - 2026-11-23
+
+### Features
+
+- **setup:** prepare provider cli fallbacks automatically (#106) ([b61f818](https://github.com/nscaledev/devflow/commit/b61f818d971b6d92f366381fe970c95083829a1f))
+
+## [0.44.1](https://github.com/nscaledev/devflow/compare/v0.44.0...v0.44.1) - 2026-11-23
+
+### Fixes
+
+- **setup:** use browser oauth for github mcp in claude (#101) ([849e048](https://github.com/nscaledev/devflow/commit/849e048e55e8ac9162ef5572de9b872d9a09b170))
+
+## [0.44.0](https://github.com/nscaledev/devflow/compare/v0.43.0...v0.44.0) - 2026-11-23
+
+### Features
+
+- install and manage devflow from terminals and AI clients (#102) ([426c95f](https://github.com/nscaledev/devflow/commit/426c95fa2571801ed0c8df5d3615ad72e39453f1))
+
+## [0.43.0](https://github.com/nscaledev/devflow/compare/v0.42.0...v0.43.0) - 2026-11-23
+
+### Features
+
+- add a local repository console (#98) ([8c26c14](https://github.com/nscaledev/devflow/commit/8c26c140500c2e2f8ef38d3d29ec0bbaab4102ad))
+
+## [0.42.0](https://github.com/nscaledev/devflow/compare/v0.41.0...v0.42.0) - 2026-11-23
+
+### Features
+
+- **setup:** offer missing provider mcp connections (#97) ([341a5d7](https://github.com/nscaledev/devflow/commit/341a5d70051d5403fa6be34985f71a9abae504dd))
+
+## [0.41.0](https://github.com/nscaledev/devflow/compare/v0.40.0...v0.41.0) - 2026-11-23
+
+### Features
+
+- **setup:** generate config-driven agent guidance (#94) ([fef9219](https://github.com/nscaledev/devflow/commit/fef921903d387b1ca208a8225a499790ca8517c4))
+
+## [0.40.0](https://github.com/nscaledev/devflow/compare/v0.39.0...v0.40.0) - 2026-11-23
+
+### Features
+
+- **knowledge:** adopt the devflow okf bundle (#92) ([0e8f271](https://github.com/nscaledev/devflow/commit/0e8f27141e4cd05ecff4d4ed3b04ab91f9f2e6e2))
+
+## [0.39.0](https://github.com/nscaledev/devflow/compare/v0.38.0...v0.39.0) - 2026-11-23
+
+### Features
+
+- **knowledge:** publish and link okf documents (#91) ([2adba25](https://github.com/nscaledev/devflow/commit/2adba259841240c550edbce20238b617781f6e89))
+
+## [0.38.0](https://github.com/nscaledev/devflow/compare/v0.37.0...v0.38.0) - 2026-11-23
+
+### Features
+
+- **knowledge:** read okf alongside legacy documents (#90) ([2615790](https://github.com/nscaledev/devflow/commit/26157900ab216d8892d86f7d1bc7210986628958))
+
 ## [0.37.0](https://github.com/nscaledev/devflow/compare/v0.36.0...v0.37.0) - 2026-11-23
 
 ### Features

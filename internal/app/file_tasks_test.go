@@ -436,4 +436,42 @@ func TestRepositoryTaskReview(t *testing.T) {
 	if retry := confirm(closeTask).(TransitionResult); retry != closed || len(prs) != 2 || docsGit(t, bare, "show-ref") != refs {
 		t.Fatalf("transition replay %+v", retry)
 	}
+
+	// An intentional second create has a fresh branch. A second agent can
+	// observe its one prompt and then publish the exact approved destination.
+	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	v, err = create("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := v.(*Pending)
+	if owner.Approval == nil || owner.ConfirmToken == "" || owner.Summary.(map[string]any)["target"] == head {
+		t.Fatalf("second create reused the earlier publication: %+v", owner)
+	}
+	worker, err := Open(ctx, a.Repo.Dir, "another-worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	callWorker := func(tok string) (any, error) {
+		return worker.CreateTicket(ctx, "", "", "Review quotas", "Details", "", tok)
+	}
+	wait, err := callWorker("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := wait.(*Pending)
+	if pending.Status != "awaiting_approval" || pending.ConfirmToken != "" || pending.Approval.OperationID != owner.Approval.OperationID || pending.Summary.(map[string]any)["target"] != owner.Summary.(map[string]any)["target"] {
+		t.Fatalf("unexpected worker preview: %+v", wait)
+	}
+	if _, err = a.Gate.Approve(owner.Approval.OperationID, owner.ConfirmToken); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := callWorker(owner.Approval.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.(map[string]string)["branch"] != owner.Summary.(map[string]any)["target"] || len(prs) != 3 {
+		t.Fatalf("handoff published wrong destination: %+v", applied)
+	}
+
 }

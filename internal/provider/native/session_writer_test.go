@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 )
@@ -118,4 +120,37 @@ func TestRoutedSessionWriterPreservesProviderAndOwner(t *testing.T) {
 	if _, err := writer.Prepare(t.Context(), Call{Provider: "slack", Server: "slack", Tool: "slack_send_message"}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("unconfigured Slack route: %v", err)
 	}
+}
+
+func TestConfiguredReviewWindowBindsNativeConnection(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		session := &writeLeaseFixture{}
+		writer := NewSessionWriter("fixture", func(context.Context, Call) (WriteSession, error) { return session, nil })
+		defer writer.Close()
+		ctx := WithWriteHost(t.Context(), writer)
+		call := Call{Provider: "jira", Server: "atlassian", Tool: "createJiraIssueRemoteIssueLink"}
+		ConfigureApprovalWindow(ctx, 15*time.Minute)
+		binding, err := PrepareWrite(ctx, call)
+		if err != nil || time.Until(binding.ExpiresAt) != 15*time.Minute {
+			t.Fatalf("initial deadline %v, err %v", binding.ExpiresAt, err)
+		}
+		ConfigureApprovalWindow(ctx, time.Minute)
+		time.Sleep(6 * time.Minute)
+		same, err := PrepareWrite(ctx, call)
+		if err != nil || same != binding {
+			t.Fatalf("pending connection changed: %v, err %v", same, err)
+		}
+		time.Sleep(9 * time.Minute)
+		synctest.Wait()
+		if _, err = Write(ctx, binding, call); !errors.Is(err, ErrWriteNotDispatched) || session.writes != 0 {
+			t.Fatalf("expired connection dispatched: %v", err)
+		}
+		fresh, err := PrepareWrite(ctx, call)
+		if err != nil || fresh.Connection == binding.Connection || time.Until(fresh.ExpiresAt) != time.Minute {
+			t.Fatalf("fresh deadline %v, err %v", fresh.ExpiresAt, err)
+		}
+		if _, err = Write(ctx, fresh, call); err != nil || session.writes != 1 {
+			t.Fatalf("new connection could not dispatch: %v", err)
+		}
+	})
 }

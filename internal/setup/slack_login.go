@@ -28,8 +28,14 @@ func LoginPublicSlack(ctx context.Context, provider, client, server, clientID, t
 
 // RegisterProviderLogin handles the explicit workspace registration option on setup login.
 func RegisterProviderLogin(ctx context.Context, dir, provider, client, server, clientID string, interactive bool, input io.Reader, output, diagnostics io.Writer) error {
+	if (provider == "github" || provider == "github-issues") && runtimeClient(client) == "claude" {
+		if clientID != "" {
+			return errors.New("--client-id is available for Asana registration")
+		}
+		return registerGitHubLogin(ctx, dir, server, output, diagnostics)
+	}
 	if client != claudeDesktop || (provider != "slack" && provider != "asana") {
-		return errors.New("--register supports only Slack and Asana in Claude Code Desktop")
+		return errors.New("--register supports GitHub in Claude Code and Slack or Asana in Claude Code Desktop")
 	}
 	if provider == "asana" {
 		return registerAsanaLogin(ctx, dir, server, clientID, interactive, input, output, diagnostics)

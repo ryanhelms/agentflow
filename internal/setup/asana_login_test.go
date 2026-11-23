@@ -76,7 +76,7 @@ esac
 func TestAsanaRegistrationInDesktopPlan(t *testing.T) {
 	for _, client := range []string{claudeDesktop, "codex", ""} {
 		plan := &ProviderSetupPlan{}
-		plan.addProviderTooling("task_management", "asana", client, nil)
+		plan.addProviderTooling(t.Context(), "task_management", "asana", client, nil)
 		args := strings.Join(plan.Tooling[0].MCP.RegisterArgs, " ")
 		if client == claudeDesktop {
 			if args != "setup login --provider asana --client claude-desktop --register" {

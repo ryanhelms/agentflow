@@ -223,7 +223,7 @@ func (a *App) transitionProviderTask(ctx context.Context, key, event, token, ope
 	if write != nil {
 		summary.Native = &write.taskWritePreview
 	}
-	if p, err := a.gate(policy.Remote, "transition", summary, token, token != "", nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "transition", summary, token, token != "", nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	return a.applyPreparedTaskTransition(ctx, ref, plan, write)
@@ -311,7 +311,7 @@ func (a *App) commentBoundTask(ctx context.Context, task provider.Task, body, to
 		summary["template"] = snapshot
 	}
 	// A comment is an append, so every native dispatch requires a single-use approval.
-	if p, err := a.gate(policy.Remote, "comment", summary, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "comment", summary, token, true, nil, write.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	_, err = applyTaskAppend(ctx, a.Home, token, write.Call.Provider, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })

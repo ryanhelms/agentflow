@@ -47,6 +47,10 @@ type TicketContext struct {
 // Context builds the ticket bundle for key (or the current branch's key).
 // It degrades gracefully: missing credentials become warnings, not errors.
 func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
+	ctx = a.standaloneReadContext(ctx)
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return &TicketContext{Branch: a.Repo.Branch(ctx), Text: "devflow · task management is disabled\n"}, nil
+	}
 	if a.UsesTaskRefs() {
 		return a.providerContext(ctx, key)
 	}
@@ -80,14 +84,16 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 			tc.Epic = parent.Ref.ID + " " + parent.Title
 			refs = append(refs, *parent.Ref)
 		}
-		for _, target := range append(refs, ref) {
-			links, err := remoteLinks(target)
-			var request *native.Request
-			if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
-				return nil, err
-			}
-			if err == nil {
-				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+		if a.Cfg.Providers.KnowledgeBase.Provider != "none" {
+			for _, target := range append(refs, ref) {
+				links, err := remoteLinks(target)
+				var request *native.Request
+				if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+					return nil, err
+				}
+				if err == nil {
+					tc.Docs = append(tc.Docs, confluenceOnly(links)...)
+				}
 			}
 		}
 		checklist := a.Checklists(ctx)
@@ -144,7 +150,9 @@ func (a *App) renderContext(tc *TicketContext) string {
 	}
 	for _, d := range tc.Docs {
 		target := d.URL
-		if target == "" && a.usesAsana() {
+		if a.usesIssues() && target != "" {
+			target = d.ID + " " + target
+		} else if target == "" && (a.usesAsana() || a.usesIssues()) {
 			target = d.ID
 		}
 		fmt.Fprintf(&b, "Doc: %s %s\n", d.Title, target)
@@ -171,8 +179,7 @@ func (a *App) renderContext(tc *TicketContext) string {
 		}
 		fmt.Fprintf(&b, "\n%s: %s\n", heading, strings.Join(parts, " · "))
 	}
-	// GitHub Issues context currently has task data only. Report collaboration
-	// details when they were queried.
+	// Report collaboration details when they were queried.
 	if !a.UsesTaskRefs() || tc.OpenPR != "" || len(tc.Others) > 0 {
 		pr := "none"
 		if tc.OpenPR != "" {
@@ -207,6 +214,10 @@ type WorkItem struct {
 
 // MyWork lists the developer's open tickets, active sprint first.
 func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
+	ctx = a.standaloneReadContext(ctx)
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return nil, nil
+	}
 	if a.UsesTaskRefs() {
 		return a.providerWork(ctx)
 	}
@@ -239,6 +250,9 @@ type StartResult struct {
 
 // Start creates a branch (or worktree) for key, assigns it and moves it to the start status.
 func (a *App) Start(ctx context.Context, key string, worktree bool, token string) (any, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return nil, provider.Unsupported("none", "starting a task")
+	}
 	if key == "" {
 		return nil, errors.New("key is required; call devflow_my_work to choose one")
 	}
@@ -294,7 +308,7 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 		summary["warning"] = "others already have work on this ticket: " + strings.Join(col.OthersOnTicket, ", ")
 	}
 	desktop := writes != nil && writes.Assignment.Binding.Owner == "devflow"
-	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}, writes.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	_, _ = a.Repo.Git(ctx, "fetch", "--quiet", "origin")
@@ -533,7 +547,7 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 			}
 		}
 	}
-	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	if apply != nil {

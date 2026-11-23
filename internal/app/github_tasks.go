@@ -11,6 +11,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/githubissues"
 	"github.com/nscaledev/devflow/internal/provider/native"
 	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
@@ -86,7 +87,7 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("issue comment is empty")
 	}
-	body := text + viaNote(a)
+	body := text + viaNote(a, "comment")
 	operationID := issueOperation()
 	var task provider.Task
 	if operationID == "" && os.Getenv("GITHUB_ACTIONS") != "true" {
@@ -153,17 +154,28 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 		return nil, err
 	}
 	var link provider.Ref
-	if linkTo == "" {
-		link, err = a.branchTask(ctx)
+	document, parseErr := provider.ParseRef(linkTo)
+	if parseErr == nil && document.Instance != issuesInstance {
+		if selected := a.Cfg.Providers.KnowledgeBase.Provider; selected == "none" || document.Instance != selected {
+			return nil, fmt.Errorf("document %s does not match the selected knowledge provider %q", document, selected)
+		}
+		draft.Description, err = githubissues.AppendRelatedKnowledge(draft.Description, document)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		link, err = a.taskRef(ctx, linkTo)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if link.ID != "" {
-		linkTo = taskKey(link)
-		draft.Description += "\n\nRelated issue: " + linkTo
+		if linkTo == "" {
+			link, err = a.branchTask(ctx)
+		} else {
+			link, err = a.taskRef(ctx, linkTo)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if link.ID != "" {
+			linkTo = taskKey(link)
+			draft.Description += "\n\nRelated issue: " + linkTo
+		}
 	}
 	s := map[string]any{"provider": issuesInstance, "project": draft.Scope, "type": "Issue", "summary": draft.Title, "description": draft.Description, "link_to": linkTo, "labels": draft.Labels, "operation_id": issueOperation()}
 	if draft.Template != nil {
@@ -230,7 +242,7 @@ func issueRepositoryForWrite(ctx context.Context, scope string, write *boundTask
 
 func (a *App) createBoundIssue(ctx context.Context, summary map[string]any, token string, write *boundTaskWrite) (any, error) {
 	summary["native_write"] = write.taskWritePreview
-	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil, write.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	result, err := applyTaskAppend(ctx, a.Home, token, write.Call.Provider, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Render Markdown release notes for a git range, grouped by commit type, with Jira details.
 #
-#   release-notes.sh <git-range> [title]
+#   release-notes.sh <git-range> [title] [task-provider]
 #
 # Env: JIRA_BASE JIRA_USER JIRA_TOKEN
 set -euo pipefail
 # shellcheck source=bin/lib.sh
 source "$(dirname "$0")/lib.sh"
 
-range="${1:?usage: release-notes.sh <git-range> [title]}"
+range="${1:?usage: release-notes.sh <git-range> [title] [task-provider]}"
 title="${2:-Release notes}"
-provider=${3:-jira}
+provider=${3:-none}
 
 subjects=$(git log --no-merges --format='%s' --end-of-options "$range" --)
 
@@ -19,8 +19,7 @@ if [ "$#" -ge 3 ]; then
   keys=""
   if [ "$provider" = jira ]; then keys=$(paste -sd, - <<<"$refs"); fi
 else
-  need_env JIRA_BASE JIRA_USER JIRA_TOKEN
-  keys=$(printf '%s\n' "$subjects" | grep -Eo "$KEY_RE" | sort -u | paste -sd, - || true)
+  keys=""
 fi
 
 issues='{}'

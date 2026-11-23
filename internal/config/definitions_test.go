@@ -88,6 +88,39 @@ func TestDefinitionLayerOrder(t *testing.T) {
 	}
 }
 
+func TestKnowledgeFormatLayers(t *testing.T) {
+	for _, name := range []string{"filesystem", "repository"} {
+		t.Run(name, func(t *testing.T) {
+			definition := "version: 1\nproviders:\n  " + name + ":\n    knowledge_base:\n      settings: {format: "
+			root, home := layers(t, definition+"legacy}\n")
+			project(t, root, "kb.yml", definition+"okf}\n")
+			config(t, root, "devflow: 1\nknowledge_base: {provider: "+name+", settings: {format: legacy}}\n")
+			user(t, home, "kb.yml", definition+"okf}\n")
+			c, _, err := LoadRepo(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sel := c.Providers.KnowledgeBase
+			var effective, projectFormat string
+			switch s := sel.Settings.(type) {
+			case *FileSystemKnowledgeSettings:
+				effective, projectFormat = s.Format, sel.RepositorySettings("format").(*FileSystemKnowledgeSettings).Format
+				if s.Root != "docs" {
+					t.Fatalf("filesystem root = %q", s.Root)
+				}
+			case *RepositoryKnowledgeSettings:
+				effective, projectFormat = s.Format, sel.RepositorySettings("format").(*RepositoryKnowledgeSettings).Format
+				if s.Directory != "docs" || s.Publication != "pull-request" || s.Branch != nil || s.Repository != nil {
+					t.Fatalf("repository defaults = %+v", s)
+				}
+			}
+			if effective != "okf" || projectFormat != "legacy" || sel.Sources["format"].Layer != LayerUser {
+				t.Fatalf("effective %q, repository %q, sources %v", effective, projectFormat, sel.Sources)
+			}
+		})
+	}
+}
+
 func TestDefinitionsOnlyApplyToSelectedProvider(t *testing.T) {
 	root, _ := layers(t, jiraRelease)
 	config(t, root, "devflow: 1\ntask_management: {provider: github-issues}\n")
@@ -270,11 +303,11 @@ providers:
 
 func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
 	root, _ := layers(t, "version: 1\nproviders:\n  jira: {task_management: {constraints: {projects: {allow: [PLAT]}}}}")
-	config(t, root, "jira: {projects: [OPS]}")
+	config(t, root, "jira: {projects: [OPS]}\ntask_management: {provider: jira}")
 	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "value OPS is not allowed") {
 		t.Fatalf("invalid inherited projects: %v", err)
 	}
-	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}")
+	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}\ntask_management: {provider: jira}\nknowledge_base: {provider: confluence}")
 	c, _, err := LoadRepo(root)
 	if err != nil {
 		t.Fatal(err)
@@ -286,7 +319,7 @@ func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
 
 func TestRepositoryScopeSurvivesReleaseAndUserDefaults(t *testing.T) {
 	root, home := layers(t, constrained)
-	config(t, root, "jira: {projects: [INFRA]}")
+	config(t, root, "jira: {projects: [INFRA]}\ntask_management: {provider: jira}")
 	user(t, home, "user.yml", "version: 1\nproviders:\n  jira: {task_management: {settings: {projects: []}}}")
 	c, _, err := LoadRepo(root)
 	if err != nil {

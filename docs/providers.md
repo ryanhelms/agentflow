@@ -8,11 +8,19 @@ objects merge by field, and supplied lists replace the default lists.
 This reference describes the configuration accepted by the provider foundation.
 The provider-specific sections below describe the CLI, MCP and workflow entry points.
 
+`devflow init` and `devflow install` give agents the same workflow guidance in a
+managed `AGENTS.md` block. Project-specific instructions remain outside that
+block. The guidance tells agents to use the effective provider configuration.
+When a session starts, the MCP server and Claude Code hook report the selected
+task and knowledge providers. Run `devflow setup providers --explain` to inspect
+how Devflow resolved their settings. Existing repositories can refresh just
+this guidance with `devflow init --guidance-only`.
+
 | Section | Default provider | Other schema selections |
 | --- | --- | --- |
 | `code_hosting` | `auto` | `github`, `none` |
-| `task_management` | `jira` | `asana`, `github-issues`, `filesystem`, `repository`, `none` |
-| `knowledge_base` | `confluence` | `filesystem`, `repository`, `github-wiki`, `none` |
+| `task_management` | Disabled | `jira`, `asana`, `github-issues`, `filesystem`, `repository`, `none` |
+| `knowledge_base` | Disabled | `confluence`, `filesystem`, `repository`, `github-wiki`, `none` |
 | `devops.checks` | `github` | `none` |
 | `devops.deployments` | `github` | `fixture`, `none` |
 | `devops.releases` | `github` | `fixture`, `none` |
@@ -24,6 +32,21 @@ and `settings` (defaults below). The enclosing `devops` section also accepts
 a schema version (default `1`). A provider selection of `none` has an empty
 settings object. Validation errors identify the property to correct.
 
+Task management and knowledge base are enabled independently. Omit
+`provider` or select `none` to disable that role. Legacy Jira and Confluence
+fields and inline settings cannot activate a role by themselves. For a repository
+that relied on the previous implicit selection, set `task_management.provider`
+to `jira` or `knowledge_base.provider` to `confluence` for the roles you use.
+Those providers continue to use their legacy settings where applicable.
+
+Setup shows detected task and knowledge providers as suggestions. A provider
+becomes active once you select it in guided init or set it in the repository
+config. Code hosting, commit conventions, and other configured roles can run
+with either role disabled. Commit messages may omit a task key when task
+management is disabled, unless the repository sets `commit.require_key: true`.
+Hosted workflows skip task actions and knowledge publishing for unassigned
+roles, including the legacy Jira and Confluence jobs.
+
 | Provider | Settings and defaults |
 | --- | --- |
 | Code hosting | `hosts` defaults to an empty hostname-to-forge map. `source_remote` and `target_remote` default to unset, so detection can select Git remotes. |
@@ -34,8 +57,8 @@ settings object. Validation errors identify the property to correct.
 | DevOps fixture | Set `path` to a repository-relative JSON file for each role. |
 | GitHub Issues | `repository` defaults to unset. `labels` defaults to an empty list. `search.open_only` defaults to `true`. `search.limit` defaults to `30`. |
 | GitHub Wiki | `repository` defaults to unset, so Git forge detection selects the GitHub.com target. Set an explicit `owner/name` to use another GitHub.com repository. |
-| FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
-| Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. |
+| FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. For knowledge, `format` defaults to `okf` and accepts `legacy`. |
+| Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. For knowledge, `format` defaults to `okf` and accepts `legacy`. |
 | SecOps | `findings` defaults to Dependabot and code scanning. `min_severity` defaults to `high`. `repository` and the optional incident fixture start unset. See [SecOps configuration](secops.md). |
 | Slack | `destination` and `credential_ref` default to unset. |
 | Webhook and router | A webhook uses an environment credential reference and can declare safe rejection codes. A router maps named destinations and signals. See [notification settings](notifications.md). |
@@ -56,7 +79,7 @@ task_management:
 knowledge_base:
   provider: repository
   settings:
-    directory: docs/adr
+    directory: docs/knowledge
 ```
 
 Devflow treats explicit `false`, `0`, empty strings, and empty lists as supplied
@@ -284,6 +307,26 @@ because the command has no terminal, open `/mcp` in the same workspace or
 rerun the command in a terminal. A connected status verifies the host
 connection only. [Slack’s Claude Code configuration](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/#connect-to-claude-code).
 
+### GitHub OAuth in Claude Code
+
+Prefer provider OAuth whenever supported. If the GitHub connector is absent
+in Claude Code, approve the setup offer and let the agent run the provided
+registration command. For Claude Code Desktop it is
+
+```sh
+devflow setup login --provider github-issues --client claude-desktop --register
+```
+
+Devflow installs the checksum-pinned official GitHub MCP release using the
+GitHub CLI and registers it in the current Claude workspace. The local server
+exposes read-only issue tools on github.com. In a fresh Claude Code session,
+the first GitHub tool call opens the browser for consent. The official server
+holds its OAuth grant in memory, so a new MCP process can ask for consent
+again. The signed-in GitHub CLI can still handle reads when the MCP is
+unavailable. [GitHub's local OAuth guide](https://github.com/github/github-mcp-server/blob/main/docs/oauth-login.md).
+
+### Asana in Claude Code Desktop
+
 For Asana in Claude Code Desktop, first reuse the registered V2 connector.
 Run the command in the enrolled workspace so Claude starts its OAuth flow
 when sign-in is needed.
@@ -313,12 +356,30 @@ uses its existing provider connection for the exact requested tool and inputs,
 then passes the result back to the original Devflow tool in `native_results`.
 Other clients can opt into the same flow with `provider_mcp: true`.
 
-Jira and Confluence can use the signed-in Teamwork Graph CLI when the MCP
-capability is missing. Interactive GitHub API calls use the signed-in `gh`
+For supported providers the request includes `setup_offer` with official
+connector details and `cli_fallback` when Devflow implements a vendor CLI.
+Resume with `unavailable` for a missing MCP or operation, `sign_in_required`
+if connector OAuth cannot complete, `connection_failed` for transport
+failures, or `oauth_app_restricted` for an explicit OAuth application approval
+restriction. Use `access_denied` for a denied user or resource.
+
+Devflow checks the vendor CLI automatically and installs its pinned release
+in the user cache if needed. It then tests access by retrying the same read
+with the CLI's saved identity. The automatic installation covers GitHub CLI
+and Atlassian Teamwork Graph CLI on macOS, Linux, and Windows (amd64 and
+arm64). These are the providers with CLI adapters in Devflow. Successful
+fallback needs no intervention. If the CLI still needs sign-in, the agent can
+start the vendor's OAuth flow, or offer MCP setup when appropriate.
+
+Standalone workstation commands also prepare the CLI for supported task and
+knowledge reads. CI and explicit service-account routes keep their existing
+behavior.
+
+Interactive GitHub API calls without a provider MCP use the signed-in `gh`
 client. Explicit GitHub workflow tokens retain the existing service-account
-path. When a provider rejects access, report the rejected site or scope and
-check its permissions. When authentication is required, start the provider
-client's sign-in and retry after consent. Other existing REST or webhook
+path. When a provider rejects user or resource access, report the rejected
+site or scope. When authentication is still required after fallback, start
+the vendor's sign-in and retry after consent. Other existing REST or webhook
 operations retain their current credential behavior during migration.
 Devflow-managed writes continue through its confirmation and audit policy.
 
@@ -502,6 +563,9 @@ task. The confirmation shows the configured project and completion effect.
 Devflow verifies project membership, grant owner, and workspace before dispatch
 and verifies the result on the same connection. A workspace denial stops the
 operation. After sign-in or enrollment replacement, request a new preview.
+
+The write schemas and receipts have been tested against provider fixtures.
+Verification in an authenticated Asana workspace is pending.
 
 Run `devflow setup logout --provider asana --client devflow` to remove local
 enrollment. Existing unattended Asana service workflows use their configured
@@ -995,15 +1059,67 @@ for task creation. Its catalog lives in [.devflow/task-templates.json](../.devfl
 The template requires Objective, Scope, Dependencies, Acceptance Criteria,
 and Verification sections. It supplies a default statement for Dependencies.
 
-This repository uses GitHub Issues for task management and the Repository
-provider for knowledge under `docs/adr/`. The `provider-pilot.yml` job
-enrolls one issue through the `DEVFLOW_PROVIDER_PILOT_ISSUE` repository
-variable. It applies `pr.merged` to that issue after a same-repository PR
-with a qualified `Task-Ref` merges into the default branch. The job builds
-devflow at that merge commit and uses it to find the published ADR before
-closing the enrolled issue.
+The pilot uses GitHub Issues for tasks and the Repository provider for the
+[Devflow OKF bundle](knowledge/index.md). The `provider-pilot.yml` workflow calls
+`task-events.yml` when a same-repository PR targeting `main` opens, reopens,
+becomes ready for review, or closes. The preview checks out the PR base SHA and uses read-only contents
+and issue permissions. A draft review event, an unmerged close, or a PR with
+`[devflow skip]` produces no transition. Fork PRs skip both jobs.
 
-The pilot uses the repository's existing GoReleaser release process.
+To enroll one issue, set the repository variable `DEVFLOW_PROVIDER_PILOT_ISSUE`
+to its decimal number. Link it on its own line in the PR body, for example
+`Task-Ref: github-issues/nscaledev%2Fdevflow/25` for issue 25. Only a
+default-branch merge whose preview resolves to that single issue can start
+the issue-write job. It builds devflow from the reviewed merge commit, checks
+the configured knowledge provider for `repository/engineering/provider-architecture`,
+and revalidates the event before closing the issue. Rerunning the job while
+the issue is closed reports `applied: false`.
+
+Clear `DEVFLOW_PROVIDER_PILOT_ISSUE` to stop the writer and keep previews.
+Set the repository variable `DEVFLOW_ENABLED=false` to skip both jobs on
+subsequent runs. Devflow releases continue through GoReleaser.
+
+## Link knowledge to a GitHub issue
+
+During issue creation, pass a qualified document reference with `--link-to`
+or the MCP `link_to` field. Devflow validates it against the selected knowledge
+provider and adds it to the issue body before showing the approval preview.
+A task reference in the same field still links the new issue to that task.
+
+For an existing issue, put a top-level section in the issue body and list one
+qualified document per bullet. This example uses the Repository knowledge provider.
+
+```markdown
+## Related Knowledge
+
+- repository/engineering/quota
+- repository/engineering%2Fplatform/scheduling
+```
+
+Use the literal heading and unindented `- ` bullets. Each bullet takes a bare
+reference or a reference enclosed in backticks. Use the escaped
+`instance/scope/id` form that Devflow prints. For example, `%2F` represents
+a slash within a scope or ID. The next heading beginning with `#` ends the list.
+Issues without the section retain their existing context.
+
+During review, run `devflow context 'owner/repo#42'` or call `devflow_context`
+with the issue key. On a review branch with the issue's `Task-Ref` trailer,
+you can omit the key. Context lists each resolved document once, in issue
+order. FileSystem reads the configured root. Repository reads the configured
+directory on the base branch. Both match the provider, scope and ID exactly.
+Context warns about invalid entries, provider mismatches and missing targets.
+Markdown links and page content are reference data. The configured provider
+supplies the lookup destination.
+
+Read the full document by passing its listed reference to `docs get`.
+
+```sh
+devflow docs get repository/engineering/quota --json
+```
+
+The equivalent read-only MCP call is `devflow_docs_get` with
+`{"ref":{"instance":"repository","scope":"engineering","id":"quota"}}`.
+Both return the document's identity, title, body and revision when available.
 
 ## Search a local knowledge directory
 
@@ -1018,7 +1134,7 @@ knowledge_base:
     root: handbook
 ```
 
-Place a Markdown document in `handbook/` with devflow front matter.
+Search also finds existing legacy records such as this Markdown file in `handbook/`.
 
 ```markdown
 ---
@@ -1034,6 +1150,59 @@ The decision and its rationale.
 
 The document's qualified reference survives a rename. Generated setup files
 and authored records have separate lifecycles during removal.
+
+## Read an OKF knowledge bundle
+
+The FileSystem and Repository knowledge providers can search [OKF v0.3
+bundles](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md)
+and legacy Devflow document records together. Point FileSystem at the bundle's
+`root`, or use the bundle as Repository's `directory` on its configured branch.
+Search and task document lookups use the same provider configuration.
+
+Within an OKF bundle, Devflow discovers nested Markdown concepts with a `type`
+in their YAML frontmatter. Use the first directory as the search scope, or
+`default` for a concept at the bundle root. The unmanaged document ID is its
+bundle-relative path without `.md`. For example, its qualified Repository
+reference might be `repository/engineering/engineering%2Fquota`. `index.md`
+and `log.md` are bundle navigation and history files.
+
+A managed concept can pin a scope and ID with
+`x-devflow-ref: {scope: engineering, id: quota}`. Moving that file preserves its
+qualified Devflow reference. Duplicate references are reported as conflicts.
+A migration can carry existing publication receipts in `x-devflow-operations`.
+
+### Publish and update concepts
+
+For FileSystem and Repository knowledge, `knowledge_base.settings.format`
+selects the encoding for new documents. The default `okf` writes Markdown
+with YAML frontmatter and a concept type of `Document` when you omit the type.
+Set `format: legacy` to create Devflow v1 records. Task management and GitHub
+Wiki keep their existing schemas.
+
+```bash
+devflow docs publish filesystem/engineering/quota \
+  --title "Quota policy" --body "Each team owns its quota." \
+  --type Policy --description "How teams allocate GPU quota" \
+  --tags '["gpu","capacity"]' --operation-id quota-policy-1
+```
+
+For MCP, pass the optional strings `type` and `description` and the string
+array `tags` to `devflow_docs_publish`. These fields require an OKF document.
+The approval shows the configured format for new documents, the destination,
+and the requested changes. GitHub pull-request publication uses the saved `gh`
+sign-in and Git’s configured access to the repository.
+
+To update a document, supply its current revision from search. An update uses
+the file’s existing encoding even when the configured default differs. OKF
+updates preserve omitted concept metadata and unknown YAML fields. Pass an
+empty tags array to clear the tags. Retry the same request with the same
+operation ID.
+
+To convert a legacy record, migrate it explicitly in a reviewed change.
+Carry its scope and ID into `x-devflow-ref`, its operation receipts into
+`x-devflow-operations`, and its structured links into `x-devflow-links`.
+Preserve its title and Markdown body and choose a concept type. See the
+[OKF rollout plan](okf-rollout.md) for the reader verification and migration order.
 
 ## Replace a Confluence page
 
@@ -1096,7 +1265,7 @@ Pass the revision from search when updating an existing document. Reuse the
 operation ID for retries. The CLI and `devflow_docs_publish` present the
 resolved destination and document for approval and record the outcome.
 
-Use `devflow docs search QUERY --json` to check a qualified document in CI.
+Use `devflow docs get repository/engineering/quota --json` to check that exact document in CI.
 
 ## Publish a GitHub Wiki page
 

@@ -45,6 +45,7 @@ type DevOps struct {
 // below. Configured reports whether the repo supplied this particular section,
 // including an empty section or an explicit selection of its default provider.
 type Selection struct {
+	history    map[string][]Contribution
 	Version    int
 	Provider   string
 	Settings   any
@@ -173,6 +174,21 @@ type RepositorySettings struct {
 	Publication string  `yaml:"publication" allowed:"pull-request,push"`
 }
 
+// FileKnowledgeSettings select the encoding for newly published knowledge documents.
+type FileKnowledgeSettings struct {
+	Format string `yaml:"format" allowed:"okf,legacy"`
+}
+
+type FileSystemKnowledgeSettings struct {
+	FileSystemSettings    `yaml:",inline"`
+	FileKnowledgeSettings `yaml:",inline"`
+}
+
+type RepositoryKnowledgeSettings struct {
+	RepositorySettings    `yaml:",inline"`
+	FileKnowledgeSettings `yaml:",inline"`
+}
+
 // FileTaskSettings apply only to file-backed task management.
 type FileTaskSettings struct {
 	Scope       string            `yaml:"scope"`
@@ -271,9 +287,20 @@ func providerSchemas() map[string]roleSchema {
 			Transitions: defaultTransitions(),
 		}
 	}
+	knowledgeDefaults := FileKnowledgeSettings{Format: "okf"}
 	knowledge := map[string]settingsFactory{
-		"filesystem": func() any { return &FileSystemSettings{Root: "docs"} },
-		"repository": func() any { return &RepositorySettings{Directory: "docs", Publication: "pull-request"} },
+		"filesystem": func() any {
+			return &FileSystemKnowledgeSettings{
+				FileSystemSettings:    FileSystemSettings{Root: "docs"},
+				FileKnowledgeSettings: knowledgeDefaults,
+			}
+		},
+		"repository": func() any {
+			return &RepositoryKnowledgeSettings{
+				RepositorySettings:    RepositorySettings{Directory: "docs", Publication: "pull-request"},
+				FileKnowledgeSettings: knowledgeDefaults,
+			}
+		},
 	}
 	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: DefaultSite} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
@@ -285,8 +312,8 @@ func providerSchemas() map[string]roleSchema {
 		"code_hosting": {"auto", map[string]settingsFactory{
 			"auto": codeHostingSettings, "github": codeHostingSettings,
 		}},
-		"task_management":    {"jira", tasks},
-		"knowledge_base":     {"confluence", knowledge},
+		"task_management":    {"none", tasks},
+		"knowledge_base":     {"none", knowledge},
 		"devops.checks":      github,
 		"devops.deployments": devOpsFixture,
 		"devops.releases":    devOpsFixture,
@@ -303,7 +330,7 @@ func providerSchemas() map[string]roleSchema {
 	}
 }
 
-func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Providers, error) {
+func resolveProviders(repo *Repo, extra map[string]yaml.Node, project definitionLoader, trace bool) (Providers, error) {
 	// Decode only the reserved sections. Unrelated top-level extensions keep
 	// their legacy behavior. yaml.v3 handles YAML anchors and merge keys here.
 	raw := map[string]any{}
@@ -317,7 +344,7 @@ func resolveProviders(repo *Repo, extra map[string]yaml.Node, root string) (Prov
 		}
 	}
 	schemas := providerSchemas()
-	defs, err := loadDefinitions(root, schemas)
+	defs, err := loadDefinitions(project, schemas, trace)
 	if err != nil {
 		return Providers{}, err
 	}
@@ -433,9 +460,14 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string, de
 	}
 	sel := Selection{Version: version, Provider: id, Settings: settings, Configured: present}
 	if id == "none" {
-		// A disabled role accepts no settings; this reports any it is given.
 		if overrides, ok := fields["settings"]; ok {
-			return sel, applySettings(settings, overrides, path+".settings")
+			if _, assigned := fields["provider"]; assigned {
+				return sel, applySettings(settings, overrides, path+".settings")
+			}
+			// Provider-specific values stay dormant until the repo selects a provider.
+			if _, object := overrides.(map[string]any); !object {
+				return sel, fmt.Errorf("%s.settings: expected an object", path)
+			}
 		}
 		return sel, nil
 	}
@@ -476,6 +508,14 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		return err
 	}
 	sel.Contract = c.ID()
+	if defs.trace {
+		sel.history = make(map[string][]Contribution)
+		defaults, err := plain(sel.Settings)
+		if err != nil {
+			return err
+		}
+		sel.record(defaults, Source{Layer: LayerDefault}, "default")
+	}
 	release, _ := defs.get(LayerRelease, sel.Provider, path)
 	sel.Constraints = release.Constraints
 	var baseline, previous map[string]any
@@ -515,7 +555,7 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		if def.settings == nil {
 			return nil
 		}
-		if err := sel.applyLayer(def.settings, def.source, path); err != nil {
+		if err := sel.applyLayer(def.settings, def.source, path, layer); err != nil {
 			return &DefinitionError{Source: def.source, Err: err}
 		}
 		if layer != LayerRelease {
@@ -526,7 +566,7 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		return nil
 	}
 	legacy := repo.legacySettings(sel.Provider)
-	if err := sel.applyLayer(legacy, configSource, path); err != nil {
+	if err := sel.applyLayer(legacy, configSource, path, "legacy"); err != nil {
 		return err
 	}
 	if err := fromDefinition(LayerRelease); err != nil {
@@ -539,7 +579,7 @@ func (sel *Selection) applyLayers(fields map[string]any, path string, defs *defi
 		return err
 	}
 	if overrides, ok := fields["settings"]; ok {
-		if err := sel.applyLayer(overrides, configSource, path); err != nil {
+		if err := sel.applyLayer(overrides, configSource, path, "inline"); err != nil {
 			return err
 		}
 		if err := check(); err != nil {
@@ -571,11 +611,21 @@ func copySettings(settings any) any {
 	return copy.Interface()
 }
 
-func (sel *Selection) applyLayer(raw any, src Source, path string) error {
+func (sel *Selection) record(fields map[string]any, source Source, step string) {
+	if sel.history == nil {
+		return
+	}
+	visitSettings("", fields, func(path string, value any) {
+		sel.history[path] = append(sel.history[path], Contribution{Source: source, Value: value, Step: step})
+	})
+}
+
+func (sel *Selection) applyLayer(raw any, src Source, path, step string) error {
 	if err := applySettings(sel.Settings, raw, path+".settings"); err != nil {
 		return err
 	}
 	fields := raw.(map[string]any) // checked by applySettings above
+	sel.record(fields, src, step)
 	visitSettings("", fields, func(property string, value any) {
 		sel.Sources[property] = src
 		if value == nil {

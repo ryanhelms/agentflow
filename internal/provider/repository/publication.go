@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/filesystem"
 )
 
 // Every exit closes the FileSystem handle before removing its checkout.
@@ -21,7 +22,7 @@ func withCheckout[T any](ctx context.Context, a adapter, run func(checkout) (T, 
 		return result, err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(root)) }()
-	c := checkout{root: root, origin: a.Origin, branch: a.Branch}
+	c := checkout{root: root, origin: a.Origin, branch: a.Branch, okfKnowledge: a.okfKnowledge}
 	if err := c.init(ctx); err != nil {
 		return result, err
 	}
@@ -110,6 +111,12 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		result, applyErr := apply(s)
 		if applyErr == nil && result.Status == provider.AlreadyApplied {
 			return result, nil
+		}
+		// An unreadable base cannot validate a review. The compatible reader
+		// also cannot use a stale review branch to overwrite an OKF concept.
+		if a.okfKnowledge && (errors.Is(applyErr, filesystem.ErrKnowledgeScan) ||
+			(a.format == "" && errors.Is(applyErr, provider.ErrUnsupported))) {
+			return zero, applyErr
 		}
 		// An engineer may have removed the record or its receipt after
 		// accepting the operation. Its commit still prevents resurrection,

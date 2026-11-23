@@ -1,0 +1,15 @@
+{
+  "name": "devflow",
+  "version": "0.48.0",
+  "description": "Manage Devflow in a project and use its delivery workflow tools.",
+  "mcpServers": {
+    "devflow": {
+      "command": "node",
+      "args": [
+        "${extensionPath}/adapters/plugin-mcp.cjs",
+        "gemini"
+      ],
+      "cwd": "${workspacePath}"
+    }
+  }
+}

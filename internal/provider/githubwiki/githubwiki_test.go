@@ -46,7 +46,14 @@ func TestWikiPublishAndRead(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(seed, "Home.md"), []byte(home), 0600); err != nil {
 		t.Fatal(err)
 	}
-	git(t, seed, "add", "--", "Home.md")
+	nested := filepath.Join(seed, directory, "nested")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "okf.md"), []byte("---\ntype: Article\n---\nordinary Markdown"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, seed, "add", "--", "Home.md", directory)
 	git(t, seed, "commit", "-m", "initialize wiki")
 	git(t, seed, "push", origin, "HEAD:refs/heads/"+branch)
 	git(t, origin, "branch", "main", branch)
