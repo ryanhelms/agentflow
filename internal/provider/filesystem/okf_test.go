@@ -221,3 +221,20 @@ func TestTaskStoreStaysFlatAndTypedTasksStayTasks(t *testing.T) {
 		t.Fatalf("mixed task and knowledge = %+v, %v", docs, err)
 	}
 }
+
+func TestOKFNewLegacyPublishRespectsOccupiedFilename(t *testing.T) {
+	dir := t.TempDir()
+	ref := provider.Ref{Instance: instance, Scope: "eng", ID: "doc"}
+	const raw = "# An unrelated Markdown file.\n"
+	file := writeBundleFile(t, dir, "document-"+ref.StorageKey()+".md", raw)
+	k := compatibleKnowledge(t, instance, dir)
+	if docs, err := k.Find(t.Context(), provider.DocumentQuery{}); err != nil || len(docs) != 0 {
+		t.Fatalf("ordinary Markdown appeared in search: %+v, %v", docs, err)
+	}
+	if _, err := k.Publish(t.Context(), ref, provider.DocumentDraft{Title: "Publish"}, provider.WriteOptions{}); !errors.Is(err, provider.ErrConflict) {
+		t.Fatalf("occupied v1 filename = %v", err)
+	}
+	if got, err := os.ReadFile(file); err != nil || string(got) != raw {
+		t.Fatalf("occupied file changed: %q, %v", got, err)
+	}
+}

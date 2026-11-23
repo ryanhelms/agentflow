@@ -11,6 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ErrKnowledgeScan means discovery failed before the store could establish a
+// unique write destination. A Repository publisher must not reconcile a pending
+// review from an older snapshot when it cannot validate the current base.
+var ErrKnowledgeScan = errors.New("cannot scan knowledge directory")
+
 // IsKnowledgeCandidate selects files to inspect in a compatible knowledge store.
 // name is slash-separated and relative to its root. The v1 reader allowed any
 // top-level .md spelling, including renamed records at OKF-reserved names.
@@ -28,6 +33,7 @@ func isOKFPath(name string) bool {
 }
 
 func parseKnowledge(instance, name string, data []byte) (record, error) {
+	legacyErr := okf.ErrNotConcept
 	if !strings.Contains(name, "/") {
 		// Recognize v1 first: a legacy task may itself have a nonempty type.
 		r, err := parse(data)
@@ -36,14 +42,18 @@ func parseKnowledge(instance, name string, data []byte) (record, error) {
 		}
 		// A damaged v1 record must not silently disappear and allow another
 		// publish under its identity. Ordinary Markdown can also have metadata.
-		if (r.Kind == documentKind || r.Kind == taskKind) && (r.Version != 0 || r.Ref.Instance != "") && r.Type == "" {
-			return record{}, err
+		identified := r.Ref.Instance != "" || (r.Ref.Scope != "" && r.Ref.ID != "")
+		if identified && (r.Kind == documentKind || r.Kind == taskKind || r.Version != 0) {
+			legacyErr = err
 		}
 	}
 	if !isOKFPath(name) {
-		return record{}, okf.ErrNotConcept
+		return record{}, legacyErr
 	}
 	concept, err := okf.Parse(data)
+	if errors.Is(err, okf.ErrNotConcept) {
+		return record{}, legacyErr
+	}
 	if err != nil {
 		return record{}, err
 	}

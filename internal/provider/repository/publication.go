@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/filesystem"
 )
 
 // Every exit closes the FileSystem handle before removing its checkout.
@@ -113,7 +114,7 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		}
 		// A stale v1 review branch must never authorize publishing over an
 		// OKF document on the current base, even with a valid confirmation.
-		if errors.Is(applyErr, provider.ErrUnsupported) {
+		if a.okfKnowledge && (errors.Is(applyErr, provider.ErrUnsupported) || errors.Is(applyErr, filesystem.ErrKnowledgeScan)) {
 			return zero, applyErr
 		}
 		// An engineer may have removed the record or its receipt after

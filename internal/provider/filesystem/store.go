@@ -75,34 +75,7 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 	}
 	seen := make(map[provider.Ref]string)
 	var records []record
-	err := fs.WalkDir(s.root.FS(), ".", func(name string, e fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if name == "." {
-			return nil
-		}
-		if s.okfKnowledge {
-			if e.IsDir() && strings.HasPrefix(e.Name(), ".") {
-				return fs.SkipDir
-			}
-			if !e.Type().IsRegular() || !IsKnowledgeCandidate(name) {
-				return nil
-			}
-		} else {
-			if strings.EqualFold(filepath.Ext(name), ".md") {
-				if !e.Type().IsRegular() {
-					return fmt.Errorf("%q must be a regular Markdown file", name)
-				}
-			} else if e.IsDir() {
-				return fs.SkipDir
-			} else {
-				return nil
-			}
-		}
+	err := s.walk(ctx, func(name string) error {
 		r, err := s.read(name)
 		if errors.Is(err, okf.ErrNotConcept) {
 			return nil
@@ -110,22 +83,65 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 		if err != nil {
 			return fmt.Errorf("read %q: %w", name, err)
 		}
-		if r.Kind != s.kind || r.Ref.Instance != s.instance || (!s.okfKnowledge && scope != "" && scope != r.Ref.Scope) {
+		inScope := scope == "" || r.Ref.Scope == scope
+		if r.Kind != s.kind || r.Ref.Instance != s.instance || (!s.okfKnowledge && !inScope) {
 			return nil
 		}
 		if other, ok := seen[r.Ref]; ok {
 			return fmt.Errorf("duplicate %s in %q and %q: %w", r.Ref, other, r.name, provider.ErrConflict)
 		}
 		seen[r.Ref] = r.name
-		if scope == "" || scope == r.Ref.Scope {
+		if inScope {
 			records = append(records, r)
 		}
 		return nil
 	})
 	if err != nil {
+		if s.okfKnowledge {
+			return nil, fmt.Errorf("%w: %w", ErrKnowledgeScan, err)
+		}
 		return nil, err
 	}
 	return records, nil
+}
+
+func (s *store) walk(ctx context.Context, visit func(string) error) error {
+	if s.okfKnowledge {
+		return fs.WalkDir(s.root.FS(), ".", func(name string, e fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if e.IsDir() && name != "." && strings.HasPrefix(e.Name(), ".") {
+				return fs.SkipDir
+			}
+			if e.Type().IsRegular() && IsKnowledgeCandidate(name) {
+				return visit(name)
+			}
+			return nil
+		})
+	}
+	entries, err := fs.ReadDir(s.root.FS(), ".")
+	if err != nil {
+		return fmt.Errorf("list provider directory: %w", err)
+	}
+	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !strings.EqualFold(filepath.Ext(e.Name()), ".md") {
+			continue
+		}
+		if !e.Type().IsRegular() {
+			return fmt.Errorf("%q must be a regular Markdown file", e.Name())
+		}
+		if err := visit(e.Name()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *store) read(name string) (record, error) {
@@ -291,6 +307,7 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 		return zero, err
 	}
 	var old *record
+	var receiptErr error
 	replayed := false
 	for i := range records {
 		existing := &records[i]
@@ -298,11 +315,18 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 			old = existing
 		}
 		if hash, ok := existing.Operations[opts.OperationID]; ok {
-			if hash != fingerprint || existing.Ref != r.Ref {
-				return zero, fmt.Errorf("operation ID %q already used for a different request: %w", opts.OperationID, provider.ErrConflict)
+			if hash == fingerprint && existing.Ref == r.Ref {
+				replayed = true
+			} else {
+				receiptErr = fmt.Errorf("operation ID %q already used for a different request: %w", opts.OperationID, provider.ErrConflict)
 			}
-			replayed = true
 		}
+	}
+	if old != nil && old.okfConcept && (!replayed || receiptErr != nil) {
+		return zero, fmt.Errorf("OKF document %s is read-only: %w", old.Ref, errors.Join(provider.ErrUnsupported, receiptErr))
+	}
+	if receiptErr != nil {
+		return zero, receiptErr
 	}
 	if op == transition && old != nil {
 		if opts.CheckTask != nil {
@@ -337,9 +361,6 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 
 // prepare resolves the destination and carries forward any fields outside the mutation.
 func (r *record) prepare(op verb, old *record, expected string) error {
-	if old != nil && old.okfConcept {
-		return fmt.Errorf("OKF document %s is read-only: %w", old.Ref, provider.ErrUnsupported)
-	}
 	if expected != "" && (old == nil || expected != old.revision) {
 		return fmt.Errorf("expected revision for %s is stale, reload before writing: %w", r.Ref, provider.ErrConflict)
 	}
