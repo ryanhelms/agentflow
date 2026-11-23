@@ -15,6 +15,11 @@ message and paths you intend to commit. Omit `--path` to use the staged index.
 devflow commit --prepare -m "fix(PLAT-123): restore the project path" --path internal/setup/path.go
 ```
 
+Devflow runs the repository's configured commit hooks. It also uses Git's
+`reference-transaction` hook to verify the approved ref, parents, tree and
+message before Git updates the branch. If your configuration sets
+`hook.reference-transaction.enabled=false`, Devflow stops during preparation.
+
 Use `devflow pr --prepare --draft --title TITLE` to inspect the publication
 candidate before pushing or opening the draft. Both preparations return the
 same candidate the corresponding apply command checks, including the Git tree

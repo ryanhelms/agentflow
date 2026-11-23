@@ -461,6 +461,9 @@ affected checkout to see which setting wins. Run `devflow policy explain` to see
 a running Devflow MCP server after editing the configuration. Host sandbox
 permissions and provider sign-in prompts are controlled by their respective clients.
 
+Devflow runs configured Git commit hooks, including native hooks on Windows.
+It verifies the approved tree and message before Git moves the branch.
+
 Automatic draft publication requires both `push` and `pr_open_draft` to allow
 `auto`. Opening a reviewable PR uses `push` and `pr_open`. Promoting an existing
 draft uses `pr_ready_for_review`. For exact previews and approval handoff, see the

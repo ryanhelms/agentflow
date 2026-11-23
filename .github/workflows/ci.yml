@@ -28,6 +28,18 @@ jobs:
         with:
           version: latest
 
+  windows-commit-approvals:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify commit approvals and configured Git hooks
+        run: >-
+          go test -count=1 -v ./internal/gitx
+          -run 'Test(StagedSnapshotUsesIndexAndGuardsHooks|CommitMessageHookCannotReplaceApprovedMessage|ExactCommit.*Hooks|GuardHookDiscovery)'
+
   convention:
     # devflow's own repo follows the commit convention it ships. Keys are optional here
     # (commit.require_key: false in .devflow/config.yml) until devflow has a Jira project.

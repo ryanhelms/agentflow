@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -102,6 +103,16 @@ func (r *Repo) PreviewCommit(ctx context.Context, paths []string) (*CommitTree, 
 
 func (c *commitIndex) build(ctx context.Context, paths []string) (*CommitTree, error) {
 	r := c.repo
+	// This transaction guard must run before Git moves the ref. Git
+	// can disable the entire reference-transaction event independently of the
+	// hook directory. Respect that configuration by refusing the operation.
+	enabled, err := r.Git(ctx, "config", "--type=bool", "--default=true", "--get", "hook.reference-transaction.enabled")
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(enabled) != "true" {
+		return nil, errors.New("exact commits require the Git reference-transaction hook event to be enabled")
+	}
 	index, err := r.gitPath(ctx, "index")
 	if err != nil {
 		return nil, err
@@ -224,14 +235,14 @@ func (r *Repo) CommitExact(ctx context.Context, expected *CommitTree, message st
 	if err != nil {
 		return "", err
 	}
-	guard, err := c.guardHooks(hooks)
+	guard, err := c.guardHooks(hooks, runtime.GOOS == "windows")
 	if err != nil {
 		return "", err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "message"), []byte(message), 0600); err != nil {
 		return "", err
 	}
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath="+guard, "commit", "--cleanup=verbatim", "--file=-")
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath="+guard, "-c", "hook.reference-transaction.enabled=true", "commit", "--cleanup=verbatim", "--file=-")
 	cmd.Dir = r.Dir
 	cmd.Env = slices.Concat(c.env, []string{
 		"GIT_INDEX_FILE=" + c.selected, "DEVFLOW_ORIGINAL_HOOKS=" + hooks,
@@ -285,36 +296,61 @@ if [ "$1" = prepared ]; then
 		printf '%s\n' "$new" > "$DEVFLOW_COMMIT_TMP/committed"
 	done <"$log"
 fi
-if [ -x "$DEVFLOW_ORIGINAL_HOOKS/reference-transaction" ]; then
-	"$DEVFLOW_ORIGINAL_HOOKS/reference-transaction" "$@" <"$log"
-fi
 `
 
-func (c *commitIndex) guardHooks(original string) (string, error) {
+func (c *commitIndex) guardHooks(original string, windows bool) (string, error) {
 	dir := filepath.Join(c.dir, "hooks")
 	if err := os.Mkdir(dir, 0700); err != nil {
 		return "", err
 	}
 	entries, err := os.ReadDir(original)
+	// Git supports disabling traditional hooks by pointing core.hooksPath
+	// at /dev/null. A missing or non-directory path has no hooks to forward.
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", err
+		if info, statErr := os.Stat(original); statErr != nil || info.IsDir() {
+			return "", err
+		}
 	}
-	const forward = "#!/bin/sh\nexec \"$DEVFLOW_ORIGINAL_HOOKS/${0##*/}\" \"$@\"\n"
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || name == "reference-transaction" {
+	hooks := make(map[string]string)
+	for _, entry := range entries {
+		name := entry.Name()
+		info, err := os.Stat(filepath.Join(original, name))
+		// Git ignores dangling links.
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		info, err := os.Stat(filepath.Join(original, name))
 		if err != nil {
 			return "", err
 		}
-		if !info.Mode().IsRegular() || info.Mode()&0111 == 0 {
+		if !info.Mode().IsRegular() || !windows && info.Mode().Perm()&0111 == 0 {
 			continue
 		}
-		if err = os.WriteFile(filepath.Join(dir, name), []byte(forward), 0700); err != nil {
+		suffix := ""
+		if windows {
+			// Windows has no executable mode bit. Git looks up the bare
+			// name first, then the same name with an .exe suffix.
+			name = strings.ToLower(name)
+			if strings.HasSuffix(name, ".exe") {
+				name = strings.TrimSuffix(name, ".exe")
+				if _, bare := hooks[name]; bare {
+					continue
+				}
+				suffix = ".exe"
+			}
+		}
+		hooks[name] = suffix
+	}
+	guard := transactionGuard
+	for name, suffix := range hooks {
+		target := `"$DEVFLOW_ORIGINAL_HOOKS/${0##*/}` + suffix + `"`
+		if name == "reference-transaction" {
+			guard += target + ` "$@" <"$log"` + "\n"
+			continue
+		}
+		forward := "#!/bin/sh\nexec " + target + ` "$@"` + "\n"
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(forward), 0700); err != nil {
 			return "", err
 		}
 	}
-	return dir, os.WriteFile(filepath.Join(dir, "reference-transaction"), []byte(transactionGuard), 0700)
+	return dir, os.WriteFile(filepath.Join(dir, "reference-transaction"), []byte(guard), 0700)
 }

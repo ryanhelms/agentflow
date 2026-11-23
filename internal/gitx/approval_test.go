@@ -2,7 +2,9 @@ package gitx
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -216,6 +218,159 @@ func TestCleanCommitMessageMatchesNoninteractiveGit(t *testing.T) {
 		got, err := r.CleanCommitMessage(t.Context(), tt.input)
 		if err != nil || got != tt.want {
 			t.Errorf("%s: got %q, %v", tt.mode, got, err)
+		}
+	}
+}
+
+func stageHookFixture(t *testing.T, r *Repo) *CommitTree {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(r.Dir, "candidate"), []byte("approved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Add(t.Context(), "candidate"); err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := r.PreviewCommit(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return candidate
+}
+
+func TestExactCommitPreservesConfiguredHooks(t *testing.T) {
+	r := commitFixture(t)
+	ctx := t.Context()
+	hooks := filepath.Join(t.TempDir(), "team hooks")
+	if err := os.Mkdir(hooks, 0700); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(t.TempDir(), "events")
+	t.Setenv("DEVFLOW_TEST_HOOK_LOG", filepath.ToSlash(log))
+	const script = `#!/bin/sh
+name=${0##*/}
+printf '%s|%s\n' "$name" "$*" >> "$DEVFLOW_TEST_HOOK_LOG"
+if [ "$name" = reference-transaction ]; then cat >> "$DEVFLOW_TEST_HOOK_LOG"; fi
+`
+	for _, name := range []string{"pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "reference-transaction"} {
+		if err := os.WriteFile(filepath.Join(hooks, name), []byte(script), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := r.Git(ctx, "config", "core.hooksPath", filepath.ToSlash(hooks)); err != nil {
+		t.Fatal(err)
+	}
+	candidate := stageHookFixture(t, r)
+	if _, err := r.CommitExact(ctx, candidate, "approved\n", nil); err != nil {
+		t.Fatal(err)
+	}
+	events, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"pre-commit|\n", "prepare-commit-msg|", "commit-msg|", "post-commit|\n", "reference-transaction|prepared\n", " refs/heads/main\n", "reference-transaction|committed\n"} {
+		if !strings.Contains(string(events), want) {
+			t.Fatalf("missing %q in %q", want, events)
+		}
+	}
+}
+
+func TestExactCommitRespectsDisabledHooks(t *testing.T) {
+	r := commitFixture(t)
+	ctx := t.Context()
+	// A non-directory hooks path disables traditional hooks on every platform.
+	disabled := filepath.Join(t.TempDir(), "disabled")
+	if err := os.WriteFile(disabled, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Git(ctx, "config", "core.hooksPath", filepath.ToSlash(disabled)); err != nil {
+		t.Fatal(err)
+	}
+	candidate := stageHookFixture(t, r)
+	if _, err := r.Git(ctx, "config", "hook.reference-transaction.enabled", "false"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.PreviewCommit(ctx, nil); err == nil || !strings.Contains(err.Error(), "event to be enabled") {
+		t.Fatalf("disabled guard preview: %v", err)
+	}
+	if _, err := r.CommitExact(ctx, candidate, "approved\n", nil); err == nil || !strings.Contains(err.Error(), "event to be enabled") {
+		t.Fatalf("disabled guard apply: %v", err)
+	}
+	head, err := r.Git(ctx, "rev-parse", "HEAD")
+	if err != nil || strings.TrimSpace(head) != candidate.Parent {
+		t.Fatalf("unexpected HEAD %q, %v", head, err)
+	}
+	if _, err := r.Git(ctx, "config", "--unset", "hook.reference-transaction.enabled"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.CommitExact(ctx, candidate, "approved\n", nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGuardHookDiscovery(t *testing.T) {
+	original := t.TempDir()
+	for _, name := range []string{"commit-msg", "commit-msg.exe", "pre-commit.exe", "reference-transaction.exe"} {
+		if err := os.WriteFile(filepath.Join(original, name), []byte("fixture"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	guard, err := (&commitIndex{dir: t.TempDir()}).guardHooks(original, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, suffix := range map[string]string{"commit-msg": "", "pre-commit": ".exe", "reference-transaction": ".exe"} {
+		b, err := os.ReadFile(filepath.Join(guard, name))
+		if err != nil || !strings.Contains(string(b), `"$DEVFLOW_ORIGINAL_HOOKS/${0##*/}`+suffix+`"`) {
+			t.Fatalf("wrong Windows hook target for %s: %s, %v", name, b, err)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		unix, err := (&commitIndex{dir: t.TempDir()}).guardHooks(original, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(unix, "commit-msg")); !os.IsNotExist(err) {
+			t.Fatalf("non-executable POSIX hook was forwarded: %v", err)
+		}
+	}
+}
+
+func TestExactCommitWindowsNativeHooks(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("requires native Git for Windows")
+	}
+	r := commitFixture(t)
+	ctx := t.Context()
+	hooks := t.TempDir()
+	source := filepath.Join(t.TempDir(), "fixture.go")
+	const program = `package main
+import ("fmt"; "os")
+func main() { fmt.Fprintln(os.Stderr, "native hook refused the candidate"); os.Exit(1) }
+`
+	if err := os.WriteFile(source, []byte(program), 0600); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(hooks, "pre-commit.exe")
+	if out, err := exec.CommandContext(ctx, "go", "build", "-o", bin, source).CombinedOutput(); err != nil {
+		t.Fatalf("build hook: %s, %v", out, err)
+	}
+	if _, err := r.Git(ctx, "config", "core.hooksPath", filepath.ToSlash(hooks)); err != nil {
+		t.Fatal(err)
+	}
+	candidate := stageHookFixture(t, r)
+	for _, name := range []string{"pre-commit", "reference-transaction"} {
+		if name == "reference-transaction" {
+			if err := os.Rename(bin, filepath.Join(hooks, name+".exe")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, err := r.CommitExact(ctx, candidate, "approved\n", nil)
+		if err == nil || !strings.Contains(err.Error(), "native hook refused the candidate") {
+			t.Fatalf("%s: %v", name, err)
+		}
+		head, err := r.Git(ctx, "rev-parse", "HEAD")
+		if err != nil || strings.TrimSpace(head) != candidate.Parent {
+			t.Fatalf("%s: unexpected HEAD %q, %v", name, head, err)
 		}
 	}
 }
