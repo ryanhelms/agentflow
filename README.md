@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
-| **Current release** | <!-- devflow:version -->`v0.35.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.37.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -195,6 +195,13 @@ The same command with `--provider asana` reuses the official Asana V2 connector.
 For a new Asana connector, pass `--client-id ID` from an approved MCP app and
 enter the app secret at Claude’s secure prompt.
 [Interactive provider setup](docs/providers.md#interactive-provider-setup).
+
+For Devflow’s own Slack connection, start browser consent with
+`devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID`.
+Use the approved PKCE-enabled app’s public client ID and the destination’s Slack workspace ID.
+The user approves in Slack. Devflow checks the workspace before storing the grant in the OS keychain.
+[Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
+
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian
 reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
@@ -205,7 +212,10 @@ Desktop task creation, completion, and comments through a separate Devflow OAuth
 enrollment. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery.
+for delivery. When using its own Slack enrollment, Devflow checks the workspace
+and configured actor against the stored grant before connecting to Slack MCP.
+A Slack send with an uncertain outcome keeps its receipt claim and
+blocks another send for the same operation and destination.
 
 The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
 and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
@@ -230,9 +240,15 @@ publication to space keys in `knowledge_base.settings.publish_spaces`.
 
 In a regular Claude Code Desktop session, `devflow_ticket_create` can create an
 unlinked Jira issue through the Devflow Rovo enrollment. Devflow checks the Jira
-project and issue type, then requests approval for the exact issue. The same
-tool can create a GitHub issue through signed-in `gh`. Its interactive preview shows the GitHub
-account and repository. If sign-in is needed, run
+project and issue type, then requests approval for the exact issue. When the MCP
+create operation is unavailable, an interactive `devflow_ticket_create` or
+`devflow task create` can use the signed-in Teamwork Graph CLI. The preview
+binds the OAuth profile, site, project, issue type, title, description and
+labels. Devflow returns the key after verifying the new issue on that profile.
+This fallback has been tested with fixtures.
+
+The same tool can create a GitHub issue through signed-in `gh`. Its interactive
+preview shows the GitHub account and repository. If sign-in is needed, run
 `devflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·
 [Slack destination configuration](docs/notifications.md)

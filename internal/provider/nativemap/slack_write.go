@@ -127,11 +127,20 @@ func slackNotificationMessage(n provider.Notification) (string, error) {
 		}
 	}
 	message := strings.Join(nonempty, "\n\n")
-	if message == "" || len(message) > slackMessageLimit || !utf8.ValidString(message) ||
-		strings.ContainsFunc(message, func(r rune) bool { return unicode.IsControl(r) && r != '\r' && r != '\t' && r != '\n' }) {
+	if !validSlackMessage(message) {
 		return "", errors.New("slack notification requires a nonempty message within the byte limit")
 	}
 	return message, nil
+}
+
+// ValidSlackSend applies the mapper's top-level conversation and message bounds.
+func ValidSlackSend(channel, message string) bool {
+	return slackChannel.MatchString(channel) && validSlackMessage(message)
+}
+
+func validSlackMessage(message string) bool {
+	return strings.TrimSpace(message) != "" && len(message) <= slackMessageLimit && utf8.ValidString(message) &&
+		!strings.ContainsFunc(message, func(r rune) bool { return unicode.IsControl(r) && r != '\r' && r != '\t' && r != '\n' })
 }
 
 // Deliver requires the caller's devflow policy gate and a durable receipt
@@ -199,16 +208,22 @@ func (n SlackNotification) deliverClaimed(
 		return receipt, errors.Join(err, finishSlackClaim(ctx, store, key, notifications.Retryable))
 	}
 	raw, err := send(ctx, n.call)
-	if errors.Is(err, native.ErrUnavailable) && !errors.Is(err, native.ErrWriteUncertain) {
-		return receipt, errors.Join(native.ErrUnavailable, finishSlackClaim(ctx, store, key, notifications.Retryable))
+	if !errors.Is(err, native.ErrWriteUncertain) {
+		switch {
+		case errors.Is(err, native.ErrWriteNotDispatched):
+			return receipt, errors.Join(native.ErrWriteNotDispatched, finishSlackClaim(ctx, store, key, notifications.Retryable))
+		case errors.Is(err, native.ErrUnavailable):
+			return receipt, errors.Join(native.ErrUnavailable, finishSlackClaim(ctx, store, key, notifications.Retryable))
+		}
 	}
 	if err != nil {
 		return receipt, fmt.Errorf("%w: native slack send failed", notifications.ErrUnconfirmed)
 	}
-	receipt.URL, err = slackMessageLink(n.intent.Destination.ChannelID, raw)
+	ack, err := DecodeSlackMessageReceipt(n.intent.Destination.ChannelID, raw)
 	if err != nil {
 		return receipt, errors.Join(notifications.ErrUnconfirmed, err)
 	}
+	receipt.URL = ack.Link
 	receipt.Status = provider.Applied
 	return receipt, finishSlackClaim(ctx, store, key, notifications.Delivered)
 }
@@ -222,23 +237,29 @@ func finishSlackClaim(ctx context.Context, store notifications.ReceiptStore, key
 	return nil
 }
 
-func slackMessageLink(channel string, raw json.RawMessage) (string, error) {
+type SlackMessageReceipt struct {
+	Link    string `json:"message_link"`
+	Context struct {
+		ChannelID string `json:"channel_id"`
+		MessageTS string `json:"message_ts"`
+	} `json:"message_context"`
+}
+
+// DecodeSlackMessageReceipt projects the fields that prove the exact top-level send.
+func DecodeSlackMessageReceipt(channel string, raw json.RawMessage) (SlackMessageReceipt, error) {
 	var result struct {
-		OK      *bool  `json:"ok"`
-		Link    string `json:"message_link"`
-		Context struct {
-			ChannelID string `json:"channel_id"`
-			MessageTS string `json:"message_ts"`
-		} `json:"message_context"`
+		SlackMessageReceipt
+		OK *bool `json:"ok"`
 	}
 	if err := decodeObject(raw, &result); err != nil {
-		return "", err
+		return SlackMessageReceipt{}, err
 	}
 	u, ok := httpsURL(result.Link)
-	if result.OK != nil && !*result.OK || !ok || !strings.HasSuffix(strings.ToLower(u.Host), ".slack.com") || u.RawQuery != "" ||
-		u.Fragment != "" || result.Context.ChannelID != channel || !slackTS.MatchString(result.Context.MessageTS) ||
+	if result.OK != nil && !*result.OK || !ok || !strings.HasSuffix(strings.ToLower(u.Host), ".slack.com") || u.RawQuery != "" || u.ForceQuery ||
+		strings.Contains(result.Link, "#") || result.Context.ChannelID != channel || !slackTS.MatchString(result.Context.MessageTS) ||
 		u.EscapedPath() != "/archives/"+channel+"/p"+strings.ReplaceAll(result.Context.MessageTS, ".", "") {
-		return "", fmt.Errorf("%w: slack acknowledgement does not identify the delivered message", ErrInvalidResult)
+		return SlackMessageReceipt{}, fmt.Errorf("%w: slack acknowledgement does not identify the delivered message", ErrInvalidResult)
 	}
-	return u.String(), nil
+	result.Link = u.String()
+	return result.SlackMessageReceipt, nil
 }

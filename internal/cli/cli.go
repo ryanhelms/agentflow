@@ -30,6 +30,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/desktophost"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/setup"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -54,11 +55,11 @@ Setup
   setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
   setup apply --companion ID [--install | --client NAME] [--yes]
                                  install or register one declared MCP companion
-  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]
+  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for Jira, Confluence or Asana enrollment
+                                 use --client devflow for Jira, Confluence, Asana or an approved Slack app
   setup logout --provider NAME --client devflow
-                                 disconnect a local Devflow provider enrollment
+                                 disconnect the selected local Devflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login
@@ -108,8 +109,11 @@ Work
 Runtime
   --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
   --native-client claude-desktop COMMAND
-                                 use enrolled Jira or Asana connections for supported task writes
-                                 comments can fall back to the signed-in Teamwork Graph CLI
+                                 use Jira for comment, start, transition or task create
+                                 use Asana for comment, completion via transition or task create
+                                 Jira comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
+  --native-client claude-desktop notify SIGNAL --operation-id ID
+                                 use the separately enrolled Slack MCP connection
   mcp [--client NAME]            MCP server on stdio
   hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
   update [--rollback] [--quiet]  install the latest release now, or go back one version
@@ -124,15 +128,19 @@ func Main(args []string) int {
 			fmt.Fprintln(os.Stderr, "usage: devflow --native-client NAME COMMAND")
 			return 1
 		}
-		writer, err := nativeWriter(args[1], args[2])
+		command := args[2]
+		if command == "task" && len(args) > 3 && args[3] == "create" {
+			command = "task create"
+		}
+		writer, err := nativeWriter(args[1], command)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "devflow:", err)
 			return 1
 		}
 		defer writer.Close()
 		ctx = native.WithWriteHost(ctx, writer)
-		if args[2] == "comment" {
-			ctx = app.WithJiraCommentCLI(ctx)
+		if command == "comment" || command == "task create" {
+			ctx = app.WithJiraWriteCLI(ctx)
 		}
 		args = args[2:]
 	}
@@ -171,10 +179,14 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		}
 		return codexhost.NewWriter(dir), nil
 	case "claude-desktop":
-		if command != "comment" && command != "start" && command != "transition" && command != "task" {
-			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition or task)")
+		switch command {
+		case "comment", "start", "transition", "task create":
+			return desktophost.NewWriter(), nil
+		case "notify":
+			return slackhost.NewWriter(), nil
+		default:
+			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition, task create or notify)")
 		}
-		return desktophost.NewWriter(), nil
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)
 	}

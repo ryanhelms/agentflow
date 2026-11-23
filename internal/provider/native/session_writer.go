@@ -161,6 +161,11 @@ func (w *SessionWriter) Prepare(ctx context.Context, call Call) (WriteBinding, e
 		}
 	}()
 	if err := checkWriteSession(session, call); err != nil {
+		// Jira creation may select a different identity only when discovery
+		// found no operation. This session already advertised a candidate.
+		if call.Provider == "jira" && call.Tool == "createJiraIssue" && errors.Is(err, ErrUnavailable) {
+			return zero, fmt.Errorf("advertised Jira create operation failed session or input validation: %w", ErrDenied)
+		}
 		return zero, err
 	}
 	if err := ctx.Err(); err != nil {

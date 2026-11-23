@@ -331,7 +331,10 @@ fresh preview. A permission denial or uncertain write stops the operation
 on the selected route. Host-mediated read continuations also work in Claude
 Code and other clients. Codex App Server binds writes to the provider connection it owns. Claude Code
 Desktop can also use Devflow-owned connections for unlinked Jira issue creation,
-Jira comments, start and forward transitions, web links and Confluence page replacement. Each preview identifies Devflow as the connection owner.
+comments, start, forward transitions and web links, and for Confluence page
+replacement. Separate Asana and Slack enrollments enable scoped Asana task
+creation, completion and comments, and Slack delivery to a configured
+conversation. Each preview identifies Devflow as the connection owner.
 
 | Provider | Native writes |
 | --- | --- |
@@ -375,6 +378,30 @@ type exists in the project and binds the title, description and labels to one
 approval. A successful result includes the new issue key. A request with a parent
 or other issue link uses the existing linked-creation route. If the outcome is
 uncertain, inspect the project before approving another creation.
+
+When MCP creation is unavailable, the same interactive callers that can post
+Jira comments can create an unlinked issue through a saved Teamwork Graph CLI
+OAuth profile. Sign in with `devflow setup login --provider jira`. For example,
+on a branch without a Jira key, preview the draft with
+`devflow --native-client claude-desktop task create --project ENG --type Task --summary "Verify kiosk check-in" --dry-run`.
+The ordinary `devflow task create` command also supports this route in a terminal.
+
+Devflow looks up the project and standard issue type with `twg jira space issue-types`.
+The confirmation binds both IDs, the selected profile and account, the exact title
+and plain-text description, and the `devflow` label. TWG trims surrounding
+whitespace and expands account mentions in descriptions. Devflow rejects those
+transformations before approval. Confirmation spends one approval before running
+`twg jira workitem create`. Devflow checks the acknowledgement and reads the issue
+back on the same site and profile to verify its key, creator and fields.
+
+A sign-in or permission failure stops the operation. An uncertain create or
+failed readback requires inspecting the project before approving again.
+An explicit link or a link inferred from the current branch uses the existing
+linked-creation route. Unattended calls, CI, operations with
+`DEVFLOW_OPERATION_ID`, and configurations with both `JIRA_USER` and
+`JIRA_TOKEN` retain the existing REST fallback. The TWG create flow has been
+exercised with offline fixtures and installed TWG 1.4.6 command help.
+[Atlassian work-item reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md).
 
 Use `devflow_transition` to apply the flow-map event for an issue. For example,
 `devflow --native-client claude-desktop transition APP-42 pr.opened --dry-run`
@@ -479,6 +506,65 @@ operation. After sign-in or enrollment replacement, request a new preview.
 Run `devflow setup logout --provider asana --client devflow` to remove local
 enrollment. Existing unattended Asana service workflows use their configured
 service authentication.
+
+### Devflow Slack enrollment
+
+For desktop browser consent, an administrator provisions a dedicated Slack app
+approved for internal use or published in the Slack Marketplace. In the app’s
+**OAuth & Permissions** settings, enable **PKCE** (`oauth_config.pkce_enabled`
+in the manifest) and register the exact redirect URL
+`http://localhost:53668/oauth/slack/callback`. Slack treats a localhost redirect
+as a desktop redirect when the app has opted into PKCE. Enabling PKCE converts
+the app to a public client and requires Slack Support to reverse. Use this app’s
+fixed public client ID for Devflow. Claude’s workspace connector has its own
+registration and callback. [Slack PKCE settings](https://docs.slack.dev/authentication/using-pkce/) · [Slack MCP app eligibility](https://docs.slack.dev/ai/slack-mcp-server/).
+
+Configure the following **user scopes** on the approved app. Devflow requires
+the returned scope set to match the request exactly.
+
+| Operation | Scopes |
+| --- | --- |
+| Verify the authenticated Slack profile | `users:read`, `users:read.email` |
+| Verify membership in the configured conversation | `channels:read`, `groups:read`, `im:read`, `mpim:read` |
+| Request permission to send a message | `chat:write` |
+
+Give the agent the approved app’s public client ID and the expected team ID
+from the destination’s `native.workspace_id`. An authorized agent or the user
+runs this command on the machine where the browser will open, substituting
+those two IDs.
+
+```sh
+devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID
+```
+
+Review the app, workspace and user permissions in Slack and approve in the
+browser. Devflow listens on IPv4 loopback during login, checks the callback
+authority, path and random state, and exchanges the code with its S256 verifier.
+The public exchange and refresh use the client ID alone as the app identifier.
+The user needs neither a client secret nor a locally trusted certificate.
+
+Slack must return the exact requested scopes and a `team.id` matching the
+expected workspace on initial consent. Devflow verifies the authenticated
+user and workspace with Slack’s `auth.test` when the public exchange returns
+a generic bearer response.
+New consent replaces the per-user enrollment in the OS keychain and invalidates
+previews bound to the prior grant. Enable token rotation in the app settings
+if rotating tokens are required for this localhost registration. Slack’s
+unconditional rotation guarantee applies to custom URI schemes. For rotating
+grants, Devflow verifies each replacement and preserves the approval generation.
+An expired refresh token or an ambiguous exchange requires fresh consent.
+[Slack user token response](https://docs.slack.dev/reference/methods/oauth.v2.user.access/) · [Slack identity verification](https://docs.slack.dev/reference/methods/auth.test/) · [Desktop PKCE and refresh](https://docs.slack.dev/authentication/using-pkce/) · [Token rotation](https://docs.slack.dev/authentication/using-token-rotation/).
+
+For a separately approved **confidential app**, register
+`https://127.0.0.1:53668/oauth/slack/callback` and run
+`devflow setup login --provider slack --client devflow` in a terminal.
+At the hidden prompts, enter the paths to the PEM certificate chain trusted by the browser
+for `127.0.0.1` and its matching private key, and the app’s client ID and
+secret. Use a dedicated loopback certificate and keep the app confidential.
+
+Run `devflow setup logout --provider slack --client devflow` to delete the
+local app credentials and grant. To revoke the app's authorization in Slack,
+remove its installation or authorization through Slack.
 
 ### Claude Code Desktop
 
