@@ -66,7 +66,7 @@ func TestRegisterProviderLoginUnsupported(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	for _, pair := range [][2]string{{"slack", "codex"}, {"slack", "claude"}, {"jira", claudeDesktop}} {
 		err := RegisterProviderLogin(t.Context(), ".", pair[0], pair[1], "", "", false, nil, nil, nil)
-		if err == nil || !strings.Contains(err.Error(), "--register supports only") {
+		if err == nil || !strings.Contains(err.Error(), "--register supports") {
 			t.Fatalf("%v: %v", pair, err)
 		}
 	}

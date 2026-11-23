@@ -238,6 +238,11 @@ connector is missing, Devflow returns a setup offer so the agent can ask
 whether to connect it in the current client. Reads can still use the
 signed-in Teamwork Graph or GitHub CLI where supported. If you approve,
 the agent starts the client's setup and any required sign-in.
+For GitHub Issues in Claude Code, Devflow can install the pinned official local
+GitHub MCP server and register it for the workspace after approval. The first
+GitHub read in a fresh session initiates browser OAuth. This registration
+exposes read-only issue tools. [GitHub OAuth setup](docs/providers.md#github-oauth-in-claude-code).
+
 A connected Codex MCP can also handle Jira issue
 writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated

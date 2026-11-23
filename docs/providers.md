@@ -292,6 +292,26 @@ because the command has no terminal, open `/mcp` in the same workspace or
 rerun the command in a terminal. A connected status verifies the host
 connection only. [Slack’s Claude Code configuration](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/#connect-to-claude-code).
 
+### GitHub OAuth in Claude Code
+
+Prefer provider OAuth whenever supported. If the GitHub connector is absent
+in Claude Code, approve the setup offer and let the agent run the provided
+registration command. For Claude Code Desktop it is
+
+```sh
+devflow setup login --provider github-issues --client claude-desktop --register
+```
+
+Devflow installs the checksum-pinned official GitHub MCP release using the
+GitHub CLI and registers it in the current Claude workspace. The local server
+exposes read-only issue tools on github.com. In a fresh Claude Code session,
+the first GitHub tool call opens the browser for consent. The official server
+holds its OAuth grant in memory, so a new MCP process can ask for consent
+again. The signed-in GitHub CLI can still handle reads when the MCP is
+unavailable. [GitHub's local OAuth guide](https://github.com/github/github-mcp-server/blob/main/docs/oauth-login.md).
+
+### Asana in Claude Code Desktop
+
 For Asana in Claude Code Desktop, first reuse the registered V2 connector.
 Run the command in the enrolled workspace so Claude starts its OAuth flow
 when sign-in is needed.

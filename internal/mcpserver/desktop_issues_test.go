@@ -108,7 +108,8 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 		t.Fatalf("native issue read: %+v", request.Request)
 	}
 	if offer := request.SetupOffer; offer == nil || offer.Name != "github" ||
-		offer.Endpoint != "https://api.githubcopilot.com/mcp/" || offer.Guide == "" ||
+		offer.Endpoint != "" || !strings.HasSuffix(offer.Guide, "/docs/oauth-login.md") ||
+		strings.Join(offer.RegisterArgs, " ") != "setup login --provider github --client claude --register" ||
 		!strings.Contains(offer.PromptIfMissing, "connect github MCP") {
 		t.Fatalf("GitHub connector offer: %+v", offer)
 	}
