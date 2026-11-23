@@ -239,7 +239,8 @@ tries the supported vendor CLI with its own saved login. It checks the
 executable and can install a checksum-pinned release of `gh` or `twg`
 in its user cache. If the CLI cannot finish the read, the agent can offer
 connector setup or start the vendor’s sign-in. Resource access denials
-remain final for the operation.
+remain final for the operation. Standalone task and knowledge reads can also
+prepare the configured provider’s CLI using the same installer.
 
 For GitHub Issues in Claude Code, Devflow can install the pinned official local
 GitHub MCP server and register it for the workspace after approval. The first

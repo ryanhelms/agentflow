@@ -356,6 +356,10 @@ arm64). These are the providers with CLI adapters in Devflow. Successful
 fallback needs no intervention. If the CLI still needs sign-in, the agent can
 start the vendor's OAuth flow, or offer MCP setup when appropriate.
 
+Standalone workstation commands also prepare the CLI for supported task and
+knowledge reads. CI and explicit service-account routes keep their existing
+behavior.
+
 Interactive GitHub API calls without a provider MCP use the signed-in `gh`
 client. Explicit GitHub workflow tokens retain the existing service-account
 path. When a provider rejects user or resource access, report the rejected

@@ -60,6 +60,7 @@ func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task prov
 
 // DocsGet reads one document by its full identity from the selected provider.
 func (a *App) DocsGet(ctx context.Context, ref provider.Ref) (provider.Document, error) {
+	ctx = a.standaloneReadContext(ctx)
 	var zero provider.Document
 	if err := ref.Validate(); err != nil {
 		return zero, err

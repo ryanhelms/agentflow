@@ -237,6 +237,7 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 
 // DocsSearch searches the selected knowledge provider. Results are reference data.
 func (a *App) DocsSearch(ctx context.Context, query, space string) (map[string]any, error) {
+	ctx = a.standaloneReadContext(ctx)
 	switch a.Cfg.Providers.KnowledgeBase.Provider {
 	case "filesystem":
 		knowledge, err := filesystem.NewOKFCompatibleKnowledge("filesystem", a.knowledgeDirectory())

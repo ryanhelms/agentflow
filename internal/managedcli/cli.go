@@ -40,6 +40,18 @@ func ForProvider(provider string) (Tool, bool) {
 }
 
 type commandKey string
+type readInstallRepoKey struct{}
+
+// WithReadInstall allows a standalone provider read to install its CLI.
+func WithReadInstall(ctx context.Context, repo string) context.Context {
+	return context.WithValue(ctx, readInstallRepoKey{}, repo)
+}
+
+// ReadInstallRepo returns the checkout for a read allowed to install its CLI.
+func ReadInstallRepo(ctx context.Context) string {
+	repo, _ := ctx.Value(readInstallRepoKey{}).(string)
+	return repo
+}
 
 // WithCommand binds this operation to a verified executable without changing PATH.
 func WithCommand(ctx context.Context, tool Tool, path string) context.Context {
