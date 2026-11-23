@@ -172,7 +172,7 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	if err := os.Mkdir(".devflow", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\n"), 0o600); err != nil {
+	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\ntask_management: {provider: jira}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile("todo.go", []byte("package x\n// TODO: unrelated cleanup\n"), 0o600); err != nil {

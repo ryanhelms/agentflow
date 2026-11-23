@@ -151,6 +151,9 @@ func (a *App) detectForgeWith(ctx context.Context, settings any) (gitx.Detection
 
 // CurrentKey returns the resolved task key for the current branch, or "".
 func (a *App) CurrentKey(ctx context.Context) string {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return ""
+	}
 	if a.UsesTaskRefs() {
 		if ref, err := a.branchTask(ctx); err == nil && ref.ID != "" {
 			return taskKey(ref)
@@ -161,6 +164,9 @@ func (a *App) CurrentKey(ctx context.Context) string {
 }
 
 func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
+	if a.Cfg.Providers.TaskManagement.Provider == "none" {
+		return "", provider.Unsupported("none", "task operations")
+	}
 	if a.UsesTaskRefs() {
 		ref, err := a.taskRef(ctx, key)
 		if err != nil {

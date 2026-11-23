@@ -312,8 +312,8 @@ func providerSchemas() map[string]roleSchema {
 		"code_hosting": {"auto", map[string]settingsFactory{
 			"auto": codeHostingSettings, "github": codeHostingSettings,
 		}},
-		"task_management":    {"jira", tasks},
-		"knowledge_base":     {"confluence", knowledge},
+		"task_management":    {"none", tasks},
+		"knowledge_base":     {"none", knowledge},
 		"devops.checks":      github,
 		"devops.deployments": devOpsFixture,
 		"devops.releases":    devOpsFixture,
@@ -460,9 +460,14 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string, de
 	}
 	sel := Selection{Version: version, Provider: id, Settings: settings, Configured: present}
 	if id == "none" {
-		// A disabled role accepts no settings; this reports any it is given.
 		if overrides, ok := fields["settings"]; ok {
-			return sel, applySettings(settings, overrides, path+".settings")
+			if _, assigned := fields["provider"]; assigned {
+				return sel, applySettings(settings, overrides, path+".settings")
+			}
+			// Provider-specific values stay dormant until the repo selects a provider.
+			if _, object := overrides.(map[string]any); !object {
+				return sel, fmt.Errorf("%s.settings: expected an object", path)
+			}
 		}
 		return sel, nil
 	}
