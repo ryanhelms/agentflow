@@ -17,21 +17,30 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
       run: |
-        root=$(cd "$ACTION_PATH/../.." && pwd)
-        echo "$root/bin" >> "$GITHUB_PATH"
-        echo "DEVFLOW_ROOT=$root" >> "$GITHUB_ENV"
-        echo "FLOW_MAP=$root/flow-map.yml" >> "$GITHUB_ENV"
+        set -euo pipefail
+        source_root=$(cd "$ACTION_PATH/../.." && pwd -P)
+        runner_root=$(cd "$RUNNER_TEMP" && pwd -P)
+        root=$(mktemp -d "$runner_root/devflow.XXXXXXXX")
+        if [[ "$root" != "$runner_root"/devflow.* || "$root" == *$'\r'* || "$root" == *$'\n'* ]]; then
+          echo "::error::Invalid Devflow runner directory"
+          exit 1
+        fi
+        cp -R -- "$source_root/bin" "$root/bin"
+        cp -- "$source_root/flow-map.yml" "$root/flow-map.yml"
+        printf '%s\n' "$root/bin" >> "$GITHUB_PATH"
+        printf 'DEVFLOW_ROOT=%s\nFLOW_MAP=%s/flow-map.yml\n' "$root" "$root" >> "$GITHUB_ENV"
     - name: Set up Go
       if: inputs.binary == 'true'
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version-file: ${{ github.action_path }}/../../go.mod
         cache: false
     - name: Build devflow
       if: inputs.binary == 'true'
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        mkdir -p "$RUNNER_TEMP/devflow-bin"
-        (cd "$DEVFLOW_ROOT" && go build -trimpath -o "$RUNNER_TEMP/devflow-bin/devflow" ./cmd/devflow)
-        echo "$RUNNER_TEMP/devflow-bin" >> "$GITHUB_PATH"
-        echo "DEVFLOW_NO_UPDATE=1" >> "$GITHUB_ENV"
+        set -euo pipefail
+        (cd "$ACTION_PATH/../.." && go build -trimpath -o "$DEVFLOW_ROOT/bin/devflow" ./cmd/devflow)
+        printf '%s\n' 'DEVFLOW_NO_UPDATE=1' >> "$GITHUB_ENV"

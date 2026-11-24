@@ -23,11 +23,11 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Read trusted repository configuration
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: $/actions/setup
         with:
           binary: true
       - name: Preview linked task transitions

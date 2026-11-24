@@ -49,6 +49,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -59,14 +60,21 @@ jobs:
     steps:
       - id: app
         if: vars.DEVFLOW_APP_ID != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
           app-id: ${{ vars.DEVFLOW_APP_ID }}
           private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.devflow/releases.yml
+            /release-please-config.json
+            /.release-please-manifest.json
 
       - name: Check release configuration
         run: |
@@ -75,7 +83,7 @@ jobs:
           done
 
       - id: rp
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
         with:
           token: ${{ steps.app.outputs.token || github.token }}
           config-file: release-please-config.json
@@ -132,141 +140,243 @@ jobs:
       matrix:
         unit: ${{ fromJSON(needs.release.outputs.matrix) }}
     permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
+      contents: read
     env:
-      GH_TOKEN: ${{ github.token }}
       TAG: ${{ matrix.unit.tag }}
       VERSION: ${{ matrix.unit.version }}
       UNIT_PATH: ${{ matrix.unit.path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: $/actions/setup
+      - name: Resolve released source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(reviewed-revision.sh release "$TAG")
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ matrix.unit.tag }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare artifact staging
+        run: |
+          git -c advice.detachedHead=false switch --detach "$DEVFLOW_RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$DEVFLOW_RELEASE_SHA"
+          artifacts="$RUNNER_TEMP/devflow-release-artifacts"
+          mkdir -p "$artifacts"/{binaries,charts,libraries}
+          printf 'ARTIFACTS=%s\n' "$artifacts" >> "$GITHUB_ENV"
+        env:
+          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
 
-      # ---- binaries ----
       - if: contains(matrix.unit.builds, 'binary') && hashFiles(format('{0}/go.mod', matrix.unit.path)) != ''
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: ${{ matrix.unit.path }}/go.mod
       - name: Build binaries
         if: contains(matrix.unit.builds, 'binary')
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           workdir: ${{ matrix.unit.path }}
           args: release --clean --skip=publish,validate,announce
         env:
           GORELEASER_CURRENT_TAG: v${{ matrix.unit.version }}
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Attach binaries to the release
+      - name: Stage binaries
         if: contains(matrix.unit.builds, 'binary')
         run: |
           shopt -s nullglob
-          files=("$UNIT_PATH"/dist/*.tar.gz "$UNIT_PATH"/dist/*.zip "$UNIT_PATH"/dist/checksums.txt)
-          [ ${#files[@]} -gt 0 ] || { echo "::error::GoReleaser produced no archives in $UNIT_PATH/dist"; exit 1; }
-          gh release upload "$TAG" "${files[@]}" --clobber
+          archives=("$UNIT_PATH"/dist/*.tar.gz "$UNIT_PATH"/dist/*.zip)
+          [ ${#archives[@]} -gt 0 ] || { echo "::error::GoReleaser produced no archives"; exit 1; }
+          cp -- "${archives[@]}" "$UNIT_PATH/dist/checksums.txt" "$ARTIFACTS/binaries/"
+
+      - if: contains(matrix.unit.builds, 'image')
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - id: meta
+        if: contains(matrix.unit.builds, 'image')
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ matrix.unit.image }}
+          labels: |
+            org.opencontainers.image.version=${{ matrix.unit.version }}
+      - if: contains(matrix.unit.builds, 'image')
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.unit.path }}
+          file: ${{ matrix.unit.path }}/${{ matrix.unit.dockerfile }}
+          push: false
+          outputs: type=docker,dest=${{ env.ARTIFACTS }}/image.tar
+          tags: devflow-release:build
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ matrix.unit.version }}
+
+      - if: contains(matrix.unit.builds, 'helm')
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+      - name: Package chart
+        if: contains(matrix.unit.builds, 'helm')
+        env:
+          CHART: ${{ matrix.unit.chart }}
+        run: |
+          dir="$UNIT_PATH/${CHART:-.}"
+          helm dependency build "$dir" >/dev/null 2>&1 || true
+          helm package "$dir" --version "$VERSION" --app-version "$VERSION" --destination "$ARTIFACTS/charts"
+
+      - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: lts/*
+          registry-url: https://npm.pkg.github.com
+      - name: Pack npm package
+        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
+        working-directory: ${{ matrix.unit.path }}
+        run: |
+          npm run prepublishOnly --if-present
+          npm pack --pack-destination "$ARTIFACTS/libraries"
+      - name: Build Python package
+        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi'
+        working-directory: ${{ matrix.unit.path }}
+        run: pipx run build --outdir "$ARTIFACTS/libraries"
+
+      - name: Record artifact source and hashes
+        env:
+          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
+        run: release-artifacts.sh record "$ARTIFACTS"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devflow-release-${{ strategy.job-index }}
+          path: ${{ env.ARTIFACTS }}
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: ${{ fromJSON(needs.release.outputs.matrix) }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TAG: ${{ matrix.unit.tag }}
+      VERSION: ${{ matrix.unit.version }}
+      UNIT_PATH: ${{ matrix.unit.path }}
+    steps:
+      - uses: $/actions/setup
+      - name: Prepare artifact staging
+        run: printf 'ARTIFACTS=%s/devflow-release-artifacts\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: devflow-release-${{ strategy.job-index }}
+          path: ${{ env.ARTIFACTS }}
+      - name: Verify artifacts against the reviewed release
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(reviewed-revision.sh release "$TAG")
+          DEVFLOW_RELEASE_SHA="$sha" release-artifacts.sh verify "$ARTIFACTS"
+          printf 'sha=%s\nshort_sha=%s\n' "$sha" "${sha:0:7}" >> "$GITHUB_OUTPUT"
+
       - if: contains(matrix.unit.builds, 'binary')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
-            ${{ matrix.unit.path }}/dist/*.tar.gz
-            ${{ matrix.unit.path }}/dist/*.zip
+            ${{ env.ARTIFACTS }}/binaries/*.tar.gz
+            ${{ env.ARTIFACTS }}/binaries/*.zip
+      - name: Attach binaries to the release
+        if: contains(matrix.unit.builds, 'binary')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" "$ARTIFACTS"/binaries/* --clobber
 
-      # ---- container image ----
       - if: contains(matrix.unit.builds, 'image')
-        uses: docker/setup-buildx-action@v3
-      - if: contains(matrix.unit.builds, 'image')
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
       - id: meta
         if: contains(matrix.unit.builds, 'image')
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ matrix.unit.image }}
           tags: |
             type=semver,pattern={{version}},value=${{ matrix.unit.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ matrix.unit.version }}
             type=semver,pattern={{major}},value=${{ matrix.unit.version }},enable=${{ matrix.unit.major != '0' }}
-            type=sha,format=short
-          labels: |
-            org.opencontainers.image.version=${{ matrix.unit.version }}
-      - id: push
+            type=raw,value=sha-${{ steps.source.outputs.short_sha }}
+      - name: Publish verified container image
+        id: push
         if: contains(matrix.unit.builds, 'image')
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.unit.path }}
-          file: ${{ matrix.unit.path }}/${{ matrix.unit.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ matrix.unit.version }}
+        env:
+          IMAGE: ${{ matrix.unit.image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          docker load --input "$ARTIFACTS/image.tar"
+          while IFS= read -r target; do
+            [ -n "$target" ] || continue
+            docker tag devflow-release:build "$target"
+            docker push "$target"
+          done <<<"$TAGS"
+          digest=$(docker image inspect --format '{{json .RepoDigests}}' "$IMAGE:$VERSION" \
+            | jq -er --arg image "$IMAGE" '.[] | select(startswith($image + "@")) | split("@")[1]')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
       - if: contains(matrix.unit.builds, 'image')
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-name: ${{ matrix.unit.image }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      # ---- helm chart ----
       - if: contains(matrix.unit.builds, 'helm')
-        uses: azure/setup-helm@v4
-      - name: Package and push chart
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+      - if: contains(matrix.unit.builds, 'helm')
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: ${{ env.ARTIFACTS }}/charts/*.tgz
+      - name: Publish verified chart
         if: contains(matrix.unit.builds, 'helm')
         env:
-          CHART: ${{ matrix.unit.chart }}
+          GH_TOKEN: ${{ github.token }}
           REGISTRY: ${{ matrix.unit.registry }}
           ACTOR: ${{ github.actor }}
         run: |
-          set -euo pipefail
-          dir="$UNIT_PATH/${CHART:-.}"
-          mkdir -p dist-chart
-          helm dependency build "$dir" >/dev/null 2>&1 || true
-          helm package "$dir" --version "$VERSION" --app-version "$VERSION" --destination dist-chart
-          echo "$GH_TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
-          helm push dist-chart/*.tgz "oci://$REGISTRY/charts"
-          gh release upload "$TAG" dist-chart/*.tgz --clobber
-      - if: contains(matrix.unit.builds, 'helm')
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: dist-chart/*.tgz
+          printf '%s\n' "$GH_TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
+          for chart in "$ARTIFACTS"/charts/*.tgz; do helm push "$chart" "oci://$REGISTRY/charts"; done
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" "$ARTIFACTS"/charts/*.tgz --clobber
 
-      # ---- libraries ----
       - name: Go module tag
         if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'go' && matrix.unit.path != '.'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: |
-          # Go resolves submodule versions from <path>/vX.Y.Z tags.
-          git tag "$UNIT_PATH/v$VERSION" "$TAG"
-          git push origin "$UNIT_PATH/v$VERSION"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$UNIT_PATH/v$VERSION" -f sha="$DEVFLOW_RELEASE_SHA"
       - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: lts/*
           registry-url: https://npm.pkg.github.com
-      - name: Publish npm package
+      - name: Publish verified npm package
         if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
-        working-directory: ${{ matrix.unit.path }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || github.token }}
-        run: npm publish --provenance --access restricted
-      - name: Build Python package
-        if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi'
-        working-directory: ${{ matrix.unit.path }}
-        run: pipx run build
+        run: |
+          npm publish "$ARTIFACTS"/libraries/*.tgz --provenance --access restricted --ignore-scripts
       - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi' && vars.PYPI_PUBLISH == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
-          packages-dir: ${{ matrix.unit.path }}/dist
+          packages-dir: devflow-release-artifacts/libraries
 
-      # ---- release notes: artifacts ----
       - name: List artifacts on the release
         env:
+          GH_TOKEN: ${{ github.token }}
           BUILDS: ${{ matrix.unit.builds }}
           IMAGE: ${{ matrix.unit.image }}
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -275,30 +385,30 @@ jobs:
         run: |
           set -euo pipefail
           {
-            gh release view "$TAG" --json body -q .body
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body
             echo
             echo "### Artifacts"
             [[ ",$BUILDS," == *,binary,* ]] && echo "- Binaries and \`checksums.txt\` attached below, with build provenance attestations"
-            [[ ",$BUILDS," == *,image,* ]] && echo "- Image: \`$IMAGE:$VERSION\` (\`${DIGEST}\`)"
+            [[ ",$BUILDS," == *,image,* ]] && echo "- Image: \`$IMAGE:$VERSION\` (\`$DIGEST\`)"
             [[ ",$BUILDS," == *,helm,* ]] && echo "- Chart: \`oci://$REGISTRY/charts\` version \`$VERSION\`"
             [[ ",$BUILDS," == *,library,* ]] && echo "- Library: ${PUBLISH:-tag} \`$VERSION\`"
             echo
             echo "Production deploys must reference this release (devflow release guard)."
           } > notes.md
-          gh release edit "$TAG" --notes-file notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
   jira:
-    needs: [release, build]
+    needs: [release, publish]
     if: always() && needs.release.outputs.created == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: $/actions/setup
         with:
           binary: true
       - id: task
