@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.52.2](https://github.com/nscaledev/devflow/compare/v0.52.1...v0.52.2) - 2026-11-24
+
+### Fixes
+
+- isolate reviewed workflow checkouts (#123) ([908ab0f](https://github.com/nscaledev/devflow/commit/908ab0f47783e9e0db58a32a6f02db7e41b9bea9))
+
 ## [0.52.1](https://github.com/nscaledev/devflow/compare/v0.52.0...v0.52.1) - 2026-11-24
 
 ### Fixes
