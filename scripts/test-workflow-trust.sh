@@ -33,7 +33,7 @@ case "$2" in
   "repos/fixture/consumer/commits/$HEAD_SHA") printf '%040d\n' 1 ;;
   repos/fixture/consumer/git/trees/*)
     case "${2##*/}" in
-      "$(printf '%040d' 1)") entries=$(printf '[{"path":".agentflow","sha":"%040d","type":"tree","mode":"040000"}]' 2) ;;
+      "$(printf '%040d' 1)") entries=$(printf '[{"path":"%s","sha":"%040d","type":"tree","mode":"040000"}]' "${FIXTURE_CONFIG_DIR:-.agentflow}" 2) ;;
       "$(printf '%040d' 2)") entries=$(printf '[{"path":"config.yml","sha":"%040d","type":"blob","mode":"100644"},{"path":"providers","sha":"%040d","type":"tree","mode":"040000"}]' 4 3) ;;
       "$(printf '%040d' 3)") entries=$(printf '[{"path":"fixture.yaml","sha":"%040d","type":"blob","mode":"100644"},{"path":"link.yml","type":"blob","mode":"120000"},{"path":"readme.txt","type":"blob","mode":"100644"}]' 5) ;;
       *) exit 1 ;;
@@ -70,6 +70,10 @@ grep -Fx '{}' "$config/.agentflow/config.yml" > /dev/null
 grep -Fx '{}' "$config/.agentflow/providers/fixture.yaml" > /dev/null
 [[ ! -e "$config/.agentflow/providers/link.yml" && ! -e "$config/.agentflow/providers/readme.txt" ]]
 [[ $(git -C "$config" remote get-url origin) == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" ]]
+legacy=$(FIXTURE_CONFIG_DIR=.devflow reviewed-config.sh)
+grep -Fx '{}' "$legacy/.devflow/config.yml" > /dev/null
+grep -Fx '{}' "$legacy/.devflow/providers/fixture.yaml" > /dev/null
+[[ ! -e "$legacy/.agentflow" ]]
 
 
 (
