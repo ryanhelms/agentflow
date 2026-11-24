@@ -71,6 +71,32 @@ grep -Fx '{}' "$config/.devflow/providers/fixture.yaml" > /dev/null
 [[ ! -e "$config/.devflow/providers/link.yml" && ! -e "$config/.devflow/providers/readme.txt" ]]
 [[ $(git -C "$config" remote get-url origin) == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" ]]
 
+
+(
+  export GITHUB_SERVER_URL="file://$fixture"
+  remote="$fixture/$GITHUB_REPOSITORY.git"
+  git init --quiet --initial-branch=main "$remote"
+  cd "$remote"
+  git config user.name 'Workflow Fixture'
+  git config user.email 'workflow@example.invalid'
+  git config core.hooksPath /dev/null
+  mkdir -p .devflow/tasks
+  printf '%s\n' 'reviewed task fixture' > .devflow/tasks/task.md
+  git add .devflow/tasks/task.md
+  git commit --quiet -m 'fixture base'
+  worktree_base=$(git rev-parse HEAD)
+  printf '%s\n' 'later task fixture' > .devflow/tasks/task.md
+  git commit --quiet -am 'fixture branch advances'
+  worktree_head=$(git rev-parse HEAD)
+  printf '{"pull_request":{"base":{"ref":"main","sha":"%s","repo":{"id":123}}}}\n' "$worktree_base" > "$GITHUB_EVENT_PATH"
+  source=$(BASE_SHA="$worktree_base" HEAD_SHA="$worktree_head" reviewed-worktree.sh)
+  [[ $(git -C "$source" rev-parse HEAD) == "$worktree_base" ]]
+  grep -Fx 'reviewed task fixture' "$source/.devflow/tasks/task.md" > /dev/null
+  if git -C "$source" config --local --get credential.helper; then
+    echo 'the fetch credential helper was persisted' >&2; exit 1
+  fi
+)
+
 artifacts="$fixture/artifacts"
 mkdir -p "$artifacts/binaries"
 printf '%s\n' 'fixture archive data' > "$artifacts/binaries/example.tar.gz"

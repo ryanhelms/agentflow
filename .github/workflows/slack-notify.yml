@@ -42,18 +42,13 @@ jobs:
       - uses: $/actions/setup
         with:
           binary: true
-      - name: Resolve the reviewed caller revision
+      - name: Read reviewed notification configuration
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(reviewed-revision.sh default)
-          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
-      - name: Read trusted repository configuration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ steps.source.outputs.sha }}
-          persist-credentials: false
+          directory=$(reviewed-config.sh)
+          printf 'directory=%s\n' "$directory" >> "$GITHUB_OUTPUT"
       - name: Identify this notification slot
         id: slot
         run: |
@@ -99,6 +94,7 @@ jobs:
           MESSAGE: ${{ inputs.message }}
           APPEND_RUN_LINK: ${{ inputs.append-run-link }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [[ "$APPEND_RUN_LINK" == true ]]; then
             MESSAGE+=" <$RUN_URL|run>"
