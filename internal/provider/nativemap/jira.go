@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 var jiraIssueKey = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$`)

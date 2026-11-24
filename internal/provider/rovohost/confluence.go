@@ -8,9 +8,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 func (s *session) confluenceCall(call native.Call) (native.Call, error) {

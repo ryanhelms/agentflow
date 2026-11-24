@@ -34,9 +34,9 @@ func pluginServer(t *testing.T, path string) pluginCommand {
 	if err := json.Unmarshal([]byte(readPluginFile(t, path)), &config); err != nil {
 		t.Fatal(err)
 	}
-	entry := config.Servers["devflow"]
+	entry := config.Servers["agentflow"]
 	if entry.Command != "node" {
-		t.Fatalf("%s: expected a Devflow Node launcher", path)
+		t.Fatalf("%s: expected a Agentflow Node launcher", path)
 	}
 	return entry
 }
@@ -45,8 +45,8 @@ func TestCodexPluginCarriesCurrentVerifiedLaunchers(t *testing.T) {
 	entry := pluginServer(t, "adapters/codex/plugin-mcp.json")
 	want := []string{
 		"-e", readPluginFile(t, "adapters/plugin-mcp.cjs"), "--", "--embedded-launchers", "codex",
-		readPluginFile(t, "templates/repo/.devflow/bin/devflow"),
-		readPluginFile(t, "templates/repo/.devflow/bin/devflow.ps1"),
+		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow"),
+		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow.ps1"),
 	}
 	if !reflect.DeepEqual(entry.Args, want) {
 		t.Fatal("stale Codex plugin descriptor: run node scripts/build-codex-plugin.mjs")
@@ -70,7 +70,7 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	cache := t.TempDir()
-	bin := filepath.Join(cache, "devflow", "current", "devflow")
+	bin := filepath.Join(cache, "agentflow", "current", "agentflow")
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
 		t.Fatal(err)
 	}

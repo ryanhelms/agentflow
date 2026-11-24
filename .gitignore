@@ -3,9 +3,9 @@
 /website/dist/
 /website/node_modules/
 /.env
-/devflow
-/devflow.exe
-/bin/devflow
+/agentflow
+/agentflow.exe
+/bin/agentflow
 
 # Test and coverage
 coverage.out

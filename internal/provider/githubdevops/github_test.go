@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubdevops"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubdevops"
 )
 
 var repo = provider.RepositoryRef{Host: "github.example.test", Path: "octo/widgets"}

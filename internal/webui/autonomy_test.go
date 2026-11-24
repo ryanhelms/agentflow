@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
 )
 
 func TestPersonalAutonomySave(t *testing.T) {
 	s := testServer(t)
-	path := filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml")
+	path := filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml")
 	initial := []byte("# keep this comment\ncustom_field: private-user-data\n")
 	if err := os.WriteFile(path, initial, 0600); err != nil {
 		t.Fatal(err)

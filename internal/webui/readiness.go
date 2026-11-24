@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nscaledev/devflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/configconsole"
 )
 
 func (s *server) readiness(w http.ResponseWriter, r *http.Request) {

@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
 )
 
 const issuesInstance = "github-issues"
@@ -126,7 +126,7 @@ func (a *App) issueRef(ctx context.Context, input string) (provider.Ref, error) 
 	if input == "" {
 		ref, err := a.branchTask(ctx)
 		if err == nil && ref.ID == "" {
-			err = errors.New("no issue bound to this branch; pass owner/repo#number or run devflow start")
+			err = errors.New("no issue bound to this branch; pass owner/repo#number or run agentflow start")
 		}
 		return ref, err
 	}
@@ -151,7 +151,7 @@ func (a *App) issueRef(ctx context.Context, input string) (provider.Ref, error) 
 // Branch configuration is local, shared by linked worktrees, and follows a
 // git branch rename. Read only repository-local configuration for a binding.
 func (a *App) boundTask(ctx context.Context, branch string) (provider.Ref, error) {
-	raw, err := a.Repo.Git(ctx, "config", "--local", "--get-all", "branch."+branch+".devflowTaskRef")
+	raw, err := a.Repo.Git(ctx, "config", "--local", "--get-all", "branch."+branch+".agentflowTaskRef")
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() == 1 {

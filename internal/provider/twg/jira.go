@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 // Jira operates on work items on one Atlassian site. References use the Jira project

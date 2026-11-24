@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nscaledev/devflow/internal/managedgh"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/managedgh"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 // ApplyProviderSetup gates one local action against a freshly inspected plan.
@@ -50,7 +50,7 @@ func (a *App) ApplySetup(ctx context.Context, req SetupAction, token string) (an
 			Client    string                  `json:"client,omitempty"`
 			InstallGH *managedgh.Installation `json:"install_gh"`
 		}{plan.Root, req.Client, plan.InstallGH}
-		instruction = "Review the gh artifact and run devflow setup apply --install-gh"
+		instruction = "Review the gh artifact and run agentflow setup apply --install-gh"
 		apply = func() error { return plan.InstallGH.Apply(ctx) }
 	case req.Companion != "":
 		if len(plan.Companions) != 1 {

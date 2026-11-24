@@ -1,12 +1,12 @@
-name: devflow version
+name: agentflow version
 description: >
   The semantic version a build of this commit gets for one deployable unit from
-  .devflow/releases.yml. On the default branch it is the next release (X.Y.Z); on other
+  .agentflow/releases.yml. On the default branch it is the next release (X.Y.Z); on other
   branches a prerelease that follows the repo's branching strategy
   (X.Y.Z-alpha|rc|hotfix|pr.N+sha). Use it to tag staging images and binaries.
 inputs:
   unit:
-    description: Unit name from .devflow/releases.yml (optional when the repo has one unit)
+    description: Unit name from .agentflow/releases.yml (optional when the repo has one unit)
     required: false
     default: ""
 outputs:
@@ -36,8 +36,8 @@ runs:
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         set -euo pipefail
-        cfg=.devflow/releases.yml
-        [ -f "$cfg" ] || { echo "::error::$cfg not found; run devflow release init"; exit 1; }
+        cfg=.agentflow/releases.yml
+        [ -f "$cfg" ] || { echo "::error::$cfg not found; run agentflow release init"; exit 1; }
         if [ -z "$UNIT" ]; then
           [ "$(yq '.units | length' "$cfg")" = 1 ] || { echo "::error::set unit: this repo has several units"; exit 1; }
           UNIT=$(yq -r '.units[0].name' "$cfg")

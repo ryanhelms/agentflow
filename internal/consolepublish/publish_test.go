@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/gh"
 )
 
 // A synthetic GitHub API. No listener, credentials, repository or external
@@ -32,7 +32,7 @@ type forge struct {
 
 func newForge(t *testing.T) (*forge, *gh.Client) {
 	t.Helper()
-	f := &forge{t: t, change: proposal{Path: ".devflow/config.yml", Original: "old", Content: "new", Title: "chore: update settings"}, defaultSHA: "base", defaultOID: blobID("old")}
+	f := &forge{t: t, change: proposal{Path: ".agentflow/config.yml", Original: "old", Content: "new", Title: "chore: update settings"}, defaultSHA: "base", defaultOID: blobID("old")}
 	old := http.DefaultTransport
 	http.DefaultTransport = f
 	t.Cleanup(func() { http.DefaultTransport = old })
@@ -234,7 +234,7 @@ func TestPublishRejectsStaleOrForeignChanges(t *testing.T) {
 				deps["flow-map.yml"] = blobID("local")
 				f.tree = []treeEntry{{Path: "flow-map.yml", Mode: "100644", SHA: blobID("remote")}}
 			case "extra definition":
-				f.tree = []treeEntry{{Path: ".devflow/providers/extra.yml", Mode: "100644", SHA: blobID("extra")}}
+				f.tree = []treeEntry{{Path: ".agentflow/providers/extra.yml", Mode: "100644", SHA: blobID("extra")}}
 			case "branch collision":
 				f.head = "occupied"
 				f.extraFile = true
@@ -295,7 +295,7 @@ func TestPublicationRechecksDefaultBeforeMerge(t *testing.T) {
 
 func TestPublishToApprovedRepositoryLeavesWorktreeAndIndexUntouched(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("GH_TOKEN", "fixture-only")
 	git := func(args ...string) string {
 		t.Helper()
@@ -310,7 +310,7 @@ func TestPublishToApprovedRepositoryLeavesWorktreeAndIndexUntouched(t *testing.T
 	git("init", "--quiet", "--initial-branch=main")
 	git("remote", "add", "origin", "https://github.com/org/repo.git")
 	f, _ := newForge(t)
-	f.change.Original = "devflow: 1\ncommit: {require_key: false}\n"
+	f.change.Original = "agentflow: 1\ncommit: {require_key: false}\n"
 	f.change.Content = f.change.Original + "# team setting\n"
 	f.defaultOID = blobID(f.change.Original)
 	full := filepath.Join(root, f.change.Path)

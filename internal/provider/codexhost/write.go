@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 type writeSession struct {
@@ -27,7 +27,7 @@ func NewWriter(dir string) *native.SessionWriter {
 }
 
 func openWriteSession(ctx context.Context, dir string, call native.Call) (native.WriteSession, error) {
-	if os.Getenv(activeEnvKey) != "" || strings.EqualFold(call.Server, "devflow") {
+	if os.Getenv(activeEnvKey) != "" || strings.EqualFold(call.Server, "agentflow") {
 		return nil, native.ErrDenied
 	}
 	ctx, cancel := context.WithCancel(ctx)

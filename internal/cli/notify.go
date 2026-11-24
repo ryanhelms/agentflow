@@ -7,7 +7,7 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/app"
 )
 
 func runNotify(ctx context.Context, args []string) error {
@@ -27,7 +27,7 @@ func runNotify(ctx context.Context, args []string) error {
 		return err
 	}
 	if input.Signal == "" || flags.NArg() != 0 {
-		return errors.New("usage: devflow notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]")
+		return errors.New("usage: agentflow notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]")
 	}
 	if *links != "" {
 		if err := json.Unmarshal([]byte(*links), &input.Links); err != nil {

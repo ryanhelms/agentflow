@@ -40,10 +40,10 @@ printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$DRY_RUN" "$TRANSITION_COMMENT"
 
 	const (
 		prURL    = "https://github.com/acme/widget/pull/57"
-		prOpened = "OPS-3\tpr.opened\t1\tdevflow: pr.opened — " + prURL + "\n" +
-			"PLAT-12\tpr.opened\t1\tdevflow: pr.opened — " + prURL + "\n"
-		prMerged = "OPS-3\tpr.merged\t1\tdevflow: pr.merged — " + prURL + "\n" +
-			"PLAT-12\tpr.merged\t1\tdevflow: pr.merged — " + prURL + "\n"
+		prOpened = "OPS-3\tpr.opened\t1\tagentflow: pr.opened — " + prURL + "\n" +
+			"PLAT-12\tpr.opened\t1\tagentflow: pr.opened — " + prURL + "\n"
+		prMerged = "OPS-3\tpr.merged\t1\tagentflow: pr.merged — " + prURL + "\n" +
+			"PLAT-12\tpr.merged\t1\tagentflow: pr.merged — " + prURL + "\n"
 	)
 	for _, tt := range []struct {
 		fixture, event, want string
@@ -59,10 +59,10 @@ printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$DRY_RUN" "$TRANSITION_COMMENT"
 		{"pr-skipped-trailer", "pull_request", ""},
 		{"pr-no-task-ref", "pull_request", prOpened},
 		{"pr-fork", "pull_request_target", prOpened},
-		{"branch-created", "create", "PLAT-12\tbranch.created\t1\tdevflow: branch.created — https://github.com/acme/widget/tree/work/PLAT-12\n"},
-		{"push", "push", "PLAT-12\t#review\t1\tdevflow: #review — https://github.com/acme/widget/commit/abc\n" +
+		{"branch-created", "create", "PLAT-12\tbranch.created\t1\tagentflow: branch.created — https://github.com/acme/widget/tree/work/PLAT-12\n"},
+		{"push", "push", "PLAT-12\t#review\t1\tagentflow: #review — https://github.com/acme/widget/commit/abc\n" +
 			"OPS-3\t#block\t1\tBlocked: Waiting on access\n" +
-			"OPS-3\t#start\t1\tdevflow: #start — https://github.com/acme/widget/commit/def\n"},
+			"OPS-3\t#start\t1\tagentflow: #start — https://github.com/acme/widget/commit/def\n"},
 	} {
 		t.Run(tt.fixture, func(t *testing.T) {
 			path, err := filepath.Abs(filepath.Join("testdata", tt.fixture+".json"))

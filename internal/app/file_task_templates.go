@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 // FileSystem and Repository round-trip the same task fields in Markdown.

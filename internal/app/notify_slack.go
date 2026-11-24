@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/notifications"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/notifications"
 )
 
 type nativeSlackPlan struct {
@@ -88,7 +88,7 @@ func verifySlackScope(ctx context.Context, binding native.WriteBinding, scope co
 	if err != nil && !errors.Is(err, native.ErrUnavailable) {
 		return identity, slackPreparationError(err)
 	}
-	if binding.Owner == "devflow" && identity.ActorID == "" {
+	if binding.Owner == "agentflow" && identity.ActorID == "" {
 		return identity, fmt.Errorf("could not identify the enrolled slack user: %w", native.ErrDenied)
 	}
 	if scope.ActorID != "" && identity.ActorID != scope.ActorID {

@@ -3,7 +3,7 @@ package version
 
 // Set at build time:
 //
-//	-X github.com/nscaledev/devflow/internal/version.Version={{.Version}}
+//	-X github.com/nscaledev/agentflow/internal/version.Version={{.Version}}
 var (
 	Version = "dev"
 	Commit  = "none"
@@ -12,7 +12,7 @@ var (
 
 // String returns a one-line description of the build.
 func String() string {
-	return "devflow " + Version + " (" + Short() + ", " + Date + ")"
+	return "agentflow " + Version + " (" + Short() + ", " + Date + ")"
 }
 
 // Short returns the commit abbreviated to 7 characters.
@@ -24,7 +24,7 @@ func Short() string {
 }
 
 // Release reports whether this is a release build with a full commit SHA, which
-// `devflow init` pins caller workflows to.
+// `agentflow init` pins caller workflows to.
 func Release() bool { return ReleaseCommit(Commit, Version) }
 
 // ReleaseCommit reports whether sha is a full commit SHA and ver a released version.

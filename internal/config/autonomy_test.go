@@ -39,7 +39,7 @@ func TestScopedAutonomy(t *testing.T) {
 
 func TestApprovalWindowAndDefaultSource(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", dir)
+	t.Setenv("AGENTFLOW_HOME", dir)
 	u, err := LoadUser()
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestApprovalWindowAndDefaultSource(t *testing.T) {
 
 func TestInvalidScopedAutonomy(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", dir)
+	t.Setenv("AGENTFLOW_HOME", dir)
 	for _, tc := range []struct{ user, repo, want string }{
 		{"autonomy: {actions: {'*': auto}}", "policy: {max_autonomy: {actions: {'*': auto}}}", "unknown action"},
 		{"autonomy: {actions: {commit: yes}}", "policy: {max_autonomy: {actions: {commit: 'yes'}}}", "suggest, confirm or auto"},

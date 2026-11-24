@@ -20,7 +20,7 @@ func layers(t *testing.T, release string) (root, home string) {
 		releaseDefinitions = fstest.MapFS{"nscale.yml": {Data: []byte(release)}}
 	}
 	home = t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	return t.TempDir(), home
 }
 
@@ -35,7 +35,7 @@ func put(t *testing.T, path, contents string) {
 }
 
 func project(t *testing.T, root, name, contents string) {
-	put(t, filepath.Join(root, ".devflow", "providers", name), contents)
+	put(t, filepath.Join(root, ".agentflow", "providers", name), contents)
 }
 
 func user(t *testing.T, home, name, contents string) {
@@ -43,7 +43,7 @@ func user(t *testing.T, home, name, contents string) {
 }
 
 func config(t *testing.T, root, contents string) {
-	put(t, filepath.Join(root, ".devflow", "config.yml"), contents)
+	put(t, filepath.Join(root, ".agentflow", "config.yml"), contents)
 }
 
 const jiraRelease = `version: 1
@@ -57,7 +57,7 @@ providers:
 func TestDefinitionLayerOrder(t *testing.T) {
 	root, home := layers(t, jiraRelease)
 	project(t, root, "jira.yml", "version: 1\nproviders:\n  jira:\n    task_management:\n      settings: {projects: [PLAT, INFRA]}\n")
-	config(t, root, "devflow: 1\ntask_management:\n  provider: jira\n  settings: {projects: [OPS]}\n")
+	config(t, root, "agentflow: 1\ntask_management:\n  provider: jira\n  settings: {projects: [OPS]}\n")
 	user(t, home, "jira.yaml", "version: 1\nproviders:\n  jira:\n    task_management:\n      settings: {site: dev.atlassian.net}\n")
 	c, _, err := LoadRepo(root)
 	if err != nil {
@@ -69,8 +69,8 @@ func TestDefinitionLayerOrder(t *testing.T) {
 		t.Fatalf("settings = %+v", got)
 	}
 	want := map[string]Source{
-		"site":     {LayerUser, "~/.devflow/providers/jira.yaml"},
-		"projects": {LayerProject, ".devflow/config.yml"},
+		"site":     {LayerUser, "~/.agentflow/providers/jira.yaml"},
+		"projects": {LayerProject, ".agentflow/config.yml"},
 	}
 	if !reflect.DeepEqual(sel.Sources, want) {
 		t.Errorf("sources = %v, want %v", sel.Sources, want)
@@ -80,8 +80,8 @@ func TestDefinitionLayerOrder(t *testing.T) {
 	}
 	files := []Source{
 		{LayerRelease, "release/nscale.yml"},
-		{LayerProject, ".devflow/providers/jira.yml"},
-		{LayerUser, "~/.devflow/providers/jira.yaml"},
+		{LayerProject, ".agentflow/providers/jira.yml"},
+		{LayerUser, "~/.agentflow/providers/jira.yaml"},
 	}
 	if !reflect.DeepEqual(c.Providers.Definitions, files) {
 		t.Errorf("definitions = %v", c.Providers.Definitions)
@@ -94,7 +94,7 @@ func TestKnowledgeFormatLayers(t *testing.T) {
 			definition := "version: 1\nproviders:\n  " + name + ":\n    knowledge_base:\n      settings: {format: "
 			root, home := layers(t, definition+"legacy}\n")
 			project(t, root, "kb.yml", definition+"okf}\n")
-			config(t, root, "devflow: 1\nknowledge_base: {provider: "+name+", settings: {format: legacy}}\n")
+			config(t, root, "agentflow: 1\nknowledge_base: {provider: "+name+", settings: {format: legacy}}\n")
 			user(t, home, "kb.yml", definition+"okf}\n")
 			c, _, err := LoadRepo(root)
 			if err != nil {
@@ -123,7 +123,7 @@ func TestKnowledgeFormatLayers(t *testing.T) {
 
 func TestDefinitionsOnlyApplyToSelectedProvider(t *testing.T) {
 	root, _ := layers(t, jiraRelease)
-	config(t, root, "devflow: 1\ntask_management: {provider: github-issues}\n")
+	config(t, root, "agentflow: 1\ntask_management: {provider: github-issues}\n")
 	c, _, err := LoadRepo(root)
 	if err != nil {
 		t.Fatal(err)
@@ -155,17 +155,17 @@ func TestDefinitionConstraints(t *testing.T) {
 	}{
 		{name: "lock allows same value", config: "provider: jira\n  settings: {site: nscale.atlassian.net}"},
 		{name: "lock", user: "jira:\n    task_management:\n      settings: {site: other.atlassian.net}",
-			want: "~/.devflow/providers/u.yml: task_management.settings.site is locked by release:release/nscale.yml"},
+			want: "~/.agentflow/providers/u.yml: task_management.settings.site is locked by release:release/nscale.yml"},
 		{name: "allow", config: "provider: jira\n  settings: {projects: [PLAT, OPS]}",
-			want: ".devflow/config.yml: task_management.settings.projects value OPS is not allowed"},
+			want: ".agentflow/config.yml: task_management.settings.projects value OPS is not allowed"},
 		{name: "allow passes", config: "provider: jira\n  settings: {projects: [INFRA]}"},
 		{name: "append", project: "github-issues:\n    task_management:\n      settings: {labels: [bug]}", config: "provider: github-issues",
-			want: ".devflow/providers/p.yml: task_management.settings.labels must keep triage"},
+			want: ".agentflow/providers/p.yml: task_management.settings.labels must keep triage"},
 		{name: "append passes", project: "github-issues:\n    task_management:\n      settings: {labels: [triage, bug]}", config: "provider: github-issues"},
 		{name: "pattern", config: "provider: github-issues\n  settings: {repository: other/repo}",
 			want: "repository value other/repo must match ^nscaledev/"},
 		{name: "pattern rejects explicit reset", config: "provider: github-issues\n  settings: {repository: null}", want: "repository value <nil> must match"},
-		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: nscaledev/devflow}"},
+		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: nscaledev/agentflow}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, home := layers(t, constrained)
@@ -179,7 +179,7 @@ func TestDefinitionConstraints(t *testing.T) {
 			if cfg == "" {
 				cfg = "provider: jira"
 			}
-			config(t, root, "devflow: 1\ntask_management:\n  "+cfg+"\n")
+			config(t, root, "agentflow: 1\ntask_management:\n  "+cfg+"\n")
 			_, _, err := LoadRepo(root)
 			if tc.want == "" {
 				if err != nil {
@@ -211,7 +211,7 @@ func TestInvalidDefinitions(t *testing.T) {
 			project(t, root, "bad.yml", tc.file)
 			_, _, err := LoadRepo(root)
 			var defErr *DefinitionError
-			if !errors.As(err, &defErr) || defErr.Source.File != ".devflow/providers/bad.yml" || !strings.Contains(err.Error(), tc.want) {
+			if !errors.As(err, &defErr) || defErr.Source.File != ".agentflow/providers/bad.yml" || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("err = %v, want %q", err, tc.want)
 			}
 		})
@@ -240,13 +240,13 @@ func TestDuplicateDefinitionInLayer(t *testing.T) {
 	def := "version: 1\nproviders:\n  jira:\n    task_management: {}\n"
 	project(t, root, "a.yml", def)
 	project(t, root, "b.yml", def)
-	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "already defined in .devflow/providers/a.yml") {
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "already defined in .agentflow/providers/a.yml") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestShippedReleaseDefinitionsLoad(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	c, _, err := LoadRepo(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -353,7 +353,7 @@ func TestWinningDefinitionOwnsSemanticError(t *testing.T) {
 	user(t, home, "override.yml", "version: 1\nproviders: {asana: {task_management: {settings: {project: bad/project}}}}")
 	_, _, err := LoadRepo(root)
 	var def *DefinitionError
-	if !errors.As(err, &def) || def.Source != (Source{LayerUser, "~/.devflow/providers/override.yml"}) || !strings.Contains(err.Error(), "task_management.settings.project") {
+	if !errors.As(err, &def) || def.Source != (Source{LayerUser, "~/.agentflow/providers/override.yml"}) || !strings.Contains(err.Error(), "task_management.settings.project") {
 		t.Fatal(err)
 	}
 }

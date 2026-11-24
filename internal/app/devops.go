@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
-	"github.com/nscaledev/devflow/internal/provider/githubdevops"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/devopsfixture"
+	"github.com/nscaledev/agentflow/internal/provider/githubdevops"
 )
 
 func devOpsRepository(selection config.Selection, defaultRepo string) provider.RepositoryRef {

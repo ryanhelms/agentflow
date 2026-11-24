@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/auth"
+	"github.com/nscaledev/agentflow/internal/auth"
 )
 
 const adf = `{"type":"doc","version":1,"content":[

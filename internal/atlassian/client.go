@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/auth"
+	"github.com/nscaledev/agentflow/internal/auth"
 )
 
 // Client talks to one Atlassian site with the developer's credential.
@@ -118,7 +118,7 @@ type Status struct {
 	} `json:"statusCategory"`
 }
 
-// Issue is the subset of a Jira issue devflow uses.
+// Issue is the subset of a Jira issue agentflow uses.
 type Issue struct {
 	Key    string `json:"key"`
 	Fields struct {

@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestIssueTemplateEnvelope(t *testing.T) {
 	ref := provider.TaskTemplateRef{Name: "A: -->\n雪", Revision: "01"}
 	// Exact wire format, including punctuation and multibyte UTF-8.
-	header := "<!-- devflow:github-issues:template:v1:413a202d2d3e0ae99baa:3031 -->"
+	header := "<!-- agentflow:github-issues:template:v1:413a202d2d3e0ae99baa:3031 -->"
 	if got := templateMarker(ref, ""); got != header {
 		t.Fatalf("header = %q", got)
 	}

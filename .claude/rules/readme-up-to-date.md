@@ -9,7 +9,7 @@ behaviour, security guarantees, status (current version, approval), and links to
 
 The status area at the top of README.md (Status, Current release, Owner, Architecture,
 Support) must always be true. The release workflow writes the current version between the
-`<!-- devflow:version -->` markers; never edit that by hand. Update the Status row yourself
+`<!-- agentflow:version -->` markers; never edit that by hand. Update the Status row yourself
 whenever approval, the rollout phase or adoption changes.
 
 Before you finish a task:

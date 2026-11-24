@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 type confluenceFixture struct {
@@ -58,7 +58,7 @@ func (f *confluenceFixture) handler(t *testing.T) http.HandlerFunc {
 				t.Fatal(err)
 			}
 			if update.ID != "42" || update.Title != "Quota" || update.Status != "current" || update.Version.Number != f.version.Number+1 ||
-				!strings.HasPrefix(update.Version.Message, "devflow docs publish ") ||
+				!strings.HasPrefix(update.Version.Message, "agentflow docs publish ") ||
 				update.Body.Representation != "storage" || update.Body.Value != "<p># Quota<br />&lt;ac:structured-macro/&gt; &amp; limits</p>" {
 				t.Fatalf("unexpected update: %+v", update)
 			}

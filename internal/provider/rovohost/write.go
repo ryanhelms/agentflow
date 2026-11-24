@@ -1,4 +1,4 @@
-// Package rovohost connects Devflow to a separately enrolled Atlassian Rovo
+// Package rovohost connects Agentflow to a separately enrolled Atlassian Rovo
 // MCP grant. It does not inspect the calling application's credential store.
 package rovohost
 
@@ -16,9 +16,9 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/rovooauth"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/rovooauth"
 )
 
 const (
@@ -47,7 +47,7 @@ func NewWriter() *native.SessionWriter {
 }
 
 func newWriter(token tokenSource, transport http.RoundTripper) *native.SessionWriter {
-	return native.NewSessionWriter("devflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
+	return native.NewSessionWriter("agentflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
 		if call.Server != "atlassian" {
 			return nil, native.ErrUnavailable
 		}
@@ -86,11 +86,11 @@ func connect(ctx context.Context, call native.Call, token tokenSource, transport
 		return nil, enrollmentError(call.Provider, err)
 	}
 	if accessToken == "" || generation == "" {
-		return nil, fmt.Errorf("%w: enroll Devflow through Atlassian OAuth", native.ErrSignIn)
+		return nil, fmt.Errorf("%w: enroll Agentflow through Atlassian OAuth", native.ErrSignIn)
 	}
 	wire := &bearer{transport: transport}
 	wire.token.Store(&accessToken)
-	client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
+	client := mcp.NewClient(&mcp.Implementation{Name: "agentflow", Version: "1"}, &mcp.ClientOptions{
 		Capabilities: &mcp.ClientCapabilities{},
 		Logger:       slog.New(slog.DiscardHandler),
 	})
@@ -403,7 +403,7 @@ func (e statusError) Error() string { return fmt.Sprintf("atlassian MCP returned
 
 func enrollmentError(provider string, err error) error {
 	if errors.Is(err, rovooauth.ErrLoginRequired) || errors.Is(err, rovooauth.ErrNotEnrolled) {
-		return fmt.Errorf("%w: run devflow setup login --provider %s --client devflow", native.ErrSignIn, provider)
+		return fmt.Errorf("%w: run agentflow setup login --provider %s --client agentflow", native.ErrSignIn, provider)
 	}
 	return err
 }
@@ -412,7 +412,7 @@ func transportError(provider string, err error) error {
 	var status statusError
 	switch {
 	case errors.As(err, &status) && status == http.StatusUnauthorized:
-		return fmt.Errorf("%w: run devflow setup login --provider %s --client devflow", native.ErrSignIn, provider)
+		return fmt.Errorf("%w: run agentflow setup login --provider %s --client agentflow", native.ErrSignIn, provider)
 	case errors.As(err, &status) && status == http.StatusForbidden, errors.Is(err, native.ErrDenied):
 		return native.ErrDenied
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 const pageSize = 100

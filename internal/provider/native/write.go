@@ -16,7 +16,7 @@ var ErrWriteUncertain = errors.New("native provider write outcome is uncertain")
 var ErrWriteNotDispatched = errors.New("native provider write was not dispatched")
 
 // WriteBinding pins the server and exact operation to a prepared provider
-// session. Include it in the Devflow approval summary before dispatching.
+// session. Include it in the Agentflow approval summary before dispatching.
 type WriteBinding struct {
 	Provider   string `json:"provider"`
 	Owner      string `json:"connection_owner,omitempty"`

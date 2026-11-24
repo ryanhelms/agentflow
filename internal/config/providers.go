@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/contract"
-	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/contract"
+	"github.com/nscaledev/agentflow/internal/gitx"
 	"gopkg.in/yaml.v3"
 )
 
@@ -242,7 +242,7 @@ type RoleProviders struct {
 }
 
 // ProviderCatalog lists the providers each role accepts, from the same
-// registry that validates .devflow/config.yml.
+// registry that validates .agentflow/config.yml.
 func ProviderCatalog() []RoleProviders {
 	schemas := providerSchemas()
 	out := make([]RoleProviders, 0, len(ProviderRoles))
@@ -259,7 +259,7 @@ func (s roleSchema) choices() []string {
 
 // providerSchemas is the provider registry, keyed by role path.
 func providerSchemas() map[string]roleSchema {
-	const taskDir = ".devflow/tasks"
+	const taskDir = ".agentflow/tasks"
 	fileDefaults := func() FileTaskSettings {
 		return FileTaskSettings{Scope: "default", Transitions: defaultTransitions()}
 	}
@@ -475,7 +475,7 @@ func (s roleSchema) resolve(fields map[string]any, present bool, path string, de
 	return sel, err
 }
 
-var configSource = Source{Layer: LayerProject, File: ".devflow/config.yml"}
+var configSource = Source{Layer: LayerProject, File: ".agentflow/config.yml"}
 
 // Legacy fields seed the role before the release defaults. Preserve their
 // provenance even when the value happens to equal a compiled default.

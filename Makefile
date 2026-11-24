@@ -4,18 +4,18 @@ SHELL := /usr/bin/env bash
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-PKG     := github.com/nscaledev/devflow/internal/version
+PKG     := github.com/nscaledev/agentflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
 SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
-	templates/repo/.devflow/bin/devflow \
+	templates/repo/.agentflow/bin/agentflow \
 	templates/repo/.githooks/commit-msg \
-	adapters/claude-code/bin/launch adapters/claude-code/bin/devflow
+	adapters/claude-code/bin/launch adapters/claude-code/bin/agentflow
 
 .PHONY: agent-docs e2e build test vet lint shellcheck actionlint check snapshot install-hooks clean
 
-build: ## Build ./devflow for this machine
-	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o devflow ./cmd/devflow
+build: ## Build ./agentflow for this machine
+	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o agentflow ./cmd/agentflow
 
 test: ## Run unit tests with the race detector
 	go test -race -count=1 ./...
@@ -45,8 +45,8 @@ snapshot: ## Local multi-platform build, no publish
 e2e: ## Drive the Claude Code plugin end to end with claude -p (uses your Claude account)
 	scripts/e2e-claude.sh
 
-install-hooks: build ## Check this repo's commits with the devflow built from this checkout
+install-hooks: build ## Check this repo's commits with the agentflow built from this checkout
 	git config core.hooksPath .githooks
 
 clean:
-	rm -rf dist devflow devflow.exe coverage.out
+	rm -rf dist agentflow agentflow.exe coverage.out

@@ -15,7 +15,7 @@ func TestProviderToolingPlan(t *testing.T) {
 	cfg := strings.Replace(headlessConfig, "github-issues, settings: {repository: sample/project}", "jira", 1)
 	cfg = strings.Replace(cfg, "filesystem, settings: {root: records}", "confluence", 1)
 	cfg = strings.Replace(cfg, "notifications: {provider: none}", "notifications: {provider: slack}", 1)
-	setupFile(t, root, ".devflow/config.yml", cfg, 0600)
+	setupFile(t, root, ".agentflow/config.yml", cfg, 0600)
 	plan := planFixture(t, root, "")
 	if plan.Ready || len(plan.Tooling) != 3 {
 		t.Fatalf("plan %+v", plan)

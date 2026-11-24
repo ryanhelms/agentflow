@@ -6,8 +6,8 @@ in [provider definitions](../providers.md#provider-definitions).
 
 ## Goal
 
-Adding or changing a provider should be configuration, not a devflow release.
-A provider is described by a YAML **definition**. devflow loads definitions from
+Adding or changing a provider should be configuration, not a agentflow release.
+A provider is described by a YAML **definition**. agentflow loads definitions from
 several layers, validates them, notices changes, and exposes them through the CLI
 and MCP server with the same behaviour on both. Compiled Go providers remain for
 the cases that need code, and they can be overridden by configuration unless a
@@ -18,10 +18,10 @@ higher layer locks the property.
 | Topic | Decision |
 | --- | --- |
 | Driver model | One operation model. Each role operation binds to a driver: `compiled`, `mcp`, `cli`, `http` or `plugin`. An opt-in `agent` fallback is allowed for MCP only. |
-| Sources | The release layer (compiled providers plus nscale YAML definitions, both embedded in the binary), project `.devflow/providers/`, and user `~/.devflow/providers/`. |
+| Sources | The release layer (compiled providers plus nscale YAML definitions, both embedded in the binary), project `.agentflow/providers/`, and user `~/.agentflow/providers/`. |
 | Precedence | release → project → user. A later layer wins unless the release layer constrains the property, section or operation. |
 | Lock kinds | `lock: true`, `allow: [...]`, `lock: append` and `pattern: ...`. |
-| Contracts | Each definition declares a contract version per role. devflow supports the current and previous major version of each contract. |
+| Contracts | Each definition declares a contract version per role. agentflow supports the current and previous major version of each contract. |
 | Write safety | Every write operation declares idempotency: a lookup and a match, or `idempotent: true`. |
 | Daemon | One per user, started on demand, exits when idle. |
 | Runners | A `runner` profile loads release and project layers, treats project approvals as implicit, and binds credentials from env. |
@@ -29,20 +29,20 @@ higher layer locks the property.
 | Project trust | A project definition that adds or changes commands, endpoints, servers or executables needs user approval, stored per content digest. Changes that only touch settings or mappings need none. |
 | Mapping language | CEL, for input templates and output mappings. |
 | Credentials | Named credential refs. Only the user layer binds a ref to a keychain entry, env var or command. |
-| Tool exposure | The role tools (`devflow_*`) stay generic and route to the selected provider. Extra operations a definition declares become `devflow_<provider>_<op>` (MCP) and `devflow <provider> <op>` (CLI). |
-| Reload | `devflow mcp` hot-reloads. An optional shared daemon serves the CLI when running, with a fresh load as fallback. Every change is validated first, and the last good version is kept on failure. |
+| Tool exposure | The role tools (`agentflow_*`) stay generic and route to the selected provider. Extra operations a definition declares become `agentflow_<provider>_<op>` (MCP) and `agentflow <provider> <op>` (CLI). |
+| Reload | `agentflow mcp` hot-reloads. An optional shared daemon serves the CLI when running, with a fresh load as fallback. Every change is validated first, and the last good version is kept on failure. |
 
 ## Layers and merge
 
 ```
-release  compiled Go + embedded YAML   versioned with devflow, can set constraints
-project  .devflow/providers/*.yml      approval needed for transport changes
-user     ~/.devflow/providers/*.yml    binds credentials and local transports
+release  compiled Go + embedded YAML   versioned with agentflow, can set constraints
+project  .agentflow/providers/*.yml      approval needed for transport changes
+user     ~/.agentflow/providers/*.yml    binds credentials and local transports
 ```
 
 The release layer combines what were separate built-in and org catalogs. It holds
 the compiled providers, nscale's YAML definitions and every constraint.
-Changing it takes a devflow release.
+Changing it takes a agentflow release.
 
 Merging works one property at a time. Maps merge, and scalars and lists replace.
 Any property, settings section or operation in the release layer can carry a
@@ -67,8 +67,8 @@ the affected provider: the reload snapshot keeps that provider's last good
 version and reports the error.
 
 The effective selection records where each value came from.
-`devflow setup providers --explain` shows the layer that set each property
-and any constraint on it. `.devflow/config.yml` role settings apply after the
+`agentflow setup providers --explain` shows the layer that set each property
+and any constraint on it. `.agentflow/config.yml` role settings apply after the
 project definition files and before the user layer.
 
 ## Definition shape
@@ -82,7 +82,7 @@ Phase 1 accepts `contract`, `settings` and `constraints` for compiled
 providers. Everything else below is the phase 2+ design.
 
 ```yaml
-# .devflow/providers/linear.yml
+# .agentflow/providers/linear.yml
 version: 1
 credentials:
   linear: {description: Linear API key}
@@ -125,9 +125,9 @@ providers:
           effects: remote
           idempotency:                # required for every write
             lookup: task.find
-            query: '{"text": "devflow-op:" + operation_id}'
+            query: '{"text": "agentflow-op:" + operation_id}'
             match: 'result.size() == 1'
-      extras:                         # become devflow_linear_<op> and devflow linear <op>
+      extras:                         # become agentflow_linear_<op> and agentflow linear <op>
         cycle_current:
           driver: http
           transport: linear-api
@@ -146,17 +146,17 @@ mapping that cannot produce a `Task` fails validation before anything runs.
 
 Each definition declares one contract version per role (`tasks/v1`). Adding a
 field is a minor change: existing definitions keep loading and the new field is
-empty. A breaking change creates a new major version (`tasks/v2`). devflow
+empty. A breaking change creates a new major version (`tasks/v2`). agentflow
 supports the current and previous major version of each contract, and converts
 results from the older version internally. Dropping support for a major version
-is a devflow breaking change and needs a devflow major release.
+is a agentflow breaking change and needs a agentflow major release.
 
 ### Write safety
 
 Every operation with `effects: local` or `effects: remote` must declare one of:
 
 - `idempotent: true`: repeating the call has no further effect.
-- `idempotency: {lookup, query, match}`: before a retry, devflow runs the
+- `idempotency: {lookup, query, match}`: before a retry, agentflow runs the
   lookup operation with the CEL query, and returns the existing effect if
   the CEL match succeeds. The operation's input must carry
   `operation_id` somewhere the lookup can find it.
@@ -172,10 +172,10 @@ resolved with the lookup on the next call.
 | Driver | Runs | Notes |
 | --- | --- | --- |
 | `compiled` | A registered Go function | Today's adapters, which register their operations by name. |
-| `http` | A request through devflow's HTTP client | devflow injects auth from the credential ref. Retries and idempotency use `operation_id`. |
+| `http` | A request through agentflow's HTTP client | agentflow injects auth from the credential ref. Retries and idempotency use `operation_id`. |
 | `mcp` | A tool call on a stdio or hosted MCP server | Builds on `managedmcp`, which currently only probes companions and will now call their tools too. |
 | `cli` | An argv exec with no shell | Captures stdout as JSON, or as text that CEL parses. Exit code maps to error. |
-| `plugin` | An executable speaking the devflow provider protocol (JSON-RPC over stdio) | For logic that a mapping can't express. Versioned and checksum-pinned like companions. |
+| `plugin` | An executable speaking the agentflow provider protocol (JSON-RPC over stdio) | For logic that a mapping can't express. Versioned and checksum-pinned like companions. |
 | `agent` | Returns the provider's raw MCP tools to the calling agent with instructions | MCP only, explicit opt-in per operation, and marked non-deterministic in results and audit. The CLI reports the operation as unavailable. |
 
 Every driver passes through `internal/app` and `internal/policy`. Approvals,
@@ -184,12 +184,12 @@ whichever driver runs.
 
 ## Trust
 
-- **Release:** trusted, and shipped and signed with devflow.
+- **Release:** trusted, and shipped and signed with agentflow.
 - **User:** trusted because the user wrote it.
-- **Project:** devflow hashes each project provider's transport-affecting fields
+- **Project:** agentflow hashes each project provider's transport-affecting fields
   (commands, URLs, servers, plugin paths, credential uses). An unapproved hash
-  blocks those operations, and `devflow setup plan` reports `needs approval`.
-  `devflow setup approve <provider>` (MCP: `devflow_setup_apply` with a
+  blocks those operations, and `agentflow setup plan` reports `needs approval`.
+  `agentflow setup approve <provider>` (MCP: `agentflow_setup_apply` with a
   confirmation) stores the approval in the user state, keyed by repo and hash.
   A change to settings or a mapping alone keeps the approval.
 - **Constraints** let the release layer stop the project or user layer from
@@ -198,10 +198,10 @@ whichever driver runs.
 
 ### Runner profile
 
-`DEVFLOW_PROFILE=runner`, set by devflow's reusable workflows, loads only the
+`AGENTFLOW_PROFILE=runner`, set by agentflow's reusable workflows, loads only the
 release and project layers. Project approvals are implicit, because the
 definitions are already reviewed in the PR or on the default branch.
-Credentials bind from `DEVFLOW_CRED_<NAME>` environment variables. There is no
+Credentials bind from `AGENTFLOW_CRED_<NAME>` environment variables. There is no
 daemon and no hot reload. One guard applies: under `pull_request_target`, or for
 a PR from a fork, project definitions that change transports are ignored and the
 default branch's versions are used instead, so untrusted PR code never runs with
@@ -212,8 +212,8 @@ secrets.
 Definitions declare named credentials. The user layer binds them:
 
 ```yaml
-# ~/.devflow/credentials.yml
-linear: {keychain: devflow/linear}
+# ~/.agentflow/credentials.yml
+linear: {keychain: agentflow/linear}
 jira:   {command: [op, read, "op://Eng/Jira/token"]}
 github: {env: GH_TOKEN}
 ```
@@ -225,20 +225,20 @@ CEL environments. Transports receive them only at the point of use.
 ## Loading and reload
 
 1. **Discover** the four layers. Project files come from the repo root and user
-   files from the devflow home.
+   files from the agentflow home.
 2. **Parse and merge**, enforcing locks.
 3. **Validate**: settings schema, CEL compile and type check against the contract,
    driver and transport references, and approval state.
 4. **Publish** an immutable snapshot that the app layer reads.
 
-`devflow mcp` watches the layer directories (fsnotify, debounced). When a change
+`agentflow mcp` watches the layer directories (fsnotify, debounced). When a change
 validates, the server swaps the snapshot, re-registers extra tools and sends
 `notifications/tools/list_changed`. When validation fails, the server keeps the
-previous snapshot and reports the error through `devflow_setup_plan` and a log
+previous snapshot and reports the error through `agentflow_setup_plan` and a log
 notification.
 
-`devflow daemon` (optional) runs once per user. It keeps one snapshot per repo
-root, on a user-only socket under the devflow home. The first CLI or MCP call
+`agentflow daemon` (optional) runs once per user. It keeps one snapshot per repo
+root, on a user-only socket under the agentflow home. The first CLI or MCP call
 that finds no daemon may start one when `daemon: auto` is set in user config.
 It exits after an idle timeout (default 30 minutes), and needs no
 launchd/systemd setup. The CLI uses it only when it runs the same binary
@@ -247,12 +247,12 @@ Results are identical either way.
 
 ## Exposure
 
-- Role tools: today's `devflow_*` tools are unchanged. They route by the selected
+- Role tools: today's `agentflow_*` tools are unchanged. They route by the selected
   provider for the role.
-- Extras: `devflow_<provider>_<op>` and `devflow <provider> <op> [--json]`,
+- Extras: `agentflow_<provider>_<op>` and `agentflow <provider> <op> [--json]`,
   both generated from the definition's `input_schema`, so CLI/MCP parity holds by
   construction. Their read-only, local or remote annotations come from `effects`.
-- `devflow setup providers` lists definitions from every layer, along with their
+- `agentflow setup providers` lists definitions from every layer, along with their
   source, lock state, approval state and readiness.
 
 ## Phases

@@ -41,8 +41,8 @@ jobs:
           -run 'Test(StagedSnapshotUsesIndexAndGuardsHooks|CommitMessageHookCannotReplaceApprovedMessage|ExactCommit.*Hooks|GuardHookDiscovery)'
 
   convention:
-    # devflow's own repo follows the commit convention it ships. Keys are optional here
-    # (commit.require_key: false in .devflow/config.yml) until devflow has a Jira project.
+    # agentflow's own repo follows the commit convention it ships. Keys are optional here
+    # (commit.require_key: false in .agentflow/config.yml) until agentflow has a Jira project.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
@@ -50,7 +50,7 @@ jobs:
       NUMBER: ${{ github.event.pull_request.number }}
       BASE: ${{ github.event.pull_request.base.sha }}
       HEAD: ${{ github.event.pull_request.head.sha }}
-      DEVFLOW_NO_UPDATE: "1"
+      AGENTFLOW_NO_UPDATE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,18 +58,18 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go build -o "$RUNNER_TEMP/devflow" ./cmd/devflow
+      - run: go build -o "$RUNNER_TEMP/agentflow" ./cmd/agentflow
       - name: PR title (becomes the squash commit and decides the version bump)
         run: |
           # Check the exact subject the squash merge will create: "<title> (#<number>)".
           printf '%s (#%s)\n' "$TITLE" "$NUMBER" > "$RUNNER_TEMP/title.txt"
-          "$RUNNER_TEMP/devflow" lint-msg "$RUNNER_TEMP/title.txt"
+          "$RUNNER_TEMP/agentflow" lint-msg "$RUNNER_TEMP/title.txt"
       - name: Every commit in the PR
         run: |
           status=0
           for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
             git log -1 --format=%B "$sha" > "$RUNNER_TEMP/msg.txt"
-            if ! "$RUNNER_TEMP/devflow" lint-msg "$RUNNER_TEMP/msg.txt"; then
+            if ! "$RUNNER_TEMP/agentflow" lint-msg "$RUNNER_TEMP/msg.txt"; then
               echo "::error::commit ${sha:0:7} does not follow the convention"
               status=1
             fi
@@ -78,7 +78,7 @@ jobs:
       - name: README.md kept current (warning only)
         run: |
           # 1. Code, templates, adapters, workflows, actions, scripts or config that people
-          #    using devflow interact with changed, but README.md did not.
+          #    using agentflow interact with changed, but README.md did not.
           changed=$(git diff --name-only "$BASE...$HEAD")
           reader_visible=$(grep -E '^(cmd/|internal/|templates/|adapters/|actions/|bin/|flow-map\.yml|policy/|\.github/workflows/)' <<<"$changed" \
             | grep -vE '^\.github/workflows/(ci|release)\.yml$|_test\.go$' || true)
@@ -91,14 +91,14 @@ jobs:
           #    release workflow updates it; a mismatch means it was edited or a release failed.
           latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
           # shellcheck disable=SC2016 # backticks are literal in the sed pattern
-          shown=$(sed -nE 's#.*<!-- devflow:version -->`?([^`<]*)`?<!-- /devflow:version -->.*#\1#p' README.md | head -n1)
+          shown=$(sed -nE 's#.*<!-- agentflow:version -->`?([^`<]*)`?<!-- /agentflow:version -->.*#\1#p' README.md | head -n1)
           if [ -z "$shown" ]; then
-            echo "::warning title=README status area::README.md has no devflow:version marker in its status table; the release workflow can't keep the current release up to date."
+            echo "::warning title=README status area::README.md has no agentflow:version marker in its status table; the release workflow can't keep the current release up to date."
           elif [ -n "$latest" ] && [ "$shown" != "$latest" ]; then
             echo "::warning title=README status area::README.md shows $shown as the current release, but the latest release is $latest."
           fi
           if git diff --name-only "$BASE...$HEAD" | grep -qE '^(docs/rollout\.md|docs/artifact/)' && ! grep -qx README.md <<<"$changed"; then
-            echo "::warning title=README status area::Rollout or blueprint changed. Check the README Status row (approval, rollout phase, who uses devflow) is still true."
+            echo "::warning title=README status area::Rollout or blueprint changed. Check the README Status row (approval, rollout phase, who uses agentflow) is still true."
           fi
 
       - name: CHANGELOG.md is generated on release, never edited in a PR
@@ -119,10 +119,10 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck -x install.sh bin/*.sh scripts/*.sh .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
-            templates/repo/.devflow/bin/devflow \
+            templates/repo/.agentflow/bin/agentflow \
             templates/repo/.githooks/commit-msg \
             adapters/claude-code/bin/launch \
-            adapters/claude-code/bin/devflow
+            adapters/claude-code/bin/agentflow
       - name: Test project installer
         run: bash scripts/test-install-sh.sh
       - name: actionlint

@@ -2,7 +2,7 @@ package app
 
 import "time"
 
-// A provider lease can start before Devflow finishes preparing the preview.
+// A provider lease can start before Agentflow finishes preparing the preview.
 // Multi-write operations must still be applicable on every bound connection.
 func earliestApprovalExpiry(bounds ...time.Time) time.Time {
 	var earliest time.Time

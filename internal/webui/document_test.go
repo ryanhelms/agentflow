@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 func TestDocumentEditorUsesCurrentSourceAndDoesNotWriteIt(t *testing.T) {
 	s := testServer(t)
-	const path = ".devflow/config.yml"
+	const path = ".agentflow/config.yml"
 	base, err := os.ReadFile(filepath.Join(s.repo.Dir, path))
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestDocumentEditorUsesCurrentSourceAndDoesNotWriteIt(t *testing.T) {
 
 func TestDocumentEditorRejectsUnscopedSources(t *testing.T) {
 	s := testServer(t)
-	in := documentSource{Path: ".git/config", Content: "devflow: 1", Base: "unrelated"}
+	in := documentSource{Path: ".git/config", Content: "agentflow: 1", Base: "unrelated"}
 	for _, tc := range []struct{ route, origin, key string }{
 		{"/api/document", s.origin, "session"},
 		{"/api/document", s.origin, ""},

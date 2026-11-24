@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 const (
@@ -28,7 +28,7 @@ type accessGrant struct {
 	expiry     time.Time
 }
 
-func userLockDir() (string, error) { return nativeoauth.UserLockDir(".devflow-rovo") }
+func userLockDir() (string, error) { return nativeoauth.UserLockDir(".agentflow-rovo") }
 func (e *enrollment) lock(ctx context.Context) (*os.File, error) {
 	f, err := nativeoauth.Lock(ctx, e.lockDir)
 	if err != nil {

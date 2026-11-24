@@ -15,7 +15,7 @@ import (
 	"slices"
 )
 
-// ClientRegistration describes only the devflow-owned project entry. Host
+// ClientRegistration describes only the agentflow-owned project entry. Host
 // trust, plugin activation, and native vendor tools remain client operations.
 type ClientRegistration struct {
 	Entry          string `json:"entry,omitempty"`
@@ -42,7 +42,7 @@ func runtimeClient(client string) string {
 func desktopLauncherEntry() map[string]any {
 	return map[string]any{
 		"type": "stdio", "command": "sh",
-		"args": []any{"-c", `root=$(git rev-parse --show-toplevel) && exec "$root/.devflow/bin/devflow" mcp --client claude`},
+		"args": []any{"-c", `root=$(git rev-parse --show-toplevel) && exec "$root/.agentflow/bin/agentflow" mcp --client claude`},
 	}
 }
 
@@ -52,7 +52,7 @@ func inspectDesktopLauncher(r *ClientRegistration, entries, wanted map[string]an
 	for name, value := range entries {
 		server, _ := value.(map[string]any)
 		if name != r.Entry && server["command"] == wanted["command"] && reflect.DeepEqual(server["args"], wanted["args"]) {
-			r.State, r.Detail = "blocked", "the desktop launcher already has another server name in "+r.Path+". Review it before registering devflow"
+			r.State, r.Detail = "blocked", "the desktop launcher already has another server name in "+r.Path+". Review it before registering agentflow"
 			return
 		}
 	}
@@ -64,16 +64,16 @@ func inspectDesktopLauncher(r *ClientRegistration, entries, wanted map[string]an
 			delete(wanted, "type")
 		}
 		if reflect.DeepEqual(server, wanted) {
-			r.State, r.Detail = "configured", "project launcher present. Restart Claude Code Desktop, approve the project server and check for devflow_setup_plan"
+			r.State, r.Detail = "configured", "project launcher present. Restart Claude Code Desktop, approve the project server and check for agentflow_setup_plan"
 		} else {
-			r.State, r.Detail = "blocked", "inspect the existing devflow entry in "+r.Path+" before registering the desktop launcher"
+			r.State, r.Detail = "blocked", "inspect the existing agentflow entry in "+r.Path+" before registering the desktop launcher"
 		}
 	}
 }
 
 func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 	if client == claudeDesktop {
-		r := &ClientRegistration{Client: client, Path: ".mcp.json", Entry: "devflow", State: "blocked"}
+		r := &ClientRegistration{Client: client, Path: ".mcp.json", Entry: "agentflow", State: "blocked"}
 		return serverOverlay(dir, r, "mcpServers", desktopLauncherEntry())
 	}
 	file := map[string]string{
@@ -91,14 +91,14 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 	var next []byte
 	if client == "codex" {
 		adapter := mustAdapter("codex/config.toml")
-		_, table, _ := bytes.Cut(adapter, []byte("[mcp_servers.devflow]"))
-		block := append([]byte("[mcp_servers.devflow]"), table...)
+		_, table, _ := bytes.Cut(adapter, []byte("[mcp_servers.agentflow]"))
+		block := append([]byte("[mcp_servers.agentflow]"), table...)
 		switch {
 		case bytes.Equal(bytes.TrimSpace(current), bytes.TrimSpace(adapter)), bytes.Equal(bytes.TrimSpace(current), bytes.TrimSpace(block)):
 		case len(bytes.TrimSpace(current)) == 0:
 			next = adapter
 		default:
-			r.Detail = "custom Codex TOML requires manual verification: compare the devflow table with adapters/codex/config.toml, trust the project and check devflow_setup_plan in Codex"
+			r.Detail = "custom Codex TOML requires manual verification: compare the agentflow table with adapters/codex/config.toml, trust the project and check agentflow_setup_plan in Codex"
 			return r, nil, nil
 		}
 	} else {
@@ -113,7 +113,7 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 			return nil, nil, err
 		}
 		// Install also manages these general preferences. Guided registration
-		// only installs the devflow endpoint or Claude plugin declaration.
+		// only installs the agentflow endpoint or Claude plugin declaration.
 		delete(wanted, "includeCoAuthoredBy")
 		delete(wanted, "contextFileName")
 		cur := registrationJSON(current, r)
@@ -138,7 +138,7 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 				if exists && !reflect.DeepEqual(existing, val) {
 					r.Detail = "inspect the existing " + key + "." + name + " entry in " + r.Path + " before adopting the project adapter"
 					if endpoint, ok := existing.(map[string]any); ok && endpoint["url"] != nil {
-						r.Detail = "the existing remote MCP entry in " + r.Path + " occupies the devflow launcher key. Declare the hosted provider companion in mcp-companions.yml and use setup plan --companion ID --client " + client + " for a read-only MCP handshake and a separate managed entry"
+						r.Detail = "the existing remote MCP entry in " + r.Path + " occupies the agentflow launcher key. Declare the hosted provider companion in mcp-companions.yml and use setup plan --companion ID --client " + client + " for a read-only MCP handshake and a separate managed entry"
 					}
 					return r, nil, nil
 				}
@@ -155,9 +155,9 @@ func clientOverlay(dir, client string) (*ClientRegistration, []byte, error) {
 		}
 	}
 	if next == nil {
-		r.State, r.Detail = "configured", "project adapter present. Reload the client, trust the project and check that devflow_setup_plan appears"
+		r.State, r.Detail = "configured", "project adapter present. Reload the client, trust the project and check that agentflow_setup_plan appears"
 	} else {
-		r.State, r.Detail = "pending", "run devflow setup apply --client "+client+" to register the project adapter, then reload the client"
+		r.State, r.Detail = "pending", "run agentflow setup apply --client "+client+" to register the project adapter, then reload the client"
 	}
 	return r, next, nil
 }
@@ -284,7 +284,7 @@ func readProjectFile(dir *os.Root, name string) ([]byte, error) {
 
 // Keep the writer lock through publication of both the config and its receipt.
 func withClientLock(dir *os.Root, name string, edit func() error) error {
-	lock := name + ".devflow-tmp"
+	lock := name + ".agentflow-tmp"
 	f, err := dir.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return fmt.Errorf("another registration is pending: retry or remove %s after confirming the previous setup has stopped", filepath.Join(dir.Name(), lock))
@@ -301,7 +301,7 @@ func withClientLock(dir *os.Root, name string, edit func() error) error {
 
 // Stage a complete file under the client lock, preserving existing permissions.
 func publishAfter(dir *os.Root, name string, data []byte, before func() error) error {
-	stage := name + ".devflow-new"
+	stage := name + ".agentflow-new"
 	f, err := dir.OpenFile(stage, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -336,19 +336,19 @@ func publishAfter(dir *os.Root, name string, data []byte, before func() error) e
 func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, hasRepo bool) {
 	check := func(ok bool, detail string) { p.check("client", client, ok, detail) }
 	if !hasRepo {
-		check(false, "open the Git working tree where the client will run devflow")
+		check(false, "open the Git working tree where the client will run agentflow")
 		return
 	}
 	if runtime.GOOS == "windows" {
-		check(false, "the bundled project adapter requires a POSIX launcher environment. Configure the client to run the verified Windows devflow.exe mcp --client "+runtimeClient(client)+" in this workspace")
+		check(false, "the bundled project adapter requires a POSIX launcher environment. Configure the client to run the verified Windows agentflow.exe mcp --client "+runtimeClient(client)+" in this workspace")
 		return
 	}
 	if _, err := exec.LookPath("sh"); err != nil {
 		check(false, "make sh available on PATH in the client environment for the project adapter")
 		return
 	}
-	if client != "claude" && !executable(filepath.Join(p.Root, ".devflow", "bin", "devflow")) {
-		check(false, "provide the executable project launcher .devflow/bin/devflow generated by devflow init")
+	if client != "claude" && !executable(filepath.Join(p.Root, ".agentflow", "bin", "agentflow")) {
+		check(false, "provide the executable project launcher .agentflow/bin/agentflow generated by agentflow init")
 		return
 	}
 	cache := os.Getenv("XDG_CACHE_HOME")
@@ -360,14 +360,14 @@ func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, ha
 		}
 		cache = filepath.Join(home, ".cache")
 	}
-	if !executable(filepath.Join(cache, "devflow", "current", "devflow")) {
+	if !executable(filepath.Join(cache, "agentflow", "current", "agentflow")) {
 		switch {
 		case !probeCommand(ctx, p.Root, "gh", "attestation", "verify", "--help"):
 			check(false, "first run requires gh on PATH with gh attestation verify support")
 		case !probeCommand(ctx, p.Root, "gh", "auth", "status", "--hostname", "github.com"):
-			check(false, "first run requires authenticated gh access to nscaledev/devflow on github.com. Run gh auth login --hostname github.com")
+			check(false, "first run requires authenticated gh access to nscaledev/agentflow on github.com. Run gh auth login --hostname github.com")
 		default:
-			check(false, "run the existing devflow launcher in the client environment to install the release after checksum and signer verification")
+			check(false, "run the existing agentflow launcher in the client environment to install the release after checksum and signer verification")
 		}
 		return
 	}

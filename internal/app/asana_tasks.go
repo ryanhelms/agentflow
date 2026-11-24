@@ -8,13 +8,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/asana"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func (a *App) usesAsana() bool { return a.Cfg.Providers.TaskManagement.Provider == "asana" }
@@ -104,7 +104,7 @@ func (a *App) createAsanaTask(ctx context.Context, project, typ, title, descript
 			return nil, fmt.Errorf("link %s does not match the selected knowledge provider", link.Ref)
 		}
 	}
-	if os.Getenv("DEVFLOW_OPERATION_ID") != "" {
+	if os.Getenv("AGENTFLOW_OPERATION_ID") != "" {
 		return nil, provider.Unsupported("asana", "deduplicating task creation by operation ID")
 	}
 	summary := map[string]any{
@@ -167,7 +167,7 @@ func (a *App) commentAsanaTask(ctx context.Context, key, text, token string) (an
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("asana comment is empty")
 	}
-	if os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("DEVFLOW_OPERATION_ID") != "" {
+	if os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("AGENTFLOW_OPERATION_ID") != "" {
 		return nil, provider.Unsupported("asana", "idempotent automation comments")
 	}
 	ref, err := a.taskRef(ctx, key)

@@ -1,6 +1,6 @@
-# devflow flow map — canonical events -> each Jira project's own statuses.
+# agentflow flow map — canonical events -> each Jira project's own statuses.
 #
-# Values are target STATUS names (not transition names). devflow picks whichever
+# Values are target STATUS names (not transition names). agentflow picks whichever
 # transition reaches that status from the current one, so teams can rename transitions
 # freely. An explicit null means "do nothing for this event". Projects that are not
 # listed under `projects:` are ignored entirely.

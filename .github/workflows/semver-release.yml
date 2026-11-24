@@ -10,12 +10,12 @@
 #   library - Go submodule tag (path/vX.Y.Z), npm or PyPI publish, Terraform tag
 # and previews released task references and Jira Fix Versions for review.
 #
-# Units come from .devflow/releases.yml (devflow release init). Works with the
+# Units come from .agentflow/releases.yml (agentflow release init). Works with the
 # workflow's own token: the `releases` output feeds the caller's release-notes job, so
 # nothing depends on release events. GitHub doesn't run checks on a PR opened with that
 # token, so where branch rules require checks the Release PR waits until someone closes
-# and reopens it (or clicks "Update branch"); it then merges itself. An optional devflow
-# GitHub App (vars.DEVFLOW_APP_ID, secrets.DEVFLOW_APP_PRIVATE_KEY) removes that step.
+# and reopens it (or clicks "Update branch"); it then merges itself. An optional agentflow
+# GitHub App (vars.AGENTFLOW_APP_ID, secrets.AGENTFLOW_APP_PRIVATE_KEY) removes that step.
 name: semver-release
 
 on:
@@ -31,7 +31,7 @@ on:
         description: JSON array of released units {name, path, tag, version, url}
         value: ${{ jobs.release.outputs.matrix }}
     secrets:
-      DEVFLOW_APP_PRIVATE_KEY:
+      AGENTFLOW_APP_PRIVATE_KEY:
         required: false
       NPM_TOKEN:
         required: false
@@ -58,11 +58,11 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: app
-        if: vars.DEVFLOW_APP_ID != ''
+        if: vars.AGENTFLOW_APP_ID != ''
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.DEVFLOW_APP_ID }}
-          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.AGENTFLOW_APP_ID }}
+          private-key: ${{ secrets.AGENTFLOW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
@@ -70,8 +70,8 @@ jobs:
 
       - name: Check release configuration
         run: |
-          for f in .devflow/releases.yml release-please-config.json .release-please-manifest.json; do
-            [ -f "$f" ] || { echo "::error::$f is missing. Run: devflow release init"; exit 1; }
+          for f in .agentflow/releases.yml release-please-config.json .release-please-manifest.json; do
+            [ -f "$f" ] || { echo "::error::$f is missing. Run: agentflow release init"; exit 1; }
           done
 
       - id: rp
@@ -103,7 +103,7 @@ jobs:
           paths=$(jq -c '.paths_released | fromjson' <<<"$OUTPUTS")
           registry=$(tr '[:upper:]' '[:lower:]' <<<"$REGISTRY")
           matrix=$(jq -c -n --argjson paths "$paths" --argjson out "$OUTPUTS" \
-                     --argjson units "$(yq -o=json '.units' .devflow/releases.yml)" \
+                     --argjson units "$(yq -o=json '.units' .agentflow/releases.yml)" \
                      --arg registry "$registry" '
             [ $paths[] as $p
               | ($units[] | select(.path == $p)) as $u
@@ -283,7 +283,7 @@ jobs:
             [[ ",$BUILDS," == *,helm,* ]] && echo "- Chart: \`oci://$REGISTRY/charts\` version \`$VERSION\`"
             [[ ",$BUILDS," == *,library,* ]] && echo "- Library: ${PUBLISH:-tag} \`$VERSION\`"
             echo
-            echo "Production deploys must reference this release (devflow release guard)."
+            echo "Production deploys must reference this release (agentflow release guard)."
           } > notes.md
           gh release edit "$TAG" --notes-file notes.md
 
@@ -298,12 +298,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: nscaledev/agentflow/actions/setup@v0
         with:
           binary: true
       - id: task
         name: Resolve release task provider
-        run: echo "provider=$(devflow keys --provider)" >> "$GITHUB_OUTPUT"
+        run: echo "provider=$(agentflow keys --provider)" >> "$GITHUB_OUTPUT"
       - name: Record released task references
         env:
           MATRIX: ${{ needs.release.outputs.matrix }}
@@ -331,7 +331,7 @@ jobs:
                 jira-fix-version.sh "$key" "$name $version" || echo "::warning::$key: could not set fix version"
               done
             else
-              devflow keys --shipped --range "$range" --path "$path" | while IFS= read -r key; do
+              agentflow keys --shipped --range "$range" --path "$path" | while IFS= read -r key; do
                 echo "Released task $key in $tag"
               done
             fi

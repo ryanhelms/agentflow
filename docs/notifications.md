@@ -1,6 +1,6 @@
 # Delivery notifications
 
-`.devflow/config.yml` selects notification destinations independently of the
+`.agentflow/config.yml` selects notification destinations independently of the
 code host and task, knowledge, DevOps, and SecOps providers. Set `provider: none`
 to disable delivery.
 
@@ -24,12 +24,12 @@ notifications:
       actor_id: U0123456789
 ```
 
-With a Devflow enrollment, the stored grant must match `workspace_id` and any
-configured `actor_id` before Devflow connects to Slack MCP. Slack can omit the
+With a Agentflow enrollment, the stored grant must match `workspace_id` and any
+configured `actor_id` before Agentflow connects to Slack MCP. Slack can omit the
 team from a profile and ignore the channel list's `team_id` filter for a regular
 workspace token.
 
-Devflow checks the channel against the authenticated user's conversation list
+Agentflow checks the channel against the authenticated user's conversation list
 through the same connection. It verifies a configured actor ID
 and rejects a different workspace ID when Slack reports one. Confirmation binds
 the connection, the exact rendered Markdown, the scoped IDs and the verified
@@ -41,14 +41,14 @@ the operation stays unconfirmed and blocks replay. A proven failure before
 dispatch releases the claim for a fresh approval.
 
 Codex uses its connected Slack MCP. Claude Code Desktop supports a separate
-Devflow enrollment for an approved Slack app. Use `devflow_notify` in either
+Agentflow enrollment for an approved Slack app. Use `agentflow_notify` in either
 client. The CLI accepts the same connection choices. The Slack CLI's saved
 login is separate from these connections. [Slack connector setup](https://docs.slack.dev/ai/slack-mcp-server/connect-to-harnesses/) ·
-[Devflow Slack enrollment](providers.md#devflow-slack-enrollment).
+[Agentflow Slack enrollment](providers.md#agentflow-slack-enrollment).
 
 ```sh
-devflow --native-client codex notify delivery --operation-id deployment-42 --body 'Production deployment failed'
-devflow --native-client claude-desktop notify delivery --operation-id deployment-42 --body 'Production deployment failed'
+agentflow --native-client codex notify delivery --operation-id deployment-42 --body 'Production deployment failed'
+agentflow --native-client claude-desktop notify delivery --operation-id deployment-42 --body 'Production deployment failed'
 ```
 
 ## Route notifications to multiple destinations
@@ -98,8 +98,8 @@ before doing any work. HTTP 408, transport failures, and 5xx are always ambiguou
 ## Send from the CLI or GitHub Actions
 
 ```sh
-devflow notify delivery --operation-id deployment-42 --body 'Production deployment failed' --dry-run
-devflow notify delivery --operation-id deployment-42 --body 'Production deployment failed'
+agentflow notify delivery --operation-id deployment-42 --body 'Production deployment failed' --dry-run
+agentflow notify delivery --operation-id deployment-42 --body 'Production deployment failed'
 ```
 
 Use the same operation ID, signal, message and destination names to replay an
@@ -127,8 +127,8 @@ operation ID was reused with different content, scope, or delivery backend.
 POST before the receipt error. `failed` includes a destination configuration or
 credential error.
 
-Local receipts live under `$DEVFLOW_HOME/notification-receipts` (default
-`~/.devflow/notification-receipts`). Keep this directory with its original
+Local receipts live under `$AGENTFLOW_HOME/notification-receipts` (default
+`~/.agentflow/notification-receipts`). Keep this directory with its original
 repository identity and operation IDs while events can be replayed. GitHub
 Actions uses an immutable reservation for each signal slot and attempt and
 uploads a receipt snapshot with `delivery.json`. A rerun restores the
@@ -138,5 +138,5 @@ expiry, delivery stops for reconciliation. Receipt files contain payload
 digests and delivery states. Credential values and message bodies stay out of
 receipts and outcome reports.
 
-Other headless runners can use `devflow notify SIGNAL --automation` with the configured
+Other headless runners can use `agentflow notify SIGNAL --automation` with the configured
 Slack webhook.

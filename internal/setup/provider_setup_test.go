@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const headlessConfig = `devflow: 1
+const headlessConfig = `agentflow: 1
 code_hosting: {provider: none}
 task_management: {provider: github-issues, settings: {repository: sample/project}}
 knowledge_base: {provider: filesystem, settings: {root: records}}
@@ -48,7 +48,7 @@ func TestDesktopLauncherOwnership(t *testing.T) {
 				}
 				return data
 			}
-			const original = `{"large":9007199254740993,"mcpServers":{"devflow-team":{"command":"team"}}}`
+			const original = `{"large":9007199254740993,"mcpServers":{"agentflow-team":{"command":"team"}}}`
 			doc := registrationJSON([]byte(original), &ClientRegistration{})
 			servers := doc["mcpServers"].(map[string]any)
 			launcher := desktopLauncherEntry()
@@ -57,7 +57,7 @@ func TestDesktopLauncherOwnership(t *testing.T) {
 				delete(launcher, "type")
 				fallthrough
 			case "user-owned":
-				servers["devflow"] = launcher
+				servers["agentflow"] = launcher
 			case "other server name":
 				servers["my-tools"] = launcher
 			}
@@ -89,7 +89,7 @@ func TestDesktopLauncherOwnership(t *testing.T) {
 				t.Fatalf("repeat apply changed registration: %v", err)
 			}
 			if scenario == "edited" {
-				servers["devflow"] = map[string]any{"command": "custom"}
+				servers["agentflow"] = map[string]any{"command": "custom"}
 				edited, err := json.Marshal(doc)
 				if err != nil {
 					t.Fatal(err)
@@ -117,7 +117,7 @@ func TestDesktopLauncherRunsFromSubdirectory(t *testing.T) {
 		t.Skip("native Windows uses manual registration")
 	}
 	dir := filepath.Join(t.TempDir(), "project with spaces")
-	setupFile(t, dir, ".devflow/bin/devflow", "#!/bin/sh\nprintf '%s\\n' \"$@\"\n", 0o755)
+	setupFile(t, dir, ".agentflow/bin/agentflow", "#!/bin/sh\nprintf '%s\\n' \"$@\"\n", 0o755)
 	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %s, %v", out, err)
 	}
@@ -137,9 +137,9 @@ func TestDesktopLauncherRunsFromSubdirectory(t *testing.T) {
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	server := cfg.MCPServers["devflow"]
+	server := cfg.MCPServers["agentflow"]
 	cmd := exec.CommandContext(t.Context(), server.Command, server.Args...)
-	cmd.Dir = filepath.Join(dir, ".devflow")
+	cmd.Dir = filepath.Join(dir, ".agentflow")
 	if out, err := cmd.Output(); err != nil || string(out) != "mcp\n--client\nclaude\n" {
 		t.Fatalf("project launcher arguments: %q, %v", out, err)
 	}
@@ -169,8 +169,8 @@ func TestHeadlessGitHubProbe(t *testing.T) {
 	root, bin := t.TempDir(), t.TempDir()
 	t.Setenv("PATH", bin) // No desktop CLI or git. The repository is explicit.
 	t.Setenv("GH_CONFIG_DIR", t.TempDir())
-	t.Setenv("DEVFLOW_HOME", filepath.Join(t.TempDir(), "unused"))
-	setupFile(t, root, ".devflow/config.yml", headlessConfig, 0o644)
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(t.TempDir(), "unused"))
+	setupFile(t, root, ".agentflow/config.yml", headlessConfig, 0o644)
 	setupFile(t, root, "records/one.md", "# local document", 0o644)
 	plan := planFixture(t, root, "")
 	if plan.Ready {
@@ -213,7 +213,7 @@ esac
 			}
 		})
 	}
-	if _, err := os.Stat(os.Getenv("DEVFLOW_HOME")); !os.IsNotExist(err) {
+	if _, err := os.Stat(os.Getenv("AGENTFLOW_HOME")); !os.IsNotExist(err) {
 		t.Fatal("read-only planning touched user state")
 	}
 }
@@ -251,7 +251,7 @@ func TestRepositoryReadinessUsesSelectedTree(t *testing.T) {
 	} {
 		cfg := strings.ReplaceAll(headlessConfig, "github-issues, settings: {repository: sample/project}", "none")
 		cfg = strings.Replace(cfg, "filesystem, settings: {root: records}", "repository, settings: {"+tc.settings+"}", 1)
-		setupFile(t, dir, ".devflow/config.yml", cfg, 0o644)
+		setupFile(t, dir, ".agentflow/config.yml", cfg, 0o644)
 		plan := planFixture(t, dir, "")
 		if plan.Ready != tc.ready {
 			t.Fatalf("%s: %+v", tc.settings, plan)
@@ -283,7 +283,7 @@ func TestClientMergePreservesUnrelatedSettings(t *testing.T) {
 			t.Fatalf("lost %q in %s", part, data)
 		}
 	}
-	for _, conflict := range []string{`null`, `{"servers": false}`, `{"servers":{"devflow":{"url":"https://example.invalid"}}}`, "broken"} {
+	for _, conflict := range []string{`null`, `{"servers": false}`, `{"servers":{"agentflow":{"url":"https://example.invalid"}}}`, "broken"} {
 		setupFile(t, dir, path, conflict, 0o600)
 		err := RegisterProviderClient(dir, "vscode")
 		if err == nil {
@@ -307,7 +307,7 @@ func TestWikiReadinessChecksInitializedGitRemote(t *testing.T) {
 	t.Setenv("PATH", bin)
 	cfg := strings.Replace(headlessConfig, "task_management: {provider: github-issues, settings: {repository: sample/project}}", "task_management: {provider: none}", 1)
 	cfg = strings.Replace(cfg, "knowledge_base: {provider: filesystem, settings: {root: records}}", "knowledge_base: {provider: github-wiki, settings: {repository: sample/project}}", 1)
-	setupFile(t, root, ".devflow/config.yml", cfg, 0o644)
+	setupFile(t, root, ".agentflow/config.yml", cfg, 0o644)
 	setupFile(t, bin, "git", `#!/bin/sh
 case "$*" in
   "--version") exit 0 ;;
@@ -331,7 +331,7 @@ func TestFileTaskReadinessUsesSelectedDirectory(t *testing.T) {
 	dir := t.TempDir()
 	cfg := strings.Replace(headlessConfig, "task_management: {provider: github-issues, settings: {repository: sample/project}}", "task_management: {provider: filesystem, settings: {root: tasks, scope: engineering}}", 1)
 	cfg = strings.Replace(cfg, "knowledge_base: {provider: filesystem, settings: {root: records}}", "knowledge_base: {provider: none}", 1)
-	setupFile(t, dir, ".devflow/config.yml", cfg, 0o644)
+	setupFile(t, dir, ".agentflow/config.yml", cfg, 0o644)
 	setupFile(t, dir, "tasks/one.md", "# fixture", 0o644)
 	plan := planFixture(t, dir, "")
 	if !plan.Ready {

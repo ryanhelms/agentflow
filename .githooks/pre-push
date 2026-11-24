@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# devflow repo pre-push hook: every commit being pushed must follow the convention,
+# agentflow repo pre-push hook: every commit being pushed must follow the convention,
 # including commits made with --no-verify. Enable with: make install-hooks
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
-export DEVFLOW_NO_UPDATE=1
+export AGENTFLOW_NO_UPDATE=1
 lint() {
-  if [ -x "$root/devflow" ]; then "$root/devflow" lint-msg "$1"; else go run "$root/cmd/devflow" lint-msg "$1"; fi
+  if [ -x "$root/agentflow" ]; then "$root/agentflow" lint-msg "$1"; else go run "$root/cmd/agentflow" lint-msg "$1"; fi
 }
 zero=0000000000000000000000000000000000000000
 status=0

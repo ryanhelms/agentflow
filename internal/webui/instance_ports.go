@@ -84,5 +84,5 @@ func listenDefault(defaultPort, remembered int) (net.Listener, net.Listener, err
 			break
 		}
 	}
-	return nil, nil, fmt.Errorf("open devflow loopback listener: %w", err)
+	return nil, nil, fmt.Errorf("open agentflow loopback listener: %w", err)
 }

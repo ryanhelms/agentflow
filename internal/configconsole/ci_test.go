@@ -16,7 +16,7 @@ func TestCIImpactUsesLocalEventAndPathFilters(t *testing.T) {
 	files := map[string]string{
 		"ci.yml": `on:
   pull_request:
-    paths: ["**", "!.devflow/**", ".devflow/reincluded.yml"]
+    paths: ["**", "!.agentflow/**", ".agentflow/reincluded.yml"]
   push:
     branches: [main]
     paths-ignore: [docs/**]
@@ -34,7 +34,7 @@ func TestCIImpactUsesLocalEventAndPathFilters(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	result := ciImpact(root, ".devflow/config.yml", "main")
+	result := ciImpact(root, ".agentflow/config.yml", "main")
 	for _, want := range []string{
 		"[skip actions]", "no applicable rules", "pull_request (file excluded)",
 		"push (default branch included, file included)", "merge_group", "pull_request_target (activity-filtered)",
@@ -44,7 +44,7 @@ func TestCIImpactUsesLocalEventAndPathFilters(t *testing.T) {
 			t.Errorf("missing %q in %s", want, result)
 		}
 	}
-	if result = ciImpact(root, ".devflow/reincluded.yml", ""); !strings.Contains(result, "pull_request (file included)") || !strings.Contains(result, "branch-filtered") {
+	if result = ciImpact(root, ".agentflow/reincluded.yml", ""); !strings.Contains(result, "pull_request (file included)") || !strings.Contains(result, "branch-filtered") {
 		t.Errorf("did not respect later path inclusion and unresolved branch: %s", result)
 	}
 }

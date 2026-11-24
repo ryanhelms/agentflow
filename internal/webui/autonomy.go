@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/nscaledev/devflow/internal/configconsole"
-	"github.com/nscaledev/devflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
 )
 
-const approvalConfigFile = ".devflow/config.yml"
+const approvalConfigFile = ".agentflow/config.yml"
 
 type autonomyEdit struct {
 	Scope        string                       `json:"scope"`

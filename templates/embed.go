@@ -1,4 +1,4 @@
-// Package templates embeds the files `devflow init` writes into a consuming repo.
+// Package templates embeds the files `agentflow init` writes into a consuming repo.
 package templates
 
 import "embed"

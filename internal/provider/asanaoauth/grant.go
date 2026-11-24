@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 )
 
 const (
-	service        = "devflow.asanaoauth.v2.1"
+	service        = "agentflow.asanaoauth.v2.1"
 	account        = issuer + " " + Resource
 	maxRecord      = 2560 // A single atomic replacement fits Windows Credential Manager and macOS security -i.
 	refreshPending = "refresh result unknown"

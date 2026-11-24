@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // CommitPlan groups the working tree into proposed commits.
@@ -159,7 +159,7 @@ func (a *App) Preview(ctx context.Context, msg string) ([]Effect, []string, erro
 	var effects []Effect
 	var warnings []string
 	if m.Skip {
-		return nil, []string{"message has [devflow skip]; automation ignores it"}, nil
+		return nil, []string{"message has [agentflow skip]; automation ignores it"}, nil
 	}
 	if a.UsesTaskRefs() {
 		var err error

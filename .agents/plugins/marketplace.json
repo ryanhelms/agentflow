@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "devflow",
+      "name": "agentflow",
       "source": {
         "source": "local",
         "path": "./"

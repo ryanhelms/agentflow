@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button, Row, Select, Stack, Text } from "@nscaledev/design-components/atoms";
 import { FormField, Panel } from "@nscaledev/design-components/molecules";
 
-const preferenceKey = "devflow.site-study.fixture.atlas-service.providers.v1";
+const preferenceKey = "agentflow.site-study.fixture.atlas-service.providers.v1";
 const taskOptions = [
   ["jira", "Jira"],
   ["github-issues", "GitHub Issues"],
@@ -58,7 +58,7 @@ export default function GuidedSetup() {
       setMessage("Already configured. Both choices retained. No changes. " + describe(pair));
     } else {
       setPhase("preview");
-      setMessage("Review these provider IDs for .devflow/config.yml. " + describe(pair));
+      setMessage("Review these provider IDs for .agentflow/config.yml. " + describe(pair));
     }
   }
 
@@ -68,7 +68,7 @@ export default function GuidedSetup() {
         <Text as="p" tone="muted">Try provider selection in the sample <code>atlas-service</code> checkout.</Text>
         {phase === "choose" && !applied && (
           <Text as="p" tone="muted">
-            The sample <code>.devflow/config.yml</code> lists <code>ABC</code> under{" "}
+            The sample <code>.agentflow/config.yml</code> lists <code>ABC</code> under{" "}
             <code>jira.projects</code>. Setup suggests Jira and asks where the team keeps knowledge.
           </Text>
         )}

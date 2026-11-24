@@ -15,7 +15,7 @@ provider=${3:-none}
 subjects=$(git log --no-merges --format='%s' --end-of-options "$range" --)
 
 if [ "$#" -ge 3 ]; then
-  refs=$(devflow keys --shipped --range "$range")
+  refs=$(agentflow keys --shipped --range "$range")
   keys=""
   if [ "$provider" = jira ]; then keys=$(paste -sd, - <<<"$refs"); fi
 else

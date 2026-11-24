@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/app"
 )
 
 func runPolicy(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow policy explain [ACTION] | status ID | approve ID --confirm-token TOKEN")
+		return errors.New("usage: agentflow policy explain [ACTION] | status ID | approve ID --confirm-token TOKEN")
 	}
 	cmd, rest := args[0], args[1:]
 	fs := flag.NewFlagSet("policy "+cmd, flag.ContinueOnError)
@@ -41,12 +41,12 @@ func runPolicy(ctx context.Context, args []string) error {
 		return writeResult(a.PolicyExplain(ctx, id))
 	case "status":
 		if id == "" {
-			return errors.New("usage: devflow policy status ID")
+			return errors.New("usage: agentflow policy status ID")
 		}
 		return writeResult(a.ApprovalStatus(id))
 	case "approve":
 		if id == "" || token == "" {
-			return errors.New("usage: devflow policy approve ID --confirm-token TOKEN")
+			return errors.New("usage: agentflow policy approve ID --confirm-token TOKEN")
 		}
 		return writeResult(a.ApproveOperation(id, token))
 	default:
@@ -99,7 +99,7 @@ func writeResult(out any, err error) error {
 // Only the machine-facing prepare response returns the bearer credential.
 func printApproval(p *app.Pending) error {
 	if p.Policy != nil {
-		fmt.Fprintf(os.Stderr, "Devflow %s: %s (%s)", p.Policy.Action, p.Policy.Level, p.Policy.Source)
+		fmt.Fprintf(os.Stderr, "Agentflow %s: %s (%s)", p.Policy.Action, p.Policy.Level, p.Policy.Source)
 		if p.Approval != nil {
 			fmt.Fprintf(os.Stderr, "; request %s, owner %s, expires %s", p.Approval.OperationID, p.Approval.PromptOwner, p.Approval.ExpiresAt.Format("15:04:05 MST"))
 		}

@@ -1,4 +1,4 @@
-# devflow's own releases: single branch, versioned straight from commit types.
+# agentflow's own releases: single branch, versioned straight from commit types.
 #
 # Every push to main computes the next version from the Conventional Commits since the
 # last vX.Y.Z tag (fix/perf -> patch, feat -> minor, ! or BREAKING CHANGE -> major; before
@@ -15,9 +15,9 @@
 # `release` remote over SSH with that key.
 #
 # Releases are published as normal, stable releases. The floating major tag (v0 while
-# devflow is 0.x, v1 from 1.0.0) then moves to the release so consuming repos that use
-# nscaledev/devflow/...@v0 get it. A bad release is stopped with policy/versions.json
-# (blocked/min_version) and devflow update --rollback.
+# agentflow is 0.x, v1 from 1.0.0) then moves to the release so consuming repos that use
+# nscaledev/agentflow/...@v0 get it. A bad release is stopped with policy/versions.json
+# (blocked/min_version) and agentflow update --rollback.
 name: release
 
 on:
@@ -34,6 +34,8 @@ concurrency:
 
 jobs:
   release:
+    # The rename can merge ahead of cutover without publishing under the old signer.
+    if: github.repository == 'nscaledev/agentflow'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -97,7 +99,7 @@ jobs:
           scripts/changelog.sh --version "$VERSION" --from "$LAST_TAG" --to HEAD \
             --repo "$GITHUB_REPOSITORY" --notes "$RUNNER_TEMP/release-notes.md" --update CHANGELOG.md
           # Keep the README status area on the current release.
-          sed -i -E "s#(<!-- devflow:version -->)[^<]*(<!-- /devflow:version -->)#\1\`v$VERSION\`\2#" README.md
+          sed -i -E "s#(<!-- agentflow:version -->)[^<]*(<!-- /agentflow:version -->)#\1\`v$VERSION\`\2#" README.md
           # Publish matching host package versions in the same commit as the binary tag.
           plugin_manifests=(
             adapters/claude-code/.claude-plugin/plugin.json
@@ -112,17 +114,45 @@ jobs:
           done
           git add CHANGELOG.md README.md "${plugin_manifests[@]}"
           git commit -m "chore(release): v$VERSION"
-          git tag -a "v$VERSION" -m "devflow v$VERSION"
+          git tag -a "v$VERSION" -m "agentflow v$VERSION"
           git push origin "HEAD:${GITHUB_REF_NAME}"
           git push release "refs/tags/v$VERSION"
 
-      - name: Build and publish the GitHub Release
+      - name: Build and upload the draft GitHub Release
         if: steps.version.outputs.release == 'true'
         uses: goreleaser/goreleaser-action@v6
         with:
           args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - if: steps.version.outputs.release == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            install.sh
+            install.ps1
+
+      - name: Verify and publish the GitHub Release
+        id: publish
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.version.outputs.next }}
+        run: |
+          set -euo pipefail
+          artifacts=$(mktemp -d)
+          trap 'rm -rf "$artifacts"' EXIT
+          gh release download "$TAG" --dir "$artifacts"
+          cd "$artifacts"
+          sha256sum --check checksums.txt
+          for file in *.tar.gz *.zip install.sh install.ps1; do
+            gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+          done
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
       - name: Move the floating major tag
         if: steps.version.outputs.release == 'true'
@@ -134,20 +164,14 @@ jobs:
           git push -f release "refs/tags/$major"
           echo "::notice::$major now points at v$VERSION"
 
-      - if: steps.version.outputs.release == 'true'
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: |
-            dist/*.tar.gz
-            dist/*.zip
-            install.sh
-            install.ps1
-
-      - name: Remove the tag if the release failed
-        if: failure() && steps.version.outputs.release == 'true'
+      - name: Clean up a failed draft release
+        if: failure() && steps.version.outputs.release == 'true' && steps.publish.outcome != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ steps.version.outputs.next }}
         run: |
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          git push --delete release "refs/tags/$TAG" || true
+          set -euo pipefail
+          if [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true ]; then
+            gh release delete "$TAG" --yes
+            git push --delete release "refs/tags/$TAG"
+          fi

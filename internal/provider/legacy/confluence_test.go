@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 type confluenceSearch func(text, space string, limit int) ([]atlassian.Page, error)
@@ -21,12 +21,12 @@ func TestConfluenceFind(t *testing.T) {
 		if text != "delivery loop" || space != "ENG" || limit != 10 {
 			t.Fatalf("search args = %q, %q, %d", text, space, limit)
 		}
-		return []atlassian.Page{{ID: "77", Title: "Design", Excerpt: "Search excerpt", Space: "ENG", URL: "https://devflow.example/wiki/design"}}, nil
+		return []atlassian.Page{{ID: "77", Title: "Design", Excerpt: "Search excerpt", Space: "ENG", URL: "https://agentflow.example/wiki/design"}}, nil
 	})
 	confluence := NewConfluence("wiki", client)
 	want := []provider.Document{{
 		Ref:   provider.Ref{Instance: "wiki", Scope: "ENG", ID: "77"},
-		Title: "Design", Body: "Search excerpt", URL: "https://devflow.example/wiki/design",
+		Title: "Design", Body: "Search excerpt", URL: "https://agentflow.example/wiki/design",
 	}}
 	got, err := confluence.Find(t.Context(), provider.DocumentQuery{Text: "delivery loop", Scope: "ENG"})
 	if err != nil || !reflect.DeepEqual(got, want) {

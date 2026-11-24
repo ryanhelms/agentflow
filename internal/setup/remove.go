@@ -14,9 +14,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/adapters"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/templates"
+	"github.com/nscaledev/agentflow/adapters"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/templates"
 )
 
 // RemoveOptions control Remove.
@@ -27,23 +27,23 @@ type RemoveOptions struct {
 }
 
 // AutoInitKey is the per-clone git config that turns automatic init off. Remove sets it
-// so the AI-client plugin does not set devflow up again on the next session.
-const AutoInitKey = "devflow.autoinit"
+// so the AI-client plugin does not set agentflow up again on the next session.
+const AutoInitKey = "agentflow.autoinit"
 
-// Files devflow owns outright: removed even when edited.
+// Files agentflow owns outright: removed even when edited.
 var ownedPaths = []string{
-	".devflow/config.yml",
-	".devflow/releases.yml",
-	".devflow/bin/devflow",
-	".devflow/bin/devflow.cmd",
-	".devflow/bin/devflow.ps1",
-	".github/workflows/devflow.yml",
+	".agentflow/config.yml",
+	".agentflow/releases.yml",
+	".agentflow/bin/agentflow",
+	".agentflow/bin/agentflow.cmd",
+	".agentflow/bin/agentflow.ps1",
+	".github/workflows/agentflow.yml",
 }
 
-// Files `devflow release init` generates.
+// Files `agentflow release init` generates.
 var releaseFiles = []string{"release-please-config.json", ".release-please-manifest.json"}
 
-// JSON client configs that are merged into, not owned: only devflow's keys are removed.
+// JSON client configs that are merged into, not owned: only agentflow's keys are removed.
 var mergedJSON = map[string][]string{
 	".claude/settings.json": {"template:.claude/settings.json"},
 	".cursor/mcp.json":      {"template:.cursor/mcp.json", "adapter:cursor/mcp.json"},
@@ -53,7 +53,7 @@ var mergedJSON = map[string][]string{
 }
 
 // Remove undoes Init and Install in the repository at repoDir: it deletes the files
-// devflow owns, strips devflow's entries from shared files (AGENTS.md, client configs),
+// agentflow owns, strips agentflow's entries from shared files (AGENTS.md, client configs),
 // unsets core.hooksPath when .githooks is gone and turns automatic init off for this
 // clone. Nothing is committed; the developer reviews and commits the deletions.
 func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, error) {
@@ -74,7 +74,7 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		if repo, openErr := gitx.Open(ctx, repoDir); openErr == nil {
 			optedOut, _ := repo.Git(ctx, "config", "--local", "--type=bool", AutoInitKey)
 			if strings.TrimSpace(optedOut) == "false" && !bytes.Contains(guidance, []byte(blockStart)) && !hasCompanionReceipts(repoDir) {
-				res.Notes = append(res.Notes, "Devflow was already removed from this clone")
+				res.Notes = append(res.Notes, "Agentflow was already removed from this clone")
 				return res, nil
 			}
 		}
@@ -138,7 +138,7 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		}
 		want, _ := templates.Repo.ReadFile(p)
 		if !bytes.Equal(cur, want) && !opt.Force {
-			res.Skipped = append(res.Skipped, rel+" (changed since devflow init; --force to delete)")
+			res.Skipped = append(res.Skipped, rel+" (changed since agentflow init; --force to delete)")
 			return nil
 		}
 		return del(rel)
@@ -172,7 +172,7 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 	cleanCodex := legacyClients
 	if receipt != nil {
 		protected, claimed := receipt.ClientEntries[".codex/config.toml"]
-		cleanCodex = claimed && !slices.Contains(protected, "mcp_servers.devflow") || fullInstall && !receipt.existing(".codex/config.toml")
+		cleanCodex = claimed && !slices.Contains(protected, "mcp_servers.agentflow") || fullInstall && !receipt.existing(".codex/config.toml")
 	}
 	if cleanCodex {
 		if err := removeCodex(res, root, receipt.existing(".codex/config.toml"), opt.DryRun); err != nil {
@@ -190,9 +190,9 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 		}
 	}
 	if (fullInstall || receipt != nil) && !opt.DryRun {
-		directories := []string{".devflow/bin", ".devflow", ".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"}
+		directories := []string{".agentflow/bin", ".agentflow", ".githooks", ".jira", "docs", ".github/workflows", ".github", ".claude", ".cursor", ".vscode", ".gemini", ".grok", ".codex"}
 		if !fullInstall {
-			directories = []string{".devflow"}
+			directories = []string{".agentflow"}
 			for name := range receipt.ClientEntries {
 				if _, known := mergedJSON[name]; known || name == ".codex/config.toml" {
 					directories = append(directories, filepath.Dir(name))
@@ -218,12 +218,12 @@ func Remove(ctx context.Context, repoDir string, opt RemoveOptions) (*Result, er
 			_, _ = repo.Git(ctx, "config", "--local", "--unset", managedHooks)
 		}
 		if _, err := repo.Git(ctx, "config", "--local", AutoInitKey, "false"); err == nil {
-			res.Notes = append(res.Notes, "automatic init is off for this clone (git config "+AutoInitKey+" false); `devflow init` turns it back on")
+			res.Notes = append(res.Notes, "automatic init is off for this clone (git config "+AutoInitKey+" false); `agentflow init` turns it back on")
 		}
 	}
 	res.Notes = append(res.Notes,
 		"commit the deletions on a branch and open a PR; other clones keep core.hooksPath until they pull",
-		"repo variables and secrets (JIRA_*, DEVFLOW_*) and ~/.codex/prompts/devflow-*.md are not touched")
+		"repo variables and secrets (JIRA_*, AGENTFLOW_*) and ~/.codex/prompts/agentflow-*.md are not touched")
 	return res, nil
 }
 
@@ -256,7 +256,7 @@ func removeIfEmpty(root *os.Root, dir string) {
 	}
 }
 
-// unmergeJSON removes the keys devflow merged into a shared JSON file, deleting the
+// unmergeJSON removes the keys agentflow merged into a shared JSON file, deleting the
 // file when nothing else is left in it.
 func unmergeJSON(res *Result, root *os.Root, rel, group string, cleanup bool, protected []string, keepFile, dryRun bool) error {
 	parent, name := filepath.Split(filepath.FromSlash(rel))
@@ -307,7 +307,7 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, cle
 	}
 	current, err := readProjectFile(dir, name)
 	if errors.Is(err, errNotRegular) {
-		res.Notes = append(res.Notes, "kept "+rel+" (inspect the file and remove devflow's entries by hand)")
+		res.Notes = append(res.Notes, "kept "+rel+" (inspect the file and remove agentflow's entries by hand)")
 		return nil
 	}
 	if err != nil {
@@ -315,7 +315,7 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, cle
 	}
 	doc := registrationJSON(current, &ClientRegistration{Path: rel})
 	if doc == nil {
-		res.Skipped = append(res.Skipped, rel+" (not valid JSON; remove devflow's entries by hand)")
+		res.Skipped = append(res.Skipped, rel+" (not valid JSON; remove agentflow's entries by hand)")
 		return nil
 	}
 	changed, err := removeCompanionEntries(res, doc, rel, group, records)
@@ -403,7 +403,7 @@ func removeCompanionEntries(res *Result, doc map[string]any, rel, group string, 
 			continue
 		}
 		delete(entries, key)
-		if key == "devflow" {
+		if key == "agentflow" {
 			res.Notes = append(res.Notes, "remove project launcher "+id)
 		} else {
 			res.Notes = append(res.Notes, "remove companion "+id)
@@ -469,7 +469,7 @@ func removeCodex(res *Result, root *os.Root, keepFile, dryRun bool) error {
 	}
 	tail := data[start+len(block):]
 	next := bytes.TrimSpace(tail)
-	if len(next) > 0 && (!bytes.HasPrefix(next, []byte("[")) || bytes.HasPrefix(next, []byte("[mcp_servers.devflow."))) {
+	if len(next) > 0 && (!bytes.HasPrefix(next, []byte("[")) || bytes.HasPrefix(next, []byte("[mcp_servers.agentflow."))) {
 		return nil
 	}
 	if start > 0 && data[start-1] != '\n' {
@@ -493,7 +493,7 @@ func removeCodex(res *Result, root *os.Root, keepFile, dryRun bool) error {
 	return publishAfter(root, rel, remaining, nil)
 }
 
-// removeBlock deletes the devflow marker block from a markdown file, and the file when
+// removeBlock deletes the agentflow marker block from a markdown file, and the file when
 // only the block was in it.
 func removeBlock(res *Result, root *os.Root, receipt *enrollment, dryRun bool) error {
 	const rel = agentInstructionsFile

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/release"
+	"github.com/nscaledev/agentflow/internal/release"
 )
 
 // UnitPlan is the version state of one deployable unit.
@@ -30,7 +30,7 @@ type UnitPlan struct {
 func (a *App) ReleasePlan(ctx context.Context, unit string) ([]UnitPlan, error) {
 	cfg, err := release.Load(a.Repo.Dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, errors.New("no .devflow/releases.yml: run devflow release init")
+		return nil, errors.New("no .agentflow/releases.yml: run agentflow release init")
 	}
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ type ReleaseInitResult struct {
 }
 
 // ReleaseInit detects deployable units and the branching strategy, then writes
-// .devflow/releases.yml and the release-please files. Existing releases.yml is kept
+// .agentflow/releases.yml and the release-please files. Existing releases.yml is kept
 // unless force is set.
 func (a *App) ReleaseInit(ctx context.Context, strategy string, force bool) (*ReleaseInitResult, error) {
 	return a.releaseInit(ctx, strategy, force, false)
@@ -113,7 +113,7 @@ func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveE
 	cfg, err := release.Load(a.Repo.Dir)
 	switch {
 	case err == nil && !force:
-		res.Notes = append(res.Notes, ".devflow/releases.yml exists; kept it (use --force to re-detect)")
+		res.Notes = append(res.Notes, ".agentflow/releases.yml exists; kept it (use --force to re-detect)")
 	case err == nil || errors.Is(err, os.ErrNotExist):
 		owner := ""
 		if r := a.Repo.RemoteRepo(ctx); r != "" {
@@ -125,7 +125,7 @@ func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveE
 		}
 		if len(cfg.Units) == 0 {
 			cfg.Units = []release.Unit{release.RootUnit(a.Repo.Dir)}
-			res.Notes = append(res.Notes, "no deployables detected; added the repo root as one unit; edit .devflow/releases.yml")
+			res.Notes = append(res.Notes, "no deployables detected; added the repo root as one unit; edit .agentflow/releases.yml")
 		}
 		if err := cfg.Validate(); err != nil {
 			return nil, err
@@ -133,7 +133,7 @@ func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveE
 		if err := cfg.Save(a.Repo.Dir); err != nil {
 			return nil, err
 		}
-		res.Written = append(res.Written, ".devflow/releases.yml")
+		res.Written = append(res.Written, ".agentflow/releases.yml")
 	default:
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveE
 	res.Strategy, res.Units = cfg.Strategy, cfg.Units
 	res.Notes = append(res.Notes,
 		"stable releases are created automatically on "+a.Repo.DefaultBranch(ctx)+" from feat/fix/! commits",
-		"commit these files; the devflow caller workflow runs nscaledev/devflow/.github/workflows/semver-release.yml")
+		"commit these files; the agentflow caller workflow runs nscaledev/agentflow/.github/workflows/semver-release.yml")
 	return res, err
 }
 

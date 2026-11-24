@@ -11,7 +11,7 @@ import (
 )
 
 // Operation is one role operation. Optional operations are capabilities a
-// provider may leave out; devflow reports them as unsupported.
+// provider may leave out; agentflow reports them as unsupported.
 type Operation struct {
 	Name     string `json:"name"`
 	Effects  string `json:"effects"` // read, local or remote
@@ -29,7 +29,7 @@ type Contract struct {
 
 func (c Contract) ID() string { return c.Name + "/v" + strconv.Itoa(c.Version) }
 
-// Supported is how many major versions devflow accepts per contract: the
+// Supported is how many major versions agentflow accepts per contract: the
 // current one and the one before it.
 const Supported = 2
 

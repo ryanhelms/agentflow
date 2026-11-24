@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/configconsole"
 )
 
 func TestReadinessUsesOnlyCurrentCheckoutAndReturnsMeasuredResults(t *testing.T) {
 	s := testServer(t)
 	contents := "code_hosting: {provider: none}\ntask_management: {provider: filesystem, settings: {root: private-fixture}}\nknowledge_base: {provider: confluence}\ndevops: {checks: {provider: none}, deployments: {provider: none}, releases: {provider: none}}\nsecops: {provider: none}\nnotifications: {provider: none}\n"
-	configPath := filepath.Join(s.repo.Dir, ".devflow", "config.yml")
+	configPath := filepath.Join(s.repo.Dir, ".agentflow", "config.yml")
 	if err := os.WriteFile(configPath, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}

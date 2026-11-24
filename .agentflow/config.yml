@@ -1,15 +1,15 @@
-# This repository uses devflow for its own provider pilot.
-devflow: 1
+# This repository uses agentflow for its own provider pilot.
+agentflow: 1
 
 task_management:
   provider: github-issues
   settings:
-    repository: nscaledev/devflow
+    repository: nscaledev/agentflow
     transitions:
       pr.merged: closed
       "#done": none
   templates:
-    catalog: .devflow/task-templates.json
+    catalog: .agentflow/task-templates.json
     default:
       name: engineering-task
       revision: "1"

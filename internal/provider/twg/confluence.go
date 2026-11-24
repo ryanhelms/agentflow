@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/confluence"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/confluence"
 )
 
 // Confluence reads pages and replaces published pages on one Atlassian site. References use
@@ -380,7 +380,7 @@ func (p PreparedConfluencePublish) Apply(ctx context.Context) (provider.WriteRes
 	if p.client == nil || p.snapshot == "" {
 		return zero, fmt.Errorf("confluence publication was not prepared: %w", ErrFailure)
 	}
-	body, err := os.CreateTemp("", "devflow-confluence-*.html")
+	body, err := os.CreateTemp("", "agentflow-confluence-*.html")
 	if err != nil {
 		return zero, fmt.Errorf("create confluence body file: %w", err)
 	}

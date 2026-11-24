@@ -9,12 +9,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (TransitionResult, error) {
@@ -52,7 +52,7 @@ func (a *App) applyIssueTransition(ctx context.Context, plan TransitionResult) (
 // re-runs keep the run ID and job. Interactive approvals identify one write;
 // unconfirmed human comments may intentionally repeat the same text.
 func issueOperation() string {
-	if id := os.Getenv("DEVFLOW_OPERATION_ID"); id != "" {
+	if id := os.Getenv("AGENTFLOW_OPERATION_ID"); id != "" {
 		return id
 	}
 	if id := os.Getenv("GITHUB_RUN_ID"); id != "" {

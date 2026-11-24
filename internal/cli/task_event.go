@@ -7,8 +7,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/nscaledev/devflow/internal/event"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/event"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func runGitHubTaskEvent(ctx context.Context, dryRun bool) error {
@@ -31,10 +31,10 @@ func runGitHubTaskEvent(ctx context.Context, dryRun bool) error {
 	metadata := event.GitHubActionsContext{
 		Repository:    provider.RepositoryRef{Host: host, Path: os.Getenv("GITHUB_REPOSITORY")},
 		RepositoryID:  repoID,
-		DefaultBranch: os.Getenv("DEVFLOW_DEFAULT_BRANCH"),
+		DefaultBranch: os.Getenv("AGENTFLOW_DEFAULT_BRANCH"),
 		EventName:     os.Getenv("GITHUB_EVENT_NAME"),
 		EventID:       os.Getenv("GITHUB_RUN_ID"),
-		ApprovedIssue: os.Getenv("DEVFLOW_APPROVED_ISSUE"),
+		ApprovedIssue: os.Getenv("AGENTFLOW_APPROVED_ISSUE"),
 	}
 	result, err := a.ApplyGitHubTaskEvent(ctx, metadata, os.Getenv("GITHUB_EVENT_PATH"), dryRun)
 	if err != nil {

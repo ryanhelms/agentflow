@@ -8,14 +8,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/auth"
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/event"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/legacy"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/auth"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/event"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/legacy"
 )
 
 // prepareWorkflowTasks binds reads to the runner identity. The Jira endpoint

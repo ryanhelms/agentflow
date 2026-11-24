@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func writeUserDefinition(t *testing.T, providers string) {
 	t.Helper()
-	dir := filepath.Join(os.Getenv("DEVFLOW_HOME"), "providers")
+	dir := filepath.Join(os.Getenv("AGENTFLOW_HOME"), "providers")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -79,10 +79,10 @@ func TestLayeredTaskTargetCannotWidenRepositoryScope(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newRepo(t)
-			if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+			if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("task_management: {provider: "+tc.repo+"}"), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte("task_management: {provider: "+tc.repo+"}"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			writeUserDefinition(t, tc.user)
@@ -131,12 +131,12 @@ func TestLayeredConfluenceSpaceScopeBeforeDispatch(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newRepo(t)
-			if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+			if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			// Only the list is repository-supplied. Its keys still pin the pre-user site.
 			body := "knowledge_base: {provider: confluence, settings: {publish_spaces: " + tc.repo + "}}"
-			if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(body), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(body), 0600); err != nil {
 				t.Fatal(err)
 			}
 			writeUserDefinition(t, "confluence: {knowledge_base: {settings: {"+tc.user+"}}}")
@@ -205,11 +205,11 @@ func TestRouterCannotAddTargetToRepositorySignal(t *testing.T) {
 
 func TestRepositoryRemoteBoundsResolvedIssueTarget(t *testing.T) {
 	dir := newRepo(t)
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	cfg := "code_hosting: {settings: {target_remote: upstream}}\ntask_management: {provider: github-issues}"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	writeUserDefinition(t, "auto: {code_hosting: {settings: {target_remote: origin}}}")

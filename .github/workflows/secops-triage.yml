@@ -8,9 +8,9 @@ on:
         type: string
         default: ""
       runner-label:
-        description: Label of self-hosted apply runners with persistent DEVFLOW_HOME storage
+        description: Label of self-hosted apply runners with persistent AGENTFLOW_HOME storage
         type: string
-        default: devflow-secops
+        default: agentflow-secops
     secrets:
       SECOPS_READ_TOKEN:
         required: false
@@ -20,7 +20,7 @@ permissions: {}
 jobs:
   preview:
     if: >-
-      vars.DEVFLOW_ENABLED != 'false' && inputs.apply-source == '' &&
+      vars.AGENTFLOW_ENABLED != 'false' && inputs.apply-source == '' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
@@ -31,24 +31,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: nscaledev/agentflow/actions/setup@v0
         with:
           binary: true
       - name: Preview task drafts
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
-        run: devflow secops triage --dry-run
+          AGENTFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
+        run: agentflow secops triage --dry-run
 
   apply:
     if: >-
-      vars.DEVFLOW_ENABLED != 'false' && inputs.apply-source != '' &&
+      vars.AGENTFLOW_ENABLED != 'false' && inputs.apply-source != '' &&
       github.event_name == 'workflow_dispatch' &&
       github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
-    # Keep DEVFLOW_HOME on a persistent volume shared by runners with this label.
+    # Keep AGENTFLOW_HOME on a persistent volume shared by runners with this label.
     runs-on: [self-hosted, "${{ inputs.runner-label }}"]
     concurrency:
-      group: devflow-secops-${{ github.repository_id }}
+      group: agentflow-secops-${{ github.repository_id }}
       cancel-in-progress: false
     permissions:
       contents: read
@@ -58,12 +58,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: nscaledev/agentflow/actions/setup@v0
         with:
           binary: true
       - name: Create the approved triage task
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
+          AGENTFLOW_SECOPS_TOKEN: ${{ secrets.SECOPS_READ_TOKEN }}
           SOURCE: ${{ inputs.apply-source }}
-        run: devflow secops triage --apply --source "$SOURCE" --yes
+        run: agentflow secops triage --apply --source "$SOURCE" --yes

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

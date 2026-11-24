@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "devflow": {
+    "agentflow": {
       "command": "sh",
-      "args": ["-c", "exec \"$(git rev-parse --show-toplevel)/.devflow/bin/devflow\" mcp --client grok"]
+      "args": ["-c", "exec \"$(git rev-parse --show-toplevel)/.agentflow/bin/agentflow\" mcp --client grok"]
     }
   }
 }

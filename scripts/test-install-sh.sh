@@ -9,7 +9,7 @@ mkdir "$scratch/cache"
 ln -s "$scratch/cache" "$scratch/cache alias"
 export XDG_CACHE_HOME="$scratch/cache alias" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export TMPDIR="$scratch/tmp" TEST_CALLS="$scratch/calls" TEST_GH="$scratch/gh-calls"
-export TEST_BINARY="$scratch/devflow" TEST_LAUNCHER="$root/templates/repo/.devflow/bin/devflow"
+export TEST_BINARY="$scratch/agentflow" TEST_LAUNCHER="$root/templates/repo/.agentflow/bin/agentflow"
 mkdir -p "$scratch/bin" "$TMPDIR"
 export PATH="$scratch/bin:$PATH"
 installer="$root/install.sh"
@@ -41,7 +41,7 @@ case "$1 $2" in
     printf '%s\n' "${TEST_TAG:-v1.2.3}"
     ;;
   'api --hostname')
-    [[ "$*" == *'repos/nscaledev/devflow/contents/templates/repo/.devflow/bin/devflow?ref=v1.2.3' ]]
+    [[ "$*" == *'repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow?ref=v1.2.3' ]]
     if [ "${TEST_FAILURE:-}" = source ]; then cat "$TEST_BINARY"; exit 42; fi
     cat "$TEST_LAUNCHER"
     ;;
@@ -52,13 +52,13 @@ case "$1 $2" in
       case "$1" in
         --dir) dest=$2 ;;
         --pattern) if [ "$2" != checksums.txt ]; then archive=$2; fi ;;
-        --repo) [ "$2" = nscaledev/devflow ] ;;
+        --repo) [ "$2" = nscaledev/agentflow ] ;;
         *) exit 2 ;;
       esac
       shift 2
     done
-    [ -n "$dest" ] && [[ "$archive" == devflow_1.2.3_*.tar.gz ]]
-    tar -czf "$dest/$archive" -C "$(dirname "$TEST_BINARY")" devflow
+    [ -n "$dest" ] && [[ "$archive" == agentflow_1.2.3_*.tar.gz ]]
+    tar -czf "$dest/$archive" -C "$(dirname "$TEST_BINARY")" agentflow
     if [ "${TEST_FAILURE:-}" = archive ]; then exit 43; fi
     if [ "${TEST_FAILURE:-}" = checksum ]; then
       printf '%064d  %s\n' 0 "$archive" > "$dest/checksums.txt"
@@ -69,7 +69,7 @@ case "$1 $2" in
     fi
     ;;
   'attestation verify')
-    [[ "$*" == *'--signer-workflow nscaledev/devflow/.github/workflows/release.yml' ]]
+    [[ "$*" == *'--signer-workflow nscaledev/agentflow/.github/workflows/release.yml' ]]
     [ "${TEST_FAILURE:-}" != signer ]
     ;;
   *) exit 97 ;;
@@ -107,13 +107,13 @@ TEST_FAILURE=archive expect_status 43 "$installer" "$repo"
 TEST_FAILURE=checksum expect_status 1 "$installer" "$repo"
 TEST_FAILURE=signer expect_status 1 "$installer" "$repo"
 [ ! -e "$TEST_CALLS" ]
-[ ! -e "$XDG_CACHE_HOME/devflow/current" ]
+[ ! -e "$XDG_CACHE_HOME/agentflow/current" ]
 
 # Recover from an invalid argument, accept a nested path, preserve stdin for the binary.
-printf '%s\n' "$scratch/missing-again" "$repo/subdir" 'left for devflow' > "$scratch/input"
-TEST_STDIN='left for devflow' expect_status 0 "$installer" --repo "$scratch/missing" < "$scratch/input"
+printf '%s\n' "$scratch/missing-again" "$repo/subdir" 'left for agentflow' > "$scratch/input"
+TEST_STDIN='left for agentflow' expect_status 0 "$installer" --repo "$scratch/missing" < "$scratch/input"
 [ "$(cat "$TEST_CALLS")" = "$repo|init" ]
-[ -x "$XDG_CACHE_HOME/devflow/current/devflow" ]
+[ -x "$XDG_CACHE_HOME/agentflow/current/agentflow" ]
 grep -q 'attestation verify' "$TEST_GH"
 : > "$TEST_GH"
 : > "$TEST_CALLS"
@@ -133,32 +133,32 @@ TEST_BINARY_STATUS=75 expect_status 75 "$installer" "$repo" </dev/null
 if grep -q 'release download' "$TEST_GH"; then echo 'Downloaded a warm cache again' >&2; exit 1; fi
 
 # A partial install resumes; a complete project never executes its own launcher.
-mkdir -p "$repo/.devflow/bin" "$repo/.github/workflows"
-touch "$repo/.devflow/config.yml"
+mkdir -p "$repo/.agentflow/bin" "$repo/.github/workflows"
+touch "$repo/.agentflow/config.yml"
 : > "$TEST_CALLS"
 expect_status 0 "$installer" "$repo"
 [ "$(cat "$TEST_CALLS")" = "$repo|init" ]
 : > "$TEST_CALLS"
-printf '#!/bin/sh\nexit 99\n' > "$repo/.devflow/bin/devflow"
-chmod +x "$repo/.devflow/bin/devflow"
-touch "$repo/.devflow/bin/devflow.cmd" "$repo/.devflow/bin/devflow.ps1" "$repo/.github/workflows/devflow.yml"
+printf '#!/bin/sh\nexit 99\n' > "$repo/.agentflow/bin/agentflow"
+chmod +x "$repo/.agentflow/bin/agentflow"
+touch "$repo/.agentflow/bin/agentflow.cmd" "$repo/.agentflow/bin/agentflow.ps1" "$repo/.github/workflows/agentflow.yml"
 expect_status 0 "$installer" "$repo"
 [ "$(cat "$TEST_CALLS")" = "$repo|init" ]
 if grep -q 'release download' "$TEST_GH"; then echo 'Downloaded a warm cache again' >&2; exit 1; fi
 
 # A different active version must not initialize a project using legacy behavior.
-mkdir "$XDG_CACHE_HOME/devflow/0.0.1"
-cp "$repo/.devflow/bin/devflow" "$XDG_CACHE_HOME/devflow/0.0.1/devflow"
-ln -sfn "$XDG_CACHE_HOME/devflow/0.0.1" "$XDG_CACHE_HOME/devflow/current"
+mkdir "$XDG_CACHE_HOME/agentflow/0.0.1"
+cp "$repo/.agentflow/bin/agentflow" "$XDG_CACHE_HOME/agentflow/0.0.1/agentflow"
+ln -sfn "$XDG_CACHE_HOME/agentflow/0.0.1" "$XDG_CACHE_HOME/agentflow/current"
 : > "$TEST_GH"
 : > "$TEST_CALLS"
 TEST_FAILURE=archive expect_status 43 "$installer" "$repo"
-[ "$XDG_CACHE_HOME/devflow/current" -ef "$XDG_CACHE_HOME/devflow/0.0.1" ]
+[ "$XDG_CACHE_HOME/agentflow/current" -ef "$XDG_CACHE_HOME/agentflow/0.0.1" ]
 [ ! -s "$TEST_CALLS" ]
 if grep -q 'attestation verify' "$TEST_GH"; then echo 'Verified an incomplete download' >&2; exit 1; fi
 expect_status 0 "$installer" "$repo"
 grep -q 'attestation verify' "$TEST_GH"
-[ "$XDG_CACHE_HOME/devflow/current" -ef "$XDG_CACHE_HOME/devflow/1.2.3" ]
+[ "$XDG_CACHE_HOME/agentflow/current" -ef "$XDG_CACHE_HOME/agentflow/1.2.3" ]
 [ "$(cat "$TEST_CALLS")" = "$repo|init" ]
 
 echo 'PASS: project selection, verified first run, failure propagation and repeat installation'

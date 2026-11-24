@@ -11,19 +11,19 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 func TestDesktopJiraComment(t *testing.T) {
 	const site = "https://fixture.atlassian.net"
 	const key = "DEV-13"
 	const note = "<ready>\n**review**"
-	const html = "<p>&lt;ready&gt;<br>**review**<br><br>(via devflow)</p>"
+	const html = "<p>&lt;ready&gt;<br>**review**<br><br>(via agentflow)</p>"
 	tools := flatCatalog(t, "jira-comment-flat-schema.json")
 	reads, writes := 0, 0
 	project, generation := "DEV", "fixture-grant"

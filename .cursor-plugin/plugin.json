@@ -1,7 +1,7 @@
 {
-  "name": "devflow",
+  "name": "agentflow",
   "version": "0.52.0",
-  "description": "Manage Devflow in a project and use its delivery workflow tools.",
+  "description": "Manage Agentflow in a project and use its delivery workflow tools.",
   "author": {
     "name": "Nscale Engineering Enablement"
   },

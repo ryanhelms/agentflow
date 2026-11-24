@@ -1,6 +1,6 @@
 // Set the theme before the first paint, including when the checkout is still connecting.
 (() => {
-  const key = "devflow.appearance";
+  const key = "agentflow.appearance";
   const system = window.matchMedia("(prefers-color-scheme: dark)");
   const preference = (value) => value === "light" || value === "dark" ? value : "system";
   let mode = "system";

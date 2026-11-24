@@ -36,17 +36,17 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: nscaledev/devflow/actions/setup@v0
+      - uses: nscaledev/agentflow/actions/setup@v0
         with:
           binary: true
       - id: task
         run: |
-          provider=$(devflow keys --provider)
+          provider=$(agentflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - id: knowledge
         name: Resolve knowledge provider
         run: |
-          provider=$(devflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
+          provider=$(agentflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Render notes
         env:
@@ -68,8 +68,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$TAG" --json body -q .body > "$RUNNER_TEMP/body.md"
-          if ! grep -q '<!-- devflow:notes -->' "$RUNNER_TEMP/body.md"; then
-            { printf '\n\n<!-- devflow:notes -->\n'; tail -n +2 "$RUNNER_TEMP/notes.md"; } >> "$RUNNER_TEMP/body.md"
+          if ! grep -q '<!-- agentflow:notes -->' "$RUNNER_TEMP/body.md"; then
+            { printf '\n\n<!-- agentflow:notes -->\n'; tail -n +2 "$RUNNER_TEMP/notes.md"; } >> "$RUNNER_TEMP/body.md"
             gh release edit "$TAG" --notes-file "$RUNNER_TEMP/body.md"
           fi
       - name: Publish to Confluence

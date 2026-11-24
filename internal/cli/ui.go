@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/webui"
+	"github.com/nscaledev/agentflow/internal/webui"
 )
 
 // A single daemon serves unrelated Git repositories. Git's per-invocation
@@ -51,9 +51,9 @@ func runUI(ctx context.Context, args []string) error {
 			running, port, err := webui.DaemonStatus(ctx)
 			if err == nil {
 				if running {
-					fmt.Printf("devflow UI daemon is running on loopback port %d\n", port)
+					fmt.Printf("agentflow UI daemon is running on loopback port %d\n", port)
 				} else {
-					fmt.Println("devflow UI daemon is stopped")
+					fmt.Println("agentflow UI daemon is stopped")
 				}
 			}
 			return err
@@ -63,9 +63,9 @@ func runUI(ctx context.Context, args []string) error {
 				return err
 			}
 			if running {
-				fmt.Println("Requested shutdown of the devflow UI daemon")
+				fmt.Println("Requested shutdown of the agentflow UI daemon")
 			} else {
-				fmt.Println("devflow UI daemon is already stopped")
+				fmt.Println("agentflow UI daemon is already stopped")
 			}
 			return nil
 		}
@@ -73,7 +73,7 @@ func runUI(ctx context.Context, args []string) error {
 
 	f := flag.NewFlagSet("ui", flag.ContinueOnError)
 	f.Usage = func() {
-		fmt.Fprintln(f.Output(), "Usage: devflow ui [options] [directory] | --status | --stop")
+		fmt.Fprintln(f.Output(), "Usage: agentflow ui [options] [directory] | --status | --stop")
 		f.PrintDefaults()
 	}
 	port := f.Int("port", 0, "loopback port for the daemon (default: reuse its port, otherwise try 80, then an available port)")
@@ -85,7 +85,7 @@ func runUI(ctx context.Context, args []string) error {
 		return err
 	}
 	if f.NArg() > 1 || *port < 0 || *port > 65535 {
-		return errors.New("usage: devflow ui [--screen NAME] [--role ROLE] [--no-open] [--foreground] [--port N] [directory]")
+		return errors.New("usage: agentflow ui [--screen NAME] [--role ROLE] [--no-open] [--foreground] [--port N] [directory]")
 	}
 	dest, err := (webui.Destination{Screen: *screen, Role: *role}).Normalize("overview")
 	if err != nil {
@@ -97,7 +97,7 @@ func runUI(ctx context.Context, args []string) error {
 	}
 	ready := func(address string, _ bool) {
 		if address == "" {
-			fmt.Fprintln(os.Stdout, "Opened the requested screen in the existing devflow tab.")
+			fmt.Fprintln(os.Stdout, "Opened the requested screen in the existing agentflow tab.")
 			return
 		}
 		fmt.Fprintln(os.Stdout, address)

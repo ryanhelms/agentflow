@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // GitHubClient is the subset of the GitHub client used by GitHub.

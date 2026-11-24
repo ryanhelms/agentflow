@@ -125,11 +125,11 @@ func (s *server) commanderFor(r *http.Request) (commanderBinding, string) {
 		return commanderBinding{}, ""
 	}
 	key := signature(c.epoch, "commander/worktree", s.instanceKey)
-	_, valid := grantDeadline(r.Header.Get("X-Devflow-Commander"), key, "commander/browser", time.Now(), tabSessionFor)
+	_, valid := grantDeadline(r.Header.Get("X-Agentflow-Commander"), key, "commander/browser", time.Now(), tabSessionFor)
 	if !valid {
 		return commanderBinding{}, ""
 	}
 	return c.actor, signature(c.epoch, "commander/tab-scope", "")
 }
 
-const commanderReconnect = "Reconnect Agent Commander from this worktree with devflow ui --screen handoff --no-open and open its one-time link."
+const commanderReconnect = "Reconnect Agent Commander from this worktree with agentflow ui --screen handoff --no-open and open its one-time link."

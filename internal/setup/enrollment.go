@@ -11,14 +11,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/templates"
+	"github.com/nscaledev/agentflow/templates"
 	"gopkg.in/yaml.v3"
 )
 
 // The receipt records names, never file contents or machine-specific paths. Only
 // fixed template paths are consulted during removal. Commit it with the project.
-const receiptPath = ".devflow/installation.yml"
-const managedHooks = "devflow.managedhookspath"
+const receiptPath = ".agentflow/installation.yml"
+const managedHooks = "agentflow.managedhookspath"
 
 type enrollment struct {
 	Version        int      `yaml:"version"`
@@ -40,7 +40,7 @@ func readEnrollment(root *os.Root) (*enrollment, error) {
 		return nil, fmt.Errorf("read installation receipt: %w", err)
 	}
 	if record.Version != 1 || record.AgentSeparator < 0 || record.AgentSeparator > 2 {
-		return nil, errors.New("invalid devflow installation receipt")
+		return nil, errors.New("invalid agentflow installation receipt")
 	}
 	return &record, nil
 }
@@ -50,16 +50,16 @@ func (r *enrollment) existing(name string) bool {
 }
 
 func legacyInstallation(root *os.Root) bool {
-	launcher, _ := readProjectFile(root, ".devflow/bin/devflow")
-	config, _ := root.Stat(".devflow/config.yml")
+	launcher, _ := readProjectFile(root, ".agentflow/bin/agentflow")
+	config, _ := root.Stat(".agentflow/config.yml")
 	shebang, body, _ := bytes.Cut(launcher, []byte("\n"))
-	return config != nil && config.Mode().IsRegular() && string(bytes.TrimSuffix(shebang, []byte("\r"))) == "#!/bin/sh" && bytes.HasPrefix(body, []byte("# devflow project launcher"))
+	return config != nil && config.Mode().IsRegular() && string(bytes.TrimSuffix(shebang, []byte("\r"))) == "#!/bin/sh" && bytes.HasPrefix(body, []byte("# agentflow project launcher"))
 }
 
 // An empty client path enrolls the whole project. A client-only installation
 // owns its registrations and can later be promoted to full project setup.
 func recordEnrollment(root *os.Root, clientFile string, writesGuidance bool) error {
-	return withClientLock(root, ".devflow-installation", func() error {
+	return withClientLock(root, ".agentflow-installation", func() error {
 		r, err := readEnrollment(root)
 		if err != nil {
 			return err
@@ -101,7 +101,7 @@ func recordEnrollment(root *os.Root, clientFile string, writesGuidance bool) err
 		if err != nil {
 			return err
 		}
-		if err := root.MkdirAll(".devflow", 0o755); err != nil {
+		if err := root.MkdirAll(".agentflow", 0o755); err != nil {
 			return err
 		}
 		return publishAfter(root, receiptPath, data, nil)
@@ -113,7 +113,7 @@ func (r *enrollment) capture(root *os.Root, clientFile string) error {
 	// init. Snapshot them at promotion, keeping the original client baselines.
 	observed := map[string]bool{}
 	if len(r.ClientEntries) > 0 {
-		observed[".devflow"], observed[agentInstructionsFile] = true, true
+		observed[".agentflow"], observed[agentInstructionsFile] = true, true
 		for name := range r.ClientEntries {
 			observed[name], observed[path.Dir(name)] = true, true
 		}
@@ -141,7 +141,7 @@ func (r *enrollment) capture(root *os.Root, clientFile string) error {
 		if err != nil {
 			return err
 		}
-		for _, name := range append(slices.Clone(releaseFiles), ".devflow/releases.yml") {
+		for _, name := range append(slices.Clone(releaseFiles), ".agentflow/releases.yml") {
 			if err := record(name); err != nil {
 				return err
 			}
@@ -150,7 +150,7 @@ func (r *enrollment) capture(root *os.Root, clientFile string) error {
 		return nil
 	}
 	if r.ClientOnly {
-		for _, name := range []string{".devflow", agentInstructionsFile, path.Dir(clientFile), clientFile} {
+		for _, name := range []string{".agentflow", agentInstructionsFile, path.Dir(clientFile), clientFile} {
 			if err := record(name); err != nil {
 				return err
 			}
@@ -177,8 +177,8 @@ func existingClientEntries(root *os.Root, name string) ([]string, error) {
 		return nil, err
 	}
 	if name == ".codex/config.toml" {
-		if bytes.Contains(data, []byte("[mcp_servers.devflow]")) {
-			return []string{"mcp_servers.devflow"}, nil
+		if bytes.Contains(data, []byte("[mcp_servers.agentflow]")) {
+			return []string{"mcp_servers.agentflow"}, nil
 		}
 		return nil, nil
 	}

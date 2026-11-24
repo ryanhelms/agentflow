@@ -8,13 +8,13 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider/slackoauth"
+	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
 )
 
-// LoginPublicSlack enrolls the Devflow-owned desktop registration through browser consent.
+// LoginPublicSlack enrolls the Agentflow-owned desktop registration through browser consent.
 func LoginPublicSlack(ctx context.Context, provider, client, server, clientID, teamID string, output io.Writer) error {
-	if provider != "slack" || client != "devflow" || (server != "" && server != "slack") {
-		return errors.New("--public-client-id and --team-id require --provider slack --client devflow and the slack server")
+	if provider != "slack" || client != "agentflow" || (server != "" && server != "slack") {
+		return errors.New("--public-client-id and --team-id require --provider slack --client agentflow and the slack server")
 	}
 	if clientID == "" || teamID == "" {
 		return errors.New("supply both --public-client-id and --team-id for Slack desktop consent")
@@ -22,7 +22,7 @@ func LoginPublicSlack(ctx context.Context, provider, client, server, clientID, t
 	if err := slackoauth.LoginPublic(ctx, clientID, teamID); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(output, "Devflow connected Slack workspace %s through the approved app.\n", teamID)
+	_, err := fmt.Fprintf(output, "Agentflow connected Slack workspace %s through the approved app.\n", teamID)
 	return err
 }
 

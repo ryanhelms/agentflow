@@ -21,9 +21,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 const fixtureAuth = "fixture-value-never-serialize"
@@ -31,7 +31,7 @@ const fixtureAuth = "fixture-value-never-serialize"
 func TestMain(m *testing.M) {
 	// This test executable is also the raw pinned native MCP server, including
 	// on Windows. It does not invoke a shell, a live desktop or a package manager.
-	if slices.Equal(os.Args[1:], []string{"stdio"}) && os.Getenv("DEVFLOW_MCP_TEST_AUTH") == fixtureAuth {
+	if slices.Equal(os.Args[1:], []string{"stdio"}) && os.Getenv("AGENTFLOW_MCP_TEST_AUTH") == fixtureAuth {
 		s := mcp.NewServer(&mcp.Implementation{Name: "fixture", Version: "1"}, nil)
 		if err := s.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 			os.Exit(7)
@@ -48,8 +48,8 @@ func (f companionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func TestDeclaredMCPSetup(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
 	t.Chdir(root)
-	t.Setenv("DEVFLOW_HOME", home)
-	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("AGENTFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 	const updateToken = "fixture-update-token"
@@ -68,7 +68,7 @@ func TestDeclaredMCPSetup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(".devflow/config.yml", `code_hosting: {provider: none}
+	write(".agentflow/config.yml", `code_hosting: {provider: none}
 task_management: {provider: filesystem, settings: {root: .}}
 knowledge_base: {provider: none}
 devops:
@@ -79,7 +79,7 @@ secops: {provider: none}
 notifications: {provider: none}
 `)
 	write(filepath.Join(home, "config.yml"), "autonomy: {local: auto}\n")
-	const initial = `{"servers":{"devflow":{"command":"existing-launcher"},"another":{"command":"keep"},"devflow-legacy":{"command":"team-tool"}},"n":9007199254740993}`
+	const initial = `{"servers":{"agentflow":{"command":"existing-launcher"},"another":{"command":"keep"},"agentflow-legacy":{"command":"team-tool"}},"n":9007199254740993}`
 	write(".vscode/mcp.json", initial)
 	exe, err := os.Executable()
 	if err != nil {
@@ -104,7 +104,7 @@ notifications: {provider: none}
 - id: catalog
   providers: [filesystem]
   kind: stdio-mcp
-  auth_env: DEVFLOW_MCP_TEST_AUTH
+  auth_env: AGENTFLOW_MCP_TEST_AUTH
   args: [stdio]
   artifacts:
   - platform: {os: %s, arch: %s}
@@ -115,7 +115,7 @@ notifications: {provider: none}
   providers: [filesystem]
   kind: remote-mcp
   endpoint: https://fixture.invalid/mcp
-  auth_env: DEVFLOW_MCP_TEST_AUTH
+  auth_env: AGENTFLOW_MCP_TEST_AUTH
 - id: unused
   providers: [slack]
   kind: remote-mcp
@@ -123,7 +123,7 @@ notifications: {provider: none}
 `, runtime.GOOS, runtime.GOARCH, (&url.URL{Scheme: "file", Path: path}).String(), digest.Sum(nil))
 	manifest := filepath.Join(home, "mcp-companions.yml")
 	write(manifest, pin)
-	t.Setenv("DEVFLOW_MCP_TEST_AUTH", fixtureAuth)
+	t.Setenv("AGENTFLOW_MCP_TEST_AUTH", fixtureAuth)
 	server := mcp.NewServer(&mcp.Implementation{Name: "remote-fixture", Version: "1"}, nil)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	var methods []string
@@ -134,7 +134,7 @@ notifications: {provider: none}
 	http.DefaultTransport = companionTransport(func(req *http.Request) (*http.Response, error) {
 		// Remove still checks the release policy when background updates are off.
 		if req.Method == http.MethodGet && req.URL.Host == "api.github.com" &&
-			req.URL.Path == "/repos/nscaledev/devflow/contents/policy/versions.json" &&
+			req.URL.Path == "/repos/nscaledev/agentflow/contents/policy/versions.json" &&
 			req.Header.Get("Authorization") == "Bearer "+updateToken {
 			rec := httptest.NewRecorder()
 			rec.WriteHeader(http.StatusNotFound)
@@ -197,7 +197,7 @@ notifications: {provider: none}
 	defer session.Close()
 	call := func(args map[string]any, result any, wantError bool) {
 		t.Helper()
-		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_setup_apply", Arguments: args})
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_setup_apply", Arguments: args})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,7 +268,7 @@ notifications: {provider: none}
 	if !installed.Ready {
 		t.Fatal("failed registration")
 	}
-	first := checkConfig("existing-launcher", "devflow-catalog", "${env:DEVFLOW_MCP_TEST_AUTH}", "9007199254740993")
+	first := checkConfig("existing-launcher", "agentflow-catalog", "${env:AGENTFLOW_MCP_TEST_AUTH}", "9007199254740993")
 	cli(0, "apply", "--client", "vscode", "--companion", "catalog", "--yes", "--json")
 	if checkConfig() != first {
 		t.Fatal("repeated registration changed bytes")
@@ -290,7 +290,7 @@ notifications: {provider: none}
 		t.Fatal("failed upgrade modified registration")
 	}
 	cli(0, "apply", "--client", "vscode", "--companion", "hosted", "--yes", "--json")
-	beforeRepair := checkConfig("devflow-hosted", "Bearer ${env:DEVFLOW_MCP_TEST_AUTH}", "existing-launcher", "devflow-catalog")
+	beforeRepair := checkConfig("agentflow-hosted", "Bearer ${env:AGENTFLOW_MCP_TEST_AUTH}", "existing-launcher", "agentflow-catalog")
 	// An approved endpoint change updates the reserved entry in place.
 	write(manifest, strings.Replace(pin, "fixture.invalid/mcp", "fixture.invalid/v2", 1))
 	cli(1, "verify", "--client", "vscode", "--companion", "hosted", "--json")
@@ -311,20 +311,20 @@ notifications: {provider: none}
 	for _, status = range []int{http.StatusUnauthorized, http.StatusTemporaryRedirect} {
 		cli(1, "verify", "--companion", "hosted", "--json")
 	}
-	t.Setenv("DEVFLOW_MCP_TEST_AUTH", "")
+	t.Setenv("AGENTFLOW_MCP_TEST_AUTH", "")
 	cli(1, "verify", "--companion", "hosted", "--json")
 	// Remove must work offline after the declaration or credentials disappear.
 	if err := os.Remove(manifest); err != nil {
 		t.Fatal(err)
 	}
 	preview := companionFixtureCLI(t, 0, "remove", "--dry-run")
-	if !bytes.Contains(preview, []byte(`remove companion .vscode/mcp.json "devflow-hosted"`)) {
+	if !bytes.Contains(preview, []byte(`remove companion .vscode/mcp.json "agentflow-hosted"`)) {
 		t.Fatal("repair did not update the hosted entry's receipt")
 	}
 	const config = ".vscode/mcp.json"
 	edited := strings.Replace(checkConfig(), "fixture.invalid/v2", "team.invalid/custom", 1)
 	write(config, edited)
-	const receipt = config + ".devflow-companions.json"
+	const receipt = config + ".agentflow-companions.json"
 	read := func(name string) string {
 		t.Helper()
 		b, err := os.ReadFile(name)
@@ -357,7 +357,7 @@ notifications: {provider: none}
 		}
 	}
 	report := string(companionFixtureCLI(t, 0, "remove", "--dry-run"))
-	for _, want := range []string{`remove companion .vscode/mcp.json "devflow-catalog"`, `"devflow-hosted" (changed since registration`, `"devflow-legacy" (untracked`} {
+	for _, want := range []string{`remove companion .vscode/mcp.json "agentflow-catalog"`, `"agentflow-hosted" (changed since registration`, `"agentflow-legacy" (untracked`} {
 		if !strings.Contains(report, want) {
 			t.Errorf("dry run missing %q", want)
 		}
@@ -379,7 +379,7 @@ notifications: {provider: none}
 		return doc
 	}
 	expected := decode(edited)
-	delete(expected["servers"].(map[string]any), "devflow-catalog")
+	delete(expected["servers"].(map[string]any), "agentflow-catalog")
 	if !reflect.DeepEqual(decode(remaining), expected) {
 		t.Fatal("remove changed entries outside the recorded native companion")
 	}

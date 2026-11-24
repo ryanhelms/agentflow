@@ -102,7 +102,7 @@ func providerFixture(t *testing.T, provider string) *fixture {
 			"registration_endpoint": registerEndpoint, "response_types_supported": []string{"code"},
 			"code_challenge_methods_supported": []string{"S256"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
 			"token_endpoint_auth_methods_supported": []string{"none", "client_secret_post"}},
-		registration: map[string]any{"client_id": "devflow-fixture-client", "client_secret": "discarded-secret", "token_endpoint_auth_method": "none"},
+		registration: map[string]any{"client_id": "agentflow-fixture-client", "client_secret": "discarded-secret", "token_endpoint_auth_method": "none"},
 		token:        map[string]any{"access_token": "fixture-access", "refresh_token": "fixture-refresh", "expires_in": 3600, "token_type": "Bearer", "scope": scope},
 	}
 	f.e = &enrollment{service: service, scope: scope, client: newClient(),
@@ -163,7 +163,7 @@ func providerFixture(t *testing.T, provider string) *fixture {
 			}
 			uris := data["redirect_uris"].([]any)
 			f.redirect = uris[0].(string)
-			if data["client_name"] != "Devflow" || data["application_type"] != "native" || data["token_endpoint_auth_method"] != "none" ||
+			if data["client_name"] != "Agentflow" || data["application_type"] != "native" || data["token_endpoint_auth_method"] != "none" ||
 				data["scope"] != scope || !slices.Equal(data["grant_types"].([]any), []any{"authorization_code", "refresh_token"}) ||
 				f.redirect != "http://"+f.ln.Addr().String()+callbackPath {
 				t.Error("incorrect DCR metadata")
@@ -175,7 +175,7 @@ func providerFixture(t *testing.T, provider string) *fixture {
 		case tokenEndpoint:
 			f.posts.Add(1)
 			if r.Method != "POST" || r.ParseForm() != nil || r.PostForm.Get("resource") != Resource ||
-				r.PostForm.Get("client_id") != "devflow-fixture-client" || r.PostForm.Has("client_secret") {
+				r.PostForm.Get("client_id") != "agentflow-fixture-client" || r.PostForm.Has("client_secret") {
 				t.Error("invalid token request")
 			}
 			switch r.PostForm.Get("grant_type") {
@@ -203,7 +203,7 @@ func providerFixture(t *testing.T, provider string) *fixture {
 			return err
 		}
 		q := u.Query()
-		if u.Scheme+"://"+u.Host+u.Path != authorizeEndpoint || q.Get("client_id") != "devflow-fixture-client" ||
+		if u.Scheme+"://"+u.Host+u.Path != authorizeEndpoint || q.Get("client_id") != "agentflow-fixture-client" ||
 			q.Get("redirect_uri") != f.redirect || q.Get("resource") != Resource || q.Get("scope") != scope ||
 			q.Get("code_challenge_method") != "S256" || q.Get("response_type") != "code" || len(q.Get("state")) < 26 {
 			return errors.New("incorrect browser request")
@@ -472,14 +472,14 @@ func TestNativeLoopback(t *testing.T) {
 }
 
 func TestGrantLockAcrossProcesses(t *testing.T) {
-	const key = "DEVFLOW_TEST_ROVO_LOCK_DIR"
+	const key = "AGENTFLOW_TEST_ROVO_LOCK_DIR"
 	dir := os.Getenv(key)
 	if dir != "" {
 		e := enrollment{lockDir: func() (string, error) { return dir, nil }}
 		ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
 		defer cancel()
 		f, err := e.lock(ctx)
-		if os.Getenv("DEVFLOW_TEST_ROVO_EXPECT_BUSY") == "yes" {
+		if os.Getenv("AGENTFLOW_TEST_ROVO_EXPECT_BUSY") == "yes" {
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("another process acquired the held grant lock")
 			}
@@ -500,7 +500,7 @@ func TestGrantLockAcrossProcesses(t *testing.T) {
 	check := func(expect string) {
 		t.Helper()
 		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestGrantLockAcrossProcesses$")
-		cmd.Env = append(os.Environ(), key+"="+dir, "DEVFLOW_TEST_ROVO_EXPECT_BUSY="+expect)
+		cmd.Env = append(os.Environ(), key+"="+dir, "AGENTFLOW_TEST_ROVO_EXPECT_BUSY="+expect)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("child lock test failed: %v %s", err, out)
 		}
@@ -513,7 +513,7 @@ func TestGrantLockAcrossProcesses(t *testing.T) {
 }
 
 func TestQuietToken(t *testing.T) {
-	const child = "DEVFLOW_TEST_QUIET_ROVO"
+	const child = "AGENTFLOW_TEST_QUIET_ROVO"
 	const canary = "synthetic-private-keyring-canary"
 	if os.Getenv(child) == "yes" {
 		f := newFixture(t)
@@ -567,7 +567,7 @@ func TestSilentStorageFailure(t *testing.T) {
 
 func TestConfluenceConsentAndIsolation(t *testing.T) {
 	jira, wiki := providerFixture(t, "jira"), providerFixture(t, "confluence")
-	if jira.e.service != "devflow.rovooauth.v2.jira.1" || wiki.e.service == jira.e.service {
+	if jira.e.service != "agentflow.rovooauth.v2.jira.1" || wiki.e.service == jira.e.service {
 		t.Fatal("provider credential namespaces collided or the original Jira namespace changed")
 	}
 	if wiki.e.scope != "read:me read:account offline_access read:confluence:agent-interface write:confluence:agent-interface" {

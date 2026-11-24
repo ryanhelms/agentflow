@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "devflow": {
+    "agentflow": {
       "type": "stdio",
       "command": "node",
       "args": [

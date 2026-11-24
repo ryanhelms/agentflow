@@ -1,25 +1,25 @@
-name: devflow setup
+name: agentflow setup
 description: >
-  Put devflow's workflow scripts on PATH and point FLOW_MAP at the shared flow map.
+  Put agentflow's workflow scripts on PATH and point FLOW_MAP at the shared flow map.
   The runner downloads this whole repository at the referenced tag to run the action,
   so no extra token is needed to read bin/ or flow-map.yml. With binary: true it also
-  builds the devflow CLI from that same source and puts it on PATH.
+  builds the agentflow CLI from that same source and puts it on PATH.
 inputs:
   binary:
-    description: Build the devflow CLI (for example for `devflow lint-msg`) and put it on PATH
+    description: Build the agentflow CLI (for example for `agentflow lint-msg`) and put it on PATH
     required: false
     default: "false"
 runs:
   using: composite
   steps:
-    - name: Expose devflow scripts
+    - name: Expose agentflow scripts
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
       run: |
         root=$(cd "$ACTION_PATH/../.." && pwd)
         echo "$root/bin" >> "$GITHUB_PATH"
-        echo "DEVFLOW_ROOT=$root" >> "$GITHUB_ENV"
+        echo "AGENTFLOW_ROOT=$root" >> "$GITHUB_ENV"
         echo "FLOW_MAP=$root/flow-map.yml" >> "$GITHUB_ENV"
     - name: Set up Go
       if: inputs.binary == 'true'
@@ -27,11 +27,11 @@ runs:
       with:
         go-version-file: ${{ github.action_path }}/../../go.mod
         cache: false
-    - name: Build devflow
+    - name: Build agentflow
       if: inputs.binary == 'true'
       shell: bash
       run: |
-        mkdir -p "$RUNNER_TEMP/devflow-bin"
-        (cd "$DEVFLOW_ROOT" && go build -trimpath -o "$RUNNER_TEMP/devflow-bin/devflow" ./cmd/devflow)
-        echo "$RUNNER_TEMP/devflow-bin" >> "$GITHUB_PATH"
-        echo "DEVFLOW_NO_UPDATE=1" >> "$GITHUB_ENV"
+        mkdir -p "$RUNNER_TEMP/agentflow-bin"
+        (cd "$AGENTFLOW_ROOT" && go build -trimpath -o "$RUNNER_TEMP/agentflow-bin/agentflow" ./cmd/agentflow)
+        echo "$RUNNER_TEMP/agentflow-bin" >> "$GITHUB_PATH"
+        echo "AGENTFLOW_NO_UPDATE=1" >> "$GITHUB_ENV"

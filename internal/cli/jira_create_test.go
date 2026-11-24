@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 	"github.com/zalando/go-keyring"
 )
 
@@ -45,8 +45,8 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
-	for _, name := range []string{"CI", "GITHUB_ACTIONS", "DEVFLOW_OPERATION_ID", "JIRA_USER", "JIRA_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "AGENTFLOW_OPERATION_ID", "JIRA_USER", "JIRA_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"} {
 		t.Setenv(name, "")
 	}
 	for _, name := range []string{"TWG_USER", "TWG_SITE", "TWG_PROFILE", "TWG_TOKEN"} {
@@ -56,10 +56,10 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 	if out, err := exec.CommandContext(ctx, "git", "init", "-qb", "main").CombinedOutput(); err != nil {
 		t.Fatal(string(out), err)
 	}
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("task_management: {provider: jira, settings: {site: https://fixture.atlassian.net, projects: [ENG]}}\n"), 0600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte("task_management: {provider: jira, settings: {site: https://fixture.atlassian.net, projects: [ENG]}}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	oldTransport := http.DefaultTransport
@@ -81,7 +81,7 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 		t.Fatal(code)
 	}
 	count(1)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 
 	connect := func() *mcp.ClientSession {
 		t.Helper()
@@ -103,7 +103,7 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 	call := func(token string, wantErr string) string {
 		t.Helper()
 		args["confirm_token"] = token
-		out, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_ticket_create", Arguments: args})
+		out, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_ticket_create", Arguments: args})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +121,7 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 		}
 		s := p.Summary.(map[string]any)
 		if p.Status != "needs_confirmation" || p.ConfirmToken == "" || s["backend"] != "twg" || s["summary"] != title || s["description"] != body || s["type_id"] != "101" ||
-			s["project_id"] != "100" || s["login"].(map[string]any)["account_id"] != "fixture-user" || s["labels"].([]any)[0] != "devflow" {
+			s["project_id"] != "100" || s["login"].(map[string]any)["account_id"] != "fixture-user" || s["labels"].([]any)[0] != "agentflow" {
 			t.Fatal(p)
 		}
 		return p.ConfirmToken
@@ -193,7 +193,7 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 	restore()
 	count(1)
 	// Block durable receipt creation. A redeemed token alone cannot dispatch.
-	ledger := filepath.Join(os.Getenv("DEVFLOW_HOME"), "task-write-receipts")
+	ledger := filepath.Join(os.Getenv("AGENTFLOW_HOME"), "task-write-receipts")
 	if err := os.WriteFile(ledger, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -215,11 +215,11 @@ func TestJiraCreateCLIFallback(t *testing.T) {
 		{"receipt", `"success":true`, `"success":false`},
 		{"receipt", `"ENG-42"`, `"OTHER-1"`},
 		{"receipt", "https://fixture.atlassian.net", "https://other.example"},
-		{"receipt", `"labels":["devflow"]`, `"labels":["devflow"],"parentKey":"ENG-1"`},
+		{"receipt", `"labels":["agentflow"]`, `"labels":["agentflow"],"parentKey":"ENG-1"`},
 		{"readback", `"id":"1042"`, `"id":"1010"`},
 		{"readback", "fixture-user", "other-user"},
 		{"readback", "<literal>", "changed"},
-		{"readback", `"devflow"`, `"other"`},
+		{"readback", `"agentflow"`, `"other"`},
 	} {
 		// Use a distinct approval for each independent receipt fixture.
 		restoreProfile := edit("profile", `"revision":2`, fmt.Sprintf(`"revision":%d`, 3+i))

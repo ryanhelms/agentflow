@@ -4,7 +4,7 @@ const concepts = [
     since: "v0.44.0",
     type: "Guide",
     path: "guides/project-installation",
-    title: "Install and manage Devflow in a project",
+    title: "Install and manage Agentflow in a project",
     tags: "installation providers agents lifecycle install.sh install.ps1 manager",
     lead: "Install the verified release into a Git worktree from your terminal or coding agent.",
     body: [
@@ -18,7 +18,7 @@ const concepts = [
       ],
       [
         "Use an agent",
-        "Ask the Devflow manager to install Devflow in the checkout. It can also update the verified binary and workflow pin or preview removal.",
+        "Ask the Agentflow manager to install Agentflow in the checkout. It can also update the verified binary and workflow pin or preview removal.",
       ],
     ],
   },
@@ -26,20 +26,20 @@ const concepts = [
     id: "task-workflow",
     type: "Guide",
     path: "guides/task-workflow",
-    title: "Work on a Devflow task",
+    title: "Work on a Agentflow task",
     tags: "tasks github contributor",
-    lead: "Carry a GitHub issue from task selection through a reviewed change in the Devflow repository.",
+    lead: "Carry a GitHub issue from task selection through a reviewed change in the Agentflow repository.",
     body: [
       [
         "Check the configured providers",
-        "Inspect the resolved settings. Devflow’s own checkout uses GitHub Issues for tasks and Repository for knowledge.",
+        "Inspect the resolved settings. Agentflow’s own checkout uses GitHub Issues for tasks and Repository for knowledge.",
       ],
-      ["$", "devflow setup providers --explain"],
+      ["$", "agentflow setup providers --explain"],
       [
         "Bind the task",
-        "Pick an issue with devflow work, then start it with its issue number. Include the qualified task reference when you open the pull request.",
+        "Pick an issue with agentflow work, then start it with its issue number. Include the qualified task reference when you open the pull request.",
       ],
-      ["$", "devflow start '#123'"],
+      ["$", "agentflow start '#123'"],
     ],
   },
   {
@@ -52,11 +52,11 @@ const concepts = [
     body: [
       [
         "Decision",
-        "Devflow translates its typed task and knowledge objects into the APIs or files of each configured provider. Qualified references preserve identity across branches, commits, and pull requests.",
+        "Agentflow translates its typed task and knowledge objects into the APIs or files of each configured provider. Qualified references preserve identity across branches, commits, and pull requests.",
       ],
       [
         "Pilot",
-        "GitHub Issues and Repository knowledge serve the Devflow pilot. Other repositories can retain Jira and Confluence selections.",
+        "GitHub Issues and Repository knowledge serve the Agentflow pilot. Other repositories can retain Jira and Confluence selections.",
       ],
     ],
   },
@@ -72,7 +72,7 @@ const concepts = [
         "Read the existing revision",
         "Open the qualified reference and capture its revision before preparing an update.",
       ],
-      ["$", "devflow docs get REF --json"],
+      ["$", "agentflow docs get REF --json"],
       [
         "Review and publish",
         "Supply the expected revision and an operation ID. Review the preview, approve the request, then reopen the document after the publication PR merges.",
@@ -82,9 +82,9 @@ const concepts = [
 ];
 const conflict = [
   "Diagnose publication conflicts",
-  "For a stale revision, reread the document and compare it with the draft. If replay returns an existing PR, check its head and review state. Check duplicate references for two files with the same x-devflow-ref.",
+  "For a stale revision, reread the document and compare it with the draft. If replay returns an existing PR, check its head and review state. Check duplicate references for two files with the same x-agentflow-ref.",
 ];
-export const SOURCE_REPOSITORY = "https://github.com/nscaledev/devflow";
+export const SOURCE_REPOSITORY = "https://github.com/nscaledev/agentflow";
 
 // Release order determines the Latest alias and which guides existed at each tag.
 const releaseCommits = {

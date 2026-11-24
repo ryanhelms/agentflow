@@ -45,7 +45,7 @@ func HasHost(ctx context.Context) bool {
 }
 
 // HasClientReplies reports that the host supplied result data. Such reads can
-// inform a preview, but must not modify persistent Devflow state.
+// inform a preview, but must not modify persistent Agentflow state.
 func HasClientReplies(ctx context.Context) bool {
 	client, _ := ctx.Value(hostKey{}).(Client)
 	return len(client.Replies) != 0

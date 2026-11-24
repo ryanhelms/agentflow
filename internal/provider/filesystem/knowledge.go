@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 )
 
 // Knowledge manages document records in a caller-owned directory.

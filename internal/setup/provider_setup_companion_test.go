@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/managedmcp"
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/managedmcp"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 func TestRegisterReviewedCompanion(t *testing.T) {
@@ -20,7 +20,7 @@ func TestRegisterReviewedCompanion(t *testing.T) {
 	if err != nil || r.State != "pending" {
 		t.Fatalf("initial registration: %+v %v", r, err)
 	}
-	const collision = `{"mcpServers":{"devflow-wiki":{"url":"https://elsewhere.invalid","headers":{"Authorization":"existing-secret"}}}}`
+	const collision = `{"mcpServers":{"agentflow-wiki":{"url":"https://elsewhere.invalid","headers":{"Authorization":"existing-secret"}}}}`
 	setupFile(t, dir, file, collision, 0o600)
 	if err := RegisterCompanion(dir, r, s); !errors.Is(err, provision.ErrStalePlan) {
 		t.Fatalf("accepted changed entry: %v", err)
@@ -50,7 +50,7 @@ func TestRegisterReviewedCompanion(t *testing.T) {
 		t.Fatalf("native path did not round trip: %+v %v", r, err)
 	}
 	// A user-edited entry survives even a forced removal.
-	edited := `{"mcpServers":{"devflow-wiki":{"command":"team","env":{"TOKEN":"private"}}}}`
+	edited := `{"mcpServers":{"agentflow-wiki":{"command":"team","env":{"TOKEN":"private"}}}}`
 	setupFile(t, dir, file, edited, 0o600)
 	res, err := Remove(t.Context(), dir, RemoveOptions{Force: true})
 	notes := strings.Join(res.Notes, " ")
@@ -91,7 +91,7 @@ func TestCompanionProjectClientFormats(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, part := range []string{shape.urlKey, shape.ref, "devflow-catalog", s.Endpoint} {
+			for _, part := range []string{shape.urlKey, shape.ref, "agentflow-catalog", s.Endpoint} {
 				if !strings.Contains(string(data), part) {
 					t.Errorf("missing %s", part)
 				}
@@ -137,7 +137,7 @@ func TestRemoveLeavesMatchingUntrackedCompanion(t *testing.T) {
 func TestCompanionReceiptConflictPreservesConfig(t *testing.T) {
 	root := t.TempDir()
 	s := managedmcp.Status{ID: "docs", Kind: provision.RemoteMCP, Endpoint: "https://fixture.invalid/mcp", Ready: true}
-	const existing = `{"mcpServers":{"devflow-docs":{"command":"team"}}}`
+	const existing = `{"mcpServers":{"agentflow-docs":{"command":"team"}}}`
 	setupFile(t, root, ".mcp.json", existing, 0o600)
 	r, _, err := companionOverlay(root, "claude", s)
 	if err != nil {

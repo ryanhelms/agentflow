@@ -45,10 +45,10 @@ $ErrorActionPreference = 'Stop'
 $stage = $env:DF_TEST_TEMP
 $mode = [IO.File]::ReadAllText((Join-Path $stage 'mode'))
 [IO.File]::AppendAllText((Join-Path $stage 'gh.log'), ($args -join ' ') + [Environment]::NewLine)
-if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/devflow/releases/latest --jq .tag_name') {
+if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/releases/latest --jq .tag_name') {
     if ($mode -eq 'no-release') { exit 19 }
     'v1.2.3'
-} elseif ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/devflow/contents/templates/repo/.devflow/bin/devflow.ps1?ref=v1.2.3') {
+} elseif ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=v1.2.3') {
     $source = if ($mode -like 'stale-*') { 'release-launcher.ps1' } else { 'mock-launcher.ps1' }
     $bytes = [IO.File]::ReadAllBytes((Join-Path $stage $source))
     $size = $bytes.Length
@@ -56,8 +56,8 @@ if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/devflow/rele
     @{ type='file'; encoding='base64'; size=$size; content=[Convert]::ToBase64String($bytes) } | ConvertTo-Json -Compress
     if ($mode -eq 'download-failure') { exit 21 }
 } elseif ($args[0] -eq 'release' -and $args[1] -eq 'download') {
-    $zip = 'devflow_1.2.3_windows_amd64.zip'
-    if ($args.Count -ne 11 -or ($args[2..5] -join ' ') -cne 'v1.2.3 --repo nscaledev/devflow --dir' -or
+    $zip = 'agentflow_1.2.3_windows_amd64.zip'
+    if ($args.Count -ne 11 -or ($args[2..5] -join ' ') -cne 'v1.2.3 --repo nscaledev/agentflow --dir' -or
         ($args[7..10] -join ' ') -cne "--pattern $zip --pattern checksums.txt") { throw "Unexpected archive arguments: $args" }
     $pkg = Join-Path $args[6] $zip
     [IO.File]::Copy((Join-Path $stage 'release.zip'), $pkg)
@@ -66,8 +66,8 @@ if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/devflow/rele
     [IO.File]::WriteAllText((Join-Path $args[6] 'checksums.txt'), "$sum  $zip")
     if ($mode -eq 'stale-download') { exit 23 }
 } elseif ($args[0] -eq 'attestation' -and $args[1] -eq 'verify') {
-    if ($args.Count -ne 7 -or (Split-Path -Leaf $args[2]) -cne 'devflow_1.2.3_windows_amd64.zip' -or
-        ($args[3..6] -join ' ') -cne '--repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml') {
+    if ($args.Count -ne 7 -or (Split-Path -Leaf $args[2]) -cne 'agentflow_1.2.3_windows_amd64.zip' -or
+        ($args[3..6] -join ' ') -cne '--repo nscaledev/agentflow --signer-workflow nscaledev/agentflow/.github/workflows/release.yml') {
         throw "Unexpected verification arguments: $args"
     }
     if ($mode -eq 'stale-signer') { exit 24 }
@@ -89,7 +89,7 @@ if ($args.Count -ne 3 -or $args[0] -ne '--bootstrap-release' -or $args[1] -ne 'v
 [IO.File]::AppendAllText((Join-Path $env:DF_TEST_TEMP 'calls.log'), "init|$((Get-Location).Path)" + [Environment]::NewLine)
 if ($mode -eq 'init-failure') { exit 17 }
 if ($args[2] -eq 'init') {
-    foreach ($name in '.devflow/config.yml','.devflow/bin/devflow','.devflow/bin/devflow.cmd','.devflow/bin/devflow.ps1','.github/workflows/devflow.yml') {
+    foreach ($name in '.agentflow/config.yml','.agentflow/bin/agentflow','.agentflow/bin/agentflow.cmd','.agentflow/bin/agentflow.ps1','.github/workflows/agentflow.yml') {
         $path = Join-Path (Get-Location).Path $name
         [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
         if (![IO.File]::Exists($path)) { [IO.File]::WriteAllText($path,'throw "Checkout launcher executed"') }
@@ -125,7 +125,7 @@ exit 0
     Assert ($res.Code -eq 0) "Retry with nested linked checkout failed: $($res.Text)"
     $calls = Join-Path $temp 'calls.log'
     Assert ((Get-Content -LiteralPath $calls -Tail 1) -eq "init|$linked") "Init ran outside the selected worktree root: expected $linked; actual $(Get-Content -LiteralPath $calls -Tail 1)."
-    Assert (!(Test-Path -LiteralPath (Join-Path $repo '.devflow'))) 'A different checkout was modified.'
+    Assert (!(Test-Path -LiteralPath (Join-Path $repo '.agentflow'))) 'A different checkout was modified.'
 
     $script = [scriptblock]::Create([IO.File]::ReadAllText($installer))
     $before = (Get-Location).Path
@@ -145,7 +145,7 @@ exit 0
         if ($mode -ne 'init-failure') { Assert (@(Get-Content -LiteralPath $calls).Count -eq $beforeCalls) "Executed a failed download: $mode" }
         else { Assert ($res.Text -match '17') 'Installer hid the launcher exit status.' }
     }
-    $missing = Join-Path $linked '.devflow/config.yml'
+    $missing = Join-Path $linked '.agentflow/config.yml'
     Remove-Item -LiteralPath $missing
     [IO.File]::WriteAllText((Join-Path $temp 'mode'), 'ok')
     $res = Run-Installer @($linked)
@@ -153,10 +153,10 @@ exit 0
     [IO.File]::WriteAllText($missing,'user settings')
 
     # A native executable that reads a file named "init" stands in for a matching cache.
-    $cache = Join-Path $env:LOCALAPPDATA 'devflow'
+    $cache = Join-Path $env:LOCALAPPDATA 'agentflow'
     $versionDir = Join-Path $cache '1.2.3'
     [IO.Directory]::CreateDirectory($versionDir) | Out-Null
-    $cached = Join-Path $versionDir 'devflow.exe'
+    $cached = Join-Path $versionDir 'agentflow.exe'
     if ($windows) { Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32/sort.exe') -Destination $cached }
     else { New-Item -ItemType SymbolicLink -Path $cached -Target '/bin/cat' | Out-Null }
     [IO.File]::WriteAllText((Join-Path $cache 'current.txt'), $versionDir)
@@ -167,18 +167,18 @@ exit 0
     Assert (@(Get-Content -LiteralPath (Join-Path $temp 'gh.log')).Count -eq $ghCount + 1) 'Current cache should only resolve the latest tag.'
     # Exercise real release verification while migrating a stale pointer. On Windows the ZIP
     # contains a native fixture. On other hosts the matching version is already cached.
-    $sourceLauncher = Join-Path (Split-Path -Parent $installer) 'templates/repo/.devflow/bin/devflow.ps1'
+    $sourceLauncher = Join-Path (Split-Path -Parent $installer) 'templates/repo/.agentflow/bin/agentflow.ps1'
     Copy-Item -LiteralPath $sourceLauncher -Destination (Join-Path $temp 'release-launcher.ps1')
     $archiveDir = [IO.Directory]::CreateDirectory((Join-Path $temp 'archive')).FullName
     if ($windows) {
-        Copy-Item -LiteralPath $cached -Destination (Join-Path $archiveDir 'devflow.exe')
+        Copy-Item -LiteralPath $cached -Destination (Join-Path $archiveDir 'agentflow.exe')
         Remove-Item -LiteralPath $versionDir -Recurse -Force
     } else {
-        [IO.File]::WriteAllText((Join-Path $archiveDir 'devflow.exe'), 'fixture')
+        [IO.File]::WriteAllText((Join-Path $archiveDir 'agentflow.exe'), 'fixture')
     }
     [IO.Compression.ZipFile]::CreateFromDirectory($archiveDir,(Join-Path $temp 'release.zip'))
     $staleDir = [IO.Directory]::CreateDirectory((Join-Path $cache '0.9.0')).FullName
-    $staleExe = Join-Path $staleDir 'devflow.exe'
+    $staleExe = Join-Path $staleDir 'agentflow.exe'
     if ($windows) { Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32/sort.exe') -Destination $staleExe }
     else { New-Item -ItemType SymbolicLink -Path $staleExe -Target '/bin/cat' | Out-Null }
     $pointer = Join-Path $cache 'current.txt'

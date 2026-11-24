@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/gitx"
 )
 
 func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	git := func(args ...string) {
 		t.Helper()
 		c := exec.Command("git", args...)
@@ -53,7 +53,7 @@ func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {
 	if initial["code_hosting"].Selected != "github" || initial["task_management"].Source != "unknown" || initial["knowledge_base"].Selected != "" {
 		t.Fatalf("bare remote implied other services: %#v", initial)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".devflow")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, ".agentflow")); !os.IsNotExist(err) {
 		t.Fatal("detection mutated the checkout")
 	}
 	write(".github/ISSUE_TEMPLATE/bug.md", "# Report a bug")
@@ -66,7 +66,7 @@ func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {
 			t.Errorf("%s: %#v", role, got)
 		}
 	}
-	write(".devflow/config.yml", "# team configuration\njira: {projects: [OPS]}\nnotifications: {provider: none}\nknowledge_base: {}\n")
+	write(".agentflow/config.yml", "# team configuration\njira: {projects: [OPS]}\nnotifications: {provider: none}\nknowledge_base: {}\n")
 	conflict := roles()
 	if got := conflict["task_management"]; got.Source != "ambiguous" || got.Selected != "" || len(got.Evidence) != 2 {
 		t.Errorf("conflict: %#v", got)
@@ -78,7 +78,7 @@ func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {
 		t.Errorf("empty section treated as saved: %#v", got)
 	}
 	git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "--allow-empty", "-qm", "feat: adopt a tracker", "-m", "Task-Ref: asana/100/900")
-	write(".devflow/config.yml", "task_management: {settings: {projects: [OPS]}}\nnotifications: {provider: none}\n")
+	write(".agentflow/config.yml", "task_management: {settings: {projects: [OPS]}}\nnotifications: {provider: none}\n")
 	refs := roles()["task_management"]
 	hasAsana := false
 	for _, ev := range refs.Evidence {
@@ -93,8 +93,8 @@ func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {
 }
 
 func TestPrepareOnlyRequestedAnswers(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
-	before := []byte("# keep team rules\ndevflow: 1\ntask_management: {provider: github-issues, settings: {labels: [team]}}\n")
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	before := []byte("# keep team rules\nagentflow: 1\ntask_management: {provider: github-issues, settings: {labels: [team]}}\n")
 	p := Plan{original: before, Roles: []Role{
 		{Role: "task_management", Options: []string{"github-issues", "jira"}, Selected: "github-issues", Source: "saved"},
 		{Role: "knowledge_base", Options: []string{"none", "repository"}, Selected: "repository", Source: "detected"},

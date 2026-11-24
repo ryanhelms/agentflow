@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 type ConnectionCheck struct {
@@ -64,7 +64,7 @@ func Readiness(ctx context.Context, root string) (ReadinessResult, error) {
 			// Companion names, endpoints, executable paths and arguments come
 			// from personal manifests. Show only the outcome of the probe.
 			id = "managed MCP"
-		case req.Role == "configuration" && req.Provider == "devflow" && !snapshot.Providers.ConfigFound:
+		case req.Role == "configuration" && req.Provider == "agentflow" && !snapshot.Providers.ConfigFound:
 		case selected[req.Role] != "" && selected[req.Role] == req.Provider:
 		default:
 			return ReadinessResult{}, ErrCheckoutChanged
@@ -111,7 +111,7 @@ func connectionDetail(req setup.ProviderRequirement) string {
 	case req.VerifyInClient:
 		return "Verify access through the provider’s connected MCP client."
 	case req.Role == "configuration":
-		return "Configure the providers in .devflow/config.yml."
+		return "Configure the providers in .agentflow/config.yml."
 	case strings.Contains(text, "gh --version") || strings.Contains(text, "install gh") || strings.Contains(text, "managed gh") || strings.Contains(text, "--install-gh"):
 		if req.Ready {
 			return "GitHub CLI is available."

@@ -12,7 +12,7 @@ import {
 } from "./docs-data.js";
 import "./docs.css";
 
-const releasePreferenceKey = "devflow.site-study.docs.version";
+const releasePreferenceKey = "agentflow.site-study.docs.version";
 
 function preferredRelease() {
   try {
@@ -104,10 +104,10 @@ export default function Docs({ active }) {
         leftWidth={312}
         header={
           <PageHeader
-            title="Devflow documentation"
+            title="Agentflow documentation"
             description="Search guides, decisions, and runbooks for your release."
             actions={
-              <FormField label="Devflow release">
+              <FormField label="Agentflow release">
                 <Select value={preference} onChange={changeRelease}>
                   <option value="latest">Latest ({CURRENT_RELEASE})</option>
                   {RELEASES.map((tag) => <option key={tag} value={tag}>{tag}</option>)}

@@ -1,4 +1,4 @@
-# Default owner: Engineering Enablement owns devflow, its Actions and Jira Automation exports.
+# Default owner: Engineering Enablement owns agentflow, its Actions and Jira Automation exports.
 *                               @nscaledev/eng-enablement
 
 # Status mapping. Each project block in flow-map.yml must also be approved by

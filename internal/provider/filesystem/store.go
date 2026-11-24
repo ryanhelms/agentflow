@@ -13,8 +13,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 )
 
 type store struct {
@@ -293,7 +293,7 @@ func (s *store) install(ctx context.Context, r record, data []byte, dirHandle *o
 		defer parentHandle.Close()
 		dirHandle = parentHandle // fsync the directory containing the rename
 	}
-	tmp := ".devflow-stage-" + rand.Text()
+	tmp := ".agentflow-stage-" + rand.Text()
 	f, err := dir.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
@@ -424,7 +424,7 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 		}
 		if r.concept.Frontmatter != nil {
 			r.Operations[opts.OperationID] = okfHash
-			if err := okf.SetField(r.concept.Frontmatter, "x-devflow-operations", r.Operations); err != nil {
+			if err := okf.SetField(r.concept.Frontmatter, "x-agentflow-operations", r.Operations); err != nil {
 				return zero, err
 			}
 		} else {

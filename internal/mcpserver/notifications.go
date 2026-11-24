@@ -3,7 +3,7 @@ package mcpserver
 import (
 	"context"
 
-	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/app"
 )
 
 type notifyIn struct {
@@ -13,7 +13,7 @@ type notifyIn struct {
 }
 
 func (s *Server) registerNotifications() {
-	add(s, "devflow_notify", "Preview or deliver a configured notification. Supply a stable operation_id, and reuse it for retries.", remote,
+	add(s, "agentflow_notify", "Preview or deliver a configured notification. Supply a stable operation_id, and reuse it for retries.", remote,
 		func(ctx context.Context, in notifyIn) (any, error) {
 			in.NotifyInput.DryRun = in.DryRun
 			result, pending, err := s.app.Notify(ctx, in.NotifyInput, in.ConfirmToken)

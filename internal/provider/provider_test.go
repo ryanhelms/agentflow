@@ -9,7 +9,7 @@ import (
 )
 
 func TestTaskRefs(t *testing.T) {
-	ref := Ref{Instance: "github-issues", Scope: "nscaledev/devflow", ID: "42"}
+	ref := Ref{Instance: "github-issues", Scope: "nscaledev/agentflow", ID: "42"}
 	body := "feat: add adapter (#57)\n\nCompare #31 for background.\n\n" + TaskTrailer + ref.String() + "\n"
 	refs, err := TaskRefs(body + TaskTrailer + ref.String() + "\r\n")
 	if err != nil || !slices.Equal(refs, []Ref{ref}) {

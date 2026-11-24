@@ -11,13 +11,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/filesystem"
 )
 
 // Every exit closes the FileSystem handle before removing its checkout.
 func withCheckout[T any](ctx context.Context, a adapter, run func(checkout) (T, error)) (result T, err error) {
-	root, err := os.MkdirTemp("", "devflow-repository-")
+	root, err := os.MkdirTemp("", "agentflow-repository-")
 	if err != nil {
 		return result, err
 	}
@@ -84,7 +84,7 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 	target := c.branch
 	review := a.Publication == "pull-request"
 	if review {
-		target = "devflow/publication/" + id
+		target = "agentflow/publication/" + id
 		if target == c.branch {
 			return zero, errors.New("publication branch coincides with target base")
 		}
@@ -121,7 +121,7 @@ func (a adapter) publish(ctx context.Context, c checkout, id, op string, apply m
 		// An engineer may have removed the record or its receipt after
 		// accepting the operation. Its commit still prevents resurrection,
 		// even on replay by a different client.
-		prior, err := c.git(ctx, nil, "log", "-1", "--format=%H", "--basic-regexp", "--grep=^Devflow-Operation: "+id+"$", base, "--")
+		prior, err := c.git(ctx, nil, "log", "-1", "--format=%H", "--basic-regexp", "--grep=^Agentflow-Operation: "+id+"$", base, "--")
 		if err != nil {
 			return zero, errors.Join(pushErr, err)
 		}

@@ -18,17 +18,17 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/nscaledev/devflow/internal/contract"
+	"github.com/nscaledev/agentflow/internal/contract"
 )
 
 // Provider definitions are layered YAML files. Later layers win, except
 // where the release layer constrains a settings property:
 //
 //	release  embedded in the binary       may set constraints
-//	project  .devflow/providers/*.yml     settings only
-//	user     $DEVFLOW_HOME/providers/*.yml settings only
+//	project  .agentflow/providers/*.yml     settings only
+//	user     $AGENTFLOW_HOME/providers/*.yml settings only
 //
-// .devflow/config.yml applies its role settings after the project layer and
+// .agentflow/config.yml applies its role settings after the project layer and
 // before the user layer.
 const (
 	LayerDefault = "default"
@@ -115,7 +115,7 @@ func loadDefinitions(project definitionLoader, schemas map[string]roleSchema, tr
 	if err != nil {
 		return nil, err
 	}
-	if err := d.loadDir(LayerUser, filepath.Join(home, "providers"), "~/.devflow/providers", schemas); err != nil {
+	if err := d.loadDir(LayerUser, filepath.Join(home, "providers"), "~/.agentflow/providers", schemas); err != nil {
 		return nil, err
 	}
 	return d, nil

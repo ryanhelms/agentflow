@@ -1,4 +1,4 @@
-// Package config loads the repo's .devflow/config.yml and the developer's ~/.devflow/config.yml.
+// Package config loads the repo's .agentflow/config.yml and the developer's ~/.agentflow/config.yml.
 package config
 
 import (
@@ -57,9 +57,9 @@ type Autonomy struct {
 	defaultLocal, defaultRemote bool
 }
 
-// Repo is .devflow/config.yml.
+// Repo is .agentflow/config.yml.
 type Repo struct {
-	Devflow int `yaml:"devflow"`
+	Agentflow int `yaml:"agentflow"`
 	// Providers holds the effective role selections populated by LoadRepo.
 	Providers Providers `yaml:"-"`
 	Update    struct {
@@ -103,7 +103,7 @@ func (c Commit) KeyRequired() bool {
 	return c.RequireKey == nil || *c.RequireKey
 }
 
-// User is ~/.devflow/config.yml.
+// User is ~/.agentflow/config.yml.
 type User struct {
 	Autonomy       Autonomy       `yaml:"autonomy"`
 	ApprovalWindow *time.Duration `yaml:"approval_window,omitempty"`
@@ -113,8 +113,8 @@ type User struct {
 	Atlassian struct {
 		Email string `yaml:"email"`
 	} `yaml:"atlassian"`
-	// Init controls automatic `devflow init` by the AI-client plugins in repos without
-	// .devflow/config.yml: auto (default), ask or off, for repos owned by Orgs.
+	// Init controls automatic `agentflow init` by the AI-client plugins in repos without
+	// .agentflow/config.yml: auto (default), ask or off, for repos owned by Orgs.
 	Init struct {
 		Auto string   `yaml:"auto"`
 		Orgs []string `yaml:"orgs"`
@@ -125,20 +125,21 @@ type User struct {
 var (
 	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
 	DefaultSite       = "https://nscale.atlassian.net"
-	DefaultFlowMap    = "nscaledev/devflow@v0:flow-map.yml"
+	DefaultFlowMap    = "nscaledev/agentflow@v0:flow-map.yml"
 	DefaultInitOrgs   = []string{"nscaledev"}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
 	DefaultCheckEvery = 6 * time.Hour
 )
 
-// LoadRepo reads <root>/.devflow/config.yml. A missing file yields defaults and ok=false.
+// LoadRepo reads project settings and definitions. Agentflow config takes precedence
+// over the legacy directory while an existing checkout is being migrated.
 func LoadRepo(root string) (*Repo, bool, error) {
-	c, extra, found, err := loadRepoFile(root)
+	c, extra, configDir, found, err := loadRepoFile(root)
 	if err != nil {
 		return nil, found, err
 	}
 	return resolveRepo(c, extra, found, func(d *definitions, schemas map[string]roleSchema) error {
-		return d.loadDir(LayerProject, filepath.Join(root, ".devflow", "providers"), ".devflow/providers", schemas)
+		return d.loadDir(LayerProject, filepath.Join(root, configDir, "providers"), configDir+"/providers", schemas)
 	}, false)
 }
 
@@ -169,7 +170,7 @@ func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project defini
 		return nil, found, err
 	}
 	if err != nil {
-		return nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
+		return nil, found, fmt.Errorf(".agentflow/config.yml: %w", err)
 	}
 	c.Providers = providers
 	return c, found, nil
@@ -178,7 +179,7 @@ func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project defini
 // LoadRepoCore reads repository policy, update and commit settings independently
 // of optional provider files. Provider operations must use LoadRepo.
 func LoadRepoCore(root string) (*Repo, bool, error) {
-	c, _, found, err := loadRepoFile(root)
+	c, _, _, found, err := loadRepoFile(root)
 	return c, found, err
 }
 
@@ -189,12 +190,20 @@ func ParseRepoCore(raw []byte) (*Repo, bool, error) {
 	return c, found, err
 }
 
-func loadRepoFile(root string) (*Repo, map[string]yaml.Node, bool, error) {
-	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, nil, false, err
+func loadRepoFile(root string) (*Repo, map[string]yaml.Node, string, bool, error) {
+	configDir := ".agentflow"
+	b, err := os.ReadFile(filepath.Join(root, configDir, "config.yml"))
+	if errors.Is(err, os.ErrNotExist) {
+		legacy := ".devflow"
+		if legacyData, legacyErr := os.ReadFile(filepath.Join(root, legacy, "config.yml")); !errors.Is(legacyErr, os.ErrNotExist) {
+			configDir, b, err = legacy, legacyData, legacyErr
+		}
 	}
-	return parseRepoFile(b)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, configDir, false, err
+	}
+	c, extra, found, err := parseRepoFile(b)
+	return c, extra, configDir, found, err
 }
 
 func parseRepoFile(b []byte) (*Repo, map[string]yaml.Node, bool, error) {
@@ -205,12 +214,12 @@ func parseRepoFile(b []byte) (*Repo, map[string]yaml.Node, bool, error) {
 	found := b != nil
 	if found {
 		if err := yaml.Unmarshal(b, &file); err != nil {
-			return nil, nil, true, fmt.Errorf(".devflow/config.yml: %w", err)
+			return nil, nil, true, fmt.Errorf(".agentflow/config.yml: %w", err)
 		}
 	}
 	c := &file.Repo
 	if err := validateAutonomy(c.Policy.MaxAutonomy, "policy.max_autonomy", c.Policy.MaxApprovalWindow, "policy.max_approval_window"); err != nil {
-		return nil, nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
+		return nil, nil, found, fmt.Errorf(".agentflow/config.yml: %w", err)
 	}
 	c.legacyJiraSite = c.Jira.Site != ""
 	c.legacyConfluenceSite = c.Confluence.Site != "" || c.legacyJiraSite
@@ -272,7 +281,7 @@ func (c *Repo) CheckEvery() time.Duration {
 	return DefaultCheckEvery
 }
 
-// Home returns ~/.devflow, creating it if needed.
+// Home returns ~/.agentflow, creating it if needed.
 func Home() (string, error) {
 	dir, err := HomeDir()
 	if err != nil {
@@ -283,6 +292,9 @@ func Home() (string, error) {
 
 // HomeDir returns the configured user directory without creating it.
 func HomeDir() (string, error) {
+	if h := os.Getenv("AGENTFLOW_HOME"); h != "" {
+		return h, nil
+	}
 	if h := os.Getenv("DEVFLOW_HOME"); h != "" {
 		return h, nil
 	}
@@ -290,10 +302,18 @@ func HomeDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".devflow"), nil
+	dir := filepath.Join(home, ".agentflow")
+	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
+		return dir, err
+	}
+	legacy := filepath.Join(home, ".devflow")
+	if _, err := os.Lstat(legacy); !errors.Is(err, os.ErrNotExist) {
+		return legacy, err
+	}
+	return dir, nil
 }
 
-// LoadUser reads ~/.devflow/config.yml, defaulting autonomy to confirm.
+// LoadUser reads ~/.agentflow/config.yml, defaulting autonomy to confirm.
 func LoadUser() (*User, error) {
 	u := &User{}
 	dir, err := Home()
@@ -303,13 +323,13 @@ func LoadUser() (*User, error) {
 	b, err := os.ReadFile(filepath.Join(dir, "config.yml"))
 	if err == nil {
 		if err := yaml.Unmarshal(b, u); err != nil {
-			return nil, fmt.Errorf("~/.devflow/config.yml: %w", err)
+			return nil, fmt.Errorf("~/.agentflow/config.yml: %w", err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
-		return nil, fmt.Errorf("~/.devflow/config.yml: %w", err)
+		return nil, fmt.Errorf("~/.agentflow/config.yml: %w", err)
 	}
 	if u.Autonomy.Local == "" {
 		u.Autonomy.defaultLocal = true
@@ -328,10 +348,10 @@ func LoadUser() (*User, error) {
 	return u, nil
 }
 
-// SaveUser writes ~/.devflow/config.yml.
+// SaveUser writes ~/.agentflow/config.yml.
 func SaveUser(u *User) error {
 	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
-		return fmt.Errorf("~/.devflow/config.yml: %w", err)
+		return fmt.Errorf("~/.agentflow/config.yml: %w", err)
 	}
 	dir, err := Home()
 	if err != nil {

@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   hygiene:
-    if: vars.DEVFLOW_ENABLED != 'false'
+    if: vars.AGENTFLOW_ENABLED != 'false'
     runs-on: ubuntu-latest
     outputs:
       report: ${{ steps.report.outputs.message }}

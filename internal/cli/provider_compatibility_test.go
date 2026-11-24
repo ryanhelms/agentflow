@@ -14,22 +14,22 @@ func TestLegacyLintMessage(t *testing.T) {
 		t.Fatalf("git init: %v: %s", err, out)
 	}
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 
-	if err := os.Mkdir(".devflow", 0o755); err != nil {
+	if err := os.Mkdir(".agentflow", 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
 		name, config, message string
 		exit                  int
 	}{
-		{"jira scope", "devflow: 1\n", "feat(PLAT-42): add fixture\n", 0},
+		{"jira scope", "agentflow: 1\n", "feat(PLAT-42): add fixture\n", 0},
 		{"required jira scope", "task_management: {provider: jira}\n", "feat: add fixture (#57)\n", 1},
-		{"unassigned task provider", "devflow: 1\n", "feat: add fixture (#57)\n", 0},
-		{"optional jira scope", "devflow: 1\ncommit: {require_key: false}\n", "feat: add fixture (#57)\n", 0},
+		{"unassigned task provider", "agentflow: 1\n", "feat: add fixture (#57)\n", 0},
+		{"optional jira scope", "agentflow: 1\ncommit: {require_key: false}\n", "feat: add fixture (#57)\n", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := os.WriteFile(filepath.Join(".devflow", "config.yml"), []byte(tc.config), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(".agentflow", "config.yml"), []byte(tc.config), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			if err := os.WriteFile("message", []byte(tc.message), 0o644); err != nil {

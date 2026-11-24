@@ -16,9 +16,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/slackoauth"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
 )
 
 const (
@@ -210,7 +210,7 @@ func prepare(t *testing.T, w *native.SessionWriter) native.WriteBinding {
 func TestBoundCalls(t *testing.T) {
 	f, w := newFixture(t)
 	b := prepare(t, w)
-	if b.Owner != "devflow" || b.Origin != origin || b.Connection == "" || b.Payload == "" {
+	if b.Owner != "agentflow" || b.Origin != origin || b.Connection == "" || b.Payload == "" {
 		t.Fatal("incomplete enrollment binding")
 	}
 	for _, tc := range []struct {
@@ -384,17 +384,17 @@ func checkPin(t *testing.T, r *http.Request) {
 func openApp(t *testing.T, actor string) *app.App {
 	t.Helper()
 	dir, home := t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	if err := exec.Command("git", "-C", dir, "init", "-q").Run(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	cfg := fmt.Sprintf("notifications: {provider: slack, settings: {native: {workspace_id: %s, channel_id: %s, actor_id: %q}}}\n", targetTeam, targetChannel, actor)
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("autonomy: {remote: confirm}\n"), 0600); err != nil {

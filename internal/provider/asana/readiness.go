@@ -15,7 +15,7 @@ import (
 func FromEnvironment(cfg Config) (*Adapter, error) {
 	token := os.Getenv("ASANA_ACCESS_TOKEN")
 	if token == "" {
-		return nil, errors.New("set ASANA_ACCESS_TOKEN in the environment running devflow")
+		return nil, errors.New("set ASANA_ACCESS_TOKEN in the environment running agentflow")
 	}
 	return New(&http.Client{Timeout: 15 * time.Second}, token, cfg)
 }

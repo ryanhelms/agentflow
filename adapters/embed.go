@@ -1,4 +1,4 @@
-// Package adapters embeds per-client adapter files used by `devflow install`.
+// Package adapters embeds per-client adapter files used by `agentflow install`.
 package adapters
 
 import "embed"

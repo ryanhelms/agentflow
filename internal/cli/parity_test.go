@@ -15,59 +15,59 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 // mcpToCLI maps every statically registered MCP tool to the CLI command that
 // runs the same internal/app operation. A new static tool must add a CLI
 // command and a row here.
 var mcpToCLI = map[string]string{
-	"devflow_ui_open":               "ui",
-	"devflow_config":                "config",
-	"devflow_config_apply":          "config publish",
-	"devflow_policy_explain":        "policy explain",
-	"devflow_approval_status":       "policy status",
-	"devflow_approval_approve":      "policy approve",
-	"devflow_commit_prepare":        "commit",
-	"devflow_pr_prepare":            "pr",
-	"devflow_push":                  "push",
-	"devflow_push_prepare":          "push",
-	"devflow_pr_mark_ready":         "pr mark-ready",
-	"devflow_pr_mark_ready_prepare": "pr mark-ready",
-	"devflow_context":               "context",
-	"devflow_my_work":               "work",
-	"devflow_start":                 "start",
-	"devflow_ac_checklist":          "ac",
-	"devflow_ac_update":             "ac done",
-	"devflow_scope_check":           "scope",
-	"devflow_ticket_create":         "task create",
-	"devflow_jira_remote_link":      "task link",
-	"devflow_notify":                "notify",
-	"devflow_transition":            "transition",
-	"devflow_comment":               "comment",
-	"devflow_commit_plan":           "commit",
-	"devflow_commit_context":        "commit",
-	"devflow_commit_validate":       "lint-msg",
-	"devflow_commit_preview":        "preview",
-	"devflow_commit":                "commit",
-	"devflow_pr_ready":              "pr",
-	"devflow_pr_open":               "pr",
-	"devflow_review_threads":        "review",
-	"devflow_review_reply":          "review reply",
-	"devflow_ship_status":           "status",
-	"devflow_standup":               "standup",
-	"devflow_eod_post":              "eod post",
-	"devflow_docs_get":              "docs get",
-	"devflow_docs_search":           "docs search",
-	"devflow_docs_publish":          "docs publish",
-	"devflow_adr_draft":             "adr new",
-	"devflow_collisions":            "collisions",
-	"devflow_release_plan":          "release plan",
-	"devflow_release_preview":       "release preview",
-	"devflow_setup_providers":       "setup providers",
-	"devflow_setup_plan":            "setup",
-	"devflow_setup_apply":           "setup apply",
+	"agentflow_ui_open":               "ui",
+	"agentflow_config":                "config",
+	"agentflow_config_apply":          "config publish",
+	"agentflow_policy_explain":        "policy explain",
+	"agentflow_approval_status":       "policy status",
+	"agentflow_approval_approve":      "policy approve",
+	"agentflow_commit_prepare":        "commit",
+	"agentflow_pr_prepare":            "pr",
+	"agentflow_push":                  "push",
+	"agentflow_push_prepare":          "push",
+	"agentflow_pr_mark_ready":         "pr mark-ready",
+	"agentflow_pr_mark_ready_prepare": "pr mark-ready",
+	"agentflow_context":               "context",
+	"agentflow_my_work":               "work",
+	"agentflow_start":                 "start",
+	"agentflow_ac_checklist":          "ac",
+	"agentflow_ac_update":             "ac done",
+	"agentflow_scope_check":           "scope",
+	"agentflow_ticket_create":         "task create",
+	"agentflow_jira_remote_link":      "task link",
+	"agentflow_notify":                "notify",
+	"agentflow_transition":            "transition",
+	"agentflow_comment":               "comment",
+	"agentflow_commit_plan":           "commit",
+	"agentflow_commit_context":        "commit",
+	"agentflow_commit_validate":       "lint-msg",
+	"agentflow_commit_preview":        "preview",
+	"agentflow_commit":                "commit",
+	"agentflow_pr_ready":              "pr",
+	"agentflow_pr_open":               "pr",
+	"agentflow_review_threads":        "review",
+	"agentflow_review_reply":          "review reply",
+	"agentflow_ship_status":           "status",
+	"agentflow_standup":               "standup",
+	"agentflow_eod_post":              "eod post",
+	"agentflow_docs_get":              "docs get",
+	"agentflow_docs_search":           "docs search",
+	"agentflow_docs_publish":          "docs publish",
+	"agentflow_adr_draft":             "adr new",
+	"agentflow_collisions":            "collisions",
+	"agentflow_release_plan":          "release plan",
+	"agentflow_release_preview":       "release preview",
+	"agentflow_setup_providers":       "setup providers",
+	"agentflow_setup_plan":            "setup",
+	"agentflow_setup_apply":           "setup apply",
 }
 
 // definitionTool reports whether a tool was generated at runtime from a
@@ -107,7 +107,7 @@ func registeredTools(t *testing.T) []string {
 }
 
 func TestEveryMCPToolHasCLICommand(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	registered := map[string]bool{}
@@ -133,7 +133,7 @@ func TestEveryMCPToolHasCLICommand(t *testing.T) {
 		words := strings.Fields(command)
 		err := run(context.Background(), words[0], append(words[1:], "--help"))
 		if err != nil && !errors.Is(err, flag.ErrHelp) && strings.Contains(err.Error(), "unknown command") {
-			t.Errorf("%s: devflow %s is not a command: %v", tool, command, err)
+			t.Errorf("%s: agentflow %s is not a command: %v", tool, command, err)
 		}
 	}
 }
@@ -143,8 +143,8 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("DEVFLOW_HOME", filepath.Join(dir, "home"))
-	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 	t.Setenv("GH_TOKEN", "fixture")
@@ -171,10 +171,10 @@ func TestParityCommandsRunLocally(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	if err := os.Mkdir(".devflow", 0o700); err != nil {
+	if err := os.Mkdir(".agentflow", 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("jira: {site: https://fixture.invalid}\ntask_management: {provider: jira}\n"), 0o600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte("jira: {site: https://fixture.invalid}\ntask_management: {provider: jira}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile("todo.go", []byte("package x\n// TODO: unrelated cleanup\n"), 0o600); err != nil {
@@ -225,7 +225,7 @@ func TestParityCommandsRunLocally(t *testing.T) {
 		{"collisions", "A", "B"},
 	} {
 		if _, code := capture(bad...); code == 0 {
-			t.Errorf("devflow %v succeeded, want a usage error", bad)
+			t.Errorf("agentflow %v succeeded, want a usage error", bad)
 		}
 	}
 }

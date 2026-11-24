@@ -1,13 +1,13 @@
 # Repository console
 
-Run `devflow ui` from the checkout you want to manage, or ask your local AI
-harness to open a devflow screen. One daemon runs under your OS account. It
+Run `agentflow ui` from the checkout you want to manage, or ask your local AI
+harness to open a agentflow screen. One daemon runs under your OS account. It
 serves the configured repositories directly on the loopback interface.
 
 ## Open a screen from chat
 
 Ask Agent Commander **“Open the task management provider editor for this
-repo.”** Its coordinator calls `devflow_ui_open` in the worktree selected for
+repo.”** Its coordinator calls `agentflow_ui_open` in the worktree selected for
 the chat. This opens **Providers → Task management**. You can also ask for
 Overview, Autonomy, Configuration or Handoff. The tool defaults to Providers and accepts
 an optional provider role.
@@ -16,30 +16,30 @@ an optional provider role.
 {"screen":"providers","role":"task_management"}
 ```
 
-Use `devflow ui --screen providers --role task_management` for the same
+Use `agentflow ui --screen providers --role task_management` for the same
 destination from a terminal. An authorized harness opens the browser locally.
 Chat receives the screen, role and reuse status. Agent Commander registers
-`devflow mcp --ui-only --client agent-commander --auto-open` for its lead
+`agentflow mcp --ui-only --client agent-commander --auto-open` for its lead
 agent. The capability check omits `--auto-open` and exposes only
-`devflow_ui_open`.
+`agentflow_ui_open`.
 
 ## Repository addresses and tabs
 
 The daemon assigns one hostname to each local clone. The first clone of
-devflow might be `http://devflow.localhost/`. A linked worktree gets a
+agentflow might be `http://agentflow.localhost/`. A linked worktree gets a
 distinct path under the same hostname. A second clone with the same name
 gets a hostname with a short suffix. The daemon keeps the mapping in the
 developer’s private profile, so it survives restarts. No repository file or
 system DNS entry is needed. Browsers must support loopback `.localhost`
 subdomains.
 
-On first launch devflow tries port 80 so the usual address has no visible port. When it
+On first launch agentflow tries port 80 so the usual address has no visible port. When it
 cannot bind that port, it selects an available loopback port and shows it in
 the URL. On subsequent starts it tries the remembered port first to keep
 bookmarks and browser drafts at the same address. Use `--port N` to
-choose a specific port when starting the daemon. `devflow ui --status`
-reports the listening port. `devflow ui --stop` stops the daemon for all
-clones. The next eligible launch starts it again. An ordinary `devflow ui`
+choose a specific port when starting the daemon. `agentflow ui --status`
+reports the listening port. `agentflow ui --stop` stops the daemon for all
+clones. The next eligible launch starts it again. An ordinary `agentflow ui`
 returns to your shell and leaves the daemon running when the terminal closes.
 Use `--foreground` to supervise a new daemon from the terminal and stop it
 with Ctrl+C.
@@ -71,7 +71,7 @@ the same clone for 30 days. The initial one-time link goes straight to the
 browser. A fresh profile, expired authorization or a different origin can show
 the reconnect screen. Copy the suggested prompt into the chat for that
 worktree, or run the displayed command from its terminal. Use
-`devflow ui --no-open` to request a fresh one-time link for a specific browser.
+`agentflow ui --no-open` to request a fresh one-time link for a specific browser.
 Keep that link on your machine. Private browsing and clearing site data
 remove browser-local credentials and drafts. A console started with v0.43.0
 predates the daemon. Its first launch after upgrading opens the new address.
@@ -80,16 +80,16 @@ The repository name and branch stay visible while you navigate. Under
 **Appearance**, choose **System**, **Light** or **Dark**. The console remembers
 your choice for this browser origin when browser storage is available.
 
-## Configure Devflow from chat
+## Configure Agentflow from chat
 
-Use a Devflow MCP connection for the worktree you want to configure. If the
-tools are missing after upgrading Devflow, reconnect the MCP server or start a
-fresh client session in that worktree. For a Codex checkout without a Devflow
-registration, run `devflow setup plan --client codex` and review the project
-registration with `devflow setup apply --client codex`. Open a fresh session
+Use a Agentflow MCP connection for the worktree you want to configure. If the
+tools are missing after upgrading Agentflow, reconnect the MCP server or start a
+fresh client session in that worktree. For a Codex checkout without a Agentflow
+registration, run `agentflow setup plan --client codex` and review the project
+registration with `agentflow setup apply --client codex`. Open a fresh session
 after registration. [Client setup](../README.md#set-up-your-machine-engineers)
 
-| Ask in chat | What Devflow does |
+| Ask in chat | What Agentflow does |
 | --- | --- |
 | “Which setting controls local commits here, and where does it come from?” | Shows your preference, the repository ceilings and the effective rule. |
 | “Set my personal commit preference to automatic. Keep the five-minute window.” | Previews the change to your user configuration. On approval, saves it on this workstation. |
@@ -97,22 +97,22 @@ after registration. [Client setup](../README.md#set-up-your-machine-engineers)
 | “Show the release units and preview this change to their configuration.” | Reads the registered release configuration by path and previews your proposed source against its current revision. |
 | “Check which configured provider connections are ready.” | Runs the checkout’s provider readiness checks and reports connections that need attention. |
 
-`devflow_config` handles inspection and preparation. `devflow_config_apply` saves
+`agentflow_config` handles inspection and preparation. `agentflow_config_apply` saves
 the reviewed personal change or publishes the reviewed repository file.
-The CLI exposes the same operations through `devflow config OP`. Pass the
+The CLI exposes the same operations through `agentflow config OP`. Pass the
 remaining fields as a JSON object on standard input or with `--input FILE`.
 List the sources and read the repository configuration with these commands.
 
 ```sh
-devflow config list
-printf '%s\n' '{"path":".devflow/config.yml"}' | devflow config read
+agentflow config list
+printf '%s\n' '{"path":".agentflow/config.yml"}' | agentflow config read
 ```
 
 ### Change a personal preference
 
-Call `devflow_config` with `{"operation":"autonomy"}` to read the effective
+Call `agentflow_config` with `{"operation":"autonomy"}` to read the effective
 rules and the current `user_revision`. To make local commits automatic, use
-the returned revision in a second call to `devflow_config`.
+the returned revision in a second call to `agentflow_config`.
 
 ```json
 {
@@ -123,7 +123,7 @@ the returned revision in a second call to `devflow_config`.
 ```
 
 Review the before and after values. Once the developer approves, call
-`devflow_config_apply` with the same revision and patch and the token from the
+`agentflow_config_apply` with the same revision and patch and the token from the
 preview.
 
 ```json
@@ -138,24 +138,24 @@ preview.
 A patch can change `local`, `remote`, `window` and individual `actions`.
 Omitted fields keep their existing values. For example,
 `{"actions":{"commit":""}}` returns the commit setting to inheritance.
-Devflow uses the current on-disk policy to review the change. If another editor
+Agentflow uses the current on-disk policy to review the change. If another editor
 updates the personal file, read the new revision and preview your patch again.
 
 ### Publish a repository change
 
-1. Call `devflow_config` with `{"operation":"list"}` to see the registered
-   files and provider settings. Use `read` with `path: ".devflow/config.yml"`
+1. Call `agentflow_config` with `{"operation":"list"}` to see the registered
+   files and provider settings. Use `read` with `path: ".agentflow/config.yml"`
    for the current source and digest. Managed and credential-bearing sources
    appear in the inventory with their contents withheld.
 2. For a checkout using GitHub Issues for task management, the following
-   `devflow_config` call sets the search limit to 25. Substitute the source
+   `agentflow_config` call sets the search limit to 25. Substitute the source
    and digest from `read`. `value` accepts the JSON type from the setting's
    schema.
 
    ```json
    {
      "operation": "compose",
-     "path": ".devflow/config.yml",
+     "path": ".agentflow/config.yml",
      "base_digest": "<digest from read>",
      "content": "<source from read>",
      "role": "task_management",
@@ -165,13 +165,13 @@ updates the personal file, read the new revision and preview your patch again.
    }
    ```
 
-3. Preview the result with `devflow_config`. Copy the edited `content` returned
+3. Preview the result with `agentflow_config`. Copy the edited `content` returned
    by `compose` and retain the original digest through successive edits.
 
    ```json
    {
      "operation": "preview",
-     "path": ".devflow/config.yml",
+     "path": ".agentflow/config.yml",
      "base_digest": "<digest from read>",
      "content": "<edited source from compose>",
      "title": "chore: adjust issue search limit",
@@ -180,7 +180,7 @@ updates the personal file, read the new revision and preview your patch again.
    ```
 
 4. Review the diff, effective settings and publication destination. After
-   approval, call `devflow_config_apply` with `operation: "publish"`, the same
+   approval, call `agentflow_config_apply` with `operation: "publish"`, the same
    path, digest, source, title and mode, and the returned `confirm_token`.
    Supply a conventional title that follows the checkout's commit rules. If the
    proposal includes a `task_ref`, include it in both calls. The default mode is
@@ -189,7 +189,7 @@ updates the personal file, read the new revision and preview your patch again.
 
 Use `compose` with `edit: "remove"` to inherit a provider setting, or
 `edit: "select"` to stage a provider switch. Use `stage_autonomy` with a
-`patch` to stage repository ceilings. For example, send this to `devflow_config`
+`patch` to stage repository ceilings. For example, send this to `agentflow_config`
 to enable automatic PR publication for eligible personal preferences.
 
 ```json
@@ -220,7 +220,7 @@ request requires a fresh preview. [Approval handoff](operations.md#prepare-and-a
 
 Open **Providers**, select a role, then select a setting. For example, open
 task management to see which provider receives task operations, what its search
-limit is, and which source supplied it. Devflow uses the same resolver as the
+limit is, and which source supplied it. Agentflow uses the same resolver as the
 CLI. Starting with compiled defaults and applicable legacy values, it applies
 release definitions, repository provider definitions, inline repository
 settings, then user provider definitions. A user override can therefore hide a
@@ -246,7 +246,7 @@ provider for the role and removes its previous inline settings. Return to
 resulting defaults, definitions and source diff before publishing. A switch
 routes future operations once the new configuration is in use. Existing provider
 records stay at their source. Automatic data migration and a per-repository
-scope selector are tracked in [issue #96](https://github.com/nscaledev/devflow/issues/96).
+scope selector are tracked in [issue #96](https://github.com/nscaledev/agentflow/issues/96).
 See [provider definitions and precedence](providers.md#provider-definitions).
 
 ## Set approval preferences and ceilings
@@ -259,7 +259,7 @@ review requirements appear alongside the action.
 Under **Personal preferences**, choose **Automatic** for **Create a local
 commit** and choose **Save preferences** to apply that choice for your user.
 The repository ceilings still apply. The personal form saves immediately to
-the Devflow user configuration. Restart an existing Devflow MCP server to use
+the Agentflow user configuration. Restart an existing Agentflow MCP server to use
 the updated settings.
 
 Under **Repository ceilings**, choose a class or an action, then choose
@@ -281,7 +281,7 @@ or staged values.
 1. Open **Configuration** and select a file. The inventory includes existing
    repository settings, provider definitions, release units, flow maps, task
    templates, document mappings and deployment environments. Workflow and client
-   registration files appear with their ownership. Use `devflow init` to set
+   registration files appear with their ownership. Use `agentflow init` to set
    up a repository that does not yet have configuration.
 2. Use **Fields** to find a setting, edit it with its typed control and stage
    it. For a task template, for example, you can edit the ordered list of
@@ -311,7 +311,7 @@ appropriate branch and pull request permissions. The current repository and
 user autonomy settings apply. A repository with remote actions set to
 `suggest` can still preview a change. Existing branch rules and required
 checks govern when it can merge. The preview lists local workflow triggers.
-At publication devflow checks GitHub Actions and the rules on both branches.
+At publication agentflow checks GitHub Actions and the rules on both branches.
 When Actions is active and both branches are confirmed to be unprotected and
 free of applicable rules, the publisher requests `[skip actions]` for eligible
 push and pull request workflows. Otherwise it uses normal triggers. Other

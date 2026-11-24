@@ -18,7 +18,7 @@ import (
 // The publisher independently checks live branch protection and rules before
 // choosing the commit body. Workflow files alone cannot identify required checks.
 func ciImpact(root, changedPath, defaultBranch string) string {
-	const policy = "Creating the proposal branch can trigger automation before the configuration commit. At publication, Devflow checks both the default and proposal branches. It adds [skip actions] to the proposal and squash commit bodies only if GitHub confirms Actions is enabled, the branches are unprotected and no applicable rules exist. Otherwise normal checks run. The marker covers push and pull_request. Merge queues, pull_request_target, external CI and downstream automation can still run."
+	const policy = "Creating the proposal branch can trigger automation before the configuration commit. At publication, Agentflow checks both the default and proposal branches. It adds [skip actions] to the proposal and squash commit bodies only if GitHub confirms Actions is enabled, the branches are unprotected and no applicable rules exist. Otherwise normal checks run. The marker covers push and pull_request. Merge queues, pull_request_target, external CI and downstream automation can still run."
 	lines := []string{policy}
 	dir, err := os.OpenRoot(root)
 	if err != nil {

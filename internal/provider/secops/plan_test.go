@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/secops"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/secops"
 )
 
 type replayTasks struct {

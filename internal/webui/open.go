@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 // OpenResult can safely be returned through chat. The browser alone receives
@@ -74,7 +74,7 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return startup{}, fmt.Errorf("locate devflow executable: %w", err)
+		return startup{}, fmt.Errorf("locate agentflow executable: %w", err)
 	}
 	cmd := exec.Command(exe, "ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port))
 	cmd.Dir = dir
@@ -86,7 +86,7 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 	return startAndWait(ctx, cmd)
 }
 
-// ServeChild is the private stdout handshake between two copies of devflow.
+// ServeChild is the private stdout handshake between two copies of agentflow.
 // Closing the pipe after readiness leaves the child with no MCP descriptors.
 func ServeChild(ctx context.Context, dest Destination, mode string, port int, pipe *os.File) error {
 	ctx, stop := context.WithCancel(ctx)

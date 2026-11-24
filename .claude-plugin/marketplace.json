@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "devflow",
+      "name": "agentflow",
       "source": "./adapters/claude-code",
       "description": "Jira-aware commits, ticket context, PRs and Confluence for the Nscale delivery loop",
       "category": "development"

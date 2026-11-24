@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/managedcli"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/managedcli"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 var (

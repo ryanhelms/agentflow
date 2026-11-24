@@ -13,9 +13,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 const workflow = setup.CallerWorkflow
@@ -48,7 +48,7 @@ func SourceBaseline(root string, files []consolecfg.File, name, original string)
 		return nil, errors.New("file is not a repository configuration source")
 	}
 	deps[name] = blobID(original)
-	// The caller workflow controls which devflow version CI will execute.
+	// The caller workflow controls which agentflow version CI will execute.
 	d, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (a remote) baseline(ctx context.Context, branch string, p proposal, deps ma
 		}
 	}
 	for name := range files {
-		if path.Dir(name) == ".devflow/providers" && (path.Ext(name) == ".yml" || path.Ext(name) == ".yaml") && deps[name] == "" {
+		if path.Dir(name) == ".agentflow/providers" && (path.Ext(name) == ".yml" || path.Ext(name) == ".yaml") && deps[name] == "" {
 			return "", false, fmt.Errorf("the default branch has another provider definition %s; refresh before publishing", name)
 		}
 	}

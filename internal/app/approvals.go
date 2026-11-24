@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 // ActionPolicy reports the decision for each possible route. The write itself

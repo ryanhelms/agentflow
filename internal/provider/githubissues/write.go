@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func taskResult(task provider.Task, status provider.WriteStatus) provider.WriteResult {
@@ -224,10 +224,10 @@ func (a *Adapter) AssignToMe(ctx context.Context, ref provider.Ref, options prov
 }
 
 const (
-	markerPrefix = "<!-- devflow:github-issues:operation:v1:"
+	markerPrefix = "<!-- agentflow:github-issues:operation:v1:"
 	markerSuffix = " -->"
 	markerGap    = "\n\n"
-	bodyEscape   = "<!-- devflow:github-issues:body:v1 -->\n\n"
+	bodyEscape   = "<!-- agentflow:github-issues:body:v1 -->\n\n"
 )
 
 func (a *Adapter) bodyMarker(path, id string, template *provider.TaskTemplateRef) string {

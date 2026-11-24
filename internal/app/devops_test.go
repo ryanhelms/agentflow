@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func devOpsApp(t *testing.T, settings string) *App {
@@ -23,7 +23,7 @@ func devOpsApp(t *testing.T, settings string) *App {
 	dir := newRepo(t)
 	r := &gitx.Repo{Dir: dir}
 	mustGit(t, r, "switch", "main")
-	configDir := filepath.Join(dir, ".devflow")
+	configDir := filepath.Join(dir, ".agentflow")
 	if err := os.Mkdir(configDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestShipStatusCorrelatesGitHubDeployments(t *testing.T) {
 func TestMixedDevOpsProvidersSharePRHead(t *testing.T) {
 	a := devOpsApp(t, `devops:
   checks: {provider: github, settings: {repository: example/checks}}
-  deployments: {provider: fixture, settings: {path: .devflow/deployments.json}}
+  deployments: {provider: fixture, settings: {path: .agentflow/deployments.json}}
   releases: {provider: github, settings: {repository: example/releases}}
 `)
 	mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/example/source.git")
@@ -114,7 +114,7 @@ func TestMixedDevOpsProvidersSharePRHead(t *testing.T) {
   {"environment":"staging","revision":"unrelated","state":"failure"},
   {"environment":"staging","revision":%q,"state":"success"}
 ]`, head)
-	if err := os.WriteFile(filepath.Join(a.Repo.Dir, ".devflow", "deployments.json"), []byte(deployments), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(a.Repo.Dir, ".agentflow", "deployments.json"), []byte(deployments), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mockDevOpsAPI(t, func(w http.ResponseWriter, r *http.Request) {

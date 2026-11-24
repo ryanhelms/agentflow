@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gh"
 )
 
 func TestVersions(t *testing.T) {
@@ -38,7 +38,7 @@ func makeArchive(t *testing.T, dir, name string) string {
 	gz := gzip.NewWriter(f)
 	tw := tar.NewWriter(gz)
 	body := []byte("#!/bin/sh\necho new\n")
-	_ = tw.WriteHeader(&tar.Header{Name: "devflow", Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg})
+	_ = tw.WriteHeader(&tar.Header{Name: "agentflow", Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg})
 	_, _ = tw.Write(body)
 	tw.Close()
 	gz.Close()
@@ -51,7 +51,7 @@ func TestLatestAndInstall(t *testing.T) {
 		t.Skip("tar.gz path only")
 	}
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("DEVFLOW_INSECURE_SKIP_ATTESTATION", "1")
+	t.Setenv("AGENTFLOW_INSECURE_SKIP_ATTESTATION", "1")
 	src := t.TempDir()
 	name := AssetName("0.5.0")
 	arch := makeArchive(t, src, name)
@@ -99,7 +99,7 @@ func TestLatestAndInstall(t *testing.T) {
 	if !u.Installed("0.5.0") {
 		t.Fatal("not activated")
 	}
-	if _, err := os.Stat(filepath.Join(u.Dir, "current", "devflow")); err != nil {
+	if _, err := os.Stat(filepath.Join(u.Dir, "current", "agentflow")); err != nil {
 		t.Fatal(err)
 	}
 

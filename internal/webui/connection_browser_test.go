@@ -30,7 +30,7 @@ func TestConsoleConnectionBrowser(t *testing.T) {
 		worktree := http.NewServeMux()
 		scoped := http.StripPrefix("/w/first", worktree)
 		mux.Handle("/w/first/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("X-Devflow-Commander") != "" && r.URL.Path != "/w/first/api/activity" && r.URL.Path != "/w/first/api/reply" && r.URL.Path != "/w/first/api/tabs/events" {
+			if r.Header.Get("X-Agentflow-Commander") != "" && r.URL.Path != "/w/first/api/activity" && r.URL.Path != "/w/first/api/reply" && r.URL.Path != "/w/first/api/tabs/events" {
 				t.Errorf("Commander credential sent to %s", r.URL.Path)
 			}
 			scoped.ServeHTTP(w, r)
@@ -90,7 +90,7 @@ func TestConsoleConnectionBrowser(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("POST /fixture/revise", func(w http.ResponseWriter, _ *http.Request) {
-			file, err := os.OpenFile(filepath.Join(s.repo.Dir, ".devflow", "config.yml"), os.O_APPEND|os.O_WRONLY, 0600)
+			file, err := os.OpenFile(filepath.Join(s.repo.Dir, ".agentflow", "config.yml"), os.O_APPEND|os.O_WRONLY, 0600)
 			if err != nil {
 				http.Error(w, "fixture checkout unavailable", http.StatusInternalServerError)
 				return
@@ -155,20 +155,20 @@ func installBrowserCommanderFixture(t *testing.T, routes *http.ServeMux, handler
 		reply(w, http.StatusOK, data)
 	})
 	routes.HandleFunc("GET /api/tabs/events", func(w http.ResponseWriter, r *http.Request) {
-		if issued.Load() == 1 && !reviewed.Load() && r.Header.Get("X-Devflow-Commander") != key {
+		if issued.Load() == 1 && !reviewed.Load() && r.Header.Get("X-Agentflow-Commander") != key {
 			t.Error("the scoped tab stream is missing its launch context")
 		}
 		handler.ServeHTTP(w, r)
 	})
 	routes.HandleFunc("GET /api/activity", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Devflow-Commander") != key {
+		if r.Header.Get("X-Agentflow-Commander") != key {
 			reply(w, http.StatusOK, map[string]any{"commander_reconnect": true, "attention": []item{{Title: "Fixture pull request"}}})
 			return
 		}
 		reply(w, http.StatusOK, map[string]any{"attention": []item{{Run: "worker-run", Request: "worker-request", Title: "Fixture worker question"}}, "handoff": "Fixture worker question"})
 	})
 	routes.HandleFunc("POST /api/reply", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Devflow-Commander") != key || reviewed.Swap(true) {
+		if r.Header.Get("X-Agentflow-Commander") != key || reviewed.Swap(true) {
 			reply(w, http.StatusForbidden, map[string]any{"commander_reconnect": true, "error": "Reopen from the Commander session."})
 			return
 		}

@@ -1,4 +1,4 @@
-# Install Devflow into a Git working tree. Supply a path or start in the intended checkout.
+# Install Agentflow into a Git working tree. Supply a path or start in the intended checkout.
 [CmdletBinding()]
 param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
 
@@ -19,15 +19,15 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
     }
 
     function Get-InstalledBinary {
-        $cache = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'devflow' } else { Join-Path $HOME '.cache/devflow' }
+        $cache = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'agentflow' } else { Join-Path $HOME '.cache/agentflow' }
         $pointer = Join-Path $cache 'current.txt'
         if (!(Test-Path -LiteralPath $pointer -PathType Leaf)) { return }
         $directory = ([string](Get-Content -LiteralPath $pointer -Raw)).Trim()
         if (!$directory -or ![IO.Path]::IsPathRooted($directory) -or
             (Split-Path -Parent $directory) -ne $cache -or (Split-Path -Leaf $directory) -notmatch '^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$') {
-            throw "Invalid Devflow cache pointer at $pointer. Repair the installation and retry."
+            throw "Invalid Agentflow cache pointer at $pointer. Repair the installation and retry."
         }
-        $file = Join-Path $directory 'devflow.exe'
+        $file = Join-Path $directory 'agentflow.exe'
         if (Test-Path -LiteralPath $file -PathType Leaf) { return $file }
     }
 
@@ -51,8 +51,8 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
             if ([string]::IsNullOrWhiteSpace($candidate)) { throw 'Installation cancelled. Rerun with -Repo PATH.' }
         }
 
-        $markers = @('.devflow/config.yml', '.devflow/bin/devflow', '.devflow/bin/devflow.ps1',
-                     '.devflow/bin/devflow.cmd', '.github/workflows/devflow.yml')
+        $markers = @('.agentflow/config.yml', '.agentflow/bin/agentflow', '.agentflow/bin/agentflow.ps1',
+                     '.agentflow/bin/agentflow.cmd', '.github/workflows/agentflow.yml')
         Push-Location -LiteralPath $root
         try {
             foreach ($path in $markers) {
@@ -61,36 +61,36 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
                     throw "Expected a regular project file at $path."
                 }
             }
-            Write-Host "Initializing Devflow in $root."
+            Write-Host "Initializing Agentflow in $root."
 
             $command = Get-InstalledBinary
             $stage = $null
             try {
                 $gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-                if (!$gh) { throw 'Resolving the latest release requires GitHub CLI (gh) signed in to github.com with access to nscaledev/devflow.' }
-                $tag = & $gh.Source api --hostname github.com repos/nscaledev/devflow/releases/latest --jq .tag_name
+                if (!$gh) { throw 'Resolving the latest release requires GitHub CLI (gh) signed in to github.com with access to nscaledev/agentflow.' }
+                $tag = & $gh.Source api --hostname github.com repos/nscaledev/agentflow/releases/latest --jq .tag_name
                 if ($LASTEXITCODE -ne 0 -or @($tag).Count -ne 1 -or $tag -cnotmatch '^v\d+\.\d+\.\d+$') {
-                    throw 'Could not resolve the latest stable nscaledev/devflow release. Check gh auth status and repository access.'
+                    throw 'Could not resolve the latest stable nscaledev/agentflow release. Check gh auth status and repository access.'
                 }
                 $commandArgs = @('init')
                 if (!$command -or (Split-Path -Leaf (Split-Path -Parent $command)) -ne $tag.Substring(1)) {
-                    $source = "repos/nscaledev/devflow/contents/templates/repo/.devflow/bin/devflow.ps1?ref=$tag"
+                    $source = "repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=$tag"
                     $response = & $gh.Source api --hostname github.com $source
-                    if ($LASTEXITCODE -ne 0) { throw "Could not download the Devflow launcher at $tag." }
+                    if ($LASTEXITCODE -ne 0) { throw "Could not download the Agentflow launcher at $tag." }
                     $file = ($response -join [Environment]::NewLine) | ConvertFrom-Json
                     if ($file.type -ne 'file' -or $file.encoding -ne 'base64' -or $file.size -le 0) {
                         throw "Unexpected launcher response for $tag."
                     }
                     $bytes = [Convert]::FromBase64String($file.content)
-                    if ($bytes.Length -ne $file.size) { throw "Incomplete Devflow launcher at $tag." }
+                    if ($bytes.Length -ne $file.size) { throw "Incomplete Agentflow launcher at $tag." }
                     $stageName = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
                     $stage = (New-Item -ItemType Directory -Path $stageName).FullName
-                    $command = Join-Path $stage 'devflow.ps1'
+                    $command = Join-Path $stage 'agentflow.ps1'
                     [IO.File]::WriteAllBytes($command, $bytes)
                     $commandArgs = @('--bootstrap-release', $tag, 'init')
                 }
                 & $command @commandArgs
-                if ($LASTEXITCODE -ne 0) { throw "Devflow init failed with exit code $LASTEXITCODE." }
+                if ($LASTEXITCODE -ne 0) { throw "Agentflow init failed with exit code $LASTEXITCODE." }
             } finally {
                 if ($stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
             }

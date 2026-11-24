@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 func TestDevOpsFixtureCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	git := func(args ...string) string {
@@ -32,12 +32,12 @@ func TestDevOpsFixtureCommands(t *testing.T) {
 	git("init", "-q", "-b", "main")
 	git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "chore: create fixture", "--allow-empty")
 	sha := git("rev-parse", "HEAD")
-	if err := os.Mkdir(".devflow", 0o755); err != nil {
+	if err := os.Mkdir(".agentflow", 0o755); err != nil {
 		t.Fatal(err)
 	}
 	write := func(name, content string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(".devflow", name), []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(".agentflow", name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -46,8 +46,8 @@ task_management: {provider: none}
 knowledge_base: {provider: none}
 devops:
   checks: {provider: none}
-  deployments: {provider: fixture, settings: {path: .devflow/deployments.json}}
-  releases: {provider: fixture, settings: {path: .devflow/releases.json}}
+  deployments: {provider: fixture, settings: {path: .agentflow/deployments.json}}
+  releases: {provider: fixture, settings: {path: .agentflow/releases.json}}
 secops: {provider: none}
 notifications: {provider: none}
 `
@@ -70,7 +70,7 @@ notifications: {provider: none}
 		os.Stdout = f
 		defer func() { os.Stdout = stdout }()
 		if err := run(t.Context(), cmd, args); err != nil {
-			t.Fatalf("devflow %s %v: %v", cmd, args, err)
+			t.Fatalf("agentflow %s %v: %v", cmd, args, err)
 		}
 		data, err := os.ReadFile(f.Name())
 		if err != nil {
@@ -104,7 +104,7 @@ notifications: {provider: none}
 	if err := run(t.Context(), "release", []string{"publish", "v1.2.3", "--revision", sha, "--yes"}); !errors.Is(err, provider.ErrUnsupported) {
 		t.Fatalf("fixture publication = %v", err)
 	}
-	write("config.yml", strings.Replace(config, "provider: fixture, settings: {path: .devflow/releases.json}", "provider: github, settings: {repository: example/releases}", 1))
+	write("config.yml", strings.Replace(config, "provider: fixture, settings: {path: .agentflow/releases.json}", "provider: github, settings: {repository: example/releases}", 1))
 	var preview struct {
 		Repository string           `json:"repository"`
 		Release    provider.Release `json:"release"`

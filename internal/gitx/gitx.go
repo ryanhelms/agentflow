@@ -1,4 +1,4 @@
-// Package gitx wraps the git CLI for the few operations devflow needs.
+// Package gitx wraps the git CLI for the few operations agentflow needs.
 package gitx
 
 import (

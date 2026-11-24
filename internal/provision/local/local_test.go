@@ -19,7 +19,7 @@ import (
 	"testing/iotest"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 var (
@@ -294,7 +294,7 @@ func TestRejectsPathsOutsideManagedLayout(t *testing.T) {
 }
 
 func TestCacheLockAcrossProcesses(t *testing.T) {
-	const childCache = "DEVFLOW_TEST_LOCKED_COMPANION_CACHE"
+	const childCache = "AGENTFLOW_TEST_LOCKED_COMPANION_CACHE"
 	if root := os.Getenv(childCache); root != "" {
 		cache := newCache(t, root, func(context.Context, provision.Artifact) (io.ReadCloser, error) {
 			t.Fatal("a second process reached the opener with the lock held")

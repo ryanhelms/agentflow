@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // A reviewer checks out the feature branch without the author's local binding.
@@ -23,8 +23,8 @@ func TestIssueKnowledgeReviewParity(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Chdir(dir)
-			t.Setenv("DEVFLOW_HOME", t.TempDir())
-			t.Setenv("DEVFLOW_NO_UPDATE", "1")
+			t.Setenv("AGENTFLOW_HOME", t.TempDir())
+			t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 			t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 			t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 			t.Setenv("GIT_ALLOW_PROTOCOL", "file")
@@ -39,7 +39,7 @@ func TestIssueKnowledgeReviewParity(t *testing.T) {
 			git("init", "-q", "-b", "main")
 			git("config", "user.email", "review@example.invalid")
 			git("config", "user.name", "Reviewer")
-			for _, sub := range []string{".devflow", "records"} {
+			for _, sub := range []string{".agentflow", "records"} {
 				if err := os.Mkdir(sub, 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -49,7 +49,7 @@ func TestIssueKnowledgeReviewParity(t *testing.T) {
 				settings = fmt.Sprintf("repository: %q, branch: main, directory: records", dir)
 			}
 			cfg := fmt.Sprintf("task_management: {provider: github-issues}\nknowledge_base: {provider: %s, settings: {%s}}\n", name, settings)
-			if err := os.WriteFile(".devflow/config.yml", []byte(cfg), 0600); err != nil {
+			if err := os.WriteFile(".agentflow/config.yml", []byte(cfg), 0600); err != nil {
 				t.Fatal(err)
 			}
 			// Two documents share a title. The first also has a namesake in another scope.
@@ -102,7 +102,7 @@ func TestIssueKnowledgeReviewParity(t *testing.T) {
 			}
 
 			out, err := captureCLI(t, "context")
-			if err != nil || call("devflow_context", nil) != out {
+			if err != nil || call("agentflow_context", nil) != out {
 				t.Fatalf("context differs: %q, %v", out, err)
 			}
 			wantDocs := "Doc: Capacity " + two + "\nDoc: Capacity " + one + "\n"
@@ -118,7 +118,7 @@ func TestIssueKnowledgeReviewParity(t *testing.T) {
 			// Inspect the full decision using the qualified identity in the context.
 			ref := provider.Ref{Instance: name, Scope: "eng", ID: "two"}
 			out, err = captureCLI(t, "docs", "get", two, "--json")
-			if err != nil || strings.TrimSpace(out) != call("devflow_docs_get", map[string]any{"ref": ref}) {
+			if err != nil || strings.TrimSpace(out) != call("agentflow_docs_get", map[string]any{"ref": ref}) {
 				t.Fatalf("lookup differs: %q, %v", out, err)
 			}
 			var doc provider.Document

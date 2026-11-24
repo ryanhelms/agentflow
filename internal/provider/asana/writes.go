@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func (a *Adapter) checkWriteOptions(options provider.WriteOptions) error {

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/setup/initproviders"
+	"github.com/nscaledev/agentflow/internal/setup/initproviders"
 )
 
 // initInspection lets the read-only JSON endpoint run without starting the background updater.

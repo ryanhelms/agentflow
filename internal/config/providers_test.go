@@ -12,7 +12,7 @@ import (
 func writeConfig(t *testing.T, contents string) string {
 	t.Helper()
 	root := t.TempDir()
-	dir := filepath.Join(root, ".devflow")
+	dir := filepath.Join(root, ".agentflow")
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestProviderDefaults(t *testing.T) {
 	if p.DevOps.Version != 1 || c.Commit.KeyRequired() || p.Notifications.Settings.(*SlackSettings).Destination != nil {
 		t.Fatalf("unexpected defaults: %+v", p)
 	}
-	if got := loadConfig(t, "devflow: 1\nfuture_extension: {nested: true}\n"); !reflect.DeepEqual(got.Providers, p) {
+	if got := loadConfig(t, "agentflow: 1\nfuture_extension: {nested: true}\n"); !reflect.DeepEqual(got.Providers, p) {
 		t.Fatalf("legacy config changed defaults: %+v", got.Providers)
 	}
 }
@@ -88,7 +88,7 @@ knowledge_base: {settings: {site: https://other.example}}
 
 func TestLegacyProviderSettings(t *testing.T) {
 	c := loadConfig(t, `
-devflow: 1
+agentflow: 1
 jira: {site: "https://jira.example", projects: [OLD]}
 commit: {require_key: false}
 task_management: {provider: jira, settings: {site: "https://tasks.example"}}
@@ -178,13 +178,13 @@ knowledge_base: {provider: filesystem, settings: {root: ../handbook}}
 		t.Fatalf("independent selections = %+v", p)
 	}
 	tasks := p.TaskManagement.Settings.(*RepositoryTaskSettings)
-	if tasks.Directory != ".devflow/tasks" || *tasks.Branch != "tasks" || tasks.Publication != "push" ||
+	if tasks.Directory != ".agentflow/tasks" || *tasks.Branch != "tasks" || tasks.Publication != "push" ||
 		p.KnowledgeBase.Settings.(*FileSystemKnowledgeSettings).Root != "../handbook" ||
 		p.KnowledgeBase.Settings.(*FileSystemKnowledgeSettings).Format != "okf" {
 		t.Fatalf("file-backed roles = %+v, %+v", tasks, p.KnowledgeBase)
 	}
 	c = loadConfig(t, "task_management: {provider: filesystem}\nknowledge_base: {provider: repository}")
-	if c.Providers.TaskManagement.Settings.(*FileSystemTaskSettings).Root != ".devflow/tasks" ||
+	if c.Providers.TaskManagement.Settings.(*FileSystemTaskSettings).Root != ".agentflow/tasks" ||
 		c.Providers.KnowledgeBase.Settings.(*RepositoryKnowledgeSettings).Directory != "docs" {
 		t.Fatal("both roles must support each file-backed provider with its own defaults")
 	}
@@ -252,7 +252,7 @@ func TestInvalidProviderConfig(t *testing.T) {
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			c, found, err := LoadRepo(writeConfig(t, tc.input))
-			if c != nil || !found || err == nil || !strings.Contains(err.Error(), ".devflow/config.yml: "+tc.path+":") {
+			if c != nil || !found || err == nil || !strings.Contains(err.Error(), ".agentflow/config.yml: "+tc.path+":") {
 				t.Fatalf("want error at %s, got found=%v, err=%v", tc.path, found, err)
 			}
 		})

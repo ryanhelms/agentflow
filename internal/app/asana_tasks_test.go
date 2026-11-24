@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/asana"
 )
 
 type asanaTransport func(*http.Request) (*http.Response, error)
@@ -36,7 +36,7 @@ knowledge_base: {provider: filesystem, settings: {root: docs}}
 	if err := os.WriteFile(filepath.Join(a.Repo.Dir, "docs", "design.md"), []byte(doc), 0600); err != nil {
 		t.Fatal(err)
 	}
-	const task = `{"gid":"101","name":"Design","notes":"devflow-task-v1: {\"links\":[{\"ref\":{\"instance\":\"filesystem\",\"scope\":\"team\",\"id\":\"design\"}}]}\n\n- [ ] Test it","completed":false,"memberships":[{"project":{"gid":"10"},"section":{"gid":"11","name":"Ready"}},{"project":{"gid":"20"},"section":{"gid":"21","name":"Later"}}]}`
+	const task = `{"gid":"101","name":"Design","notes":"agentflow-task-v1: {\"links\":[{\"ref\":{\"instance\":\"filesystem\",\"scope\":\"team\",\"id\":\"design\"}}]}\n\n- [ ] Test it","completed":false,"memberships":[{"project":{"gid":"10"},"section":{"gid":"11","name":"Ready"}},{"project":{"gid":"20"},"section":{"gid":"21","name":"Later"}}]}`
 	writes := 0
 	a.tasks, _ = asana.New(&http.Client{Transport: asanaTransport(func(r *http.Request) (*http.Response, error) {
 		rec := httptest.NewRecorder()
@@ -119,7 +119,7 @@ func TestAsanaTemplateAtApprovalAndTransition(t *testing.T) {
   templates: {catalog: catalog.json, default: {name: plan, revision: "01"}}
 knowledge_base: {provider: filesystem}
 `)
-	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	path := filepath.Join(a.Repo.Dir, "catalog.json")
 	const catalog = `[{"name":"plan","revision":"01","required":["title","links"],"defaults":{"title":"Design","links":[{"ref":{"instance":"filesystem","scope":"team","id":"doc"}}]},"checklist":["Review"]},{"name":"plan","revision":"2","required":["priority"]}]`
 	if err := os.WriteFile(path, []byte(catalog), 0600); err != nil {

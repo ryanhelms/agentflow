@@ -1,15 +1,15 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-const repositoryFile = ".devflow/config.yml";
+const repositoryFile = ".agentflow/config.yml";
 const drafts = new Map();
-const sessionKey = "devflow.session:" + location.pathname;
-const commanderKey = "devflow.commander:" + location.pathname;
+const sessionKey = "agentflow.session:" + location.pathname;
+const commanderKey = "agentflow.commander:" + location.pathname;
 const reconnectCommander = "Open this worktree again from its Agent Commander session to see worker requests or send a reply.";
 let commanderContext = "";
 let commanderEpoch = 0;
 try { commanderContext = sessionStorage.getItem(commanderKey) || ""; } catch { /* A fresh launch still works in memory. */ }
-const savedDraftKey = "devflow.drafts:" + location.pathname;
-const rememberKey = "devflow.browser"; // localStorage is isolated by clone origin.
+const savedDraftKey = "agentflow.drafts:" + location.pathname;
+const rememberKey = "agentflow.browser"; // localStorage is isolated by clone origin.
 let memoryGrant = "";
 let resumeAttempt;
 let leavingForWorktree = false;
@@ -173,18 +173,18 @@ async function request(path, body, retried = false) {
   const commanderRequest = path === "api/activity" || path === "api/reply";
   const epoch = commanderEpoch;
   if (path === "api/reply" && !commanderContext) throw new Error(reconnectCommander);
-  if (commanderRequest && commanderContext) headers["X-Devflow-Commander"] = commanderContext;
+  if (commanderRequest && commanderContext) headers["X-Agentflow-Commander"] = commanderContext;
   if (credential && !bootstrap) headers.Authorization = "Bearer " + credential;
   const options = { headers, cache: "no-store", credentials: "omit", redirect: "error" };
   if (body !== undefined) {
     options.method = "POST";
     headers["Content-Type"] = "application/json";
-    headers["X-Devflow-Request"] = "console";
+    headers["X-Agentflow-Request"] = "console";
     options.body = JSON.stringify(body);
   }
   let response;
   try { response = await fetch(path, options); }
-  catch { throw new Error("Cannot reach the local devflow process. Check that devflow ui is still running."); }
+  catch { throw new Error("Cannot reach the local agentflow process. Check that agentflow ui is still running."); }
   const data = await response.json().catch(() => ({}));
   if (commanderRequest) {
     if (epoch !== commanderEpoch) throw new Error("The Commander session changed. Check activity again.");
@@ -238,9 +238,9 @@ function route(screen, role) {
 function updateConnectionOptions() {
   const {screen,role} = destination();
   const name = role ? labelRole(role).toLowerCase() + " provider editor" : screenNames[screen];
-  $("chat-prompt").textContent = "Open the devflow " + name + " for this repository.";
+  $("chat-prompt").textContent = "Open the agentflow " + name + " for this repository.";
   const resume = drafts.size > 0;
-  $("reconnect-command").textContent = "devflow ui --screen " + screen + (role ? " --role " + role : "");
+  $("reconnect-command").textContent = "agentflow ui --screen " + screen + (role ? " --role " + role : "");
   $("terminal-instructions").textContent = resume
     ? "Run this command in the same worktree to resume its saved edits."
     : "Run this command in the worktree you want to manage.";
@@ -265,12 +265,12 @@ function showConnection(message) {
   $("console-shell").hidden = true;
   if ($("setting-dialog").open) $("setting-dialog").close();
 
-  $("connection-title").textContent = "Reconnect to devflow";
+  $("connection-title").textContent = "Reconnect to agentflow";
   $("connection-message").textContent = message;
   $("connection-options").hidden = false;
   $("connection-retry").hidden = !session;
   $("connection").hidden = false;
-  document.title = "Reconnect · devflow";
+  document.title = "Reconnect · agentflow";
   updateConnectionOptions();
   if (leavingConsole) $("connection-title").focus();
 }
@@ -488,7 +488,7 @@ function renderOverview() {
   $("checkout-name").textContent = name;
   $("root-path").textContent = state.root || "Worktree path unavailable";
   $("rail-version").textContent = state.version || "";
-  document.title = name + " · devflow";
+  document.title = name + " · agentflow";
   const dirty = Boolean(state.dirty);
   $("working-state").textContent = dirty ? "Uncommitted changes" : "Clean worktree";
   $("working-state").classList.toggle("changed", dirty);
@@ -1139,7 +1139,7 @@ function renderEditor() {
   $("core-details").hidden = !hasCore;
   $("core-values").textContent = hasCore ? JSON.stringify(state.config.core,null,2) : "";
   $("source").readOnly = !active?.editable || publishing;
-  const reason = active?.reason || (!active ? "Run devflow init in this checkout to create repository configuration, then refresh." : "");
+  const reason = active?.reason || (!active ? "Run agentflow init in this checkout to create repository configuration, then refresh." : "");
   $("file-reason").textContent = reason;
   $("file-reason").hidden = !reason;
   $("edit-controls").hidden = !active?.editable;
@@ -1270,7 +1270,7 @@ function downloadText(name, text, type = "text/plain;charset=utf-8") {
 }
 $("download-patch").addEventListener("click",() => {
   const patch = review?.data.plan?.diff;
-  if (patch) downloadText("devflow-config.patch",patch,"text/x-diff;charset=utf-8");
+  if (patch) downloadText("agentflow-config.patch",patch,"text/x-diff;charset=utf-8");
 });
 $("back-to-edit").addEventListener("click",() => { invalidateReview(); documentEditorFocus(); });
 

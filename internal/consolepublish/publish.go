@@ -15,13 +15,13 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 type Result struct {
@@ -197,7 +197,7 @@ func (p proposal) matchesMessage(actual string) bool {
 func (p proposal) branch(defaultName string) string {
 	data, _ := json.Marshal([6]string{defaultName, p.Path, p.Original, p.Content, p.Title, p.Trailer})
 	sum := sha256.Sum256(data)
-	return "devflow/config-" + hex.EncodeToString(sum[:16])
+	return "agentflow/config-" + hex.EncodeToString(sum[:16])
 }
 
 type repository struct {
@@ -244,7 +244,7 @@ func publish(ctx context.Context, client *gh.Client, repo string, p proposal, de
 		return Result{}, err
 	}
 	if pr == nil {
-		body := "Update the repository configuration reviewed in the Devflow console."
+		body := "Update the repository configuration reviewed in the Agentflow console."
 		if p.Trailer != "" {
 			body += "\n\n" + p.Trailer
 		}

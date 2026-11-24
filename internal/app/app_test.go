@@ -8,13 +8,13 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 // newRepo makes a repo with no origin: main has api/, the branch PLAT-1-x adds to it.
 func newRepo(t *testing.T) string {
 	t.Helper()
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("JIRA_USER", "")
 	t.Setenv("JIRA_TOKEN", "")
 	dir := t.TempDir()
@@ -75,11 +75,11 @@ func TestLintBranchWithoutOrigin(t *testing.T) {
 func TestPRReadinessWithoutTaskProvider(t *testing.T) {
 	ctx := t.Context()
 	dir := newRepo(t)
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	cfg := "commit: {require_key: true}\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(ctx, dir, "fixture")
@@ -87,7 +87,7 @@ func TestPRReadinessWithoutTaskProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustGit(t, a.Repo, "branch", "-m", "add-quota")
-	mustGit(t, a.Repo, "add", ".devflow/config.yml")
+	mustGit(t, a.Repo, "add", ".agentflow/config.yml")
 	mustGit(t, a.Repo, "commit", "--amend", "--no-edit")
 	mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/example/quota.git")
 
@@ -117,11 +117,11 @@ func TestJiraPRReadinessWithoutBranchKey(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			dir := newRepo(t)
-			if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+			if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 				t.Fatal(err)
 			}
 			cfg := "task_management: {provider: jira}\n" + tt.rules
-			if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 				t.Fatal(err)
 			}
 			a, err := Open(ctx, dir, "fixture")
@@ -129,7 +129,7 @@ func TestJiraPRReadinessWithoutBranchKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			mustGit(t, a.Repo, "branch", "-m", "add-quota")
-			mustGit(t, a.Repo, "add", ".devflow/config.yml")
+			mustGit(t, a.Repo, "add", ".agentflow/config.yml")
 			// Keep a valid Jira key in the commit so commit lint passes in both modes.
 			mustGit(t, a.Repo, "commit", "--amend", "--no-edit")
 			mustGit(t, a.Repo, "remote", "add", "origin", "https://github.com/example/quota.git")

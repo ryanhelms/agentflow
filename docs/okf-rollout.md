@@ -1,30 +1,30 @@
-# OKF rollout in the Devflow repository
+# OKF rollout in the Agentflow repository
 
-Devflow will use GitHub Issues for its work and a Git-backed Open Knowledge
+Agentflow will use GitHub Issues for its work and a Git-backed Open Knowledge
 Format (OKF) bundle for its knowledge. FileSystem and Repository knowledge
 providers will share OKF v0.3 document handling. The Repository provider will
-continue to publish Devflow changes through pull requests. This builds on
-[the issue-to-ADR pilot](https://github.com/nscaledev/devflow/issues/25).
+continue to publish Agentflow changes through pull requests. This builds on
+[the issue-to-ADR pilot](https://github.com/nscaledev/agentflow/issues/25).
 
-The [rollout issue](https://github.com/nscaledev/devflow/issues/83) tracks the
+The [rollout issue](https://github.com/nscaledev/agentflow/issues/83) tracks the
 work. Each implementation task uses `engineering-task@1` and records its
 objective, scope, dependencies, acceptance criteria, and verification.
 
 | Task | Depends on |
 | --- | --- |
-| [Compatible reader and signed release](https://github.com/nscaledev/devflow/issues/84) | Rollout scope |
-| [Default OKF writer](https://github.com/nscaledev/devflow/issues/85) | Verified signed compatible reader release |
-| [Exact task-to-knowledge links](https://github.com/nscaledev/devflow/issues/86) | Compatible reader |
-| [Bundle migration and seed docs](https://github.com/nscaledev/devflow/issues/87) | Signed compatible reader and OKF writer |
-| [Reviewed merge handling](https://github.com/nscaledev/devflow/issues/88) | Exact links and migrated bundle |
-| [Repository dogfood and rollback](https://github.com/nscaledev/devflow/issues/89) | Writer, links, migration, and merge handling |
+| [Compatible reader and signed release](https://github.com/nscaledev/agentflow/issues/84) | Rollout scope |
+| [Default OKF writer](https://github.com/nscaledev/agentflow/issues/85) | Verified signed compatible reader release |
+| [Exact task-to-knowledge links](https://github.com/nscaledev/agentflow/issues/86) | Compatible reader |
+| [Bundle migration and seed docs](https://github.com/nscaledev/agentflow/issues/87) | Signed compatible reader and OKF writer |
+| [Reviewed merge handling](https://github.com/nscaledev/agentflow/issues/88) | Exact links and migrated bundle |
+| [Repository dogfood and rollback](https://github.com/nscaledev/agentflow/issues/89) | Writer, links, migration, and merge handling |
 
 ## Release order
 
 1. **Ship the compatible reader.** Add OKF concept discovery to FileSystem
-   and Repository knowledge alongside existing Devflow Markdown. Verify the
+   and Repository knowledge alongside existing Agentflow Markdown. Verify the
    signed release against both formats through their normal read entry points.
-   Verify that the same release reads the current Devflow ADR using the
+   Verify that the same release reads the current Agentflow ADR using the
    committed configuration. Record the tag and verification before applying
    any live bundle changes.
 2. **Ship the OKF writer and exact task links.** After the coordinator verifies
@@ -40,7 +40,7 @@ objective, scope, dependencies, acceptance criteria, and verification.
    checkout after merge.
 4. **Complete a real delivery.** Preview a GitHub task transition using
    trusted base configuration. Approve a scoped issue write for an eligible
-   Devflow PR merge, verify one closure, then replay. Capture links to the
+   Agentflow PR merge, verify one closure, then replay. Capture links to the
    task, knowledge concept, PR, release, and workflow evidence. Rehearse
    restoring the prior bundle layout and caller configuration in isolation.
 
@@ -52,7 +52,7 @@ concepts and recognize reserved index and log filenames. Human and agent
 readers can follow standard Markdown links within the bundle. Broken links
 can be reported without preventing unrelated concepts from being read.
 
-Managed concepts keep their Devflow scope and ID across a move. OKF's own
+Managed concepts keep their Agentflow scope and ID across a move. OKF's own
 concept ID follows the path. A reviewed move repairs affected Markdown links.
 Publication checks the expected revision and uses an operation ID to reconcile
 replays. Migration carries prior operation receipts and their matching
@@ -62,13 +62,13 @@ compatibility requirements.
 
 ## Evidence and rollback
 
-The attested [v0.38.0 reader](https://github.com/nscaledev/devflow/releases/tag/v0.38.0)
+The attested [v0.38.0 reader](https://github.com/nscaledev/agentflow/releases/tag/v0.38.0)
 was installed and verified against mixed FileSystem and Git-backed Repository
-fixtures and the live legacy ADR. [Issue #84](https://github.com/nscaledev/devflow/issues/84)
+fixtures and the live legacy ADR. [Issue #84](https://github.com/nscaledev/agentflow/issues/84)
 records the original reference and revision.
-The attested [v0.39.0 writer](https://github.com/nscaledev/devflow/releases/tag/v0.39.0)
+The attested [v0.39.0 writer](https://github.com/nscaledev/agentflow/releases/tag/v0.39.0)
 passed OKF publication, legacy override, exact lookup, and replay checks before
-the Devflow bundle moved.
+the Agentflow bundle moved.
 
 Run `make check` for each change and `make e2e` for MCP, hook, Claude adapter,
 or initializer changes. Exercise FileSystem and Repository through the

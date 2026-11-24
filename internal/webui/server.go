@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/configconsole"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 //go:embed static
@@ -82,12 +82,12 @@ func (s *server) handler() http.Handler {
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			origin := r.Header.Get("Origin")
-			if (origin != "" && origin != s.origin) || (r.Method == http.MethodPost && (origin != s.origin || r.Header.Get("X-Devflow-Request") != "console")) {
+			if (origin != "" && origin != s.origin) || (r.Method == http.MethodPost && (origin != s.origin || r.Header.Get("X-Agentflow-Request") != "console")) {
 				problem(w, 403, "expected a same-origin console request")
 				return
 			}
 			if r.URL.Path != "/api/session" && r.URL.Path != "/api/resume" && !s.authorized(r) {
-				problem(w, 401, "open the launch URL printed by devflow ui")
+				problem(w, 401, "open the launch URL printed by agentflow ui")
 				return
 			}
 		}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
@@ -20,7 +20,7 @@ func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 	const branch = "wiki/current"
 	ref := provider.Ref{Instance: "github-wiki", Scope: "engineering", ID: "quota"}
 	slug := "document-" + ref.StorageKey()
-	records := filepath.Join(dir, "devflow-pages")
+	records := filepath.Join(dir, "agentflow-pages")
 	if err := os.Mkdir(records, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	docsGit(t, dir, "switch", "-c", branch)
-	docsGit(t, dir, "add", "devflow-pages")
+	docsGit(t, dir, "add", "agentflow-pages")
 	docsGit(t, dir, "commit", "-m", "seed wiki")
 	bare := filepath.Join(t.TempDir(), "runbooks.wiki.git")
 	docsGit(t, dir, "clone", "--bare", "--", dir, bare)
@@ -39,11 +39,11 @@ func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 	docsGit(t, dir, "remote", "add", "origin", "git@github.com:fork/runbooks.git")
 	docsGit(t, dir, "remote", "add", "upstream", "git@github.com:upstream/runbooks.git")
 	docsGit(t, dir, "remote", "add", "handbook", "ssh://git@ssh.github.com:443/Docs-Team/Runbooks.git")
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "devflow: 1\ncode_hosting: {settings: {target_remote: handbook}}\nknowledge_base: {provider: github-wiki}\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+	cfg := "agentflow: 1\ncode_hosting: {settings: {target_remote: handbook}}\nknowledge_base: {provider: github-wiki}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
@@ -82,11 +82,11 @@ func TestDocsWikiSearchAndRewrittenPushTarget(t *testing.T) {
 
 func TestDocsWikiRequiresGitHubDotComTarget(t *testing.T) {
 	dir := newRepo(t)
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "devflow: 1\nknowledge_base: {provider: github-wiki}\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+	cfg := "agentflow: 1\nknowledge_base: {provider: github-wiki}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(t.Context(), dir, "test")
@@ -105,8 +105,8 @@ func TestDocsWikiRequiresGitHubDotComTarget(t *testing.T) {
 			t.Fatalf("%s: expected a configuration hint, got %v", remote, err)
 		}
 	}
-	cfg = "devflow: 1\nknowledge_base: {provider: github-wiki, settings: {repository: org/handbook}}\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+	cfg = "agentflow: 1\nknowledge_base: {provider: github-wiki, settings: {repository: org/handbook}}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err = Open(t.Context(), dir, "test")

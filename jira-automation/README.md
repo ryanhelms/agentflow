@@ -1,8 +1,8 @@
 # Jira Automation rules
 
-devflow uses Jira Automation for events that start in Jira. Each rule has a spec here;
+agentflow uses Jira Automation for events that start in Jira. Each rule has a spec here;
 the live rule is built in **Jira settings › System › Automation** as a global rule,
-scoped to opted-in projects, with the actor set to the `svc-devflow` service account.
+scoped to opted-in projects, with the actor set to the `svc-agentflow` service account.
 
 | Rule | Spec | Phase |
 |---|---|---|

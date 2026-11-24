@@ -1,11 +1,11 @@
-# devflow repo config. Written by `devflow init`; commit it.
-# There is no pinned version: devflow installs the latest release and updates itself.
-devflow: 1
+# agentflow repo config. Written by `agentflow init`; commit it.
+# There is no pinned version: agentflow installs the latest release and updates itself.
+agentflow: 1
 
 update:
   track: 0                       # follow the latest release within this major version
   check_every: 6h
-  # pin: 0.5.2                   # incident use only; devflow warns on every run while set
+  # pin: 0.5.2                   # incident use only; agentflow warns on every run while set
 
 # Task management and knowledge base are disabled until a provider is selected.
 # task_management: {provider: github-issues}

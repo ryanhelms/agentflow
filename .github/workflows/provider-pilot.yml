@@ -1,4 +1,4 @@
-name: devflow provider pilot
+name: agentflow provider pilot
 
 on:
   pull_request:
@@ -10,8 +10,8 @@ permissions: {}
 jobs:
   preview:
     if: >-
-      vars.DEVFLOW_ENABLED != 'false' &&
-      github.repository == 'nscaledev/devflow' &&
+      vars.AGENTFLOW_ENABLED != 'false' &&
+      github.repository == 'nscaledev/agentflow' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
@@ -21,19 +21,19 @@ jobs:
   approved-issue:
     needs: preview
     if: >-
-      vars.DEVFLOW_ENABLED != 'false' &&
-      github.repository == 'nscaledev/devflow' &&
+      vars.AGENTFLOW_ENABLED != 'false' &&
+      github.repository == 'nscaledev/agentflow' &&
       github.event.action == 'closed' &&
       github.event.pull_request.merged &&
       github.event.pull_request.base.ref == github.event.repository.default_branch &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      vars.DEVFLOW_PROVIDER_PILOT_ISSUE != '' &&
-      needs.preview.outputs.merged-issue == vars.DEVFLOW_PROVIDER_PILOT_ISSUE
+      vars.AGENTFLOW_PROVIDER_PILOT_ISSUE != '' &&
+      needs.preview.outputs.merged-issue == vars.AGENTFLOW_PROVIDER_PILOT_ISSUE
     permissions:
       contents: read
       issues: write
     concurrency:
-      group: devflow-provider-pilot-${{ github.repository_id }}
+      group: agentflow-provider-pilot-${{ github.repository_id }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     defaults:
@@ -48,30 +48,30 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build devflow
-        run: go build -o "$RUNNER_TEMP/devflow" ./cmd/devflow
+      - name: Build agentflow
+        run: go build -o "$RUNNER_TEMP/agentflow" ./cmd/agentflow
       - name: Verify the published pilot ADR
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_NO_UPDATE: "1"
-          DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
+          AGENTFLOW_NO_UPDATE: "1"
+          AGENTFLOW_HOME: ${{ runner.temp }}/agentflow-provider-pilot
         run: |
           gh auth setup-git --hostname github.com
-          "$RUNNER_TEMP/devflow" docs search provider-architecture --space engineering --json \
+          "$RUNNER_TEMP/agentflow" docs search provider-architecture --space engineering --json \
             | jq -e 'any(.pages[]; .ref == {instance: "repository", scope: "engineering", id: "provider-architecture"})'
       - name: Close the approved issue
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_HOME: ${{ runner.temp }}/devflow-provider-pilot
-          DEVFLOW_NO_UPDATE: "1"
-          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          DEVFLOW_APPROVED_ISSUE: ${{ vars.DEVFLOW_PROVIDER_PILOT_ISSUE }}
+          AGENTFLOW_HOME: ${{ runner.temp }}/agentflow-provider-pilot
+          AGENTFLOW_NO_UPDATE: "1"
+          AGENTFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          AGENTFLOW_APPROVED_ISSUE: ${{ vars.AGENTFLOW_PROVIDER_PILOT_ISSUE }}
         run: |
-          if [[ ! "$DEVFLOW_APPROVED_ISSUE" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Set DEVFLOW_PROVIDER_PILOT_ISSUE to the exact pilot issue number"
+          if [[ ! "$AGENTFLOW_APPROVED_ISSUE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Set AGENTFLOW_PROVIDER_PILOT_ISSUE to the exact pilot issue number"
             exit 1
           fi
           umask 077
-          mkdir -p "$DEVFLOW_HOME"
-          printf '%s\n' 'autonomy: {remote: auto}' > "$DEVFLOW_HOME/config.yml"
-          "$RUNNER_TEMP/devflow" transition --github-event
+          mkdir -p "$AGENTFLOW_HOME"
+          printf '%s\n' 'autonomy: {remote: auto}' > "$AGENTFLOW_HOME/config.yml"
+          "$RUNNER_TEMP/agentflow" transition --github-event

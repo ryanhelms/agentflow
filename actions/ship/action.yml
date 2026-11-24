@@ -1,4 +1,4 @@
-name: devflow ship
+name: agentflow ship
 description: >
   Apply Jira transitions and optional fix versions, or preview other configured task providers.
 inputs:
@@ -28,7 +28,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: nscaledev/devflow/actions/setup@v0
+    - uses: nscaledev/agentflow/actions/setup@v0
       with:
         binary: true
     - name: Collect shipped keys
@@ -47,12 +47,12 @@ runs:
             RANGE="${prev:+$prev..}HEAD"
           fi
         fi
-        provider=$(devflow keys --provider)
+        provider=$(agentflow keys --provider)
         if [ "$provider" = jira ]; then
           bin=$(cd "$ACTION_PATH/../../bin" && pwd)
           keys=$("$bin/jira-keys.sh" "$RANGE" | paste -sd' ' -)
         else
-          keys=$(devflow keys --shipped --range "$RANGE" | paste -sd' ' -)
+          keys=$(agentflow keys --shipped --range "$RANGE" | paste -sd' ' -)
         fi
         echo "provider=$provider" >> "$GITHUB_OUTPUT"
         echo "Shipped keys in $RANGE: ${keys:-none}"
@@ -92,10 +92,10 @@ runs:
       run: |
         set -euo pipefail
         if [ "$DRY" != true ]; then
-          echo "::notice::Ship previews task changes. Apply a reviewed transition through devflow transition."
+          echo "::notice::Ship previews task changes. Apply a reviewed transition through agentflow transition."
         fi
         if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
         read -r -a tasks <<<"$KEYS"
         for key in "${tasks[@]}"; do
-          devflow transition --shipped --dry-run "$key" "$EVENT"
+          agentflow transition --shipped --dry-run "$key" "$EVENT"
         done

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 const (
@@ -134,8 +134,8 @@ func (w *SessionWriter) Prepare(ctx context.Context, call Call) (WriteBinding, e
 	if err := ctx.Err(); err != nil {
 		return zero, err
 	}
-	if strings.EqualFold(call.Server, "devflow") ||
-		strings.HasPrefix(strings.ToLower(call.Tool), "devflow_") {
+	if strings.EqualFold(call.Server, "agentflow") ||
+		strings.HasPrefix(strings.ToLower(call.Tool), "agentflow_") {
 		return zero, ErrDenied
 	}
 	if providerHosts[call.Provider] == "" {

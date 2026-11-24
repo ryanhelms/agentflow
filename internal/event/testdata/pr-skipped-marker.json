@@ -10,7 +10,7 @@
   "pull_request": {
     "number": 57,
     "title": "fix(PLAT-12): match PLAT-12 and OPS-3 (#57)",
-    "body": "See #31 and acme/other#99 for context.\n\nTask-Ref: issues/acme%2Fwidget/42\n\n[DEVFLOW SKIP]",
+    "body": "See #31 and acme/other#99 for context.\n\nTask-Ref: issues/acme%2Fwidget/42\n\n[AGENTFLOW SKIP]",
     "html_url": "https://github.com/acme/widget/pull/57",
     "draft": false,
     "merged": false,

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // Ref is stored alongside the created task. Revision is an opaque, exact identifier.

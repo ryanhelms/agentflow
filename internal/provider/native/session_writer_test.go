@@ -89,7 +89,7 @@ func TestUnresolvableInputSchemaDoesNotPermitFallback(t *testing.T) {
 func TestRoutedSessionWriterPreservesProviderAndOwner(t *testing.T) {
 	session := &writeLeaseFixture{}
 	routes := map[string]*SessionWriter{
-		"jira": NewSessionWriter("devflow", func(_ context.Context, call Call) (WriteSession, error) {
+		"jira": NewSessionWriter("agentflow", func(_ context.Context, call Call) (WriteSession, error) {
 			if call.Provider != "jira" {
 				t.Fatal("wrong provider reached the Jira session")
 			}
@@ -100,12 +100,12 @@ func TestRoutedSessionWriterPreservesProviderAndOwner(t *testing.T) {
 			return nil, ErrDenied
 		}),
 	}
-	writer := NewRoutedSessionWriter("devflow", routes)
+	writer := NewRoutedSessionWriter("agentflow", routes)
 	t.Cleanup(writer.Close)
 	delete(routes, "jira")
 	call := Call{Provider: "jira", Server: "atlassian", Tool: "createJiraIssueRemoteIssueLink"}
 	binding, err := writer.Prepare(t.Context(), call)
-	if err != nil || binding.Owner != "devflow" {
+	if err != nil || binding.Owner != "agentflow" {
 		t.Fatalf("prepare Jira: %+v %v", binding, err)
 	}
 	if _, err := writer.Write(t.Context(), binding, call); err != nil || session.writes != 1 {

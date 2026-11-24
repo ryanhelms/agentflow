@@ -3,12 +3,12 @@
     "nscale": {
       "source": {
         "source": "github",
-        "repo": "nscaledev/devflow"
+        "repo": "nscaledev/agentflow"
       }
     }
   },
   "enabledPlugins": {
-    "devflow@nscale": true
+    "agentflow@nscale": true
   },
   "includeCoAuthoredBy": false
 }

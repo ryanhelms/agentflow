@@ -14,7 +14,7 @@ func SaveInitProviderConfig(root string, before, after []byte) error {
 		return err
 	}
 	defer dir.Close()
-	const name = ".devflow/config.yml"
+	const name = ".agentflow/config.yml"
 	return withClientLock(dir, name, func() error {
 		return publishAfter(dir, name, after, func() error {
 			current, err := readProjectFile(dir, name)

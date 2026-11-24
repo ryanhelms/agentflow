@@ -1,4 +1,4 @@
-// Package legacy adapts devflow's existing hosted service clients to the provider
+// Package legacy adapts agentflow's existing hosted service clients to the provider
 // contracts. Callers supply clients and configured instance names.
 //
 // Jira can create an issue with one related Jira issue. Explicit priority,

@@ -9,12 +9,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
-const jiraSite = "https://devflow.example"
+const jiraSite = "https://agentflow.example"
 
 var jiraTestRef = provider.Ref{Instance: "jira", Scope: "PLAT", ID: "PLAT-17"}
 
@@ -112,13 +112,13 @@ func TestJiraCreate(t *testing.T) {
 	linkErr := errors.New("link request failed")
 	mock := &jiraMock{create: func(project, kind, title, description string, labels []string, link string) (string, error) {
 		if project != "CORE" || kind != "Task" || title != "Follow up" || description != "Background" ||
-			!slices.Equal(labels, []string{"devflow"}) || link != jiraTestRef.ID {
+			!slices.Equal(labels, []string{"agentflow"}) || link != jiraTestRef.ID {
 			t.Fatalf("create args = %q, %q, %q, %q, %v, %q", project, kind, title, description, labels, link)
 		}
 		return "CORE-2", linkErr
 	}}
 	jira := NewJira("jira", jiraSite, mock, nil)
-	draft := provider.TaskDraft{Scope: "CORE", Title: "Follow up", Description: "Background", Labels: []string{"devflow"}, Links: []provider.Link{{Ref: &jiraTestRef}}}
+	draft := provider.TaskDraft{Scope: "CORE", Title: "Follow up", Description: "Background", Labels: []string{"agentflow"}, Links: []provider.Link{{Ref: &jiraTestRef}}}
 	got, err := jira.Create(t.Context(), draft, provider.WriteOptions{})
 	want := provider.WriteResult{Ref: provider.Ref{Instance: "jira", Scope: "CORE", ID: "CORE-2"}, Status: provider.Applied, URL: jiraSite + "/browse/CORE-2"}
 	if got != want || !errors.Is(err, linkErr) {

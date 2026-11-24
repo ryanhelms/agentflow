@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 type taskWriteFixture struct {
@@ -59,7 +59,7 @@ func taskWriteContext(t *testing.T, f *taskWriteFixture) context.Context {
 	t.Helper()
 	t.Setenv("GITHUB_RUN_ID", "")
 	t.Setenv("GITHUB_ACTIONS", "")
-	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	f.t = t
 	f.connection = "fixture-connection"
 	return native.WithWriteHost(t.Context(), f)
@@ -162,7 +162,7 @@ func TestNativeGitHubCommentFallbackAndUncertainWrite(t *testing.T) {
 		t.Fatalf("missing capability fallback %v, native writes %d, fallback writes %v", err, f.writes, fallback.writes)
 	}
 	f.prepareErr = nil
-	t.Setenv("DEVFLOW_OPERATION_ID", "fixture-op")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "fixture-op")
 	preparations := f.preparations
 	if _, err := comment(ctx, ""); err != nil || f.preparations != preparations || len(fallback.writes) != 2 || fallback.writes[1] == "" {
 		t.Fatalf("automation path %v, preparations %d, fallback writes %v", err, f.preparations, fallback.writes)

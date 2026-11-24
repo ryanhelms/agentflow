@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 var githubContext = GitHubActionsContext{

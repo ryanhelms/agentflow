@@ -1,4 +1,4 @@
-// Package managedcli resolves and prepares Devflow's supported provider CLIs.
+// Package managedcli resolves and prepares Agentflow's supported provider CLIs.
 package managedcli
 
 import (
@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/managedgh"
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/provision/local"
-	"github.com/nscaledev/devflow/internal/provision/user"
+	"github.com/nscaledev/agentflow/internal/managedgh"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision/local"
+	"github.com/nscaledev/agentflow/internal/provision/user"
 )
 
 type Tool struct {
@@ -23,7 +23,7 @@ type Tool struct {
 	Installed bool     `json:"installed"`
 }
 
-// ForProvider returns only CLI adapters implemented by Devflow.
+// ForProvider returns only CLI adapters implemented by Agentflow.
 func ForProvider(provider string) (Tool, bool) {
 	switch provider {
 	case "github", "github-issues":
@@ -64,7 +64,7 @@ func Selected(ctx context.Context, name string) string {
 }
 
 // Resolve uses an existing CLI. Ensure also permits automatic installation of
-// a release pinned by Devflow when none is working.
+// a release pinned by Agentflow when none is working.
 func Resolve(ctx context.Context, repo string, tool Tool) (string, error) {
 	return resolve(ctx, repo, tool, false)
 }

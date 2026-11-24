@@ -10,14 +10,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/auth"
-	"github.com/nscaledev/devflow/internal/managedcli"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/legacy"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/twg"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/auth"
+	"github.com/nscaledev/agentflow/internal/managedcli"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/legacy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/twg"
 )
 
 type jiraWorkPage struct {
@@ -104,7 +104,7 @@ func jiraWorkItems(tasks []provider.Task) []WorkItem {
 func atlCLIError(name string, err error) error {
 	switch {
 	case errors.Is(err, twg.ErrAuthRequired):
-		return fmt.Errorf("%s: %w; run devflow setup login --provider %s", name, native.ErrSignIn, name)
+		return fmt.Errorf("%s: %w; run agentflow setup login --provider %s", name, native.ErrSignIn, name)
 	case errors.Is(err, twg.ErrAccessDenied):
 		return fmt.Errorf("%s: %w", name, native.ErrDenied)
 	default:

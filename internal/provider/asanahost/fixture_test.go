@@ -11,9 +11,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 const projectID = "10"
@@ -228,7 +228,7 @@ func (f *fixture) prepare(w *native.SessionWriter) native.WriteBinding {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	if b.Owner != "devflow" || b.Origin != Origin || b.Connection == "" || b.Payload == "" || f.writes != 0 {
+	if b.Owner != "agentflow" || b.Origin != Origin || b.Connection == "" || b.Payload == "" || f.writes != 0 {
 		f.t.Fatal("invalid preview")
 	}
 	return b

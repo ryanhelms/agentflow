@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 func TestConsoleDestination(t *testing.T) {
@@ -62,7 +62,7 @@ func TestConsoleStartupPipe(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd := exec.Command(executable, "-test.run=^TestConsoleStartupChild$")
-			cmd.Env = append(os.Environ(), "DEVFLOW_TEST_UI_HANDSHAKE="+tc.name)
+			cmd.Env = append(os.Environ(), "AGENTFLOW_TEST_UI_HANDSHAKE="+tc.name)
 			ready, err := startAndWait(t.Context(), cmd)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || strings.Contains(err.Error(), "sample-launch") {
@@ -78,7 +78,7 @@ func TestConsoleStartupPipe(t *testing.T) {
 }
 
 func TestConsoleStartupChild(t *testing.T) {
-	mode := os.Getenv("DEVFLOW_TEST_UI_HANDSHAKE")
+	mode := os.Getenv("AGENTFLOW_TEST_UI_HANDSHAKE")
 	if mode == "" {
 		return
 	}
@@ -108,14 +108,14 @@ func TestCanceledConsoleCallDoesNotStartProcesses(t *testing.T) {
 }
 
 func TestDetachedConsoleAfterLauncherExit(t *testing.T) {
-	registry := os.Getenv("DEVFLOW_TEST_DETACHED_REGISTRY")
-	op := registration(os.Getenv("DEVFLOW_TEST_DETACHED_WORKTREE"), "link", "overview")
+	registry := os.Getenv("AGENTFLOW_TEST_DETACHED_REGISTRY")
+	op := registration(os.Getenv("AGENTFLOW_TEST_DETACHED_WORKTREE"), "link", "overview")
 	makeChild := func(mode string) *exec.Cmd {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestDetachedConsoleAfterLauncherExit$")
-		cmd.Env = append(os.Environ(), "DEVFLOW_TEST_DETACHED_MODE="+mode)
+		cmd.Env = append(os.Environ(), "AGENTFLOW_TEST_DETACHED_MODE="+mode)
 		return cmd
 	}
-	switch os.Getenv("DEVFLOW_TEST_DETACHED_MODE") {
+	switch os.Getenv("AGENTFLOW_TEST_DETACHED_MODE") {
 	case "daemon":
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
@@ -135,8 +135,8 @@ func TestDetachedConsoleAfterLauncherExit(t *testing.T) {
 	}
 	registry = filepath.Join(t.TempDir(), "registry")
 	root := testServer(t).repo.Dir
-	t.Setenv("DEVFLOW_TEST_DETACHED_REGISTRY", registry)
-	t.Setenv("DEVFLOW_TEST_DETACHED_WORKTREE", root)
+	t.Setenv("AGENTFLOW_TEST_DETACHED_REGISTRY", registry)
+	t.Setenv("AGENTFLOW_TEST_DETACHED_WORKTREE", root)
 	if output, err := makeChild("launcher").CombinedOutput(); err != nil {
 		t.Fatalf("launcher: %v: %s", err, output)
 	}

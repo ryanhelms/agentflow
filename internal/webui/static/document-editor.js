@@ -257,7 +257,7 @@
     const nestedRole = selected[0] === "devops" && ["checks","deployments","releases"].includes(selected[1]);
     const roleSize = nestedRole ? 2 : roleNames.includes(selected[0]) ? 1 : 0;
     const rolePath = selected.slice(0,roleSize);
-    const isCore = fileName === ".devflow/config.yml";
+    const isCore = fileName === ".agentflow/config.yml";
     const isRole = isCore && roleSize > 0 && (selected.length === roleSize ||
       (selected.length === roleSize + 1 && selected.at(-1) === "provider"));
     if (isRole || (isCore && selected.length === 1 && selected[0] === "devops")) {

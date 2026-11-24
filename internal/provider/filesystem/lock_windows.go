@@ -10,12 +10,12 @@ import (
 
 const readFlags = os.O_RDONLY
 
-const lockName = ".devflow-write.lock"
+const lockName = ".agentflow-write.lock"
 
 func lockHandle(root *os.Root) (*os.File, error) {
 	info, err := root.Lstat(lockName)
 	if err == nil && !info.Mode().IsRegular() {
-		return nil, errors.New(".devflow-write.lock must be a regular file")
+		return nil, errors.New(".agentflow-write.lock must be a regular file")
 	}
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err

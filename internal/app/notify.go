@@ -13,12 +13,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/notifications"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/notifications"
 )
 
 type NotifyInput struct {
@@ -285,7 +285,7 @@ func (target notificationTarget) router(store notifications.FileStore, transport
 func (a *App) notificationOperationID(ctx context.Context, input NotifyInput) (string, error) {
 	origin, _ := a.Repo.Git(ctx, "config", "--get", "remote.origin.url")
 	remote, err := gitx.ParseRemoteURL(origin)
-	fields := []string{"devflow-notify-v1", input.Signal, input.OperationID}
+	fields := []string{"agentflow-notify-v1", input.Signal, input.OperationID}
 	if err == nil {
 		fields = append(fields, "remote", remote.Host, remote.Port, remote.Path)
 	} else {

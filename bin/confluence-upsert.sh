@@ -36,7 +36,7 @@ else
   id=$(jq -r '.id' <<<"$existing")
   ver=$(atl GET "$api/pages/$id" | jq '.version.number + 1')
   payload=$(jq -cn --arg id "$id" --arg t "$title" --arg b "$html" --argjson v "$ver" \
-    '{id:$id, status:"current", title:$t, version:{number:$v, message:"devflow sync"},
+    '{id:$id, status:"current", title:$t, version:{number:$v, message:"agentflow sync"},
       body:{representation:"storage", value:$b}}')
   atl PUT "$api/pages/$id" -d "$payload" >/dev/null
   echo "updated page $id to version $ver: $title"

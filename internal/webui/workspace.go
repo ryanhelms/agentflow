@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/setup"
-	"github.com/nscaledev/devflow/internal/version"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/version"
 )
 
 type item struct {
@@ -66,7 +66,7 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if pin != "" && version.Release() && setup.VersionLess(pin, version.Version) {
-		attention = append(attention, item{Title: "Workflow pin behind installed release", Detail: pin + " is pinned. Use devflow pin to review the caller update."})
+		attention = append(attention, item{Title: "Workflow pin behind installed release", Detail: pin + " is pinned. Use agentflow pin to review the caller update."})
 	}
 	var note strings.Builder
 	fmt.Fprintf(&note, "%s\nWorktree: %s\nBranch: %s\nCommit: %s\nChanged paths: %d\n", filepath.Base(s.repo.Dir), s.repo.Dir, branch, head, len(changes))

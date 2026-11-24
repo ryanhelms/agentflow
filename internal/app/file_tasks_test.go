@@ -11,20 +11,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func fileTaskApp(t *testing.T, settings string) *App {
 	t.Helper()
 	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
 	dir := newRepo(t)
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("commit: {require_key: false}\ntask_management:\n"+settings), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte("commit: {require_key: false}\ntask_management:\n"+settings), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(t.Context(), dir, "test")
@@ -255,8 +255,8 @@ func TestFileTaskCreateRetryAndLinks(t *testing.T) {
 	root := t.TempDir()
 	a.Cfg.Providers.TaskManagement.Settings.(*config.FileSystemTaskSettings).Root = root
 	link := provider.Ref{Instance: "filesystem", Scope: "default", ID: "parent/#2"}
-	mustGit(t, a.Repo, "config", "--local", "branch."+a.Repo.Branch(ctx)+".devflowTaskRef", link.String())
-	t.Setenv("DEVFLOW_OPERATION_ID", "test-create-event")
+	mustGit(t, a.Repo, "config", "--local", "branch."+a.Repo.Branch(ctx)+".agentflowTaskRef", link.String())
+	t.Setenv("AGENTFLOW_OPERATION_ID", "test-create-event")
 	create := func() string {
 		t.Helper()
 		call := func(token string) (any, error) {
@@ -300,7 +300,7 @@ func TestRepositoryTaskReview(t *testing.T) {
 	a, bare := repositoryFixture(t, "task_management")
 	ctx := t.Context()
 	t.Setenv("GH_TOKEN", "fixture")
-	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	t.Setenv("GITHUB_RUN_ID", "")
 	docsGit(t, bare, "branch", "board", "main")
 	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/board")
@@ -347,7 +347,7 @@ func TestRepositoryTaskReview(t *testing.T) {
 	token := confirmation(t, v)
 	preview := v.(*Pending).Summary.(map[string]any)
 	head := preview["target"].(string)
-	if preview["base"] != "board" || !strings.HasPrefix(head, "devflow/publication/") || docsGit(t, bare, "show-ref") != before || len(prs) != 0 {
+	if preview["base"] != "board" || !strings.HasPrefix(head, "agentflow/publication/") || docsGit(t, bare, "show-ref") != before || len(prs) != 0 {
 		t.Fatalf("unexpected preview %+v, PRs %v", preview, prs)
 	}
 	docsGit(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
@@ -377,7 +377,7 @@ func TestRepositoryTaskReview(t *testing.T) {
 		t.Fatalf("unmerged create visible: %v, %v", work, err)
 	}
 	// Retry using the same operation ID and fresh approval.
-	t.Setenv("DEVFLOW_OPERATION_ID", preview["operation_id"].(string))
+	t.Setenv("AGENTFLOW_OPERATION_ID", preview["operation_id"].(string))
 	a, err = Open(ctx, a.Repo.Dir, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -439,7 +439,7 @@ func TestRepositoryTaskReview(t *testing.T) {
 
 	// An intentional second create has a fresh branch. A second agent can
 	// observe its one prompt and then publish the exact approved destination.
-	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	v, err = create("")
 	if err != nil {
 		t.Fatal(err)

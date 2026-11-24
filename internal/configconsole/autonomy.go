@@ -9,12 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/filelock"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/filelock"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 var ErrUserRevision = errors.New("personal settings changed; reload them before saving")
@@ -151,7 +151,7 @@ func loadAutonomy(ctx context.Context, root, base string, content *string) (auto
 	var out autonomySources
 	home, err := config.Home()
 	if err != nil {
-		return out, errors.New("cannot open the Devflow settings directory")
+		return out, errors.New("cannot open the Agentflow settings directory")
 	}
 	out.home = home
 	if out.personal, err = personalConfig(home); err != nil {
@@ -318,7 +318,7 @@ func PersonalAutonomy(ctx context.Context, a *app.App, revision string, patch Ap
 	if err != nil {
 		return nil, err
 	}
-	if p := app.PendingDecision(gate, d, summary, []string{"devflow ui"}); p != nil {
+	if p := app.PendingDecision(gate, d, summary, []string{"agentflow ui"}); p != nil {
 		return p, nil
 	}
 	if token == "" {
@@ -330,5 +330,5 @@ func PersonalAutonomy(ctx context.Context, a *app.App, revision string, patch Ap
 		return nil, err
 	}
 	gate.Audit(policy.Local, action, summary, "saved")
-	return personalSave{out, "Restart running Devflow MCP sessions to use the saved policy for other tools."}, nil
+	return personalSave{out, "Restart running Agentflow MCP sessions to use the saved policy for other tools."}, nil
 }

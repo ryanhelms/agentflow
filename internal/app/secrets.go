@@ -49,7 +49,7 @@ func scanDiff(diff string) []SecretHit {
 		if !strings.HasPrefix(l, "+") || strings.HasPrefix(l, "+++") {
 			continue
 		}
-		if strings.Contains(l, "devflow:allow-secret") {
+		if strings.Contains(l, "agentflow:allow-secret") {
 			continue
 		}
 		for _, p := range secretPatterns {

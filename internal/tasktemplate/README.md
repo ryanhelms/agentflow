@@ -1,12 +1,12 @@
 # Task object templates
 
-Configure a JSON catalog in `.devflow/config.yml` under the task management role.
+Configure a JSON catalog in `.agentflow/config.yml` under the task management role.
 The same settings apply to any task provider.
 
 ```yaml
 task_management:
   templates:
-    catalog: .devflow/task-templates.json
+    catalog: .agentflow/task-templates.json
     default:
       name: professional
       revision: '1'

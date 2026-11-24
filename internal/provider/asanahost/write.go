@@ -1,5 +1,5 @@
 // Package asanahost dispatches a single mapped task write through a separately
-// enrolled Devflow Asana V2 connection.
+// enrolled Agentflow Asana V2 connection.
 package asanahost
 
 import (
@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 const (
@@ -57,7 +57,7 @@ func NewWriter(enrollment Enrollment, scope Scope) *native.SessionWriter {
 }
 
 func newWriter(e Enrollment, scope Scope, transport http.RoundTripper) *native.SessionWriter {
-	return native.NewSessionWriter("devflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
+	return native.NewSessionWriter("agentflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
 		if call.Provider != "asana" {
 			return nil, native.ErrUnavailable
 		}
@@ -75,7 +75,7 @@ func newWriter(e Enrollment, scope Scope, transport http.RoundTripper) *native.S
 		if binding.Generation == "" || !gid.MatchString(binding.User) || !gid.MatchString(binding.Workspace) {
 			return nil, native.ErrDenied
 		}
-		client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
+		client := mcp.NewClient(&mcp.Implementation{Name: "agentflow", Version: "1"}, &mcp.ClientOptions{
 			Capabilities: &mcp.ClientCapabilities{}, Logger: slog.New(slog.DiscardHandler),
 			MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true},
 		})

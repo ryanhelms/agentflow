@@ -21,7 +21,7 @@ func TestNativeSlackNotificationSettings(t *testing.T) {
 		{"{provider: router, settings: {destinations: {team: {provider: slack, native: " + scope + "}, duplicate: {provider: slack, native: " + scope + "}}}}", "native scope already used"},
 	} {
 		dir := t.TempDir()
-		configDir := filepath.Join(dir, ".devflow")
+		configDir := filepath.Join(dir, ".agentflow")
 		if err := os.Mkdir(configDir, 0o700); err != nil {
 			t.Fatal(err)
 		}

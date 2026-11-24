@@ -14,15 +14,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/provision/local"
-	"github.com/nscaledev/devflow/internal/provision/user"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision/local"
+	"github.com/nscaledev/agentflow/internal/provision/user"
 )
 
 func TestPinTrustAndIntegrity(t *testing.T) {
 	repo, home := t.TempDir(), t.TempDir()
 	t.Setenv("PATH", t.TempDir())
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	source := filepath.Join(t.TempDir(), "gh")
 	const raw = "#!/bin/sh\nexit 0\n"
 	put := func(path, data string) {
@@ -65,7 +65,7 @@ func TestPinTrustAndIntegrity(t *testing.T) {
 		}
 	}
 	t.Run("repository as home", func(t *testing.T) {
-		t.Setenv("DEVFLOW_HOME", repo)
+		t.Setenv("AGENTFLOW_HOME", repo)
 		if _, err := Inspect(t.Context(), repo); err == nil {
 			t.Fatal("accepted repository as trusted home")
 		}

@@ -245,11 +245,11 @@ func TestExactCommitPreservesConfiguredHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := filepath.Join(t.TempDir(), "events")
-	t.Setenv("DEVFLOW_TEST_HOOK_LOG", filepath.ToSlash(log))
+	t.Setenv("AGENTFLOW_TEST_HOOK_LOG", filepath.ToSlash(log))
 	const script = `#!/bin/sh
 name=${0##*/}
-printf '%s|%s\n' "$name" "$*" >> "$DEVFLOW_TEST_HOOK_LOG"
-if [ "$name" = reference-transaction ]; then cat >> "$DEVFLOW_TEST_HOOK_LOG"; fi
+printf '%s|%s\n' "$name" "$*" >> "$AGENTFLOW_TEST_HOOK_LOG"
+if [ "$name" = reference-transaction ]; then cat >> "$AGENTFLOW_TEST_HOOK_LOG"; fi
 `
 	for _, name := range []string{"pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "reference-transaction"} {
 		if err := os.WriteFile(filepath.Join(hooks, name), []byte(script), 0700); err != nil {
@@ -320,7 +320,7 @@ func TestGuardHookDiscovery(t *testing.T) {
 	}
 	for name, suffix := range map[string]string{"commit-msg": "", "pre-commit": ".exe", "reference-transaction": ".exe"} {
 		b, err := os.ReadFile(filepath.Join(guard, name))
-		if err != nil || !strings.Contains(string(b), `"$DEVFLOW_ORIGINAL_HOOKS/${0##*/}`+suffix+`"`) {
+		if err != nil || !strings.Contains(string(b), `"$AGENTFLOW_ORIGINAL_HOOKS/${0##*/}`+suffix+`"`) {
 			t.Fatalf("wrong Windows hook target for %s: %s, %v", name, b, err)
 		}
 	}

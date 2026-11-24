@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,11 +34,11 @@ func at(t *testing.T, s fieldSpec, path ...string) fieldSpec {
 func TestDescribeEveryConfigurationFormat(t *testing.T) {
 	root, _ := fixture(t)
 	src := map[string]string{
-		MainFile:                       "devflow: 1\n",
+		MainFile:                       "agentflow: 1\n",
 		definitionsDir + "/custom.yml": "version: 1\nproviders: {}\n",
-		".devflow/releases.yml":        "strategy: trunk\nunits: []\n",
+		".agentflow/releases.yml":        "strategy: trunk\nunits: []\n",
 		"flow-map.yml":                 "defaults: {}\n",
-		".devflow/task-templates.json": "[]",
+		".agentflow/task-templates.json": "[]",
 		"docs/confluence.yml":          "space: EX\npages: []\n",
 		".jira/config.yml":             "deployments: {environmentMapping: {}}\n",
 	}
@@ -72,7 +72,7 @@ func TestDescribeEveryConfigurationFormat(t *testing.T) {
 	if at(t, defs, "providers", "fixture", "devops.deployments", "settings", "path").Type != "string" || at(t, defs, "providers", "repository", "knowledge_base", "settings", "format").Enum[0] != "okf" {
 		t.Fatal("missing definition settings")
 	}
-	units := describe(".devflow/releases.yml", src[".devflow/releases.yml"]).Schema
+	units := describe(".agentflow/releases.yml", src[".agentflow/releases.yml"]).Schema
 	if !at(t, units, "units", "*", "path").Required || !slices.Contains(at(t, units, "units", "*", "builds", "*").Enum, "image") {
 		t.Fatal("invalid release unit schema")
 	}
@@ -80,7 +80,7 @@ func TestDescribeEveryConfigurationFormat(t *testing.T) {
 	if !at(t, flow, "projects", "{}", "verbs", "{}").Nullable || !slices.Contains(at(t, flow, "defaults").KeySuggestions, "pr.merged") {
 		t.Fatal("flow inheritance schema missing")
 	}
-	tpl := describe(".devflow/task-templates.json", src[".devflow/task-templates.json"])
+	tpl := describe(".agentflow/task-templates.json", src[".agentflow/task-templates.json"])
 	if tpl.Format != "json" || tpl.Schema.Nullable || !at(t, tpl.Schema, "*", "defaults", "labels").Nullable || !at(t, tpl.Schema, "*", "name").Required || at(t, tpl.Schema, "*", "defaults", "links", "*", "ref", "instance").Type != "string" {
 		t.Fatal("template schema missing")
 	}

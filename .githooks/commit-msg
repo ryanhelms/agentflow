@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# devflow repo's own commit-msg hook: checks the message with the devflow built from this
-# checkout, using the rules in .devflow/config.yml. Enable with: make install-hooks
+# agentflow repo's own commit-msg hook: checks the message with the agentflow built from this
+# checkout, using the rules in .agentflow/config.yml. Enable with: make install-hooks
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
-export DEVFLOW_NO_UPDATE=1
-if [ -x "$root/devflow" ]; then
-  exec "$root/devflow" hook commit-msg "$1"
+export AGENTFLOW_NO_UPDATE=1
+if [ -x "$root/agentflow" ]; then
+  exec "$root/agentflow" hook commit-msg "$1"
 fi
-exec go run "$root/cmd/devflow" hook commit-msg "$1"
+exec go run "$root/cmd/agentflow" hook commit-msg "$1"

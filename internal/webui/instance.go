@@ -28,13 +28,13 @@ func (i instance) origin() string {
 }
 
 func registryDir() (string, error) {
-	// A repository or agent can supply its own DEVFLOW_HOME or XDG environment.
+	// A repository or agent can supply its own AGENTFLOW_HOME or XDG environment.
 	// Locate these credentials through the OS user's private profile instead.
 	account, err := user.Current()
 	if err != nil || !filepath.IsAbs(account.HomeDir) {
 		return "", errors.New("could not locate the console user's profile")
 	}
-	return filepath.Join(account.HomeDir, ".devflow-ui"), nil
+	return filepath.Join(account.HomeDir, ".agentflow-ui"), nil
 }
 
 // The same user profile can be mounted on multiple machines.
@@ -277,12 +277,12 @@ func liveInstance(ctx context.Context, path string) (instance, bool) {
 		return i, false
 	}
 	nonce := randomKey()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, i.origin()+"/_devflow/instance", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, i.origin()+"/_agentflow/instance", nil)
 	if err != nil {
 		return i, false
 	}
-	req.Header.Set("X-Devflow-Challenge", nonce)
-	req.Header.Set("X-Devflow-Proof", signature(i.Key, "client/v1", nonce))
+	req.Header.Set("X-Agentflow-Challenge", nonce)
+	req.Header.Set("X-Agentflow-Proof", signature(i.Key, "client/v1", nonce))
 	resp, err := instanceHTTP.Do(req)
 	if err != nil {
 		return i, false

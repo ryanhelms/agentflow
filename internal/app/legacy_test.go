@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func legacyApp(t *testing.T, handler http.HandlerFunc) *App {
@@ -29,10 +29,10 @@ task_management: {provider: jira, settings: {site: https://tasks.example, projec
 knowledge_base: {provider: confluence, settings: {site: https://docs.example}}
 flow_map: flow.yml
 `
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "flow.yml"), []byte("projects:\n  PLAT:\n    pr.merged: QA\n    order: [Open, QA]\n    deploy.production: null\n"), 0600); err != nil {
@@ -363,7 +363,7 @@ func TestMissingProviderSkipsLegacyAtlassianOperations(t *testing.T) {
 		t.Fatalf("unassigned role contacted %s %s", r.Method, r.URL)
 	})
 	cfg := "jira: {site: https://shared.example}\nconfluence: {site: https://wiki.example}\n"
-	if err := os.WriteFile(filepath.Join(fixture.Repo.Dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(fixture.Repo.Dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(ctx, fixture.Repo.Dir, "fixture")
@@ -418,10 +418,10 @@ func TestExplicitProvidersReuseLegacyAtlassianSettings(t *testing.T) {
 	t.Setenv("CONFLUENCE_USER", "")
 	t.Setenv("CONFLUENCE_TOKEN", "")
 	dir := a.Repo.Dir
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("jira: {site: https://shared.example}\ntask_management: {provider: jira}\nknowledge_base: {provider: confluence}\nflow_map: flow.yml\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte("jira: {site: https://shared.example}\ntask_management: {provider: jira}\nknowledge_base: {provider: confluence}\nflow_map: flow.yml\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	mustGit(t, a.Repo, "add", ".devflow/config.yml", "flow.yml")
+	mustGit(t, a.Repo, "add", ".agentflow/config.yml", "flow.yml")
 	mustGit(t, a.Repo, "commit", "-qm", "chore(PLAT-1): add fixture")
 	a, err := Open(ctx, dir, "fixture")
 	if err != nil {

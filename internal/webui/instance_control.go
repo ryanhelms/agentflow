@@ -55,7 +55,7 @@ func (i instance) control(ctx context.Context, op daemonRequest) (daemonReply, e
 			return daemonReply{}, err
 		}
 		if !peer.ScopedCommander {
-			return daemonReply{}, errors.New("running devflow UI daemon predates scoped Agent Commander connections; run devflow ui --stop and reopen it")
+			return daemonReply{}, errors.New("running agentflow UI daemon predates scoped Agent Commander connections; run agentflow ui --stop and reopen it")
 		}
 		op.Action = "register_scoped"
 	}
@@ -69,8 +69,8 @@ func (i instance) control(ctx context.Context, op daemonRequest) (daemonReply, e
 		return daemonReply{}, err
 	}
 	//nolint:gosec // NewGCMWithRandomNonce generates and prepends the nonce; its nonce argument must be nil.
-	data := aead.Seal(nil, nil, plain, []byte("devflow-control/v1"))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.origin()+"/_devflow/control", bytes.NewReader(data))
+	data := aead.Seal(nil, nil, plain, []byte("agentflow-control/v1"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.origin()+"/_agentflow/control", bytes.NewReader(data))
 	if err != nil {
 		return daemonReply{}, err
 	}
@@ -81,7 +81,7 @@ func (i instance) control(ctx context.Context, op daemonRequest) (daemonReply, e
 	//nolint:gosec // instance.origin always constructs a literal 127.0.0.1 address and redirects are disabled.
 	resp, err := client.Do(req)
 	if err != nil {
-		return daemonReply{}, fmt.Errorf("contact devflow daemon: %w", err)
+		return daemonReply{}, fmt.Errorf("contact agentflow daemon: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
@@ -91,7 +91,7 @@ func (i instance) control(ctx context.Context, op daemonRequest) (daemonReply, e
 	reqHash := sha256.Sum256(data)
 	res, err := aead.Open(nil, nil, body, reqHash[:])
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return daemonReply{}, errors.New("could not verify devflow daemon response")
+		return daemonReply{}, errors.New("could not verify agentflow daemon response")
 	}
 	var reply daemonReply
 	if err := json.Unmarshal(res, &reply); err != nil {
@@ -118,7 +118,7 @@ func (d *daemon) handleControl(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "daemon key unavailable", http.StatusInternalServerError)
 		return
 	}
-	plain, err := aead.Open(nil, nil, data, []byte("devflow-control/v1"))
+	plain, err := aead.Open(nil, nil, data, []byte("agentflow-control/v1"))
 	if err != nil {
 		http.Error(w, "invalid control request", http.StatusForbidden)
 		return

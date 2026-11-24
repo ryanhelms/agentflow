@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 type confluenceMCPFixture struct {
@@ -87,7 +87,7 @@ func (f *confluenceMCPFixture) Write(_ context.Context, binding native.WriteBind
 		"snapshotToken": f.snapshot, "versionMessage": message,
 		"body": map[string]any{"format": "html", "value": "<p># Quota<br />&lt;ac:structured-macro/&gt; &amp; limits</p>"},
 	}
-	if !strings.HasPrefix(message, "devflow docs publish ") || !reflect.DeepEqual(call.Arguments, want) {
+	if !strings.HasPrefix(message, "agentflow docs publish ") || !reflect.DeepEqual(call.Arguments, want) {
 		f.t.Fatalf("unexpected native write: %#v", call)
 	}
 	f.version, f.title, f.currentMessage, f.successorMessage = f.version+1, "Quota", message, message

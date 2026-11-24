@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 )
 
 func writer(t *testing.T, dir, format string) *Knowledge {
@@ -107,9 +107,9 @@ func TestWriterNestedMigratedReceipt(t *testing.T) {
 	oldDraft := provider.DocumentDraft{Title: "Architecture", Body: "Body.\n"}
 	const body = "# Manual\r\n\r\n[other](../other.md)"
 	raw := "---\ntype: Reference\ntitle: &title Manual\ndescription: Kept\ntags: [eng]\n" +
-		"x-devflow-ref: {scope: engineering, id: provider-architecture}\n" +
-		"x-devflow-links: [{url: 'urn:previous', ref: {instance: tasks, scope: eng, id: work}}]\n" +
-		"x-devflow-operations: {published: " + legacyPublishHash + "}\n" +
+		"x-agentflow-ref: {scope: engineering, id: provider-architecture}\n" +
+		"x-agentflow-links: [{url: 'urn:previous', ref: {instance: tasks, scope: eng, id: work}}]\n" +
+		"x-agentflow-operations: {published: " + legacyPublishHash + "}\n" +
 		"sources: [{title: *title, extension: !vendor 'provenance'}] # comment\n---\n" + body
 	path := writeBundleFile(t, dir, "moved/nested/article.md", raw)
 	if err := os.Chmod(path, 0750); err != nil {

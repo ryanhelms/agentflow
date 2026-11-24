@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func TestTaskTemplateSettings(t *testing.T) {
@@ -16,13 +16,13 @@ func TestTaskTemplateSettings(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			cfg := loadConfig(t, "task_management:\n  provider: "+id+`
   templates:
-    catalog: .devflow/task-templates.json
+    catalog: .agentflow/task-templates.json
     default: {name: professional, revision: '01'}
 `)
 			settings := cfg.Providers.TaskTemplates
 			want := tasktemplate.Ref{Name: "professional", Revision: "01"}
 			if cfg.Providers.TaskManagement.Provider != id || settings == nil ||
-				settings.Catalog != ".devflow/task-templates.json" || settings.Default == nil || *settings.Default != want {
+				settings.Catalog != ".agentflow/task-templates.json" || settings.Default == nil || *settings.Default != want {
 				t.Fatalf("unexpected provider or template settings: %+v, %+v", cfg.Providers.TaskManagement, settings)
 			}
 		})

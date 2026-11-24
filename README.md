@@ -1,18 +1,18 @@
-# devflow
+# agentflow
 
-[![ci](https://github.com/nscaledev/devflow/actions/workflows/ci.yml/badge.svg)](https://github.com/nscaledev/devflow/actions/workflows/ci.yml)
-[![release](https://github.com/nscaledev/devflow/actions/workflows/release.yml/badge.svg)](https://github.com/nscaledev/devflow/actions/workflows/release.yml)
+[![ci](https://github.com/nscaledev/agentflow/actions/workflows/ci.yml/badge.svg)](https://github.com/nscaledev/agentflow/actions/workflows/ci.yml)
+[![release](https://github.com/nscaledev/agentflow/actions/workflows/release.yml/badge.svg)](https://github.com/nscaledev/agentflow/actions/workflows/release.yml)
 
-**devflow connects GitHub, Jira and Confluence into one delivery loop for Nscale
-engineering.** Engineers state intent once, in the commit message, and devflow moves the
+**agentflow connects GitHub, Jira and Confluence into one delivery loop for Nscale
+engineering.** Engineers state intent once, in the commit message, and agentflow moves the
 ticket, publishes the release, updates the docs and tells the team. The same rules apply
 whether the work is done by a person in a terminal or by an AI agent in Claude Code,
 Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Devflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Devflow PR validation on its default branch. |
-| **Current release** | <!-- devflow:version -->`v0.52.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Status** | Agentflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Agentflow PR validation on its default branch. |
+| **Current release** | <!-- agentflow:version -->`v0.52.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -21,7 +21,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 ## Contents
 
-- [Why devflow](#why-devflow)
+- [Why agentflow](#why-agentflow)
 - [What it does](#what-it-does)
 - [Architecture](#architecture)
 - [Getting started](#getting-started)
@@ -31,16 +31,16 @@ Codex, Grok, Cursor, Copilot or Gemini.
 - [AI client support](#ai-client-support)
 - [Security and governance](#security-and-governance)
 - [Operations](#operations)
-- [How devflow itself is released](#how-devflow-itself-is-released)
+- [How agentflow itself is released](#how-agentflow-itself-is-released)
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
 - [Documentation](#documentation)
 
-## Why devflow
+## Why agentflow
 
-Without devflow, engineers move Jira tickets by hand, PRs link to tickets only when
+Without agentflow, engineers move Jira tickets by hand, PRs link to tickets only when
 someone remembers, releases are cut inconsistently, and Confluence drifts away from the
-code. devflow makes git the source of truth and turns the rest into automation:
+code. agentflow makes git the source of truth and turns the rest into automation:
 
 - **Tickets move themselves.** Branch, PR, merge and deploy events move each ticket
   through *its own team's* Jira workflow, using one reviewed status map.
@@ -49,14 +49,14 @@ code. devflow makes git the source of truth and turns the rest into automation:
   only deploys releases.
 - **Docs and notes write themselves.** Release notes, design-doc pages and sprint reports
   are generated into Confluence.
-- **AI agents follow the rules.** The devflow plugin gives agents the ticket context, writes
+- **AI agents follow the rules.** The agentflow plugin gives agents the ticket context, writes
   convention commits, previews Jira effects and asks before acting.
 
 ## What it does
 
 | Area | Capabilities |
 | --- | --- |
-| **Commit and PR hygiene** | Commit convention with Jira keys, enforced locally (`commit-msg`) and in CI (`key-check` runs the same rules from `.devflow/config.yml` on the PR title and every commit, then checks the keys exist; `commit.require_key: false` makes keys optional) · generated, validated and split commits · PR readiness checks and PR creation from templates |
+| **Commit and PR hygiene** | Commit convention with Jira keys, enforced locally (`commit-msg`) and in CI (`key-check` runs the same rules from `.agentflow/config.yml` on the PR title and every commit, then checks the keys exist; `commit.require_key: false` makes keys optional) · generated, validated and split commits · PR readiness checks and PR creation from templates |
 | **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions and provider previews |
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
@@ -68,12 +68,12 @@ code. devflow makes git the source of truth and turns the rest into automation:
 ```mermaid
 flowchart LR
   dev["Engineer or AI agent<br/>(any client)"] -->|commit · PR| gh[GitHub]
-  dev <-->|MCP · CLI · hooks| bin["devflow binary"]
+  dev <-->|MCP · CLI · hooks| bin["agentflow binary"]
   bin -->|developer's own tokens| jira[Jira Cloud]
   bin --> conf[Confluence Cloud]
   bin --> gh
   gh -->|GitHub for Jira app| jira
-  gh -->|reusable workflows @v0| actions["devflow Actions<br/>transitions · releases · notes"]
+  gh -->|reusable workflows @v0| actions["agentflow Actions<br/>transitions · releases · notes"]
   actions -->|flow-map.yml| jira
   actions --> conf
   actions --> rel["GitHub Releases<br/>binaries · images · charts"]
@@ -81,26 +81,26 @@ flowchart LR
   actions --> notifications[Slack and webhook destinations]
 ```
 
-devflow has two halves that share one status map and one set of rules:
+agentflow has two halves that share one status map and one set of rules:
 
 1. **Reusable GitHub Actions** (`.github/workflows/`, `actions/`) react to code events in
    every opted-in repo: task reference checks, ticket transitions, semantic releases, release
    guard, Confluence publishing, delivery notifications and hygiene. Repos call them from a single
-   caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that `devflow pin`
+   caller workflow, pinned to a release commit (`@<sha> # vX.Y.Z`) that `agentflow pin`
    moves forward in a reviewed PR.
-2. **The `devflow` binary**, one Go program that is a CLI, an MCP server and a set of git
+2. **The `agentflow` binary**, one Go program that is a CLI, an MCP server and a set of git
    and AI-client hooks. Each repo commits a small launcher that installs the latest
    verified release on first use; the binary then keeps itself updated.
 
 Responsibilities are split deliberately: the GitHub for Jira app links development data,
-devflow Actions handle everything that starts in code, and Jira Automation handles
+agentflow Actions handle everything that starts in code, and Jira Automation handles
 everything that starts in Jira. See [the blueprint](docs/blueprint.html#architecture).
 
 ## Getting started
 
-### Enable devflow in a repository (repo owners)
+### Enable agentflow in a repository (repo owners)
 
-Sign in to the GitHub CLI with access to `nscaledev/devflow`. Run the command for
+Sign in to the GitHub CLI with access to `nscaledev/agentflow`. Run the command for
 your OS from the project or one of its subdirectories. If you start outside a
 Git worktree, the installer keeps asking for a checkout path until you supply
 one or cancel.
@@ -108,7 +108,7 @@ one or cancel.
 **macOS or Linux**
 
 ```bash
-s=$(gh release download -R nscaledev/devflow -p install.sh -O -) && bash -c "$s" devflow
+s=$(gh release download -R nscaledev/agentflow -p install.sh -O -) && bash -c "$s" agentflow
 ```
 
 Append `--repo '/path/to/my project'` to target a checkout.
@@ -116,66 +116,66 @@ Append `--repo '/path/to/my project'` to target a checkout.
 **Windows PowerShell**
 
 ```powershell
-$s = gh release download -R nscaledev/devflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
+$s = gh release download -R nscaledev/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
 ```
 
 Add `-Repo 'C:\src\my project'` before the closing brace to supply the path.
-Both commands install the verified stable binary and run `devflow init`.
+Both commands install the verified stable binary and run `agentflow init`.
 The interactive setup shows provider evidence, lets you change a selection and
 asks about roles it cannot determine. Choices are saved with the project.
-Agents can read the same suggestions with `devflow init --detect-providers`
+Agents can read the same suggestions with `agentflow init --detect-providers`
 and apply choices with `--non-interactive --provider ROLE=ID`.
 Review and commit the generated project files. For integrations, configure the
 organization-level settings and the project's flow map.
-[Agent installation guide](docs/knowledge/engineering/guides/project-installation.md) · [Operations](docs/operations.md) · [Flow map](flow-map.yml)
+[Upgrade from Devflow](docs/agentflow-migration.md) · [Agent installation guide](docs/knowledge/engineering/guides/project-installation.md) · [Operations](docs/operations.md) · [Flow map](flow-map.yml)
 
-`devflow init` writes the files in [`templates/repo/`](templates/repo/) and sets up
+`agentflow init` writes the files in [`templates/repo/`](templates/repo/) and sets up
 releases:
 
 | File | Purpose |
 | --- | --- |
-| `.devflow/config.yml` | Provider selections, task templates, commit rules, autonomy ceiling, update channel |
-| `.devflow/installation.yml` | Pre-existing paths recorded by new installations for cleanup |
-| `.devflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
-| `.devflow/bin/devflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
+| `.agentflow/config.yml` | Provider selections, task templates, commit rules, autonomy ceiling, update channel |
+| `.agentflow/installation.yml` | Pre-existing paths recorded by new installations for cleanup |
+| `.agentflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
+| `.agentflow/bin/agentflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
-| `.github/workflows/devflow.yml` | The one caller workflow for every devflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
+| `.github/workflows/agentflow.yml` | The one caller workflow for every agentflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
 | `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/` | AI client configuration |
-| `AGENTS.md` | Devflow-managed instructions that direct agents to the effective provider configuration |
+| `AGENTS.md` | Agentflow-managed instructions that direct agents to the effective provider configuration |
 
-`devflow init` and `devflow install` write the same managed block in `AGENTS.md`
+`agentflow init` and `agentflow install` write the same managed block in `AGENTS.md`
 and preserve project instructions around it. The block tells agents to use
-Devflow for task context, task creation, acceptance criteria, and linked
-knowledge. Devflow reads the provider selections and task template from
-`.devflow/config.yml`. The MCP server and Claude Code session hook report the
+Agentflow for task context, task creation, acceptance criteria, and linked
+knowledge. Agentflow reads the provider selections and task template from
+`.agentflow/config.yml`. The MCP server and Claude Code session hook report the
 resolved task and knowledge providers. For an already-initialized project,
-`devflow init --guidance-only` refreshes just the managed instruction block.
+`agentflow init --guidance-only` refreshes just the managed instruction block.
 
-Disable devflow in a repo at any time with the repository variable `DEVFLOW_ENABLED=false`:
+Disable agentflow in a repo at any time with the repository variable `AGENTFLOW_ENABLED=false`:
 every job in the caller workflow checks it.
 
 **Automatic setup with the Claude Code plugin.** When a Claude Code session starts in a
-repo with no `.devflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
-(default `nscaledev`), the plugin runs `devflow init` for you. It writes the files above
+repo with no `.agentflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
+(default `nscaledev`), the plugin runs `agentflow init` for you. It writes the files above
 and commits nothing; Claude tells you what was written and offers a branch and PR. Choose
-the behaviour in `~/.devflow/config.yml`:
+the behaviour in `~/.agentflow/config.yml`:
 
 ```yaml
 init:
-  auto: auto        # auto (default) | ask (only suggest /devflow:init) | off
+  auto: auto        # auto (default) | ask (only suggest /agentflow:init) | off
   orgs: [nscaledev]
 ```
 
-**Updating the pinned workflows.** `devflow pin` (or `/devflow:pin`) moves every
-`nscaledev/devflow` reference in `.github/workflows/devflow.yml` to the release you have
-installed; commit it in a PR. `devflow pin --check` and `devflow doctor` report a pin
-that is behind, and the Claude Code session hook offers `/devflow:pin` when it is. No
+**Updating the pinned workflows.** `agentflow pin` (or `/agentflow:pin`) moves every
+`nscaledev/agentflow` reference in `.github/workflows/agentflow.yml` to the release you have
+installed; commit it in a PR. `agentflow pin --check` and `agentflow doctor` report a pin
+that is behind, and the Claude Code session hook offers `/agentflow:pin` when it is. No
 Dependabot or GitHub App access is needed.
 
-**Removing devflow.** Preview the affected files with `devflow remove --dry-run`,
-then run `devflow remove` or use `/devflow:manager remove`. Removal cleans up
-the generated files, Devflow's instruction block, managed client registrations
+**Removing agentflow.** Preview the affected files with `agentflow remove --dry-run`,
+then run `agentflow remove` or use `/agentflow:manager remove`. Removal cleans up
+the generated files, Agentflow's instruction block, managed client registrations
 and the hooks path it set. New installations record pre-existing project paths
 and preserve existing release configuration and custom hooks. For older
 installations, inspect the preview and use `--keep-releases` for project-owned
@@ -189,24 +189,24 @@ The shared installation stays available to other projects. [Companion cleanup an
 
 ### Set up your machine (engineers)
 
-Opening the repo in a supported client runs the devflow launcher.
+Opening the repo in a supported client runs the agentflow launcher.
 
 ```bash
-devflow setup plan --client NAME   # preferred provider MCP and CLI fallback
-devflow doctor --fix               # checks binary, hooks, flow map and client config
+agentflow setup plan --client NAME   # preferred provider MCP and CLI fallback
+agentflow doctor --fix               # checks binary, hooks, flow map and client config
 ```
 
 The [provider configuration reference](docs/providers.md) documents independent
 service sections, versioned settings, defaults, and their override rules. Task
 management and knowledge base each require an explicit provider selection in
-`.devflow/config.yml`. Devflow skips the operations for an unassigned role. Jira
+`.agentflow/config.yml`. Agentflow skips the operations for an unassigned role. Jira
 tasks and Confluence can use separate sites and credentials. See the
 [migration and rollback rehearsal](docs/rollout.md#provider-migration-rehearsal)
 and the [provider authoring guide](docs/provider-authoring.md). Use the
 `filesystem` knowledge provider to search a local directory with
-`devflow docs search` or `devflow_docs_search`.
+`agentflow docs search` or `agentflow_docs_search`.
 
-Run `devflow setup providers` (MCP: `devflow_setup_providers`) to list every provider
+Run `agentflow setup providers` (MCP: `agentflow_setup_providers`) to list every provider
 each role accepts, its default, which one this repo selects, and how to verify
 readiness. Jira, Confluence, Slack, and Asana support client verification. Headless
 setup can also probe Asana directly with an explicit `ASANA_ACCESS_TOKEN`.
@@ -214,29 +214,29 @@ Add `--explain` to see the selected providers' effective settings and which laye
 set them. Personal defaults can narrow the repository’s configured write targets.
 Both native and fallback writes enforce the repository scope. Restart the MCP
 server to pick up configuration edits. [Provider definitions](docs/providers.md#provider-definitions).
-Run `devflow setup plan --client NAME` to see which providers and companions
-are ready in the current environment. `devflow setup apply --client NAME`
-registers a supported project adapter after approval. `devflow setup verify`
+Run `agentflow setup plan --client NAME` to see which providers and companions
+are ready in the current environment. `agentflow setup apply --client NAME`
+registers a supported project adapter after approval. `agentflow setup verify`
 checks provider readiness and returns an error for missing requirements.
 In an agent session, use the setup skill to reuse the provider's connected MCP
-or start its OAuth flow. Use `devflow setup login --provider NAME` to start
+or start its OAuth flow. Use `agentflow setup login --provider NAME` to start
 the supported vendor CLI's browser login when no MCP is available. In a Claude Code
-Desktop workspace, `devflow setup login --provider slack --client claude-desktop --register`
+Desktop workspace, `agentflow setup login --provider slack --client claude-desktop --register`
 can register the official Slack connector locally and start Claude’s sign-in flow.
 The same command with `--provider asana` reuses the official Asana V2 connector.
 For a new Asana connector, pass `--client-id ID` from an approved MCP app and
 enter the app secret at Claude’s secure prompt.
 [Interactive provider setup](docs/providers.md#interactive-provider-setup).
 
-For Devflow’s own Slack connection, start browser consent with
-`devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID`.
+For Agentflow’s own Slack connection, start browser consent with
+`agentflow setup login --provider slack --client agentflow --public-client-id CLIENT_ID --team-id TEAM_ID`.
 Use the approved PKCE-enabled app’s public client ID and the destination’s Slack workspace ID.
-The user approves in Slack. Devflow checks the workspace before storing the grant in the OS keychain.
-[Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
+The user approves in Slack. Agentflow checks the workspace before storing the grant in the OS keychain.
+[Slack app and callback setup](docs/providers.md#agentflow-slack-enrollment).
 
 Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. If the
-connector is unavailable or its OAuth sign-in fails, Devflow automatically
+connector is unavailable or its OAuth sign-in fails, Agentflow automatically
 tries the supported vendor CLI with its own saved login. It checks the
 executable and can install a checksum-pinned release of `gh` or `twg`
 in its user cache. If the CLI cannot finish the read, the agent can offer
@@ -244,7 +244,7 @@ connector setup or start the vendor’s sign-in. Resource access denials
 remain final for the operation. Standalone task and knowledge reads can also
 prepare the configured provider’s CLI using the same installer.
 
-For GitHub Issues in Claude Code, Devflow can install the pinned official local
+For GitHub Issues in Claude Code, Agentflow can install the pinned official local
 GitHub MCP server and register it for the workspace after approval. The first
 GitHub read in a fresh session initiates browser OAuth. This registration
 exposes read-only issue tools. [GitHub OAuth setup](docs/providers.md#github-oauth-in-claude-code).
@@ -252,80 +252,80 @@ exposes read-only issue tools. [GitHub OAuth setup](docs/providers.md#github-oau
 A connected Codex MCP can also handle Jira issue
 writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. An approved Asana MCP app also enables
-Desktop task creation, completion, and comments through a separate Devflow OAuth
-enrollment. Devflow binds approval to the authenticated
-session and exact operation. Use `devflow --native-client codex` for supported
-CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery. When using its own Slack enrollment, Devflow checks the workspace
+Desktop task creation, completion, and comments through a separate Agentflow OAuth
+enrollment. Agentflow binds approval to the authenticated
+session and exact operation. Use `agentflow --native-client codex` for supported
+CLI writes, `agentflow_jira_remote_link` for Jira web links, and `agentflow_notify`
+for delivery. When using its own Slack enrollment, Agentflow checks the workspace
 and configured actor against the stored grant before connecting to Slack MCP.
 A Slack send with an uncertain outcome keeps its receipt claim and
 blocks another send for the same operation and destination.
 
-The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
-and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
+The Claude Code Desktop pilot uses separate Agentflow Rovo enrollments for Jira
+and Confluence. Alongside Jira web links, a fixture-tested `agentflow_comment`
 route adds one comment after approval and returns its verified comment ID.
-The CLI equivalent is `devflow --native-client claude-desktop comment [KEY] TEXT`.
+The CLI equivalent is `agentflow --native-client claude-desktop comment [KEY] TEXT`.
 If the MCP comment capability is unavailable, interactive clients can use the
-Teamwork Graph CLI’s saved OAuth login. Run `devflow setup login --provider jira`
+Teamwork Graph CLI’s saved OAuth login. Run `agentflow setup login --provider jira`
 to sign in. The preview shows the profile, site, project, issue and comment.
 Each approval permits one post. If the outcome is uncertain, inspect the issue
 before approving again. Unattended Jira REST workflows keep their configured identity.
 
-With the same Jira enrollment, `devflow_transition` previews a forward move
-and `devflow_start` creates the branch or worktree, assigns the issue to the
+With the same Jira enrollment, `agentflow_transition` previews a forward move
+and `agentflow_start` creates the branch or worktree, assigns the issue to the
 signed-in Jira user and applies the configured start transition. Both require
-approval. Devflow reads the issue on the write connection to verify each change.
+approval. Agentflow reads the issue on the write connection to verify each change.
 Hosted Jira canaries verified forward transitions and self-assignment.
 
-For Confluence, use `devflow setup login --provider confluence --client devflow`
-and preview the update with `devflow_docs_publish`. Desktop verifies the page’s
+For Confluence, use `agentflow setup login --provider confluence --client agentflow`
+and preview the update with `agentflow_docs_publish`. Desktop verifies the page’s
 space ID and key on the same site before it can publish. Repositories can limit
 publication to space keys in `knowledge_base.settings.publish_spaces`.
 
-In a regular Claude Code Desktop session, `devflow_ticket_create` can create an
-unlinked Jira issue through the Devflow Rovo enrollment. Devflow checks the Jira
+In a regular Claude Code Desktop session, `agentflow_ticket_create` can create an
+unlinked Jira issue through the Agentflow Rovo enrollment. Agentflow checks the Jira
 project and issue type, then requests approval for the exact issue. When the MCP
-create operation is unavailable, an interactive `devflow_ticket_create` or
-`devflow task create` can use the signed-in Teamwork Graph CLI. The preview
+create operation is unavailable, an interactive `agentflow_ticket_create` or
+`agentflow task create` can use the signed-in Teamwork Graph CLI. The preview
 binds the OAuth profile, site, project, issue type, title, description and
-labels. Devflow returns the key after verifying the new issue on that profile.
+labels. Agentflow returns the key after verifying the new issue on that profile.
 This fallback has been tested with fixtures.
 
 The same tool can create a GitHub issue through signed-in `gh`. Its interactive
 preview shows the GitHub account and repository. If sign-in is needed, run
-`devflow setup login --provider github-issues` from the checkout.
+`agentflow setup login --provider github-issues` from the checkout.
 [Provider setup](docs/providers.md#interactive-provider-setup) ·
 [Slack destination configuration](docs/notifications.md)
 
-If Claude Code Desktop on macOS is missing the devflow tools, run
-`devflow setup apply --client claude-desktop` in the enrolled checkout.
+If Claude Code Desktop on macOS is missing the agentflow tools, run
+`agentflow setup apply --client claude-desktop` in the enrolled checkout.
 It registers the project launcher in `.mcp.json`. Restart Claude Code Desktop,
-approve the project server if prompted, and look for `mcp__devflow__devflow_setup_plan`.
+approve the project server if prompted, and look for `mcp__agentflow__agentflow_setup_plan`.
 Use `--client claude` for the Claude Code plugin marketplace.
 [Desktop setup and verification](docs/providers.md#claude-code-desktop).
 
 On macOS and Linux, if a selected GitHub provider needs `gh` and the PATH
 copy fails its version check or is missing, you can pin a raw executable in
-`~/.devflow/companions.yml` and approve `devflow setup apply --install-gh`.
-Devflow verifies its SHA256 and uses the cached executable directly. See the
+`~/.agentflow/companions.yml` and approve `agentflow setup apply --install-gh`.
+Agentflow verifies its SHA256 and uses the cached executable directly. See the
 [manifest format and MCP confirmation flow](docs/providers.md#install-a-pinned-gh-companion).
 
 To add a provider MCP server, declare its native executable pins or HTTPS
-endpoint in your user-owned `~/.devflow/mcp-companions.yml`. Run
-`devflow setup verify --companion ID` to check the MCP handshake and tool
+endpoint in your user-owned `~/.agentflow/mcp-companions.yml`. Run
+`agentflow setup verify --companion ID` to check the MCP handshake and tool
 discovery headlessly. Approve installation and registration separately in
 VS Code, Cursor, Claude Code or Gemini CLI. [Provider MCP setup](docs/providers.md#register-a-provider-mcp-companion).
 
 FileSystem and Repository publish new knowledge documents as OKF v0.3 concepts
-by default. Use `devflow docs publish` with optional `--type`, `--description`
+by default. Use `agentflow docs publish` with optional `--type`, `--description`
 and `--tags '["capacity"]'`, or pass `type`, `description` and `tags` to
-`devflow_docs_publish`. Set `knowledge_base.settings.format: legacy` to create
+`agentflow_docs_publish`. Set `knowledge_base.settings.format: legacy` to create
 legacy records. Search finds nested OKF concepts alongside legacy records.
 Updates keep each document’s existing format and preserve unknown OKF
 frontmatter. Converting a legacy record takes an explicit migration. [OKF knowledge bundles](docs/providers.md#read-an-okf-knowledge-bundle)
 
 Choose the `repository` knowledge provider to search a Git destination and
-publish managed Markdown with `devflow docs publish`. A GitHub review
+publish managed Markdown with `agentflow docs publish`. A GitHub review
 publication uses the saved `gh` sign-in and returns the PR link and review status.
 
 Select `knowledge_base.provider: github-wiki` to search and publish managed
@@ -334,8 +334,8 @@ GitHub, and configure Git credentials for the wiki remote. Publication uses the
 remote approval policy and targets the wiki's default branch. See the
 [GitHub Wiki configuration and commands](docs/providers.md#publish-a-github-wiki-page).
 
-Create tasks with `devflow task create --summary "Review capacity"` or
-`devflow_ticket_create`. Both use the configured task provider. Use
+Create tasks with `agentflow task create --summary "Review capacity"` or
+`agentflow_ticket_create`. Both use the configured task provider. Use
 `--dry-run` to inspect the resolved task and `--yes` to approve in a
 noninteractive workflow. To select a catalog revision, pass
 `--template NAME --template-revision REV` or the MCP fields `template`
@@ -344,57 +344,57 @@ and `template_revision`. Omit both to use the configured default.
 Select `asana` to list open project tasks, start a branch from a plain task GID,
 read linked knowledge documents and move a task to a configured section.
 Set the default project GID and provide `ASANA_ACCESS_TOKEN` in the calling
-environment. Verify access with `devflow setup verify`.
+environment. Verify access with `agentflow setup verify`.
 [Asana setup, project mappings and capabilities](docs/providers.md#asana-project-tasks)
 
 Select `github-issues` in `task_management.provider` to work with GitHub issues
-through the existing task commands. Start an issue with `devflow start '#42'`
-when the issue repository is known, or specify `owner/repo#42`. Devflow carries
+through the existing task commands. Start an issue with `agentflow start '#42'`
+when the issue repository is known, or specify `owner/repo#42`. Agentflow carries
 the qualified issue reference in the PR body and interactive commit message.
 Configure a catalog and default under `task_management.templates` to preview new issues
-with template defaults, required sections and checklist items. Devflow records
+with template defaults, required sections and checklist items. Agentflow records
 the selected revision and validates the issue against it before a comment or
 state change. See the [task template configuration](docs/providers.md#task-templates).
 
-When creating a GitHub issue through Devflow, pass a qualified document
-reference such as `--link-to repository/engineering/quota`. Devflow adds the
+When creating a GitHub issue through Agentflow, pass a qualified document
+reference such as `--link-to repository/engineering/quota`. Agentflow adds the
 reference to the issue and includes it in the creation preview.
 For an existing issue, add a `## Related Knowledge`
 heading and one bullet such as `- repository/engineering/quota` per document.
-`devflow context` and `devflow_context` show the resolved titles and references.
-Reviewers can read a document with `devflow docs get REF [--json]` or
-`devflow_docs_get`. [Issue format and review example](docs/providers.md#link-knowledge-to-a-github-issue)
+`agentflow context` and `agentflow_context` show the resolved titles and references.
+Reviewers can read a document with `agentflow docs get REF [--json]` or
+`agentflow_docs_get`. [Issue format and review example](docs/providers.md#link-knowledge-to-a-github-issue)
 
-New issues created through devflow in this repository use the
-[`engineering-task` template](.devflow/task-templates.json).
+New issues created through agentflow in this repository use the
+[`engineering-task` template](.agentflow/task-templates.json).
 The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
 knowledge migration, and full repository workflow. The
-[Devflow knowledge index](docs/knowledge/index.md) lists the repository’s
+[Agentflow knowledge index](docs/knowledge/index.md) lists the repository’s
 decisions, guides, and runbooks.
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.
 Other task providers use previews in the generic transition, ship and release
-workflows. Apply a reviewed change through `devflow transition`. For GitHub Issues and Asana, PR and commit bodies carry
+workflows. Apply a reviewed change through `agentflow transition`. For GitHub Issues and Asana, PR and commit bodies carry
 qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
 read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
 covers runner credentials, event replay, release outputs and pin rollback.
 
-The Devflow repository rollout for [#88](https://github.com/nscaledev/devflow/issues/88)
+The Agentflow repository rollout for [#88](https://github.com/nscaledev/agentflow/issues/88)
 adds read-only previews from the PR base configuration. Its merge writer requires
-one qualified issue matching `DEVFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
-to pause writes, or set `DEVFLOW_ENABLED=false` to pause both jobs. Activation
+one qualified issue matching `AGENTFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
+to pause writes, or set `AGENTFLOW_ENABLED=false` to pause both jobs. Activation
 awaits the signed compatible reader and the live OKF bundle cutover.
-[Repository pilot](docs/providers.md#devflow-repository-pilot)
+[Repository pilot](docs/providers.md#agentflow-repository-pilot)
 
-Use `devflow secops triage` to preview tasks from configured GitHub findings
+Use `agentflow secops triage` to preview tasks from configured GitHub findings
 and fixture incidents. Apply a source reference to create a linked task using
 the selected task provider's template and approval policy. The reusable
 `secops-triage.yml` workflow calls the same command.
 [SecOps configuration and replay](docs/secops.md)
 
 Select `filesystem` or `repository` to manage Markdown tasks. Start work with
-`devflow start <qualified-key>` to bind a local branch or worktree to the task.
+`agentflow start <qualified-key>` to bind a local branch or worktree to the task.
 With a default task template, both providers store its exact name and revision
 in the Markdown front matter and validate the task against it before closing.
 FileSystem writes use local autonomy. Repository creates and transitions require
@@ -403,14 +403,14 @@ GitHub PR URL and review branch. The task listing reflects the change after
 merge. Use `publication: push` for direct writes to an unprotected branch.
 [Provider configuration](docs/providers.md)
 
-Confluence search returns the page ID, space key and revision in `devflow docs search QUERY --json`.
-Use `devflow docs publish confluence/SPACE/PAGE_ID` with the expected revision
+Confluence search returns the page ID, space key and revision in `agentflow docs search QUERY --json`.
+Use `agentflow docs publish confluence/SPACE/PAGE_ID` with the expected revision
 to replace an existing page through the remote approval policy. The page body
 displays Markdown as literal text. See the [Confluence example](docs/providers.md#replace-a-confluence-page).
 
-`devflow status` reads checks and deployments from their own `devops` providers.
+`agentflow status` reads checks and deployments from their own `devops` providers.
 Deployments match the open PR's head commit or the local `HEAD` when there is no
-open PR. Use `devflow release get TAG` to inspect a release from `devops.releases`.
+open PR. Use `agentflow release get TAG` to inspect a release from `devops.releases`.
 GitHub lookup includes the tagged commit and any assets attached by the build pipeline.
 Deployments and release lookup also support local JSON fixtures.
 [DevOps provider configuration](docs/providers.md#deployment-and-release-providers)
@@ -419,41 +419,41 @@ Deployments and release lookup also support local JSON fixtures.
 
 | Task | Terminal | AI client |
 | --- | --- | --- |
-| Open the local repository console | `devflow ui` | `devflow_ui_open` or `/devflow:ui` |
-| Inspect, edit and review configuration | `devflow config OP` | `devflow_config`, `devflow_config_apply` |
-| Create a task | `devflow task create` | `devflow_ticket_create` |
-| Pick up a ticket | `devflow start` | `/devflow:start` or "start PLAT-123" |
-| See the ticket context | `devflow context` | loaded automatically at session start |
-| Track acceptance criteria | `devflow ac`, `devflow ac done ITEM --evidence SHA` | `/devflow:ac` |
-| Check for scope drift | `devflow scope` | `/devflow:scope` |
-| Comment on the task | `devflow comment [KEY] TEXT` | `/devflow:comment` |
-| Check for overlapping PRs | `devflow collisions` | `/devflow:collisions` |
-| Commit | `devflow commit` (or plain `git commit`) | `/devflow:commit` |
-| Preview Jira effects | `devflow preview` | shown before every commit |
-| Check PR readiness | `devflow pr --check` | `devflow_pr_ready` |
-| Open a PR | `devflow pr` | `/devflow:pr` |
-| Push a feature branch | `devflow push` | `devflow_push` |
-| Mark an existing draft ready for review | `devflow pr mark-ready` | `devflow_pr_mark_ready` |
-| Explain an approval | `devflow policy explain ACTION` | `devflow_policy_explain` |
-| Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
-| Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
-| Standup | `devflow standup` | `/devflow:standup` |
-| End-of-day task comments | `devflow eod post KEY=NOTE` | `/devflow:eod` |
-| Next release version | `devflow release plan` | "what version will this ship as?" |
+| Open the local repository console | `agentflow ui` | `agentflow_ui_open` or `/agentflow:ui` |
+| Inspect, edit and review configuration | `agentflow config OP` | `agentflow_config`, `agentflow_config_apply` |
+| Create a task | `agentflow task create` | `agentflow_ticket_create` |
+| Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
+| See the ticket context | `agentflow context` | loaded automatically at session start |
+| Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA` | `/agentflow:ac` |
+| Check for scope drift | `agentflow scope` | `/agentflow:scope` |
+| Comment on the task | `agentflow comment [KEY] TEXT` | `/agentflow:comment` |
+| Check for overlapping PRs | `agentflow collisions` | `/agentflow:collisions` |
+| Commit | `agentflow commit` (or plain `git commit`) | `/agentflow:commit` |
+| Preview Jira effects | `agentflow preview` | shown before every commit |
+| Check PR readiness | `agentflow pr --check` | `agentflow_pr_ready` |
+| Open a PR | `agentflow pr` | `/agentflow:pr` |
+| Push a feature branch | `agentflow push` | `agentflow_push` |
+| Mark an existing draft ready for review | `agentflow pr mark-ready` | `agentflow_pr_mark_ready` |
+| Explain an approval | `agentflow policy explain ACTION` | `agentflow_policy_explain` |
+| Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
+| Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
+| Standup | `agentflow standup` | `/agentflow:standup` |
+| End-of-day task comments | `agentflow eod post KEY=NOTE` | `/agentflow:eod` |
+| Next release version | `agentflow release plan` | "what version will this ship as?" |
 
 Ask Agent Commander “Open the task management provider editor for this repo.”
 One local daemon serves your checkouts. Each clone gets a stable hostname
-such as `devflow.localhost`, with a separate path and editor drafts for each
-linked worktree. On an interactive harness launch, devflow opens a tab when
+such as `agentflow.localhost`, with a separate path and editor drafts for each
+linked worktree. On an interactive harness launch, agentflow opens a tab when
 the clone needs one. Asking for a screen directs that tab to the worktree
 where you asked. From a terminal, use
-`devflow ui --screen providers --role task_management`. The command returns
-once the local console has opened. Use `devflow ui --status` to check the
-daemon or `devflow ui --stop` to shut it down for all clones.
+`agentflow ui --screen providers --role task_management`. The command returns
+once the local console has opened. Use `agentflow ui --status` to check the
+daemon or `agentflow ui --stop` to shut it down for all clones.
 An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 
-Run `devflow ui` from the worktree you want to manage. The standalone browser
+Run `agentflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
 and how a proposed edit changes the effective configuration. Add and reorder
 list entries, edit maps by key, and choose supported values in the provider
@@ -468,20 +468,20 @@ questions for this worktree. The console uses the Nscale design system. The
 From a connected chat, ask “Show which rule governs
 local commits here” or “Set my local commits to automatic and show me the change
 before saving.” You can also edit provider settings, repository ceilings and the
-other editable files in the console inventory. Devflow returns the proposed
+other editable files in the console inventory. Agentflow returns the proposed
 change for review before saving personal preferences or publishing a repository
-change. [Configure Devflow from chat](docs/repository-console.md#configure-devflow-from-chat)
+change. [Configure Agentflow from chat](docs/repository-console.md#configure-agentflow-from-chat)
 
 PR readiness requires a Jira key in the branch name by default. With
-`commit.require_key: false` in `.devflow/config.yml`, a keyless branch can pass
+`commit.require_key: false` in `.agentflow/config.yml`, a keyless branch can pass
 readiness if its other checks pass. To open a PR from that branch, supply a
-conventional title with `devflow pr --title "feat: add quota"` or the
-`devflow_pr_open` tool's `title` input.
+conventional title with `agentflow pr --title "feat: add quota"` or the
+`agentflow_pr_open` tool's `title` input.
 
 ### Control agent approvals
 
 To allow local commits while keeping other writes under review, add this to your
-personal `~/.devflow/config.yml` (or `$DEVFLOW_HOME/config.yml`).
+personal `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`).
 
 ```yaml
 autonomy:
@@ -493,7 +493,7 @@ approval_window: 15m
 ```
 
 The two classes default to `confirm`. A named action overrides your class
-preference for that operation. The repository's `.devflow/config.yml` sets
+preference for that operation. The repository's `.agentflow/config.yml` sets
 ceilings independently.
 
 ```yaml
@@ -507,24 +507,24 @@ policy:
 ```
 
 A repo action ceiling can tighten its class ceiling. `suggest` returns commands
-for you to run, `confirm` requires your approval, and `auto` lets Devflow carry
+for you to run, `confirm` requires your approval, and `auto` lets Agentflow carry
 out an authorized operation. Task creation, release publication and other writes
 with mandatory review still require confirmation when set to `auto`.
 The default review window is five minutes. Configured windows accept one minute
 through one hour, subject to the repo maximum.
 
-In `devflow ui`, open **Autonomy** to inspect the effective rule for each action,
+In `agentflow ui`, open **Autonomy** to inspect the effective rule for each action,
 save personal preferences or stage repository ceilings for review. Select
-**Inherit** to remove an override. Run `devflow policy explain commit` in the
-affected checkout to see which setting wins. Run `devflow policy explain` to see the supported actions. Restart
-a running Devflow MCP server after editing the configuration. Host sandbox
+**Inherit** to remove an override. Run `agentflow policy explain commit` in the
+affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. Restart
+a running Agentflow MCP server after editing the configuration. Host sandbox
 permissions and provider sign-in prompts are controlled by their respective clients.
 
-Devflow runs configured Git commit hooks, including native hooks on Windows.
+Agentflow runs configured Git commit hooks, including native hooks on Windows.
 It verifies the approved tree and message before Git moves the branch.
 
 To let an agent open a draft or ready PR while keeping standalone pushes under
-review, add this repository setting to `.devflow/config.yml` on the target
+review, add this repository setting to `.agentflow/config.yml` on the target
 repository’s default branch and bring that change into your checkout.
 
 ```yaml
@@ -545,7 +545,7 @@ autonomy:
     pr_open: auto
 ```
 
-With these settings, Devflow can push the exact feature-branch revision and open
+With these settings, Agentflow can push the exact feature-branch revision and open
 the PR in one operation. Adding reviewers or labels also writes to GitHub and
 uses the usual remote ceiling. A standalone push, promoting an existing draft, and
 other remote writes still require review. To require review for ready PRs, set
@@ -567,14 +567,14 @@ When a provider write needs confirmation, the CLI shows the approval summary. Pa
 
 [BREAKING CHANGE: what breaks and how to migrate]
 [Refs: PLAT-456]
-[Devflow: skip]
+[Agentflow: skip]
 ```
 
 - `type`: `feat fix perf refactor docs test build ci chore revert`
 - `#start #review #qa #done #block` select ticket transitions from `flow-map.yml`. Jira Smart
   Commits still handle `#comment` and `#time`
 - `feat` → minor, `fix`/`perf` → patch, `!` or `BREAKING CHANGE:` → major
-- No AI attribution trailers; devflow strips known ones
+- No AI attribution trailers; agentflow strips known ones
 - PR titles follow the same format and are checked as the squash commit they become
   (`<title> (#123)` ≤ 72 characters), before the PR is created and again in CI
 
@@ -585,7 +585,7 @@ the system of record for what runs in production.
 
 - **Automatic.** Each merge to the default branch with `feat`, `fix` or `!` commits
   publishes a release for every changed unit, with changelog, artifacts and attestations.
-- **Per deployable.** Units live in `.devflow/releases.yml`; monorepo tags carry the unit
+- **Per deployable.** Units live in `.agentflow/releases.yml`; monorepo tags carry the unit
   (`api-v1.4.0`).
 - **Branch-aware.** Other branches build prereleases: `-alpha` (GitFlow `develop`),
   `-rc` (`release/*`), `-hotfix` (`hotfix/*`), `-pr` (everything else).
@@ -597,7 +597,7 @@ the system of record for what runs in production.
 
 Full rules and examples: [docs/releases.md](docs/releases.md).
 
-For a manual release, `devflow release publish TAG --revision SHA --dry-run`
+For a manual release, `agentflow release publish TAG --revision SHA --dry-run`
 previews the destination and commit. Publication takes an explicit full commit
 SHA and confirmation under the remote autonomy policy. Retry the same tag, SHA,
 title and notes to reconcile the result.
@@ -609,30 +609,30 @@ title and notes to reconcile the result.
 | --- | --- | --- | --- | --- | --- |
 | Tools | Plugin MCP | MCP | MCP | MCP | CLI |
 | Instructions | Plugin skill | `AGENTS.md` | Instructions file | `AGENTS.md` / rules | – |
-| Commands | `/devflow:*` skills | Custom prompts | Where supported | Where supported | Subcommands |
+| Commands | `/agentflow:*` skills | Custom prompts | Where supported | Where supported | Subcommands |
 | Hooks | SessionStart, PreToolUse, Stop | git hooks | git hooks | git hooks | git hooks |
 
-Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `key-check` (same rules, same `.devflow/config.yml`) in
+Enforcement is identical everywhere: the `commit-msg` hook locally and the PR `key-check` (same rules, same `.agentflow/config.yml`) in
 CI.
 
-The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remove`,
+The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `remove`,
 `install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
-`eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
-release on first use, so the skills work in repos devflow has not set up yet. Skills that
+`eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
+release on first use, so the skills work in repos agentflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
 `update`) run only when you invoke them. Install directly from the internal
-Devflow repository:
+Agentflow repository:
 
 ```sh
-claude plugin marketplace add nscaledev/devflow
-claude plugin install devflow@nscale
+claude plugin marketplace add nscaledev/agentflow
+claude plugin install agentflow@nscale
 ```
 
-Use `/devflow:manager install`, `update` or `remove` for a project. Update
+Use `/agentflow:manager install`, `update` or `remove` for a project. Update
 resolves GitHub's latest stable release, verifies it, and refreshes the project's
-workflow pins. The CLI equivalent is `devflow update --latest-stable` followed
-by `devflow pin` through the updated launcher. Project pins and major-version
+workflow pins. The CLI equivalent is `agentflow update --latest-stable` followed
+by `agentflow pin` through the updated launcher. Project pins and major-version
 restrictions are reported for review. Other clients have their own installation
 commands and capabilities. [Client installation guide](docs/client-plugins.md).
 
@@ -640,20 +640,20 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 
 - **Identity.** Writes use each developer's own Atlassian and GitHub credentials. GitHub
   Wiki uses Git's configured credentials. CI uses a scoped service account.
-- **Release integrity.** devflow installs only builds whose SHA-256 and GitHub build
-  attestation both verify, and the attestation must come from devflow's release workflow
-  (`gh attestation verify --repo nscaledev/devflow --signer-workflow nscaledev/devflow/.github/workflows/release.yml`).
+- **Release integrity.** agentflow installs only builds whose SHA-256 and GitHub build
+  attestation both verify, and the attestation must come from agentflow's release workflow
+  (`gh attestation verify --repo nscaledev/agentflow --signer-workflow nscaledev/agentflow/.github/workflows/release.yml`).
   The caller workflow gives each job only the secrets and permissions it uses.
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.
-- **Never list.** At every autonomy level devflow refuses force-pushes, pushes to protected
+- **Never list.** At every autonomy level agentflow refuses force-pushes, pushes to protected
   branches, PR merges, remote branch deletes and acting as another user.
-- **Audit.** Every local and remote action is logged to `~/.devflow/audit.log`.
+- **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
-  ([CODEOWNERS](CODEOWNERS)); caller workflows pin devflow to a release
-  commit SHA, and each new devflow release reaches a repo only through a reviewed
-  `devflow pin` PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
-  devflow's release workflow and repo admins can move: the "Protect release tags"
+  ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
+  commit SHA, and each new agentflow release reaches a repo only through a reviewed
+  `agentflow pin` PR. The reusable workflows load agentflow's `setup` action at `@v0`, which only
+  agentflow's release workflow and repo admins can move: the "Protect release tags"
   ruleset guards every `v*` tag ([docs/operations.md](docs/operations.md#releases)).
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
@@ -663,28 +663,30 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 | Task | How |
 | --- | --- |
 | Org secrets, optional GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
-| Configure and replay delivery notifications from CI or `devflow notify` | [docs/notifications.md](docs/notifications.md) |
+| Configure and replay delivery notifications from CI or `agentflow notify` | [docs/notifications.md](docs/notifications.md) |
 | Rollout phases and checklists | [docs/rollout.md](docs/rollout.md) |
-| Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
-| Pause devflow in one repo | Repository variable `DEVFLOW_ENABLED=false` |
-| Roll back the binary on a machine | `devflow update --rollback` |
+| Stop a bad agentflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
+| Pause agentflow in one repo | Repository variable `AGENTFLOW_ENABLED=false` |
+| Roll back the binary on a machine | `agentflow update --rollback` |
 
-## How devflow itself is released
+## How agentflow itself is released
 
-This section is about the devflow repository's own releases, not the release tooling
-devflow offers other repos.
+This section is about the agentflow repository's own releases, not the release tooling
+agentflow offers other repos.
 
 - **Single branch.** Every push to `main` derives the next version from the commit types
   since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the
   [CHANGELOG.md](CHANGELOG.md) section from those commits, commits it as
   `chore(release): vX.Y.Z`, tags it and publishes the GitHub Release with the same notes.
   No Release PR.
-- **Same commit convention as devflow-managed repos.** Enforced locally by
+- **Same commit convention as agentflow-managed repos.** Enforced locally by
   `.githooks/commit-msg` and in CI on every PR title and commit. `CHANGELOG.md` is never
   edited by hand.
-- **Stable immediately.** Every release is a normal GitHub Release marked "Latest", and the
-  floating major tag (`v0` while devflow is 0.x) moves to it. Safety comes from
-  `policy/versions.json` (block a version everywhere) and `devflow update --rollback`.
+- **Verified before publication.** The release workflow uploads a draft, verifies the
+  published assets against the checksums and release workflow's attestations, then marks
+  the release "Latest" and moves the floating major tag (`v0` while agentflow is 0.x).
+  Use `policy/versions.json` to block a version and `agentflow update --rollback` to restore
+  a cached version.
 - **Updates.** Installs check at most every 6 hours without blocking, verify each build,
   swap it in atomically, and keep the previous version for rollback.
 - **Merging.** PRs are squash-merged, so the PR title decides the version bump.
@@ -692,16 +694,16 @@ devflow offers other repos.
 ## Repository layout
 
 ```
-cmd/devflow/              CLI entry point
+cmd/agentflow/              CLI entry point
 internal/                 operations (app), MCP server, hooks, commit engine, flow map,
                           release maths, policy, self-update, Atlassian and GitHub clients
 adapters/                 per-client files; adapters/claude-code is the Claude Code plugin
-templates/repo/           files devflow init writes into a consuming repo
-.github/workflows/        devflow's CI and releases, plus reusable workflows for other repos
+templates/repo/           files agentflow init writes into a consuming repo
+.github/workflows/        agentflow's CI and releases, plus reusable workflows for other repos
 actions/                  composite actions: setup, ship, version, release-guard
 bin/                      shell helpers used by workflows and actions
 flow-map.yml              canonical events → each project's Jira statuses
-policy/versions.json      minimum and blocked devflow versions
+policy/versions.json      minimum and blocked agentflow versions
 jira-automation/          Jira Automation rule specs
 confluence-templates/     design doc, postmortem, release notes, sprint report
 docs/                     blueprint, releases, rollout, operations
@@ -732,8 +734,8 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
-| [CHANGELOG.md](CHANGELOG.md) | Generated release history of devflow |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing and changing devflow |
+| [CHANGELOG.md](CHANGELOG.md) | Generated release history of agentflow |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Building, testing and changing agentflow |
 | [AGENTS.md](AGENTS.md) | Instructions for AI agents working on this repo |
 | [SECURITY.md](SECURITY.md) | Security model and reporting |
 

@@ -44,7 +44,7 @@ func TestProviderGuideExamples(t *testing.T) {
 		}
 		checked++
 		root := t.TempDir()
-		configDir := filepath.Join(root, ".devflow")
+		configDir := filepath.Join(root, ".agentflow")
 		if err := os.Mkdir(configDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func isRepositoryProviderExample(example string) bool {
 			continue
 		}
 		switch key {
-		case "devflow", "code_hosting", "task_management", "knowledge_base", "devops", "secops", "notifications":
+		case "agentflow", "code_hosting", "task_management", "knowledge_base", "devops", "secops", "notifications":
 			return true
 		}
 	}

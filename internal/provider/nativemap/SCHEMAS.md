@@ -62,7 +62,7 @@ projects each Jira remote link's `object.title` and `object.url` from the list.
 TWG uses `jira workitem get <KEY> --remote-links` with the same site and login
 used to load issue fields.
 The official Rovo flat catalog wraps the Jira issue and remote-link list in a
-single `data` field. The Devflow-owned connection unwraps that response before
+single `data` field. The Agentflow-owned connection unwraps that response before
 mapping it. The web-link preflight checks the exact issue key and any returned
 project key. Workflow status fields are unnecessary for adding a web link.
 
@@ -86,7 +86,7 @@ covers `listJiraProjectIssueTypesMetadata` and `createJiraIssue`. The Desktop
 connection restricts both tools to the configured site and project. Complete
 metadata must establish exactly one matching standard issue type. Creation
 sends `cloudId`, `projectKey`, `issueType` and `summary`, plus any approved
-labels and escaped HTML description. Devflow requires an issue key in the
+labels and escaped HTML description. Agentflow requires an issue key in the
 requested project in the acknowledgement and claims the approval before calling
 the provider.
 
@@ -96,7 +96,7 @@ The Desktop writer checks each wire argument against the enrolled flat catalog.
 Its five authenticated input schemas are retained in the
 [offline state fixture](../rovohost/testdata/jira-state-flat-schemas.json).
 
-| Tool | Fields sent to Rovo | Evidence Devflow uses |
+| Tool | Fields sent to Rovo | Evidence Agentflow uses |
 | --- | --- | --- |
 | `getJiraIssue` | `cloudId`, `issueIdOrKey`, `view: "full"`, `fieldsByKeys: true` and `fields: ["summary","status","project","assignee"]` | Matching issue and project keys, summary, status name and category, and an explicit null assignee or its account ID |
 | `listJiraIssueTransitions` | `cloudId`, `issueIdOrKey` | A unique available ID leading to the mapped target status with a forward category |
@@ -122,7 +122,7 @@ in [the offline catalog fixture](../rovohost/testdata/jira-comment-flat-schema.j
 Desktop sends exactly `cloudId`, `issueIdOrKey`, `contentFormat: "html"` and
 `commentBody`. Omitting `commentId` selects creation. The body encodes the
 approved plain text as escaped HTML. The catalog describes an HTML echo by
-default for this input. Devflow checks that every submitted field is advertised.
+default for this input. Agentflow checks that every submitted field is advertised.
 
 The synthetic write fixture uses the following receipt inside MCP structured
 content or a single JSON text block. The authenticated call and its preflight
@@ -172,14 +172,14 @@ existing page reference with the expected positive decimal version. The
 authenticated write connection reads the published page with
 `getConfluenceContent`, full HTML detail and metadata. The response must
 identify the requested page, space key and numeric space ID. Its opaque
-snapshot token belongs to that exact revision. Devflow binds the token and the
+snapshot token belongs to that exact revision. Agentflow binds the token and the
 complete update to the same connection before approval.
 
 ```json
-{"cloudId":"https://fixture.atlassian.net","contentId":"123456","contentType":"page","title":"Runbook","snapshotToken":"opaque","body":{"format":"html","value":"<p># Rollout</p>"},"versionMessage":"devflow docs publish <digest>"}
+{"cloudId":"https://fixture.atlassian.net","contentId":"123456","contentType":"page","title":"Runbook","snapshotToken":"opaque","body":{"format":"html","value":"<p># Rollout</p>"},"versionMessage":"agentflow docs publish <digest>"}
 ```
 
-`updateConfluenceContent` publishes the full text replacement. Devflow escapes
+`updateConfluenceContent` publishes the full text replacement. Agentflow escapes
 Markdown and HTML as literal text and omits parent and metadata fields. A
 successful result must prove the exact successor receipt, either in the write
 response or through a read on the same connection. Replays of older writes use
@@ -263,7 +263,7 @@ The prepared `Intent()` includes the workspace, instance, destination name,
 channel ID, stable operation ID and exact rendered message.
 
 `Deliver` requires the caller to verify the selected workspace and live tool
-schema, apply devflow policy and confirmation to the exact intent, and audit the
+schema, apply agentflow policy and confirmation to the exact intent, and audit the
 outcome. It atomically claims the operation in the existing durable
 `notifications.ReceiptStore` before the callback dispatches. Use the same
 receipt store, namespaced operation ID and stable destination alias across
@@ -277,7 +277,7 @@ a timestamp and matching Slack permalink. Confirmed replays return
 blocks replay. The receipt store preserves status and the local receipt ID
 across attempts. The permalink is returned on the acknowledged attempt.
 
-The Devflow-owned writer in `internal/provider/slackhost` uses this same
+The Agentflow-owned writer in `internal/provider/slackhost` uses this same
 notification path. A generation-checked OAuth callback authenticates each
 request to the fixed Slack MCP endpoint. The writer checks the advertised
 input properties and JSON Schema before calling the tool. Its local catalog
@@ -304,7 +304,7 @@ Both the method-tagged output and the older flat issue object are supported.
 The github.com URL must prove the requested repository and issue number. A PR
 URL is rejected. The mapper carries title, body, open or closed state, labels,
 first assignee, issue type and update timestamp. Body text follows the server's
-projection. It is unsuitable for verifying private devflow markers the server
+projection. It is unsuitable for verifying private agentflow markers the server
 may remove.
 
 [GitHub MCP issue tool inputs and implementation](https://github.com/github/github-mcp-server/blob/main/pkg/github/issues.go) ·
@@ -316,7 +316,7 @@ may remove.
 
 An Asana create submits one item to `create_tasks` with an explicit
 `project_id` and matching `default_project`. The item's `notes` preserve
-Devflow template and link metadata. Completion submits one item to
+Agentflow template and link metadata. Completion submits one item to
 `update_tasks` with `task_id` and `completed: true`. The decoder requires
 one successful item and an empty failure list. Comments use the task GID and
 plain text. The story acknowledgement must identify that same task.

@@ -6,8 +6,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 	"gopkg.in/yaml.v3"
 )
 
@@ -79,27 +79,27 @@ func parseKnowledge(instance, name string, data []byte) (record, error) {
 			continue
 		}
 		switch key.Value {
-		case "x-devflow-ref":
+		case "x-agentflow-ref":
 			fields, err := extensionStrings(value)
 			if err != nil {
-				return record{}, fmt.Errorf("x-devflow-ref: %w", err)
+				return record{}, fmt.Errorf("x-agentflow-ref: %w", err)
 			}
 			if len(fields) != 2 || fields["scope"] == "" || fields["id"] == "" {
-				return record{}, errors.New("x-devflow-ref requires exactly scope and id")
+				return record{}, errors.New("x-agentflow-ref requires exactly scope and id")
 			}
 			r.Ref.Scope, r.Ref.ID = fields["scope"], fields["id"]
 			r.explicitRef = true
-		case "x-devflow-links":
+		case "x-agentflow-links":
 			if value.Kind != yaml.SequenceNode || value.ShortTag() != "!!seq" {
-				return record{}, errors.New("x-devflow-links requires a sequence")
+				return record{}, errors.New("x-agentflow-links requires a sequence")
 			}
 			if err := value.Decode(&r.Links); err != nil {
-				return record{}, fmt.Errorf("x-devflow-links: %w", err)
+				return record{}, fmt.Errorf("x-agentflow-links: %w", err)
 			}
-		case "x-devflow-operations":
+		case "x-agentflow-operations":
 			r.Operations, err = extensionStrings(value)
 			if err != nil {
-				return record{}, fmt.Errorf("x-devflow-operations: %w", err)
+				return record{}, fmt.Errorf("x-agentflow-operations: %w", err)
 			}
 		}
 	}

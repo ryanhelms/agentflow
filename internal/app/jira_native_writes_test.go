@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 type jiraNativeFixture struct {
@@ -232,7 +232,7 @@ func TestJiraNativeCreateAndRemoteLink(t *testing.T) {
 		t.Fatalf("create = %+v, error = %v", out, err)
 	}
 	if len(fixture.writes) != 1 || fixture.writes[0].Tool != "createJiraIssue" ||
-		!reflect.DeepEqual(fixture.writes[0].Arguments["labels"], []string{"devflow"}) {
+		!reflect.DeepEqual(fixture.writes[0].Arguments["labels"], []string{"agentflow"}) {
 		t.Fatalf("writes = %+v", fixture.writes)
 	}
 
@@ -319,7 +319,7 @@ case "$1 $2 $3" in
     test "$4 $5 $6 $7 $8 $9 ${10}" = 'weblink --id PLAT-1 --url https://docs.example/runbook --title Runbook'
     test "${11}" = --global-id
     case "${12}" in
-      devflow:jira-remote-link:*) ;;
+      agentflow:jira-remote-link:*) ;;
       *) exit 1 ;;
     esac
     test ! -f %q

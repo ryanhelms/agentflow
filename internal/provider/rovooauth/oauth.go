@@ -1,4 +1,4 @@
-// Package rovooauth enrolls Devflow as a native public client of Atlassian Rovo MCP.
+// Package rovooauth enrolls Agentflow as a native public client of Atlassian Rovo MCP.
 package rovooauth
 
 import (
@@ -15,7 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
@@ -35,14 +35,14 @@ const (
 )
 
 var (
-	ErrNotEnrolled   = errors.New("no Devflow Rovo enrollment")
-	ErrLoginRequired = errors.New("explicit Devflow Rovo login required")
+	ErrNotEnrolled   = errors.New("no Agentflow Rovo enrollment")
+	ErrLoginRequired = errors.New("explicit Agentflow Rovo login required")
 	errMetadata      = errors.New("official Rovo OAuth metadata does not match the supported profile")
-	errRegistration  = errors.New("could not register Devflow as a public Rovo client")
+	errRegistration  = errors.New("could not register Agentflow as a public Rovo client")
 	errToken         = errors.New("could not obtain a usable Rovo grant")
-	errStorage       = errors.New("OS keyring unavailable or failed verification for the Devflow Rovo grant")
-	errGrantSize     = errors.New("secure storage size limit exceeded for the Devflow Rovo grant")
-	errLock          = errors.New("could not lock Devflow Rovo grant storage")
+	errStorage       = errors.New("OS keyring unavailable or failed verification for the Agentflow Rovo grant")
+	errGrantSize     = errors.New("secure storage size limit exceeded for the Agentflow Rovo grant")
+	errLock          = errors.New("could not lock Agentflow Rovo grant storage")
 )
 
 // Each provider has an independent consent, credential namespace and bearer cache.
@@ -65,11 +65,11 @@ func newEnrollment(service, scope string) *enrollment {
 }
 
 var enrollments = map[string]*enrollment{
-	"jira":       newEnrollment("devflow.rovooauth.v2.jira.1", jiraScope),
-	"confluence": newEnrollment("devflow.rovooauth.v2.confluence.1", confluenceScope),
+	"jira":       newEnrollment("agentflow.rovooauth.v2.jira.1", jiraScope),
+	"confluence": newEnrollment("agentflow.rovooauth.v2.confluence.1", confluenceScope),
 }
 
-var errProvider = errors.New("select jira or confluence for Devflow Rovo enrollment")
+var errProvider = errors.New("select jira or confluence for Agentflow Rovo enrollment")
 
 // Login starts browser consent only for the selected provider.
 func Login(ctx context.Context, provider string) error {
@@ -143,7 +143,7 @@ func (e *enrollment) login(ctx context.Context) error {
 	defer listener.Close()
 	redirect := "http://" + listener.Addr().String() + callbackPath
 	meta := &oauthex.ClientRegistrationMetadata{
-		ClientName: "Devflow", ApplicationType: "native", TokenEndpointAuthMethod: "none",
+		ClientName: "Agentflow", ApplicationType: "native", TokenEndpointAuthMethod: "none",
 		RedirectURIs: []string{redirect}, GrantTypes: []string{"authorization_code", "refresh_token"},
 		ResponseTypes: []string{"code"}, Scope: e.scope,
 	}

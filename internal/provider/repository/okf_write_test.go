@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 )
 
 func repositoryWriter(t *testing.T, cfg Config, format string) *Knowledge {
@@ -37,10 +37,10 @@ func TestWriterMigratedGitBlob(t *testing.T) {
 	const hash = "67bf72b1db485dd9aa273c4be94ef04c14494dd156375d6267fbbda654c8a79f"
 	const body = "## Source\n[linked](../../linked.md)"
 	put(t, filepath.Join(dir, "moved.md"), "---\ntype: Reference\ntitle: Manual\ntags: [team]\n"+
-		"x-devflow-ref: {scope: engineering, id: provider-architecture}\n"+
-		"x-devflow-links: [{title: Related, url: 'urn:related'}]\n"+
+		"x-agentflow-ref: {scope: engineering, id: provider-architecture}\n"+
+		"x-agentflow-links: [{title: Related, url: 'urn:related'}]\n"+
 		"verified: [{by: 'human:alice', x-team: {rating: '4'}}]\n"+
-		"x-devflow-operations: {old: "+hash+"}\n---\n"+body)
+		"x-agentflow-operations: {old: "+hash+"}\n---\n"+body)
 	path := cfg.Directory + "/imports/archive/moved.md"
 	git(t, f.engineer, "add", "--", path)
 	git(t, f.engineer, "update-index", "--chmod=+x", "--", path)
@@ -104,7 +104,7 @@ func TestWriterMigratedGitBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 	v1Path := cfg.Directory + "/document-" + ref.StorageKey() + ".md"
-	if raw := git(t, f.origin, "show", "trunk:"+v1Path); !strings.Contains(raw, "kind: document") || strings.Contains(raw, "x-devflow-") {
+	if raw := git(t, f.origin, "show", "trunk:"+v1Path); !strings.Contains(raw, "kind: document") || strings.Contains(raw, "x-agentflow-") {
 		t.Fatalf("legacy encoding changed: %s", raw)
 	}
 }
@@ -139,7 +139,7 @@ func TestWriterOKFReviewRecovery(t *testing.T) {
 	path := git(t, f.origin, "diff", "--name-only", base, head)
 	raw := git(t, f.origin, "show", head+":"+path)
 	c, err := okf.Parse([]byte(raw))
-	if err != nil || c.Type != "Document" || c.Body != draft.Body || c.Description != draft.Description || !strings.Contains(raw, "x-devflow-links:") {
+	if err != nil || c.Type != "Document" || c.Body != draft.Body || c.Description != draft.Description || !strings.Contains(raw, "x-agentflow-links:") {
 		t.Fatalf("review blob = %s, %v", raw, err)
 	}
 	f.cfg.Publisher = reviewPublisher(func(p Publication) (string, error) {

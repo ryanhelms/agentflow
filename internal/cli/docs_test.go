@@ -10,19 +10,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestDocsPublishAndSearchCLI(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
-	for _, sub := range []string{".devflow", "records"} {
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	for _, sub := range []string{".agentflow", "records"} {
 		if err := os.Mkdir(sub, 0755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("devflow: 1\nknowledge_base: {provider: filesystem, settings: {root: records}}\n"), 0600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte("agentflow: 1\nknowledge_base: {provider: filesystem, settings: {root: records}}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.CommandContext(t.Context(), "git", "init", "--quiet", "--template=")

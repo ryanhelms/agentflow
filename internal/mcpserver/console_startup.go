@@ -8,7 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nscaledev/devflow/internal/webui"
+	"github.com/nscaledev/agentflow/internal/webui"
 )
 
 // One stdio server belongs to one harness connection. Initialization confirms
