@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Fetch the merge ref so both parents (including a fork's head) are available.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -37,7 +37,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: git -c core.hooksPath=/dev/null checkout --detach "$BASE"
-      - uses: nscaledev/agentflow/actions/setup@v0
+      - uses: $/actions/setup
         with:
           binary: true
       - id: task

@@ -30,13 +30,14 @@ shellcheck:
 	shellcheck -x $(SHELL_SCRIPTS)
 
 actionlint:
-	actionlint
+	scripts/lint-workflows.sh
 
 agent-docs: ## CLAUDE.md files must only contain @AGENTS.md
 	scripts/check-agent-docs.sh
 
 check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs locally
 	bash scripts/test-install-sh.sh
+	bash scripts/test-workflow-trust.sh
 	@if command -v pwsh >/dev/null; then pwsh -NoProfile -File scripts/test-install-ps1.ps1; fi
 
 snapshot: ## Local multi-platform build, no publish

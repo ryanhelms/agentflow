@@ -30,16 +30,19 @@ jobs:
       group: agentflow-transitions-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - name: Read trusted repository configuration
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
-          persist-credentials: false
-      - uses: nscaledev/agentflow/actions/setup@v0
+      - uses: $/actions/setup
         with:
           binary: true
+      - name: Fetch the reviewed caller source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          directory=$(reviewed-worktree.sh)
+          printf 'directory=%s\n' "$directory" >> "$GITHUB_OUTPUT"
       - id: task
         name: Resolve task provider
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           provider=$(agentflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
@@ -50,6 +53,7 @@ jobs:
           JIRA_USER: ${{ secrets.JIRA_USER }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           DRY_RUN: ${{ inputs.dry-run && '1' || '0' }}
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
             echo "::warning::JIRA_BASE or JIRA_TOKEN not set; agentflow transitions skipped"
@@ -65,6 +69,7 @@ jobs:
           ASANA_ACCESS_TOKEN: ${{ steps.task.outputs.provider == 'asana' && secrets.ASANA_ACCESS_TOKEN || '' }}
           GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || (steps.task.outputs.provider == 'repository') && github.token || '' }}
           DRY_RUN: ${{ inputs.dry-run }}
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
           if [ "$DRY_RUN" != true ]; then

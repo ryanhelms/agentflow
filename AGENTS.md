@@ -136,7 +136,7 @@ and stay compatible with bash 3.2 (macOS), so use `${arr[@]+"${arr[@]}"}` for po
 empty arrays and no `${var,,}`.
 
 **Workflows and actions.** actionlint-clean, least-privilege `permissions:` per job,
-third-party actions pinned to a major tag, and secrets only through `env:`.
+third-party actions pinned to verified full commit SHAs with release comments, and secrets only through `env:`.
 
 ## Compatibility contracts
 
@@ -144,8 +144,8 @@ These are used by other repos and clients. Changing them is a breaking change:
 
 - Caller workflows pin reusable workflows to a release commit (`@<sha> # vX.Y.Z`, written
   by `agentflow init` from the binary's embedded full commit, moved forward by `agentflow pin`). The
-  floating tag `v0` is still moved to every release: the reusable workflows load
-  `actions/setup@v0`, and repos may use it directly. Keep inputs, outputs and secrets backwards compatible within a
+  floating tag `v0` is still moved to every release for repos that use it directly.
+  Reusable workflows resolve `$/actions/setup` at their own running commit. Keep inputs, outputs and secrets backwards compatible within a
   major version; a breaking change means a new major and a new floating tag.
 - CLI surface used by adapters and templates: `agentflow mcp --client NAME`,
   `agentflow hook commit-msg FILE | session-start | pre-bash | stop --client NAME`,

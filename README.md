@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Agentflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Agentflow PR validation on its default branch. |
-| **Current release** | <!-- agentflow:version -->`v0.52.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.52.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -371,6 +371,8 @@ The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
 knowledge migration, and full repository workflow. The
 [Agentflow knowledge index](docs/knowledge/index.md) lists the repository’s
 decisions, guides, and runbooks.
+Task transitions read the reviewed PR base or default-branch revision. Slack notification workflows load configuration from the reviewed default branch.
+
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.
@@ -652,8 +654,8 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
   commit SHA, and each new agentflow release reaches a repo only through a reviewed
-  `agentflow pin` PR. The reusable workflows load agentflow's `setup` action at `@v0`, which only
-  agentflow's release workflow and repo admins can move: the "Protect release tags"
+  `agentflow pin` PR. Reusable workflows resolve the setup action at their own commit.
+  The directly callable `@v0` tag remains protected. Only the release workflow and repo admins can move it: the "Protect release tags"
   ruleset guards every `v*` tag ([docs/operations.md](docs/operations.md#releases)).
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).

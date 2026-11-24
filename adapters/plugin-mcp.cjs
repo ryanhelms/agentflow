@@ -1,27 +1,35 @@
 // Hosts provide their project cwd. Keep stdin/stdout attached to the MCP server.
 const { spawn } = require('node:child_process');
+const { mkdtempSync, rmSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
 const path = require('node:path');
 
-const [client, posixSource, windowsSource] = process.argv.slice(2);
+const client = process.argv[2];
 if (!['codex', 'cursor', 'gemini', 'vscode'].includes(client)) {
   process.stderr.write('agentflow: expected a plugin client name\n');
   process.exit(1);
 }
-const embedded = process.argv[1] === '--embedded-launchers';
-const launcher = path.resolve(__dirname, '../templates/repo/.agentflow/bin/agentflow');
-const mcp = ['mcp', '--client', client];
 
-let command = 'sh';
-let args = embedded ? ['-c', posixSource, 'agentflow', ...mcp] : [launcher, ...mcp];
-if (process.platform === 'win32') {
-  command = 'powershell.exe';
-  const script = embedded
-    ? ['-Command', '& { ' + windowsSource + '\n} mcp --client ' + client]
-    : ['-File', launcher + '.ps1', ...mcp];
-  args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', ...script];
+const windows = process.platform === 'win32';
+const filename = windows ? 'agentflow.ps1' : 'agentflow';
+let launcher = path.join(__dirname, '../templates/repo/.agentflow/bin', filename);
+if (typeof embeddedLaunchers !== 'undefined') {
+  try {
+    const directory = mkdtempSync(path.join(tmpdir(), 'agentflow-launcher-'));
+    process.once('exit', () => rmSync(directory, { recursive: true, force: true }));
+    launcher = path.join(directory, filename);
+    writeFileSync(launcher, windows ? embeddedLaunchers.windows : embeddedLaunchers.posix, { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    process.stderr.write('agentflow: could not prepare the plugin launcher: ' + error.message + '\n');
+    process.exit(1);
+  }
 }
 
-const server = spawn(command, args, { stdio: 'inherit' });
+const mcp = ['mcp', '--client', client];
+const options = { shell: false, stdio: 'inherit' };
+const server = windows
+  ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', launcher, ...mcp], options)
+  : spawn('sh', [launcher, ...mcp], options);
 server.on('error', error => {
   process.stderr.write('agentflow: could not start the plugin launcher: ' + error.message + '\n');
   process.exitCode = 1;

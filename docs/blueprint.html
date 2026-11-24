@@ -1699,8 +1699,33 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
   var out = document.getElementById("commit-result");
   var stat = document.getElementById("commit-status");
 
-  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
-  function cell(k,v){return '<div><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';}
+  function element(tag, className, text){
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function cell(key, values){
+    var row = element("div");
+    var value = element("div", "v");
+    value.append(...values);
+    row.append(element("div", "k", key), value);
+    return row;
+  }
+  function lines(values, empty){
+    if (!values.length) return [empty];
+    var result = [];
+    values.forEach(function(value, index){
+      if (index) result.push(element("br"));
+      result.push(value);
+    });
+    return result;
+  }
+  function status(ok, parts){
+    var detail = element("span");
+    detail.append(...parts);
+    stat.replaceChildren(element("span", ok ? "pill ok" : "pill bad", ok ? "Valid" : "Rejected"), detail);
+  }
   function target(project, verb){
     var p = FLOW[project] || {};
     if (Object.prototype.hasOwnProperty.call(p, verb)) return p[verb];
@@ -1719,8 +1744,11 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
     var t = text.match(/#time ((?:\d+[wdhm]\s*)+)/); if (t) smart.push("time: " + t[1].trim());
 
     if (!m) {
-      out.innerHTML = cell("Type","—") + cell("Jira keys", esc((subject.match(/[A-Z][A-Z0-9]+-\d+/g)||["none found"]).join(", "))) + cell("Summary","—") + cell("Verbs", esc(flowVerbs.join(" ") || "none"));
-      stat.innerHTML = '<span class="pill bad">Rejected</span><span>Subject must look like <code>feat(PLAT-123): add quota API</code>. The commit-msg hook and PR check both block this.</span>';
+      var candidates = subject.match(/[A-Z][A-Z0-9]+-\d+/g) || ["none found"];
+      out.replaceChildren(cell("Type", ["—"]), cell("Jira keys", [candidates.join(", ")]),
+        cell("Summary", ["—"]), cell("Verbs", [flowVerbs.join(" ") || "none"]));
+      status(false, ["Subject must look like ", element("code", "", "feat(PLAT-123): add quota API"),
+        ". The commit-msg hook and PR check both block this."]);
       return;
     }
     var type = m[1], keys = m[2].split(","), breaking = !!m[3];
@@ -1731,19 +1759,25 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
       var proj = k.split("-")[0];
       flowVerbs.forEach(function(v){
         var dest = target(proj, v);
-        effects.push(esc(k) + " → " + (dest ? esc(dest) : "no change (" + esc(proj) + " has no " + v + " status)"));
+        effects.push(k + " → " + (dest || "no change (" + proj + " has no " + v + " status)"));
       });
     });
-    out.innerHTML =
-      cell("Type", esc(type) + (breaking ? " · breaking" : "")) +
-      cell("Jira keys", esc(keys.join(", "))) +
-      cell("Summary", esc(summary)) +
-      cell("Transitions", effects.length ? effects.join("<br>") : "none, events only") +
-      cell("Smart Commits", smart.length ? esc(smart.join("\n")).replace(/\n/g,"<br>") : "none");
+    out.replaceChildren(
+      cell("Type", [type + (breaking ? " · breaking" : "")]),
+      cell("Jira keys", [keys.join(", ")]),
+      cell("Summary", [summary]),
+      cell("Transitions", lines(effects, "none, events only")),
+      cell("Smart Commits", lines(smart.length ? smart.join("\n").split("\n") : [], "none")));
     if (!typeOk) {
-      stat.innerHTML = '<span class="pill bad">Rejected</span><span>Unknown type <code>' + esc(type) + '</code>. Use one of: ' + TYPES.join(", ") + '.</span>';
+      status(false, ["Unknown type ", element("code", "", type), ". Use one of: " + TYPES.join(", ") + "."]);
     } else {
-      stat.innerHTML = '<span class="pill ok">Valid</span><span>Links to ' + esc(keys.join(", ")) + ' in Jira' + (effects.length ? ' and applies the transitions above using <code>flow-map.yml</code>.' : '. Branch, PR and merge events still move the ticket.') + '</span>';
+      var details = ["Links to " + keys.join(", ") + " in Jira"];
+      if (effects.length) {
+        details.push(" and applies the transitions above using ", element("code", "", "flow-map.yml"), ".");
+      } else {
+        details.push(". Branch, PR and merge events still move the ticket.");
+      }
+      status(true, details);
     }
   }
   input.addEventListener("input", parse);

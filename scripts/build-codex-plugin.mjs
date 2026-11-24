@@ -4,17 +4,18 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
-const read = path => readFile(new URL(path, root), 'utf8');
+const read = async path => (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
 const [start, posix, windows] = await Promise.all([
-  read('adapters/plugin-mcp.cjs'),
-  read('templates/repo/.agentflow/bin/agentflow'),
-  read('templates/repo/.agentflow/bin/agentflow.ps1'),
+  read(new URL('adapters/plugin-mcp.cjs', root)),
+  read(new URL('templates/repo/.agentflow/bin/agentflow', root)),
+  read(new URL('templates/repo/.agentflow/bin/agentflow.ps1', root)),
 ]);
-const args = ['-e', start, '--', '--embedded-launchers', 'codex', posix, windows];
+const launchers = `const embeddedLaunchers = ${JSON.stringify({ posix, windows })};\n`;
+const args = ['-e', launchers + start, '--', '--embedded-launchers', 'codex'];
 const output = JSON.stringify({ mcpServers: { agentflow: { command: 'node', args, startup_timeout_sec: 60 } } }, null, 2) + '\n';
 const path = new URL('adapters/codex/plugin-mcp.json', root);
 if (process.argv.includes('--check')) {
-  if (await readFile(path, 'utf8') !== output) {
+  if (await read(path) !== output) {
     throw new Error('Regenerate the Codex launcher with node scripts/build-codex-plugin.mjs');
   }
 } else {

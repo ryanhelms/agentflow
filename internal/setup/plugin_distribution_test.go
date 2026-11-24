@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -23,7 +24,7 @@ func readPluginFile(t *testing.T, path string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data)
+	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }
 
 func pluginServer(t *testing.T, path string) pluginCommand {
@@ -43,10 +44,21 @@ func pluginServer(t *testing.T, path string) pluginCommand {
 
 func TestCodexPluginCarriesCurrentVerifiedLaunchers(t *testing.T) {
 	entry := pluginServer(t, "adapters/codex/plugin-mcp.json")
-	want := []string{
-		"-e", readPluginFile(t, "adapters/plugin-mcp.cjs"), "--", "--embedded-launchers", "codex",
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(struct {
+		POSIX   string `json:"posix"`
+		Windows string `json:"windows"`
+	}{
 		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow"),
 		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow.ps1"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	entryPoint := "const embeddedLaunchers = " + strings.TrimSuffix(payload.String(), "\n") + ";\n"
+	want := []string{
+		"-e", entryPoint + readPluginFile(t, "adapters/plugin-mcp.cjs"), "--", "--embedded-launchers", "codex",
 	}
 	if !reflect.DeepEqual(entry.Args, want) {
 		t.Fatal("stale Codex plugin descriptor: run node scripts/build-codex-plugin.mjs")
@@ -54,9 +66,6 @@ func TestCodexPluginCarriesCurrentVerifiedLaunchers(t *testing.T) {
 }
 
 func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX fixture for the cached native binary")
-	}
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node is not installed")
@@ -69,12 +78,14 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cache := t.TempDir()
-	bin := filepath.Join(cache, "agentflow", "current", "agentflow")
-	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+	target = filepath.Join(target, "project with 'quotes' & spaces")
+	if err := os.Mkdir(target, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o755); err != nil {
+	cache := t.TempDir()
+	pluginFixture(t, cache)
+	tmp := filepath.Join(t.TempDir(), "launcher with 'quotes' & spaces")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ client, path, pluginRoot string }{
@@ -96,15 +107,52 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 			}
 			cmd := exec.CommandContext(t.Context(), node, entry.Args...)
 			cmd.Dir = target
-			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "XDG_CACHE_HOME=" + cache}
+			cmd.Env = append(os.Environ(), "XDG_CACHE_HOME="+cache, "LOCALAPPDATA="+cache, "TMPDIR="+tmp, "TEMP="+tmp, "TMP="+tmp)
 			got, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("run plugin server: %v: %s", err, got)
 			}
 			want := target + "\nmcp\n--client\n" + tc.client + "\n"
-			if string(got) != want {
+			if strings.ReplaceAll(string(got), "\r\n", "\n") != want {
 				t.Fatalf("launcher output %q, want %q", got, want)
 			}
+			if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
+				t.Fatalf("temporary launcher was not cleaned up: %v, %v", entries, err)
+			}
 		})
+	}
+}
+
+func pluginFixture(t *testing.T, cache string) {
+	t.Helper()
+	active := filepath.Join(cache, "agentflow", "current")
+	if err := os.MkdirAll(active, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.WriteFile(filepath.Join(active, "agentflow"), []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if err := os.WriteFile(filepath.Join(cache, "agentflow", "current.txt"), []byte(active), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "main.go")
+	const fixture = `package main
+import ("fmt"; "os")
+func main() {
+	dir, err := os.Getwd()
+	if err != nil { os.Exit(1) }
+	fmt.Println(dir)
+	for _, arg := range os.Args[1:] { fmt.Println(arg) }
+}
+`
+	if err := os.WriteFile(source, []byte(fixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(active, "agentflow.exe"), source)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build Windows plugin fixture: %v: %s", err, output)
 	}
 }

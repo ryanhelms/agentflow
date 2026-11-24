@@ -17,21 +17,30 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
       run: |
-        root=$(cd "$ACTION_PATH/../.." && pwd)
-        echo "$root/bin" >> "$GITHUB_PATH"
-        echo "AGENTFLOW_ROOT=$root" >> "$GITHUB_ENV"
-        echo "FLOW_MAP=$root/flow-map.yml" >> "$GITHUB_ENV"
+        set -euo pipefail
+        source_root=$(cd "$ACTION_PATH/../.." && pwd -P)
+        runner_root=$(cd "$RUNNER_TEMP" && pwd -P)
+        root=$(mktemp -d "$runner_root/agentflow.XXXXXXXX")
+        if [[ "$root" != "$runner_root"/agentflow.* || "$root" == *$'\r'* || "$root" == *$'\n'* ]]; then
+          echo "::error::Invalid Agentflow runner directory"
+          exit 1
+        fi
+        cp -R -- "$source_root/bin" "$root/bin"
+        cp -- "$source_root/flow-map.yml" "$root/flow-map.yml"
+        printf '%s\n' "$root/bin" >> "$GITHUB_PATH"
+        printf 'AGENTFLOW_ROOT=%s\nFLOW_MAP=%s/flow-map.yml\n' "$root" "$root" >> "$GITHUB_ENV"
     - name: Set up Go
       if: inputs.binary == 'true'
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version-file: ${{ github.action_path }}/../../go.mod
         cache: false
     - name: Build agentflow
       if: inputs.binary == 'true'
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
-        mkdir -p "$RUNNER_TEMP/agentflow-bin"
-        (cd "$AGENTFLOW_ROOT" && go build -trimpath -o "$RUNNER_TEMP/agentflow-bin/agentflow" ./cmd/agentflow)
-        echo "$RUNNER_TEMP/agentflow-bin" >> "$GITHUB_PATH"
-        echo "AGENTFLOW_NO_UPDATE=1" >> "$GITHUB_ENV"
+        set -euo pipefail
+        (cd "$ACTION_PATH/../.." && go build -trimpath -o "$AGENTFLOW_ROOT/bin/agentflow" ./cmd/agentflow)
+        printf '%s\n' 'AGENTFLOW_NO_UPDATE=1' >> "$GITHUB_ENV"

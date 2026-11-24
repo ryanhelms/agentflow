@@ -25,10 +25,10 @@ jobs:
       group: agentflow-docs-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: nscaledev/agentflow/actions/setup@v0
+      - uses: $/actions/setup
         with:
           binary: true
       - id: knowledge
