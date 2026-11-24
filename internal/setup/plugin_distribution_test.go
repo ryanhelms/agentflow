@@ -24,7 +24,7 @@ func readPluginFile(t *testing.T, path string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data)
+	return strings.ReplaceAll(string(data), "\r\n", "\n")
 }
 
 func pluginServer(t *testing.T, path string) pluginCommand {

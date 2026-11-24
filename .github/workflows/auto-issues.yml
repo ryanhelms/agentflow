@@ -68,23 +68,15 @@ jobs:
       - uses: $/actions/setup
         with:
           binary: true
-      - name: Resolve the reviewed caller revision
-        id: source
+      - id: task
+        name: Resolve task provider from reviewed configuration
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(reviewed-revision.sh default)
-          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
-      - name: Read trusted repository configuration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ steps.source.outputs.sha }}
-          persist-credentials: false
-      - id: task
-        name: Resolve task provider
-        run: |
+          config=$(reviewed-config.sh)
+          cd "$config"
           provider=$(devflow keys --provider)
-          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          printf 'provider=%s\n' "$provider" >> "$GITHUB_OUTPUT"
 
       # Dependabot alerts need a GitHub App token with "Dependabot alerts: read".
       - id: app

@@ -6,6 +6,7 @@ trap 'rm -rf "$fixture"' EXIT
 export HEAD_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 export BASE_SHA=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 export GITHUB_REPOSITORY=fixture/consumer GITHUB_REPOSITORY_ID=123 GITHUB_RUN_ID=98
+export GITHUB_SERVER_URL=https://github.example.invalid RUNNER_TEMP="$fixture"
 export GITHUB_EVENT_PATH="$fixture/event.json" GITHUB_EVENT_NAME=pull_request
 export PATH="$fixture:$PATH"
 
@@ -29,6 +30,19 @@ case "$2" in
     printf '{"status":"%s","merge_base_commit":{"sha":"%s"}}\n' "$status" "$BASE_SHA"
     ;;
   "repos/fixture/consumer/commits/$BASE_SHA") printf '%s\n' "$BASE_SHA" ;;
+  "repos/fixture/consumer/commits/$HEAD_SHA") printf '%040d\n' 1 ;;
+  repos/fixture/consumer/git/trees/*)
+    case "${2##*/}" in
+      "$(printf '%040d' 1)") entries=$(printf '[{"path":".devflow","sha":"%040d","type":"tree","mode":"040000"}]' 2) ;;
+      "$(printf '%040d' 2)") entries=$(printf '[{"path":"config.yml","sha":"%040d","type":"blob","mode":"100644"},{"path":"providers","sha":"%040d","type":"tree","mode":"040000"}]' 4 3) ;;
+      "$(printf '%040d' 3)") entries=$(printf '[{"path":"fixture.yaml","sha":"%040d","type":"blob","mode":"100644"},{"path":"link.yml","type":"blob","mode":"120000"},{"path":"readme.txt","type":"blob","mode":"100644"}]' 5) ;;
+      *) exit 1 ;;
+    esac
+    printf '{"truncated":false,"tree":%s}\n' "$entries"
+    ;;
+  "repos/fixture/consumer/git/blobs/$(printf '%040d' 4)"|"repos/fixture/consumer/git/blobs/$(printf '%040d' 5)")
+    printf '%s\n' '{"encoding":"base64","content":"e30K"}'
+    ;;
   *) echo "unexpected fixture request: $2" >&2; exit 1 ;;
 esac
 SH
@@ -49,6 +63,13 @@ if "$revision" pr-base > /dev/null 2> "$fixture/error"; then
   echo 'foreign pull request base was accepted' >&2; exit 1
 fi
 grep -q 'base repository did not match' "$fixture/error"
+
+export PATH="$root/bin:$PATH"
+config=$(reviewed-config.sh)
+grep -Fx '{}' "$config/.devflow/config.yml" > /dev/null
+grep -Fx '{}' "$config/.devflow/providers/fixture.yaml" > /dev/null
+[[ ! -e "$config/.devflow/providers/link.yml" && ! -e "$config/.devflow/providers/readme.txt" ]]
+[[ $(git -C "$config" remote get-url origin) == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" ]]
 
 artifacts="$fixture/artifacts"
 mkdir -p "$artifacts/binaries"
