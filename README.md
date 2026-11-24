@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Agentflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Agentflow PR validation on its default branch. |
-| **Current release** | <!-- agentflow:version -->`v0.52.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.52.2`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |

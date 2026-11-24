@@ -1,6 +1,6 @@
 {
   "name": "agentflow",
-  "version": "0.52.1",
+  "version": "0.52.2",
   "description": "Nscale delivery loop: Jira-linked Conventional Commits, ticket context, flow-map previews, PRs, reviews and Confluence from Claude Code.",
   "author": {
     "name": "Nscale Engineering Enablement"
