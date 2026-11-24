@@ -34,13 +34,13 @@ func at(t *testing.T, s fieldSpec, path ...string) fieldSpec {
 func TestDescribeEveryConfigurationFormat(t *testing.T) {
 	root, _ := fixture(t)
 	src := map[string]string{
-		MainFile:                       "agentflow: 1\n",
-		definitionsDir + "/custom.yml": "version: 1\nproviders: {}\n",
+		MainFile:                         "agentflow: 1\n",
+		definitionsDir + "/custom.yml":   "version: 1\nproviders: {}\n",
 		".agentflow/releases.yml":        "strategy: trunk\nunits: []\n",
-		"flow-map.yml":                 "defaults: {}\n",
+		"flow-map.yml":                   "defaults: {}\n",
 		".agentflow/task-templates.json": "[]",
-		"docs/confluence.yml":          "space: EX\npages: []\n",
-		".jira/config.yml":             "deployments: {environmentMapping: {}}\n",
+		"docs/confluence.yml":            "space: EX\npages: []\n",
+		".jira/config.yml":               "deployments: {environmentMapping: {}}\n",
 	}
 	for path, content := range src {
 		put(t, root, path, content)

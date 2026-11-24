@@ -14,12 +14,12 @@ func TestProjectEnrollmentRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	dir := newRepo(t)
 	original := map[string]string{
-		"AGENTS.md":                     "# Project rules   ",
-		"release-please-config.json":    "{\"packages\":{}}\n",
-		".release-please-manifest.json": "{\".\":\"3.2.1\"}\n",
-		".githooks/commit-msg":          "#!/bin/sh\nexit 0\n",
+		"AGENTS.md":                       "# Project rules   ",
+		"release-please-config.json":      "{\"packages\":{}}\n",
+		".release-please-manifest.json":   "{\".\":\"3.2.1\"}\n",
+		".githooks/commit-msg":            "#!/bin/sh\nexit 0\n",
 		".github/workflows/agentflow.yml": "# pre-existing project workflow\n",
-		".jira/config.yml":              "project: TEAM\n",
+		".jira/config.yml":                "project: TEAM\n",
 	}
 	for name, data := range original {
 		file := filepath.Join(dir, name)

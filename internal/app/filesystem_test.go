@@ -17,7 +17,7 @@ func TestDocsSearchWithFileSystemProvider(t *testing.T) {
 	dir := newRepo(t)
 	for path, content := range map[string]string{
 		".agentflow/config.yml": "agentflow: 1\nknowledge_base: {provider: filesystem, settings: {root: handbook}}\n",
-		"handbook/quota.md":   "---\nversion: 1\nkind: document\ninstance: filesystem\nscope: engineering\nid: quota\ntitle: Quota design\n---\nAn engineering decision.\n",
+		"handbook/quota.md":     "---\nversion: 1\nkind: document\ninstance: filesystem\nscope: engineering\nid: quota\ntitle: Quota design\n---\nAn engineering decision.\n",
 	} {
 		path = filepath.Join(dir, path)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
