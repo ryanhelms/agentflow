@@ -84,15 +84,13 @@ grep -Fx '{}' "$config/.devflow/providers/fixture.yaml" > /dev/null
   printf '%s\n' 'reviewed task fixture' > .devflow/tasks/task.md
   git add .devflow/tasks/task.md
   git commit --quiet -m 'fixture base'
-  export BASE_SHA
-  BASE_SHA=$(git rev-parse HEAD)
+  worktree_base=$(git rev-parse HEAD)
   printf '%s\n' 'later task fixture' > .devflow/tasks/task.md
   git commit --quiet -am 'fixture branch advances'
-  export HEAD_SHA
-  HEAD_SHA=$(git rev-parse HEAD)
-  printf '{"pull_request":{"base":{"ref":"main","sha":"%s","repo":{"id":123}}}}\n' "$BASE_SHA" > "$GITHUB_EVENT_PATH"
-  source=$(reviewed-worktree.sh)
-  [[ $(git -C "$source" rev-parse HEAD) == "$BASE_SHA" ]]
+  worktree_head=$(git rev-parse HEAD)
+  printf '{"pull_request":{"base":{"ref":"main","sha":"%s","repo":{"id":123}}}}\n' "$worktree_base" > "$GITHUB_EVENT_PATH"
+  source=$(BASE_SHA="$worktree_base" HEAD_SHA="$worktree_head" reviewed-worktree.sh)
+  [[ $(git -C "$source" rev-parse HEAD) == "$worktree_base" ]]
   grep -Fx 'reviewed task fixture' "$source/.devflow/tasks/task.md" > /dev/null
   if git -C "$source" config --local --get credential.helper; then
     echo 'the fetch credential helper was persisted' >&2; exit 1
