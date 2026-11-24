@@ -15,8 +15,8 @@ func TestRemovalPreservesUnrelatedProject(t *testing.T) {
 	files := map[string]string{
 		".claude/settings.json":      `{"includeCoAuthoredBy":false}`,
 		".codex/config.toml":         "# Workspace configuration\n[mcp_servers.agentflow]\ncommand = \"my-company-command\"\n",
-		".agentflow/config.yml":        "project: local\n",
-		".agentflow/bin/agentflow":       "#!/bin/sh\n# Another project tool\n",
+		".agentflow/config.yml":      "project: local\n",
+		".agentflow/bin/agentflow":   "#!/bin/sh\n# Another project tool\n",
 		"release-please-config.json": "{}\n",
 	}
 	for rel, body := range files {
