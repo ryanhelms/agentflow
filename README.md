@@ -652,8 +652,8 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin devflow to a release
   commit SHA, and each new devflow release reaches a repo only through a reviewed
-  `devflow pin` PR. The reusable workflows load devflow's `setup` action at `@v0`, which only
-  devflow's release workflow and repo admins can move: the "Protect release tags"
+  `devflow pin` PR. Reusable workflows resolve the setup action at their own commit.
+  The directly callable `@v0` tag remains protected. Only the release workflow and repo admins can move it: the "Protect release tags"
   ruleset guards every `v*` tag ([docs/operations.md](docs/operations.md#releases)).
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).

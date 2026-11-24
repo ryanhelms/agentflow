@@ -28,7 +28,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: nscaledev/devflow/actions/setup@v0
+    - uses: $/actions/setup
       with:
         binary: true
     - name: Collect shipped keys

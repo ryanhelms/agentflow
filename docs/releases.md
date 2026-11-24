@@ -99,6 +99,14 @@ The operation can create a tag when one is absent. GitHub tag protections apply.
 After a retry, use `devflow release get TAG` to inspect the existing assets.
 The reusable workflow builds and uploads artifacts for its release-please releases.
 
+## Release build and publication
+
+The reusable release workflow checks that each release tag resolves to a commit
+on the caller repository’s default branch. The build job uses read-only access.
+The publish job verifies the source revision and checksums, then uploads the
+archives, images, charts or packages with its own credentials. npm lifecycle work
+runs during packaging, and the publisher uploads the prepared tarball.
+
 ## Using versions in your own workflows
 
 Tag staging builds with the branch version:
