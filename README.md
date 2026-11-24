@@ -371,6 +371,8 @@ The [OKF rollout plan](docs/okf-rollout.md) tracks the compatible reader,
 knowledge migration, and full repository workflow. The
 [Devflow knowledge index](docs/knowledge/index.md) lists the repository’s
 decisions, guides, and runbooks.
+Task transitions read the reviewed PR base or default-branch revision. Slack notification workflows load configuration from the reviewed default branch.
+
 The pinned `jira-key.yml` and `transitions.yml` workflows use the configured
 task provider. Validation checks the squash title and each commit. The
 existing Jira paths apply transitions and fix versions when configured.

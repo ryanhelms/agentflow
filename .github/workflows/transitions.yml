@@ -33,20 +33,16 @@ jobs:
       - uses: $/actions/setup
         with:
           binary: true
-      - name: Resolve the reviewed caller revision
+      - name: Fetch the reviewed caller source
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha=$(reviewed-revision.sh pr-base)
-          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
-      - name: Read trusted repository configuration
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ steps.source.outputs.sha }}
-          persist-credentials: false
+          directory=$(reviewed-worktree.sh)
+          printf 'directory=%s\n' "$directory" >> "$GITHUB_OUTPUT"
       - id: task
         name: Resolve task provider
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           provider=$(devflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
@@ -57,6 +53,7 @@ jobs:
           JIRA_USER: ${{ secrets.JIRA_USER }}
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           DRY_RUN: ${{ inputs.dry-run && '1' || '0' }}
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
             echo "::warning::JIRA_BASE or JIRA_TOKEN not set; devflow transitions skipped"
@@ -72,6 +69,7 @@ jobs:
           ASANA_ACCESS_TOKEN: ${{ steps.task.outputs.provider == 'asana' && secrets.ASANA_ACCESS_TOKEN || '' }}
           GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || (steps.task.outputs.provider == 'repository') && github.token || '' }}
           DRY_RUN: ${{ inputs.dry-run }}
+        working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
           if [ "$DRY_RUN" != true ]; then
