@@ -267,8 +267,10 @@ merge. Use `publication: push` for direct writes to an unprotected branch.
 
 Confluence search returns the page ID, space key and revision in `devflow docs search QUERY --json`.
 Use `devflow docs publish confluence/SPACE/PAGE_ID` with the expected revision
-to replace an existing page through the remote approval policy. The page body
-displays Markdown as literal text. See the [Confluence example](docs/providers.md#replace-a-confluence-page).
+to replace an existing page through the remote approval policy. Interactive
+publishing can use an authenticated Atlassian Rovo MCP connection or the
+Teamwork Graph CLI. The page body displays Markdown as literal text. See the
+[Confluence example](docs/providers.md#replace-a-confluence-page).
 
 `devflow status` reads checks and deployments from their own `devops` providers.
 Deployments match the open PR's head commit or the local `HEAD` when there is no

@@ -659,17 +659,22 @@ devflow docs publish confluence/ENG/42 \
 ```
 
 The CLI and `devflow_docs_publish` apply the remote autonomy policy. Confirmation
-covers the configured site, qualified reference, expected revision, operation ID
-and complete replacement. Devflow checks the space key immediately before the
-update and verifies the space ID in the response. Confluence uses the page
-version as its write precondition. In this example the requested version is 8.
-If another edit wins, review the newer version before publishing a replacement.
+covers the selected backend, configured site, qualified reference, expected
+revision, operation ID and complete replacement. Interactive publishing can use
+the authenticated Atlassian Rovo MCP connection, with Teamwork Graph CLI
+available when the MCP write capability is missing. The existing REST path
+continues to serve automation. Devflow checks the published page and space
+before the update and verifies their identity when confirming an outcome.
+Interactive transports require a snapshot token for the expected page version.
+In this example the successor is version 8. If another edit wins, review the
+newer version before publishing a replacement.
 
 Retry an uncertain result with the same operation ID, revision, title and body.
 Devflow checks the message on the exact successor version, including in page
 history after later edits. A matching receipt returns `already_applied` with
 the original published revision. An inaccessible version history can prevent
 verification. For a new edit, use a new operation ID and the current revision.
+After an attempted write, devflow keeps the outcome tied to that backend.
 
 Lookup renders readable text from the page's Atlassian Document Format.
 Publication escapes Markdown and HTML as literal text and preserves line breaks.

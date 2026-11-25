@@ -17,7 +17,8 @@ the principal's access to the selected resource.
 `CapabilityFor` returns `provider.ErrUnsupported` for other provider and
 operation pairs. In particular, native task search, creation, assignment,
 comments and transitions, document search and publication, and GitHub PR,
-release, deployment and security operations are outside this mapping.
+release, deployment and security operations are outside this table. The
+Confluence replacement mapper uses its own prepared publication.
 
 ## Caller contract
 
@@ -73,6 +74,32 @@ against the authorized canary session.
 [Official Confluence MCP request and revision example](https://github.com/atlassian/atlassian-mcp-server/blob/main/skills/generate-status-report/SKILL.md#updating-existing-reports) ·
 [Atlassian Markdown conversion notes](https://atlassian.github.io/atlassian-mcp-server/skills/teamwork-graph-context/SKILL.html) ·
 [Confluence page metadata schema](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-pages-id-get)
+
+## Confluence replacement → `provider.WriteResult`
+
+`PrepareConfluencePublication` takes the configured site's HTTPS origin and an
+existing page reference with the expected positive decimal version. The
+authenticated write connection reads the published page with
+`getConfluenceContent`, full HTML detail and metadata. The response must
+identify the requested page, space key and numeric space ID. Its opaque
+snapshot token belongs to that exact revision. Devflow binds the token and the
+complete update to the same connection before approval.
+
+```json
+{"cloudId":"https://fixture.atlassian.net","contentId":"123456","contentType":"page","title":"Runbook","snapshotToken":"opaque","body":{"format":"html","value":"<p># Rollout</p>"},"versionMessage":"devflow docs publish <digest>"}
+```
+
+`updateConfluenceContent` publishes the full text replacement. Devflow escapes
+Markdown and HTML as literal text and omits parent and metadata fields. A
+successful result must prove the exact successor receipt, either in the write
+response or through a read on the same connection. Replays of older writes use
+`getConfluenceContentVersion` through `executeRead` to verify the exact
+successor. Missing or conflicting receipt metadata leaves the result
+unconfirmed. The hosted version projection is fixture-tested.
+
+[Rovo MCP tool catalog and deferred tool execution](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/) ·
+[Atlassian snapshot and version message example](https://github.com/atlassian/atlassian-mcp-server/blob/main/skills/generate-status-report/SKILL.md#updating-existing-reports) ·
+[Atlassian version history guidance](https://atlassian.github.io/atlassian-mcp-server/skills/decision-trace/SKILL.html)
 
 ## Asana task → `provider.Task`
 

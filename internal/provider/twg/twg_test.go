@@ -322,7 +322,9 @@ func TestUnsupportedWritesNeverLaunchTWG(t *testing.T) {
 	opts := provider.WriteOptions{OperationID: "fixture", ExpectedRevision: "1"}
 	_, create := j.Create(t.Context(), provider.TaskDraft{}, opts)
 	_, transition := j.Transition(t.Context(), j.ref("ENG", "ENG-42"), provider.TaskState{}, opts)
-	_, publish := c.Publish(t.Context(), c.ref("DOC", "55"), provider.DocumentDraft{}, opts)
+	_, publish := c.Publish(t.Context(), c.ref("DOC", "55"), provider.DocumentDraft{
+		Title: "Page", Links: []provider.Link{{URL: "https://example.test"}},
+	}, opts)
 	for _, err := range []error{create, transition, publish} {
 		if !errors.Is(err, provider.ErrUnsupported) {
 			t.Fatalf("unsupported write error = %v", err)
