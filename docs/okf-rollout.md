@@ -13,7 +13,7 @@ objective, scope, dependencies, acceptance criteria, and verification.
 | Task | Depends on |
 | --- | --- |
 | [Compatible reader and signed release](https://github.com/nscaledev/devflow/issues/84) | Rollout scope |
-| [Default OKF writer](https://github.com/nscaledev/devflow/issues/85) | Compatible reader |
+| [Default OKF writer](https://github.com/nscaledev/devflow/issues/85) | Verified signed compatible reader release |
 | [Exact task-to-knowledge links](https://github.com/nscaledev/devflow/issues/86) | Compatible reader |
 | [Bundle migration and seed docs](https://github.com/nscaledev/devflow/issues/87) | Signed compatible reader and OKF writer |
 | [Reviewed merge handling](https://github.com/nscaledev/devflow/issues/88) | Exact links and migrated bundle |
@@ -27,8 +27,9 @@ objective, scope, dependencies, acceptance criteria, and verification.
    Verify that the same release reads the current Devflow ADR using the
    committed configuration. Record the tag and verification before applying
    any live bundle changes.
-2. **Ship the OKF writer and exact task links.** Default new file-backed
-   documents to OKF through a knowledge-only configuration setting. Retain an
+2. **Ship the OKF writer and exact task links.** After the coordinator verifies
+   the signed compatible reader release, integrate the writer. Default new
+   file-backed documents to OKF through a knowledge-only setting. Retain an
    explicit legacy format option and preserve each existing document's format
    until its reviewed migration. Accept a stable document reference on the
    GitHub issue and expose exact lookup in CLI and MCP.

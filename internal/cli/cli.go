@@ -92,7 +92,7 @@ Work
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs search QUERY [--space S]  search the selected knowledge base
   docs publish REF --title T --body TEXT --operation-id ID
-               [--expected-revision REV] [--links JSON] [--yes]   publish a knowledge document
+               [--expected-revision REV] [--links JSON] [--type TYPE] [--description TEXT] [--tags JSON] [--yes]   publish a knowledge document
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
                                  .devflow/releases.yml and the release-please files

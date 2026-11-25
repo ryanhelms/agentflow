@@ -207,7 +207,7 @@ func TestDocsPublicationPreflight(t *testing.T) {
 	a, bare := repositoryFixture(t, "knowledge_base")
 	// Exercise the implicit origin and HEAD of a local repository.
 	docsGit(t, a.Repo.Dir, "remote", "set-url", "origin", bare)
-	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositorySettings)
+	cfg := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositoryKnowledgeSettings)
 	slug := "docs-team/handbook"
 	cfg.Repository = &slug
 	if dest, err := a.knowledgeRepository(t.Context()); err != nil || dest.Origin != "https://github.com/"+slug {

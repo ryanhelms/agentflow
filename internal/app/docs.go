@@ -20,7 +20,7 @@ import (
 var githubSlug = regexp.MustCompile(`^[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+$`)
 
 func (a *App) knowledgeRepository(ctx context.Context) (repository.Config, error) {
-	s := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositorySettings)
+	s := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositoryKnowledgeSettings)
 	cfg := repository.Config{Instance: "repository", Directory: s.Directory, Publication: s.Publication}
 	if cfg.Publication == "" {
 		cfg.Publication = "pull-request"
@@ -62,7 +62,10 @@ type DocsPublishInput struct {
 	Ref              provider.Ref    `json:"ref" jsonschema:"qualified destination with instance, scope and id"`
 	Title            string          `json:"title"`
 	Body             string          `json:"body" jsonschema:"Markdown document body"`
-	Links            []provider.Link `json:"links,omitempty" jsonschema:"links for the replacement document"`
+	Type             string          `json:"type,omitempty" jsonschema:"OKF concept type (defaults to Document on create)"`
+	Description      string          `json:"description,omitempty" jsonschema:"OKF concept description"`
+	Tags             []string        `json:"tags,omitzero" jsonschema:"OKF concept tags (omit to preserve or supply an empty list to clear)"`
+	Links            []provider.Link `json:"links,omitzero" jsonschema:"links for the replacement document"`
 	OperationID      string          `json:"operation_id" jsonschema:"stable operation ID to reuse on retry"`
 	ExpectedRevision string          `json:"expected_revision,omitempty" jsonschema:"revision returned by search, omit only for a new document"`
 }
@@ -70,7 +73,11 @@ type DocsPublishInput struct {
 func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string) (any, error) {
 	name := a.Cfg.Providers.KnowledgeBase.Provider
 	switch name {
-	case "filesystem", "repository", "github-wiki", "confluence":
+	case "filesystem", "repository":
+	case "github-wiki", "confluence":
+		if in.Type != "" || in.Description != "" || in.Tags != nil {
+			return nil, provider.Unsupported(name, "document type, description and tags")
+		}
 	default:
 		return nil, provider.Unsupported(name, "document publish")
 	}
@@ -90,11 +97,12 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 	}
 	if name == "filesystem" {
 		root := a.knowledgeDirectory()
-		summary["directory"] = root
+		format := a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemKnowledgeSettings).Format
+		summary["directory"], summary["format"] = root, format
 		if p, err := a.gate(policy.Local, "docs_publish", summary, token, false, nil); p != nil || err != nil {
 			return p, err
 		}
-		k, err := filesystem.NewOKFCompatibleKnowledge(name, root)
+		k, err := filesystem.NewOKFKnowledge(name, root, format)
 		if err != nil {
 			a.audit(policy.Local, "docs_publish", summary, err)
 			return nil, err
@@ -144,7 +152,9 @@ func (a *App) DocsPublish(ctx context.Context, in DocsPublishInput, token string
 			}
 		}
 		cfg.BeforeWrite = beforeWrite
-		knowledge, err = repository.NewOKFCompatibleKnowledge(cfg)
+		format := a.Cfg.Providers.KnowledgeBase.Settings.(*config.RepositoryKnowledgeSettings).Format
+		summary["format"] = format
+		knowledge, err = repository.NewOKFKnowledge(cfg, format)
 		if err != nil {
 			return nil, err
 		}
@@ -163,6 +173,9 @@ func (in DocsPublishInput) publish(ctx context.Context, knowledge provider.Knowl
 }
 
 func (in DocsPublishInput) replacement() (provider.DocumentDraft, provider.WriteOptions) {
-	return provider.DocumentDraft{Title: in.Title, Body: in.Body, Links: in.Links},
-		provider.WriteOptions{OperationID: in.OperationID, ExpectedRevision: in.ExpectedRevision}
+	draft := provider.DocumentDraft{
+		Title: in.Title, Body: in.Body, Links: in.Links,
+		Type: in.Type, Description: in.Description, Tags: in.Tags,
+	}
+	return draft, provider.WriteOptions{OperationID: in.OperationID, ExpectedRevision: in.ExpectedRevision}
 }

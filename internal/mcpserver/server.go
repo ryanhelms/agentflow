@@ -373,7 +373,7 @@ func (s *Server) register() {
 		func(ctx context.Context, in docsIn) (any, error) {
 			return a.DocsSearch(s.providerContext(ctx, in.nativeReadIn), in.Query, in.Space)
 		})
-	add(s, "devflow_docs_publish", "Publish a document to the selected knowledge base. For Confluence, replace an existing page with literal text and supply expected_revision. Use the same operation_id on retry.", remote,
+	add(s, "devflow_docs_publish", "Publish a document to the selected knowledge base. FileSystem and Repository accept type, description and tags on OKF concepts. For Confluence, replace an existing page with literal text and supply expected_revision. Use the same operation_id on retry.", remote,
 		func(ctx context.Context, in docsPublishIn) (any, error) {
 			return a.DocsPublish(app.WithConfluenceCLI(ctx), in.DocsPublishInput, in.ConfirmToken)
 		})

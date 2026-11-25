@@ -210,7 +210,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			p.checkProviderTool(role, "check the Atlassian MCP in the client or use signed-in Teamwork Graph CLI")
 		case *config.SlackSettings:
 			p.checkProviderTool(role, "check the Slack MCP in the client")
-		case *config.FileSystemSettings:
+		case *config.FileSystemKnowledgeSettings:
 			p.checkDirectory(role, settings.Root)
 		case *config.FileSystemTaskSettings:
 			p.checkDirectory(role, settings.Root)
@@ -220,9 +220,9 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 			} else {
 				p.check(role.name, role.Provider, true, fmt.Sprintf("can read fixture %q", settings.Path))
 			}
-		case *config.RepositorySettings:
+		case *config.RepositoryKnowledgeSettings:
 			if gitOK {
-				p.checkRepository(ctx, role, settings, repo)
+				p.checkRepository(ctx, role, &settings.RepositorySettings, repo)
 			}
 		case *config.RepositoryTaskSettings:
 			if gitOK {

@@ -9,7 +9,7 @@ import (
 )
 
 func (a *App) knowledgeDirectory() string {
-	root := a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemSettings).Root
+	root := a.Cfg.Providers.KnowledgeBase.Settings.(*config.FileSystemKnowledgeSettings).Root
 	if root != "" && !filepath.IsAbs(root) {
 		return filepath.Join(a.Repo.Dir, root)
 	}
