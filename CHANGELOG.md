@@ -1,9 +1,19 @@
 # Changelog
 
-All notable changes to devflow. This file is generated on release from
+All notable changes to agentflow. This file is generated on release from
 Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
+
+## [0.53.0](https://github.com/nscaledev/agentflow/compare/v0.52.2...v0.53.0) - 2026-11-25
+
+### Breaking changes
+
+- rename devflow to agentflow ([ba469a2](https://github.com/nscaledev/agentflow/commit/ba469a25b126e0e686060b42dc41593335b9bfc0))
+
+### Features
+
+- rename devflow to agentflow ([ba469a2](https://github.com/nscaledev/agentflow/commit/ba469a25b126e0e686060b42dc41593335b9bfc0))
 
 ## [0.52.2](https://github.com/nscaledev/devflow/compare/v0.52.1...v0.52.2) - 2026-11-24
 
