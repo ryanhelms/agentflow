@@ -60,7 +60,7 @@ code. devflow makes git the source of truth and turns the rest into automation:
 | **Ticket flow** | Branch → In Progress, PR → In Review, merge → QA/Done, deploy → Released, mapped per project in [`flow-map.yml`](flow-map.yml) · commit verbs `#start #review #qa #done #block` · forward-only transitions and provider previews |
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
-| **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
+| **Signals** | Authenticated Slack MCP delivery and automation webhooks with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
 | **AI assist** | 29 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
@@ -390,7 +390,7 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 | Task | How |
 | --- | --- |
 | Org secrets, optional GitHub App, Atlassian service account | [docs/operations.md](docs/operations.md) |
-| Configure and replay delivery notifications from CI or `devflow notify` | [docs/notifications.md](docs/notifications.md) |
+| Configure authenticated Slack delivery and replay notifications from CI or `devflow notify` | [docs/notifications.md](docs/notifications.md) |
 | Rollout phases and checklists | [docs/rollout.md](docs/rollout.md) |
 | Stop a bad devflow release everywhere | Add it to `blocked` in [`policy/versions.json`](policy/versions.json); installs update or stop on their next start |
 | Pause devflow in one repo | Repository variable `DEVFLOW_ENABLED=false` |

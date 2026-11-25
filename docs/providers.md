@@ -37,7 +37,7 @@ settings object. Validation errors identify the property to correct.
 | FileSystem | `root` defaults to `.devflow/tasks` for tasks and `docs` for knowledge. |
 | Repository | `repository` and `branch` default to unset, allowing the current repository and its default branch. `directory` defaults to `.devflow/tasks` or `docs`. `publication` defaults to `pull-request` and accepts `push`. |
 | SecOps | `findings` defaults to Dependabot and code scanning. `min_severity` defaults to `high`. `repository` and the optional incident fixture start unset. See [SecOps configuration](secops.md). |
-| Slack | `destination` and `credential_ref` default to unset. |
+| Slack | `native` scopes interactive delivery to a Slack workspace and channel. Automation can use an incoming webhook selected by `credential_ref`. See [notification settings](notifications.md). |
 | Webhook and router | A webhook uses an environment credential reference and can declare safe rejection codes. A router maps named destinations and signals. See [notification settings](notifications.md). |
 
 This configuration overrides one search property and sets a different provider

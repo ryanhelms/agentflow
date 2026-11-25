@@ -27,6 +27,7 @@ type NotifyInput struct {
 	Body        string          `json:"body,omitempty"`
 	Links       []provider.Link `json:"links,omitempty"`
 	DryRun      bool            `json:"-"`
+	Automation  bool            `json:"-"` // explicit headless CLI invocation
 }
 
 type NotificationStatus string
@@ -47,8 +48,11 @@ type NotificationOutcome struct {
 	Destination string               `json:"destination"`
 	Provider    string               `json:"provider"`
 	Status      NotificationStatus   `json:"status"`
+	WorkspaceID string               `json:"workspace_id,omitempty"`
+	ChannelID   string               `json:"channel_id,omitempty"`
 	ReceiptID   string               `json:"receipt_id,omitempty"`
 	WriteStatus provider.WriteStatus `json:"write_status,omitempty"`
+	URL         string               `json:"url,omitempty"`
 	Detail      string               `json:"detail,omitempty"`
 }
 
@@ -96,13 +100,30 @@ func (a *App) notify(ctx context.Context, input NotifyInput, token string, trans
 		return result, nil, nil
 	}
 	store := notifications.FileStore{Dir: filepath.Join(a.Home, "notification-receipts")}
+	var id string
+	if !input.DryRun {
+		var err error
+		id, err = a.notificationOperationID(ctx, input)
+		if err != nil {
+			return result, nil, err
+		}
+	}
+	automation := a.Client == "cli" && (input.Automation || os.Getenv("GITHUB_ACTIONS") == "true")
 	var ready []notificationAttempt
+	var slackPlans []nativeSlackPlan
 	for _, target := range targets {
 		outcome := NotificationOutcome{Destination: target.name, Provider: target.Provider, Status: NotificationPlanned}
+		if target.Native != nil {
+			outcome.WorkspaceID, outcome.ChannelID = target.Native.WorkspaceID, target.Native.ChannelID
+		}
 		if !input.DryRun {
-			router, status, err := target.router(store, transport)
+			notification := provider.Notification{Destination: target.name, Title: input.Title, Body: input.Body, Links: input.Links}
+			deliver, plan, status, err := target.prepare(ctx, notification, id, store, transport, automation)
 			if err == nil {
-				ready = append(ready, notificationAttempt{router: router, index: len(result.Deliveries)})
+				ready = append(ready, notificationAttempt{deliver: deliver, index: len(result.Deliveries)})
+				if plan != nil {
+					slackPlans = append(slackPlans, *plan)
+				}
 			} else {
 				outcome.Status, outcome.Detail = status, err.Error()
 			}
@@ -112,20 +133,18 @@ func (a *App) notify(ctx context.Context, input NotifyInput, token string, trans
 	if len(ready) == 0 {
 		return result, nil, nil
 	}
-	id, err := a.notificationOperationID(ctx, input)
-	if err != nil {
-		return result, nil, err
-	}
 	confirmation := struct {
 		Input      NotifyInput           `json:"notification"`
 		Deliveries []NotificationOutcome `json:"deliveries"`
-	}{input, slices.Clone(result.Deliveries)}
+		Slack      []nativeSlackPlan     `json:"native_slack,omitempty"`
+	}{input, slices.Clone(result.Deliveries), slackPlans}
 	if pending, err := a.gate(policy.Remote, "notify", confirmation, token, false, nil); pending != nil || err != nil {
 		return result, pending, err
 	}
 	for _, attempt := range ready {
 		outcome := &result.Deliveries[attempt.index]
-		attempt.deliver(ctx, input, id, outcome)
+		receipt, err := attempt.deliver(ctx)
+		setNotificationOutcome(outcome, receipt, err)
 		a.Gate.Audit(policy.Remote, "notify", confirmation, string(outcome.Status))
 	}
 	return result, nil, nil
@@ -140,11 +159,12 @@ type notificationTarget struct {
 func notificationTargets(selection config.Selection, signal string) []notificationTarget {
 	switch settings := selection.Settings.(type) {
 	case *config.SlackSettings:
-		target := singleNotificationTarget("slack", "SLACK_WEBHOOK_URL", *settings)
+		target := singleNotificationTarget("slack", "SLACK_WEBHOOK_URL", settings.Destination, settings.CredentialRef)
+		target.Native = settings.Native
 		target.optional = settings.CredentialRef == nil || *settings.CredentialRef == ""
 		return []notificationTarget{target}
 	case *config.WebhookSettings:
-		target := singleNotificationTarget("webhook", "WEBHOOK_URL", settings.SlackSettings)
+		target := singleNotificationTarget("webhook", "WEBHOOK_URL", settings.Destination, settings.CredentialRef)
 		target.HeaderRefs, target.RejectedStatuses = settings.HeaderRefs, settings.RejectedStatuses
 		return []notificationTarget{target}
 	case *config.NotificationRoutes:
@@ -166,15 +186,34 @@ func notificationTargets(selection config.Selection, signal string) []notificati
 	}
 }
 
-func singleNotificationTarget(kind, env string, settings config.SlackSettings) notificationTarget {
+func singleNotificationTarget(kind, env string, dest, credential *string) notificationTarget {
 	name := kind
-	if settings.Destination != nil && *settings.Destination != "" {
-		name = *settings.Destination
+	if dest != nil && *dest != "" {
+		name = *dest
 	}
-	if settings.CredentialRef != nil && *settings.CredentialRef != "" {
-		env = *settings.CredentialRef
+	if credential != nil && *credential != "" {
+		env = *credential
 	}
 	return notificationTarget{name: name, NotificationDestination: config.NotificationDestination{Provider: kind, CredentialRef: env}}
+}
+
+func (target notificationTarget) prepare(ctx context.Context, notification provider.Notification, id string,
+	store notifications.FileStore, transport http.RoundTripper, automation bool,
+) (notificationDelivery, *nativeSlackPlan, NotificationStatus, error) {
+	if target.Native != nil {
+		deliver, plan, err := prepareNativeSlack(ctx, *target.Native, notification, id, store)
+		return deliver, plan, NotificationFailed, err
+	}
+	if target.Provider == "slack" && !automation {
+		return nil, nil, NotificationFailed, errors.New("interactive Slack delivery requires a native workspace and channel configuration. Slack incoming webhooks require automation")
+	}
+	router, status, err := target.router(store, transport)
+	if err != nil {
+		return nil, nil, status, err
+	}
+	return func(ctx context.Context) (provider.DeliveryReceipt, error) {
+		return router.Deliver(ctx, notification, provider.WriteOptions{OperationID: id})
+	}, nil, NotificationFailed, nil
 }
 
 func (target notificationTarget) router(store notifications.FileStore, transport http.RoundTripper) (*notifications.Router, NotificationStatus, error) {
@@ -218,15 +257,14 @@ func (a *App) notificationOperationID(ctx context.Context, input NotifyInput) (s
 }
 
 type notificationAttempt struct {
-	router *notifications.Router
-	index  int
+	deliver notificationDelivery
+	index   int
 }
 
-func (a notificationAttempt) deliver(ctx context.Context, input NotifyInput, id string, outcome *NotificationOutcome) {
-	receipt, err := a.router.Deliver(ctx, provider.Notification{
-		Destination: outcome.Destination, Title: input.Title, Body: input.Body, Links: input.Links,
-	}, provider.WriteOptions{OperationID: id})
-	outcome.ReceiptID, outcome.WriteStatus = receipt.ID, receipt.Status
+type notificationDelivery func(context.Context) (provider.DeliveryReceipt, error)
+
+func setNotificationOutcome(outcome *NotificationOutcome, receipt provider.DeliveryReceipt, err error) {
+	outcome.ReceiptID, outcome.WriteStatus, outcome.URL = receipt.ID, receipt.Status, receipt.URL
 	switch {
 	case err == nil && receipt.Status == provider.AlreadyApplied:
 		outcome.Status = NotificationAlreadyDelivered
