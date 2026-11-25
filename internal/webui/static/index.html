@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="nscale-ui">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>devflow · Repository console</title>
+  <script src="appearance.js"></script>
+  <link rel="stylesheet" href="nscale-tokens.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="typed-editor.css">
   <link rel="stylesheet" href="document-editor.css">
@@ -57,8 +59,15 @@
     </aside>
     <div class="workspace">
       <header class="context">
-        <div class="breadcrumb"><span>Repository</span><span aria-hidden="true">/</span><strong id="top-repo">Loading…</strong></div>
-        <button id="refresh" class="button secondary" type="button">Refresh checkout</button>
+        <div class="breadcrumb"><span>Repository</span><span aria-hidden="true">/</span><strong id="top-repo">Loading…</strong><code id="context-branch" aria-label="Checkout branch" hidden></code></div>
+        <div class="context-actions">
+          <label class="appearance-control">Appearance
+            <select id="appearance">
+              <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
+            </select>
+          </label>
+          <button id="refresh" class="button secondary" type="button">Refresh checkout</button>
+        </div>
       </header>
       <main id="main" tabindex="-1">
         <p id="workspace-save-error" class="notice error" role="status" hidden>Browser storage is full or unavailable. Keep this tab open and save your edits locally before switching worktrees.</p>
@@ -83,15 +92,10 @@
           </div>
         </section>
         <section id="page-providers" aria-labelledby="providers-title" hidden>
-          <div class="page-heading"><h1 id="providers-title">Providers</h1><p>Inspect the active provider and the settings used by each role.</p></div>
-          <section class="panel" aria-labelledby="connections-title">
-            <div class="section-heading"><h2 id="connections-title">Checkout connections</h2><button id="check-connections" class="button secondary small" type="button" disabled>Check connections</button></div>
-            <p id="connection-status" class="muted" role="status">Check the providers selected in the configuration on disk.</p>
-            <details id="connection-results" hidden><summary>Connection details</summary><ul class="rows" id="connection-list"></ul></details>
-          </section>
+          <div class="page-heading"><h1 id="providers-title">Providers</h1><p>Choose a provider for each role and trace its settings to their source.</p></div>
           <p id="provider-error" class="notice error" role="status" hidden></p>
           <div class="provider-layout">
-            <div class="panel role-panel"><h2>Roles</h2><div id="roles" class="role-list"></div></div>
+            <div class="panel role-panel"><div class="section-heading"><h2 id="roles-heading">Provider roles</h2><span id="role-count" class="tag"></span></div><div role="group" aria-labelledby="roles-heading" id="roles" class="role-list"></div></div>
             <div class="panel provider-main">
               <div class="section-heading"><div><h2 id="role-title">Provider</h2><span class="muted code wrap" id="role-contract"></span></div></div>
               <div id="role-detail" hidden>
@@ -107,6 +111,11 @@
               <p id="role-empty" class="muted">No provider data available.</p>
             </div>
           </div>
+          <section class="panel" aria-labelledby="connections-title">
+            <div class="section-heading"><h2 id="connections-title">Checkout connections</h2><button id="check-connections" class="button secondary small" type="button" disabled>Check connections</button></div>
+            <p id="connection-status" class="muted" role="status">Check the providers selected in the configuration on disk.</p>
+            <details id="connection-results" hidden><summary>Connection details</summary><ul class="rows" id="connection-list"></ul></details>
+          </section>
         </section>
         <section id="page-autonomy" aria-labelledby="autonomy-title" hidden>
           <div class="page-heading"><h1 id="autonomy-title">Autonomy</h1><p>Choose which actions Devflow can take and how long an approval stays valid.</p></div>

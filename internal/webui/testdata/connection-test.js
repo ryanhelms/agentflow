@@ -174,6 +174,17 @@
     const list = byID("typed-control");
     [...list.querySelectorAll("button")].find(b=>b.textContent==="Add item").click();
     const input=list.querySelector("input[type=text]");
+    const modeControl=byID("appearance");
+    for (const [mode,surface] of [["light","rgb(255, 255, 255)"],["dark","rgb(10, 23, 52)"]]) {
+      modeControl.value=mode;
+      modeControl.dispatchEvent(new Event("change",{bubbles:true}));
+      check(document.documentElement.dataset.theme===mode,"theme not applied");
+      check(getComputedStyle(input).backgroundColor===surface,"typed input "+mode+" background: "+getComputedStyle(input).backgroundColor);
+      check(getComputedStyle(input).color!==surface,"unreadable typed input");
+      check(document.querySelectorAll("#typed-control .te-button").length>0,"typed management buttons missing");
+    }
+    check([...document.styleSheets].some(s=>new URL(s.href).pathname==="/w/first/nscale-tokens.css"),"token CSS not scoped to worktree");
+    check(getComputedStyle(byID("role-count")).display!=="none","role count badge hidden");
     input.value="retained label";input.dispatchEvent(new Event("input",{bubbles:true}));
     const write=Storage.prototype.setItem;
     try {

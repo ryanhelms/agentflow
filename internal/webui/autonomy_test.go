@@ -23,13 +23,13 @@ func TestPersonalAutonomySave(t *testing.T) {
 	if w := request(t, s, "GET", "/api/autonomy", "", "", nil); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	w := request(t, s, "GET", "/api/autonomy", "", s.session, nil)
+	w := request(t, s, "GET", "/api/autonomy", "", "session", nil)
 	var v consolecfg.ApprovalView
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &v) != nil || len(v.Actions) == 0 || bytes.Contains(w.Body.Bytes(), []byte("private-user-data")) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	in := autonomyEdit{Scope: "personal", UserRevision: v.UserRevision, Settings: &consolecfg.ApprovalSettings{Actions: map[string]config.Level{"console.reply": config.Suggest, "commit": config.Auto}, Window: "15m"}}
-	w = request(t, s, "POST", "/api/autonomy", s.origin, s.session, in)
+	w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in)
 	if w.Code != 200 || bytes.Contains(w.Body.Bytes(), []byte("private-user-data")) {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -41,11 +41,11 @@ func TestPersonalAutonomySave(t *testing.T) {
 	if err != nil || user.Autonomy.Actions["commit"] != config.Auto || user.ApprovalWindow.Minutes() != 15 {
 		t.Fatal(user, err)
 	}
-	if w = request(t, s, "POST", "/api/autonomy", s.origin, s.session, in); w.Code != 409 {
+	if w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in); w.Code != 409 {
 		t.Fatalf("stale: %s", w.Body.String())
 	}
 	in.UserRevision, in.Settings.Window = hash(saved), "2h"
-	if w = request(t, s, "POST", "/api/autonomy", s.origin, s.session, in); w.Code != 422 {
+	if w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in); w.Code != 422 {
 		t.Fatalf("invalid: %s", w.Body.String())
 	}
 }
@@ -76,7 +76,7 @@ func TestRepositoryAutonomyStagesAgainstReviewedRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	in := autonomyEdit{Scope: "repository", Base: hash(src), Content: string(src) + "# existing staged change\n", Settings: &consolecfg.ApprovalSettings{Actions: map[string]config.Level{"push": config.Confirm}, Window: "10m"}}
-	w := request(t, s, "POST", "/api/autonomy", s.origin, s.session, in)
+	w := request(t, s, "POST", "/api/autonomy", s.origin, "session", in)
 	var result struct {
 		Content  string
 		Autonomy consolecfg.ApprovalView
@@ -89,7 +89,7 @@ func TestRepositoryAutonomyStagesAgainstReviewedRevision(t *testing.T) {
 		t.Fatal("repository changed during staging", err)
 	}
 	in.Base = "stale"
-	if w = request(t, s, "POST", "/api/autonomy", s.origin, s.session, in); w.Code != 409 {
+	if w = request(t, s, "POST", "/api/autonomy", s.origin, "session", in); w.Code != 409 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 }

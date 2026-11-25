@@ -345,7 +345,10 @@ function showPage(focus = false) {
     else link.removeAttribute("aria-current");
   }
   if (screen === "configuration" && state) renderEditor();
-  if (focus) $("main").focus();
+  if (focus) {
+    $("main").focus({preventScroll: true});
+    window.scrollTo(0, 0);
+  }
 }
 
 function go(screen, role = "") {

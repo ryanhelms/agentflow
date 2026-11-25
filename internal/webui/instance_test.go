@@ -425,6 +425,20 @@ func TestBareCloneWorktreePickerRequiresBrowserGrant(t *testing.T) {
 	if code, _ := daemonBrowser(t, &cloneURL, "GET", "", "", ""); code != 200 {
 		t.Fatal("missing clone picker")
 	}
+	for _, test := range []struct { path, contains string }{
+        {"_devflow/nscale-tokens.css", "--brand-midnight:"},
+        {"_devflow/appearance.js", "devflow.appearance"},
+        {"_devflow/style.css", ".connection"},
+    } {
+        req, err := http.NewRequest(http.MethodGet,"http://127.0.0.1:"+cloneURL.Port()+"/"+test.path,nil)
+        if err != nil {t.Fatal(err)}
+        req.Host = cloneURL.Host
+        res, err := http.DefaultClient.Do(req)
+        if err != nil {t.Fatal(err)}
+        data, err := io.ReadAll(res.Body)
+        _ = res.Body.Close()
+        if err != nil || res.StatusCode != 200 || !bytes.Contains(data, []byte(test.contains)) { t.Fatalf("picker asset %s unavailable, %d",test.path,res.StatusCode) }
+    }
 	if code, _ := daemonBrowser(t, &cloneURL, "GET", "_devflow/worktrees", "", ""); code != 401 {
 		t.Fatal("disclosed picker list without browser grant")
 	}
