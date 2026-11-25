@@ -87,6 +87,13 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return providerFixture(t, "jira")
+}
+
+func providerFixture(t *testing.T, provider string) *fixture {
+	t.Helper()
+	profile := enrollments[provider]
+	scope, service := profile.scope, profile.service
 	dir := filepath.Join(t.TempDir(), "user-lock")
 	f := &fixture{
 		records: make(map[string]string),
@@ -99,7 +106,7 @@ func newFixture(t *testing.T) *fixture {
 		registration: map[string]any{"client_id": "devflow-fixture-client", "client_secret": "discarded-secret", "token_endpoint_auth_method": "none"},
 		token:        map[string]any{"access_token": "fixture-access", "refresh_token": "fixture-refresh", "expires_in": 3600, "token_type": "Bearer", "scope": scope},
 	}
-	f.e = &enrollment{client: newClient(),
+	f.e = &enrollment{service: service, scope: scope, client: newClient(),
 		lockDir: func() (string, error) { return dir, nil },
 		listen:  func(context.Context) (net.Listener, error) { f.ln = newPipe(); return f.ln, nil },
 		get: func(s, a string) (string, error) {
@@ -231,17 +238,17 @@ func callbackRequest(ctx context.Context, ln *pipeListener, address, host string
 func TestEnrollmentAndRotation(t *testing.T) {
 	f := newFixture(t)
 	// Exercise package entry points. This fixture never reads an OS store.
-	old := desktop
-	desktop = f.e
-	t.Cleanup(func() { desktop = old })
+	old := enrollments["jira"]
+	enrollments["jira"] = f.e
+	t.Cleanup(func() { enrollments["jira"] = old })
 	t.Setenv("ATLASSIAN_API_TOKEN", "synthetic-environment-value")
-	if tok, err := Token(t.Context()); tok != "" || !errors.Is(err, ErrNotEnrolled) || len(f.requests) != 0 || f.opens.Load() != 0 {
+	if tok, _, err := BoundToken(t.Context(), "jira"); tok != "" || !errors.Is(err, ErrNotEnrolled) || len(f.requests) != 0 || f.opens.Load() != 0 {
 		t.Fatal("unenrolled lookup did not fail locally")
 	}
-	if err := Login(t.Context()); err != nil {
+	if err := Login(t.Context(), "jira"); err != nil {
 		t.Fatal(err)
 	}
-	tok, gen, err := BoundToken(t.Context())
+	tok, gen, err := BoundToken(t.Context(), "jira")
 	if err != nil || tok != "fixture-access" || gen == "" {
 		t.Fatal("missing enrolled grant", err)
 	}
@@ -254,7 +261,7 @@ func TestEnrollmentAndRotation(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			a, g, err := BoundToken(t.Context())
+			a, g, err := BoundToken(t.Context(), "jira")
 			if err != nil || a != "fixture-access-2" || g != gen {
 				t.Error("bad refreshed grant", err)
 			}
@@ -266,14 +273,14 @@ func TestEnrollmentAndRotation(t *testing.T) {
 	}
 	f.e.cached.Store(nil)
 	delete(f.token, "refresh_token")
-	if _, _, err := BoundToken(t.Context()); err != nil || !strings.Contains(f.records[account], "fixture-refresh-rotated") {
+	if _, _, err := BoundToken(t.Context(), "jira"); err != nil || !strings.Contains(f.records[account], "fixture-refresh-rotated") {
 		t.Fatal("nonrotating refresh lost existing token", err)
 	}
 	f.token["refresh_token"] = "fixture-refresh-new-login"
-	if err := Login(t.Context()); err != nil {
+	if err := Login(t.Context(), "jira"); err != nil {
 		t.Fatal(err)
 	}
-	_, newGen, err := BoundToken(t.Context())
+	_, newGen, err := BoundToken(t.Context(), "jira")
 	if err != nil || newGen == gen {
 		t.Fatal("reenrollment did not replace generation", err)
 	}
@@ -312,7 +319,7 @@ func TestRegistrationAndTokenFailures(t *testing.T) {
 		registration bool
 	}{
 		{"redirect_uris", []string{"http://localhost/changed"}, true}, {"token_endpoint_auth_method", "client_secret_post", true},
-		{"scope", scope + " email", true}, {"scope", "read:me", false}, {"scope", scope + " email", false},
+		{"scope", jiraScope + " email", true}, {"scope", "read:me", false}, {"scope", jiraScope + " email", false},
 		{"token_type", "DPoP", false}, {"access_token", "invalid\r\nheader", false}, {"access_token", "wrong,other", false}, {"expires_in", 0, false}, {"refresh_token", "", false},
 	} {
 		t.Run(tc.field, func(t *testing.T) {
@@ -527,11 +534,11 @@ func TestQuietToken(t *testing.T) {
 		f := newFixture(t)
 		f.token["refresh_token"] = "fixture-refresh-" + strings.Repeat(canary, 100)
 		f.token["access_token"] = "access-" + canary
-		desktop = f.e
-		if err := Login(t.Context()); err != nil {
+		enrollments["jira"] = f.e
+		if err := Login(t.Context(), "jira"); err != nil {
 			t.Fatal(err)
 		}
-		if token, err := Token(t.Context()); err != nil || token != "access-"+canary {
+		if token, _, err := BoundToken(t.Context(), "jira"); err != nil || token != "access-"+canary {
 			t.Fatal("missing access token")
 		}
 		f.e.cached.Store(nil)
@@ -540,12 +547,12 @@ func TestQuietToken(t *testing.T) {
 			reply.StatusCode = http.StatusBadRequest
 			return reply, nil
 		})
-		token, err := Token(t.Context())
+		token, _, err := BoundToken(t.Context(), "jira")
 		if token != "" || !errors.Is(err, ErrLoginRequired) || strings.Contains(err.Error(), canary) {
 			t.Fatal("unsafe refresh failure")
 		}
 		f.e.get = func(string, string) (string, error) { return "", errors.New(canary) }
-		if _, err := Token(t.Context()); err == nil || strings.Contains(err.Error(), canary) {
+		if _, _, err := BoundToken(t.Context(), "jira"); err == nil || strings.Contains(err.Error(), canary) {
 			t.Fatal("unsafe keyring failure")
 		}
 		return
@@ -570,5 +577,41 @@ func TestSilentStorageFailure(t *testing.T) {
 	f.e.set = func(string, string, string) error { return nil } // a backend acknowledged but left the old record
 	if tok, g, err := f.e.boundToken(t.Context()); tok != "" || g != "" || !errors.Is(err, errStorage) || f.posts.Load() != 1 {
 		t.Fatal("unverified keyring replacement allowed a refresh")
+	}
+}
+
+func TestConfluenceConsentAndIsolation(t *testing.T) {
+	jira, wiki := providerFixture(t, "jira"), providerFixture(t, "confluence")
+	if jira.e.service != "devflow.rovooauth.v2.jira.1" || wiki.e.service == jira.e.service {
+		t.Fatal("provider credential namespaces collided or the original Jira namespace changed")
+	}
+	if wiki.e.scope != "read:me read:account offline_access read:confluence:agent-interface write:confluence:agent-interface" {
+		t.Fatal("unexpected Confluence permission request")
+	}
+	if err := jira.e.login(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := wiki.e.boundToken(t.Context()); !errors.Is(err, ErrNotEnrolled) || len(wiki.requests) != 0 {
+		t.Fatal("Jira login qualified an unenrolled Confluence profile", err)
+	}
+	for _, mismatched := range []string{jiraScope, baseScopes + " read:confluence:agent-interface", confluenceScope + " write:jira:agent-interface"} {
+		wiki.token["scope"] = mismatched
+		if err := wiki.e.login(t.Context()); !errors.Is(err, errToken) || len(wiki.records) != 0 {
+			t.Fatal("unexpected consent qualified", err)
+		}
+		delete(wiki.registration, "redirect_uris")
+	}
+	wiki.token["scope"] = confluenceScope
+	largeLogin(t, wiki)
+	wiki.e.cached.Store(nil)
+	wiki.token["scope"] = jiraScope
+	if bearer, _, err := wiki.e.boundToken(t.Context()); bearer != "" || !errors.Is(err, ErrLoginRequired) {
+		t.Fatal("refresh accepted a different scope", err)
+	}
+	if err := wiki.e.disconnect(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if bearer, _, err := jira.e.boundToken(t.Context()); bearer == "" || err != nil || jira.posts.Load() != 1 {
+		t.Fatal("disconnect affected Jira", err)
 	}
 }

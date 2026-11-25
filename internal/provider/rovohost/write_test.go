@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync/atomic"
 	"testing"
 
@@ -41,7 +40,7 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 	})
 
 	var lastBearer atomic.Value
-	endpoint := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+	handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		authorization := req.Header.Get("Authorization")
 		if (authorization != "Bearer local-fixture-only" && authorization != "Bearer refreshed-fixture-only") ||
 			req.URL.Query().Get("tools") != "all" {
@@ -49,16 +48,14 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 		}
 		lastBearer.Store(authorization)
 		return server
-	}, nil))
-	defer endpoint.Close()
-	host, err := url.Parse(endpoint.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	}, &mcp.StreamableHTTPOptions{JSONResponse: true})
 	generation, token := "fixture-generation", "local-fixture-only"
-	writer := newWriter(func(context.Context) (string, string, error) {
+	writer := newWriter(func(_ context.Context, provider string) (string, string, error) {
+		if provider != "jira" {
+			t.Fatal("incorrect OAuth profile")
+		}
 		return token, generation, nil
-	}, rewriteTo{host})
+	}, inProcessHTTP{handler})
 	defer writer.Close()
 
 	call := native.Call{Provider: "jira", Server: "atlassian", Tool: remoteLinkTool, Arguments: map[string]any{
@@ -100,14 +97,13 @@ func TestRovoWriterKeepsTheApprovedOAuthGrant(t *testing.T) {
 	}
 }
 
-type rewriteTo struct{ endpoint *url.URL }
+// Run the SDK's streamable HTTP server without opening a socket.
+type inProcessHTTP struct{ http.Handler }
 
-func (r rewriteTo) RoundTrip(req *http.Request) (*http.Response, error) {
-	dest := *req.URL
-	dest.Scheme, dest.Host = r.endpoint.Scheme, r.endpoint.Host
-	req = req.Clone(req.Context())
-	req.URL, req.Host = &dest, dest.Host
-	return http.DefaultTransport.RoundTrip(req)
+func (h inProcessHTTP) RoundTrip(req *http.Request) (*http.Response, error) {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec.Result(), nil
 }
 
 func TestRovoBearerNeverLeavesTheExactCatalogEndpoint(t *testing.T) {

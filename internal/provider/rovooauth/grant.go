@@ -12,9 +12,7 @@ import (
 	"time"
 )
 
-// Each OS user has a single active grant for this issuer, resource and Jira scope profile.
 const (
-	service   = "devflow.rovooauth.v2.jira.1"
 	account   = issuer + " " + Resource
 	maxRecord = 2560 // Windows Credential Manager's blob limit.
 )

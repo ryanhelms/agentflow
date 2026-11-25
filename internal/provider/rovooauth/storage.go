@@ -88,7 +88,7 @@ func (e *enrollment) readGrant(head string) (grant, error) {
 	var raw strings.Builder
 	raw.Grow(m.size)
 	for offset := 0; offset < m.size; offset += chunkSize {
-		chunk, err := e.get(service, m.chunkAccount(offset))
+		chunk, err := e.get(e.service, m.chunkAccount(offset))
 		if errors.Is(err, keyring.ErrNotFound) {
 			return grant{}, ErrLoginRequired
 		}
@@ -109,14 +109,14 @@ func (e *enrollment) readGrant(head string) (grant, error) {
 // An unsuccessful write or read-back may already have changed the OS store.
 // Never expose backend errors, which may include native output.
 func (e *enrollment) put(name, raw string) error {
-	err := e.set(service, name, raw)
+	err := e.set(e.service, name, raw)
 	if errors.Is(err, keyring.ErrSetDataTooBig) {
 		return errGrantSize
 	}
 	if err != nil {
 		return errStorage
 	}
-	saved, err := e.get(service, name)
+	saved, err := e.get(e.service, name)
 	if err != nil || saved != raw {
 		return errStorage
 	}
@@ -124,12 +124,12 @@ func (e *enrollment) put(name, raw string) error {
 }
 
 func (e *enrollment) discard(name string) error {
-	if err := e.remove(service, name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+	if err := e.remove(e.service, name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return errStorage
 	}
 	// A silent deletion failure must leave the retirement journal available
 	// for the next lock holder.
-	if _, err := e.get(service, name); !errors.Is(err, keyring.ErrNotFound) {
+	if _, err := e.get(e.service, name); !errors.Is(err, keyring.ErrNotFound) {
 		return errStorage
 	}
 	return nil
@@ -171,12 +171,12 @@ func (e *enrollment) finish(c chunkChange, active chunkManifest) error {
 }
 
 func (e *enrollment) currentHead(reenroll bool) (string, error) {
-	head, err := e.get(service, account)
+	head, err := e.get(e.service, account)
 	missing := errors.Is(err, keyring.ErrNotFound)
 	if err != nil && !missing {
 		return "", errStorage
 	}
-	pending, err := e.get(service, journalAccount)
+	pending, err := e.get(e.service, journalAccount)
 	if errors.Is(err, keyring.ErrNotFound) {
 		if missing {
 			return "", ErrNotEnrolled

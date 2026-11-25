@@ -1,0 +1,222 @@
+{
+  "getConfluenceContent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "access_link": {
+        "description": "Optional HTTPS Confluence access-link URL for this request. Reuse the same link when reading or updating its content.",
+        "type": "string"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "content_format": {
+        "description": "Body format. Doc types: html (default) or markdown. Document HTML can contain\nsupported macro wrappers instead of content displayed in Confluence web. When\nvisible macro content is required, use resolveConfluenceContentMacros with the\nreturned numeric content ID and all=true; use discover if its full contract is\nneeded. Whiteboards support only svg and png: use svg to inspect content or\nprepare edits, or png for a screenshot. Never use html or markdown for a\nwhiteboard. PNG is read-only and returns a short-lived presigned URL in\nbody.value, not the image content. Databases: csv.\nURL-backed content such as embeds: url. For an embed or Smart Link, including a\nSmart Folder child, explicitly request content_format=url and omit detail to read\nthe destination URL in body.value. Then follow retrievalGuidance to read the target.\nOmitting content_format preserves the existing envelope-only embed read.\n",
+        "enum": [
+          "html",
+          "markdown",
+          "url",
+          "svg",
+          "png",
+          "csv"
+        ],
+        "type": "string"
+      },
+      "content_id": {
+        "description": "Required when content_url is omitted. Numeric Confluence content ID, or a\nConfluence tiny link key (the encoded part\nfrom /wiki/x/ URLs, e.g. 4_sXAQ). Recognized Confluence content URLs are also\naccepted and converted to the content ID, but prefer content_url for URLs.\nOne of content_id or content_url is required.\n",
+        "minLength": 1,
+        "type": "string"
+      },
+      "content_url": {
+        "description": "Required when content_id is omitted. Full URL of the Confluence content.\nSupported: pages/live docs\n(/pages/{id}), blog URLs (/blog/{id}), whiteboards\n(/whiteboard/{id}), databases (/database/{id}), folders (/folder/{id}),\nembeds (/embed/{id}), and TinyUrl (/wiki/x/{key}). Prefer this for URLs copied from Confluence.\nOne of content_id or content_url is required.\n",
+        "minLength": 1,
+        "type": "string"
+      },
+      "detail": {
+        "description": "Response shape for document-style reads. summary = title + excerpt + counts\n(default, cheap). ai_summary = the generated AI summary when available, otherwise\nnull; it does not fall back to the standard excerpt. outline = heading tree (cheap,\nfor navigation). full = body in the requested format (use when intending to edit).\nNon-document content such as whiteboards, databases, folders, and embeds does not support detail;\ncontent_format is a separate representation selector for\nformats such as whiteboard svg/png, database csv, or embed url.\n",
+        "enum": [
+          "summary",
+          "ai_summary",
+          "outline",
+          "full"
+        ],
+        "type": "string"
+      },
+      "draft": {
+        "description": "If true, read the draft version instead of current. Only supported for\npages and blog posts.\n",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cloudId"
+    ],
+    "type": "object"
+  },
+  "getConfluenceContentVersion": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "access_link": {
+        "description": "Optional HTTPS Confluence access-link URL for this request.",
+        "type": "string"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "contentId": {
+        "description": "Numeric ID of the Confluence page, live doc, or blog post.",
+        "maxLength": 19,
+        "minLength": 1,
+        "type": "string"
+      },
+      "content_format": {
+        "description": "Optional historical body format. Omit to return version metadata without rendering the body.",
+        "enum": [
+          "markdown",
+          "html"
+        ],
+        "type": "string"
+      },
+      "versionNumber": {
+        "description": "Positive version number to retrieve.",
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "cloudId",
+      "contentId",
+      "versionNumber"
+    ],
+    "type": "object"
+  },
+  "getConfluenceSpace": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "includeLabels": {
+        "description": "If true, include the space labels in the response. Defaults to false.",
+        "type": "boolean"
+      },
+      "spaceIdOrKey": {
+        "description": "Numeric Confluence space id or space key, for example 123456, DEV, or ~accountId for a personal space.",
+        "maxLength": 255,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId",
+      "spaceIdOrKey"
+    ],
+    "type": "object"
+  },
+  "updateConfluenceContent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "access_link": {
+        "description": "Optional HTTPS Confluence access-link URL for this request. Reuse the same link when reading or updating its content.",
+        "type": "string"
+      },
+      "body": {
+        "additionalProperties": {},
+        "description": "Before composing this body, follow the space-instruction decision rule in the tool\ndescription. Reuse known instruction state and do not repeat the space lookup per write.\nRead the format guide once per task before you write this body or edit, also when you\nknow HTML: Confluence HTML is not standard HTML. getContentFormatGuide is a valid\noperation name; you do not need discover.\nBody update object with format and value. Doc types accept format html or\nmarkdown. Prefer HTML. Use markdown only when you are confident the content needs\nonly basic text formatting and has no rich Confluence elements to preserve or create,\nsuch as panels, layouts, media, whiteboard embeds, or Remixes. If unsure, use HTML.\nRe-read existing rich content as HTML before editing and preserve its content and embeds.\nWhiteboards accept format svg and should include\ncontext.content with the current SVG when applying a patch. Databases\naccept format csv and should include context.content with the current\nCSV when applying an edit envelope. Put the raw patch/envelope directly in\nvalue; do not wrap it in an extra JSON object or {\"content\": \"...\"}\nwrapper. For whiteboards, value is a patch, not a full SVG replacement.\nFor databases, value is an edit envelope, not a create payload. Mutually\nexclusive with edits.\n",
+        "type": "object"
+      },
+      "cloudId": {
+        "description": "Atlassian site UUID, hostname, or URL. If unknown, list accessible resources.",
+        "type": "string"
+      },
+      "contentId": {
+        "description": "Numeric Confluence content ID. One of contentId or contentUrl is required.\n",
+        "type": "string"
+      },
+      "contentUrl": {
+        "description": "Full URL of the Confluence content. One of contentId or contentUrl is required.\nClear Confluence URLs for pages/live docs (/pages/{id}), blogs\n(/blog/{id}), whiteboards (/whiteboard/{id}), databases\n(/database/{id}), and folders (/folder/{id}) are normalized to their\nnumeric content ID before the update is sent, so URLs copied from the\nproduct should work directly.\n",
+        "type": "string"
+      },
+      "contentWidth": {
+        "description": "Optional page width for doc types only: page, live_doc, and blogpost.\nAccepted values are narrow, wide, and max. The default width is narrow.\nOmit to keep the existing content width unchanged.\nA width-only update is valid and requires snapshotToken, but does not\nrequire title, body, or edits.\nNon-doc content types do not support this field.\n",
+        "enum": [
+          "narrow",
+          "wide",
+          "max"
+        ],
+        "type": "string"
+      },
+      "draft": {
+        "description": "If true, update the draft version instead of current. Only supported\nfor page and blogpost doc edits.\n",
+        "type": "boolean"
+      },
+      "dryRun": {
+        "description": "If true, validate and preview the result without persisting. For edits,\nreturns the resulting HTML. For body replacement, echoes the input.\n",
+        "type": "boolean"
+      },
+      "edits": {
+        "description": "Granular edit operations. Array of tool-call objects, each with name\n(replaceNode, insertNodeAfter, insertNodeBefore, deleteNode, removeNodes,\nmoveNode, appendNodeToEnd, setAttrs), localId, value, and arguments.\nMutually exclusive with body.\n",
+        "items": {},
+        "type": "array"
+      },
+      "headerImage": {
+        "additionalProperties": false,
+        "description": "Page, live_doc, and blogpost header image. Omit to preserve.\nUse {clear: true} alone to remove the header, retaining its attachment.\nSet one of url (approved HTTPS Confluence gallery URL) or fileId (Media\nUUID from an image uploaded to this page), with optional position (0-100,\ndefault 50). Upload an image to this page before setting fileId.\nSupply position alone to reposition an existing image.\nHeader-only updates do not require a snapshot or change the body version.\n",
+        "properties": {
+          "clear": {
+            "description": "Set true alone to remove the header without deleting its attachment.",
+            "type": "boolean"
+          },
+          "fileId": {
+            "description": "Media file UUID returned by the upload response, not the Confluence attachment ID.",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "type": "string"
+          },
+          "position": {
+            "description": "Vertical crop position from 0 to 100; defaults to 50 when setting an image.",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "url": {
+            "description": "Approved HTTPS Confluence gallery image URL; mutually exclusive with fileId.",
+            "maxLength": 2048,
+            "minLength": 1,
+            "pattern": "^https:\\/\\/",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "minorEdit": {
+        "description": "Whether to mark the new content version as a minor edit.",
+        "type": "boolean"
+      },
+      "ownerId": {
+        "description": "Atlassian account ID of the new owner to transfer page ownership to. Optional.\nThis is an account ID (e.g. 5b10ac8d82e05b22cc7d4ef5), never an email/username\nor a content ID. The new owner must already have edit permission.\n",
+        "type": "string"
+      },
+      "snapshotToken": {
+        "description": "Opaque token from the most recent getConfluenceContent or updateConfluenceContent\nresponse for this content. Each successful update returns the current snapshot.token;\npass it to the next update, because changes to the content make earlier tokens\nstale. On snapshot_stale, re-read the content with getConfluenceContent and reapply\nthe change to the latest body before retrying; do not resend the same payload with\ncurrentSnapshot.token.\nRequired for doc-type updates that mutate page/blog/live_doc content or contentWidth.\nNot used for whiteboard svg or database csv object updates.\n",
+        "type": "string"
+      },
+      "title": {
+        "description": "New title for the content. 1-255 characters. Omit to keep existing title.",
+        "type": "string"
+      },
+      "versionMessage": {
+        "description": "Optional version comment/message for the content update.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cloudId"
+    ],
+    "type": "object"
+  }
+}

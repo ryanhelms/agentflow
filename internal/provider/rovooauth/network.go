@@ -108,7 +108,7 @@ func (e *enrollment) exchange(ctx context.Context, clientID string, form url.Val
 	var t tokenResponse
 	if err != nil || len(body) > maxBody || json.Unmarshal(body, &t) != nil || t.Error != "" ||
 		!strings.EqualFold(t.Type, "Bearer") || !opaque(t.Access) || !bearerSyntax.MatchString(t.Access) || (t.Refresh != "" && !opaque(t.Refresh)) ||
-		(t.Scope != nil && !sameScopes(*t.Scope)) || t.ExpiresIn <= 0 || t.ExpiresIn > 1<<31 {
+		(t.Scope != nil && !e.sameScopes(*t.Scope)) || t.ExpiresIn <= 0 || t.ExpiresIn > 1<<31 {
 		return nil, errToken
 	}
 	t.expiry = started.Add(time.Duration(t.ExpiresIn) * time.Second)

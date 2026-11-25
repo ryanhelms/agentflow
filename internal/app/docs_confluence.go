@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 
 	"github.com/nscaledev/devflow/internal/atlassian"
+	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/confluence"
@@ -34,6 +36,10 @@ func WithConfluenceCLI(ctx context.Context) context.Context {
 func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summary map[string]any, token string) (any, error) {
 	if _, err := confluence.ReplacementVersion(in.Ref, in.ExpectedRevision, in.Links); err != nil {
 		return nil, err
+	}
+	if settings, ok := a.Cfg.Providers.KnowledgeBase.Settings.(*config.ConfluenceSettings); ok &&
+		settings.PublishSpaces != nil && !slices.Contains(settings.PublishSpaces, in.Ref.Scope) {
+		return nil, errors.New("document space is outside knowledge_base.settings.publish_spaces")
 	}
 	site, err := a.confluenceSite()
 	if err != nil {
