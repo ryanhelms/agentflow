@@ -179,6 +179,9 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 		if err != nil {
 			return nil, err
 		}
+		if err := a.jiraWriteScope(ref.Scope); err != nil {
+			return nil, err
+		}
 		refs[key] = ref
 	}
 	summary := maps.Clone(notes)

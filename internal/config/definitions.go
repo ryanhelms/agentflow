@@ -70,14 +70,16 @@ type Constraint struct {
 	Allow   []any  `yaml:"allow" json:"allow,omitempty"`
 	Pattern string `yaml:"pattern" json:"pattern,omitempty"`
 	pattern *regexp.Regexp
+	parts   []string
 	source  Source
 }
 
 type roleDefinition struct {
-	Contract    string                `yaml:"contract"`
-	Settings    map[string]any        `yaml:"settings"`
-	Constraints map[string]Constraint `yaml:"constraints"`
-	source      Source
+	Contract     string    `yaml:"contract"`
+	SettingsNode yaml.Node `yaml:"settings"`
+	settings     map[string]any
+	Constraints  map[string]Constraint `yaml:"constraints"`
+	source       Source
 }
 
 type definitionFile struct {
@@ -162,6 +164,13 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 	if err := dec.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
+	var trailing yaml.Node
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return err
+		}
+		return errors.New("expected exactly one YAML document")
+	}
 	if file.Version != ProviderSchemaVersion {
 		return fmt.Errorf("version: expected integer %d", ProviderSchemaVersion)
 	}
@@ -182,11 +191,21 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 				// Configuration-only providers need the operation engine.
 				return fmt.Errorf("%s: %s is not available for %s; expected one of %s", p, id, role, strings.Join(schema.choices()[:len(schema.choices())-1], ", "))
 			}
-			if _, err := contract.Resolve(role, def.Contract); err != nil {
+			c, err := contract.Resolve(role, def.Contract)
+			if err != nil {
 				return fmt.Errorf("%s.contract: %w", p, err)
 			}
-			if def.Settings != nil {
-				if err := applySettings(factory(), def.Settings, p+".settings"); err != nil {
+			if def.Contract != "" {
+				def.Contract = c.ID()
+			}
+			if def.SettingsNode.Kind != 0 {
+				if err := def.SettingsNode.Decode(&def.settings); err != nil {
+					return fmt.Errorf("%s.settings: %w", p, err)
+				}
+				if def.settings == nil {
+					return fmt.Errorf("%s.settings: expected an object with string keys", p)
+				}
+				if err := applySettings(factory(), def.settings, p+".settings"); err != nil {
 					return err
 				}
 			}
@@ -214,7 +233,12 @@ func (d *definitions) add(src Source, data []byte, schemas map[string]roleSchema
 }
 
 func (c *Constraint) compile(settings reflect.Type, name string) error {
-	t, err := settingsType(settings, name)
+	parts, err := splitSettingPath(name)
+	if err != nil {
+		return err
+	}
+	c.parts = parts
+	t, err := settingsType(settings, name, parts)
 	if err != nil {
 		return err
 	}
@@ -238,24 +262,43 @@ func (c *Constraint) compile(settings reflect.Type, name string) error {
 	return nil
 }
 
+// Paths use backslash to quote literal dots and backslashes in map keys.
+var escapeSettingKey = strings.NewReplacer(`\`, `\\`, ".", `\.`)
+
+func splitSettingPath(name string) ([]string, error) {
+	var parts []string
+	var part strings.Builder
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '.':
+			parts = append(parts, part.String())
+			part.Reset()
+		case '\\':
+			i++
+			if i == len(name) || (name[i] != '.' && name[i] != '\\') {
+				return nil, fmt.Errorf("invalid escape in settings property %q", name)
+			}
+			part.WriteByte(name[i])
+		default:
+			part.WriteByte(name[i])
+		}
+	}
+	return append(parts, part.String()), nil
+}
+
 // settingsType follows a dotted yaml path through a settings struct.
-func settingsType(t reflect.Type, name string) (reflect.Type, error) {
-	for _, part := range strings.Split(name, ".") {
+func settingsType(t reflect.Type, name string, parts []string) (reflect.Type, error) {
+	for _, part := range parts {
 		for t.Kind() == reflect.Pointer {
 			t = t.Elem()
 		}
 		switch t.Kind() {
 		case reflect.Struct:
-			found := false
-			for _, f := range reflect.VisibleFields(t) {
-				if tag := f.Tag.Get("yaml"); tag == part {
-					t, found = f.Type, true
-					break
-				}
-			}
-			if !found {
+			field, ok := settingFields(t)[part]
+			if !ok {
 				return nil, fmt.Errorf("unknown settings property %q", name)
 			}
+			t = field.Type
 		case reflect.Map:
 			t = t.Elem()
 		default:
@@ -269,8 +312,8 @@ func settingsType(t reflect.Type, name string) (reflect.Type, error) {
 }
 
 // lookup finds a dotted path in plain YAML data.
-func lookup(data any, name string) (any, bool) {
-	for _, part := range strings.Split(name, ".") {
+func lookup(data any, parts []string) (any, bool) {
+	for _, part := range parts {
 		m, ok := data.(map[string]any)
 		if !ok {
 			return nil, false
@@ -282,14 +325,56 @@ func lookup(data any, name string) (any, bool) {
 	return data, true
 }
 
-// plain converts a settings struct to the YAML data model used for comparison.
+// Use the merge schema to snapshot effective values. In particular a nil
+// routes map and an explicitly empty map dispatch to different destinations.
+// A YAML marshal/unmarshal round trip would turn both into an empty object.
 func plain(settings any) (map[string]any, error) {
-	b, err := yaml.Marshal(settings)
-	if err != nil {
-		return nil, err
+	value := reflect.Indirect(reflect.ValueOf(settings))
+	if value.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("expected provider settings struct, got %T", settings)
 	}
+	return plainStruct(value), nil
+}
+
+func plainStruct(value reflect.Value) map[string]any {
 	out := map[string]any{}
-	return out, yaml.Unmarshal(b, &out)
+	for name, field := range settingFields(value.Type()) {
+		out[name] = plainValue(value.FieldByIndex(field.Index))
+	}
+	return out
+}
+
+func plainValue(value reflect.Value) any {
+	switch value.Kind() {
+	case reflect.Struct:
+		return plainStruct(value)
+	case reflect.Pointer:
+		if value.IsNil() {
+			return nil
+		}
+		return plainValue(value.Elem())
+	case reflect.Map:
+		if value.IsNil() {
+			return nil
+		}
+		out := make(map[string]any, value.Len())
+		iter := value.MapRange()
+		for iter.Next() {
+			out[iter.Key().String()] = plainValue(iter.Value())
+		}
+		return out
+	case reflect.Slice:
+		if value.IsNil() {
+			return nil
+		}
+		out := make([]any, value.Len())
+		for i := range out {
+			out[i] = plainValue(value.Index(i))
+		}
+		return out
+	default:
+		return value.Interface()
+	}
 }
 
 // check validates a later layer's value against the release baseline.
@@ -336,20 +421,17 @@ func asList(v any) []any {
 	return []any{v}
 }
 
-// flatten lists the leaf paths a YAML value sets. Objects merge key by key,
-// so their keys are separate leaves; lists replace as a unit.
-func flatten(prefix string, value any, out map[string]any) {
-	m, ok := value.(map[string]any)
-	if !ok || len(m) == 0 {
-		out[prefix] = value
-		return
-	}
-	for k, v := range m {
-		p := k
+// visitSettings uses the same escaped property names for provenance and explain.
+func visitSettings(prefix string, fields map[string]any, visit func(string, any)) {
+	for key, value := range fields {
+		path := escapeSettingKey.Replace(key)
 		if prefix != "" {
-			p = prefix + "." + k
+			path = prefix + "." + path
 		}
-		flatten(p, v, out)
+		visit(path, value)
+		if children, ok := value.(map[string]any); ok {
+			visitSettings(path, children, visit)
+		}
 	}
 }
 
@@ -372,8 +454,13 @@ func (s Selection) Explain() ([]Setting, error) {
 		return nil, err
 	}
 	leaves := map[string]any{}
-	flatten("", data, leaves)
-	delete(leaves, "") // a settings type with no properties
+	visitSettings("", data, func(path string, v any) {
+		children, object := v.(map[string]any)
+		_, constrained := s.Constraints[path]
+		if !object || len(children) == 0 || constrained {
+			leaves[path] = v
+		}
+	})
 	out := make([]Setting, 0, len(leaves))
 	for _, p := range slices.Sorted(maps.Keys(leaves)) {
 		src, ok := s.Sources[p]

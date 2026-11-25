@@ -116,3 +116,37 @@ func TestSessionStartAutoInit(t *testing.T) {
 		t.Error("auto init ran in an opted-out clone")
 	}
 }
+
+func TestCoreHooksSurviveInvalidProviderDefinition(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	home := t.TempDir()
+	t.Setenv("DEVFLOW_HOME", home)
+	if out, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	if err := os.Mkdir(".devflow", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".devflow/config.yml", []byte("task_management: {provider: asana}\ncommit: {types: [docs]}\npolicy: {protected_branches: [production]}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(home, "providers"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "providers", "slack.yml"), []byte("providers: ["), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := PreBash(t.Context(), strings.NewReader(`{"tool_input":{"command":"git push origin production"}}`), &buf, false); err == nil {
+		t.Fatal("push to protected branch accepted")
+	}
+	for msg, valid := range map[string]bool{"feat(OPS-1): add quota": false, "docs: describe quota": true} {
+		if err := os.WriteFile("MSG", []byte(msg), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := CommitMsg(t.Context(), "MSG", &buf); (err == nil) != valid {
+			t.Errorf("commit %q: %v", msg, err)
+		}
+	}
+}

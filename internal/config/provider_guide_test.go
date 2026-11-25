@@ -13,11 +13,30 @@ func TestProviderGuideExamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	examples := strings.Split(string(guide), "```yaml\n")
-	checked := 0
+	checked, definitionsChecked := 0, 0
 	for _, block := range examples[1:] {
 		example, _, ok := strings.Cut(block, "```")
 		if !ok {
 			t.Fatal("unterminated YAML example")
+		}
+		if strings.Contains(example, "\nproviders:\n") {
+			t.Run("definition", func(t *testing.T) {
+				var root string
+				if strings.Contains(example, "# Embedded release definition") {
+					root, _ = layers(t, example)
+				} else {
+					root, _ = layers(t, "")
+					project(t, root, "example.yml", example)
+				}
+				for _, id := range []string{"jira", "github-issues"} {
+					config(t, root, "task_management: {provider: "+id+"}")
+					if _, _, err := LoadRepo(root); err != nil {
+						t.Fatalf("invalid definition: %v\n%s", err, example)
+					}
+				}
+			})
+			definitionsChecked++
+			continue
 		}
 		// Companions and client manifests use separate files and validators.
 		if !isRepositoryProviderExample(example) {
@@ -36,6 +55,9 @@ func TestProviderGuideExamples(t *testing.T) {
 		if err != nil || !found {
 			t.Fatalf("provider guide example does not load: %v\n%s", err, example)
 		}
+	}
+	if definitionsChecked < 2 {
+		t.Fatal("missing release or project provider definition example")
 	}
 	if checked == 0 {
 		t.Fatal("no repository provider configuration examples found")

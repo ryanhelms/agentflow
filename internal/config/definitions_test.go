@@ -131,6 +131,7 @@ func TestDefinitionConstraints(t *testing.T) {
 		{name: "append passes", project: "github-issues:\n    task_management:\n      settings: {labels: [triage, bug]}", config: "provider: github-issues"},
 		{name: "pattern", config: "provider: github-issues\n  settings: {repository: other/repo}",
 			want: "repository value other/repo must match ^nscaledev/"},
+		{name: "pattern rejects explicit reset", config: "provider: github-issues\n  settings: {repository: null}", want: "repository value <nil> must match"},
 		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: nscaledev/devflow}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -164,6 +165,8 @@ func TestInvalidDefinitions(t *testing.T) {
 	for _, tc := range []struct{ name, file, want string }{
 		{"version", "version: 2\nproviders: {}", "version: expected integer 1"},
 		{"unknown field", "version: 1\nproviders: {}\nextra: 1", "field extra not found"},
+		{"null settings", "version: 1\nproviders: {jira: {task_management: {settings: null}}}", "settings: expected an object"},
+		{"trailing document", "version: 1\nproviders: {}\n---\nunknown: true", "expected exactly one YAML document"},
 		{"unknown role", "version: 1\nproviders:\n  jira:\n    tasks: {}", "providers.jira.tasks: unknown role"},
 		{"config-only provider", "version: 1\nproviders:\n  linear:\n    task_management: {}", "linear is not available for task_management"},
 		{"contract", "version: 1\nproviders:\n  jira:\n    task_management: {contract: knowledge/v1}", "does not apply"},
@@ -218,5 +221,132 @@ func TestShippedReleaseDefinitionsLoad(t *testing.T) {
 	want := []Source{{LayerRelease, "release/providers.yml"}}
 	if !reflect.DeepEqual(c.Providers.Definitions, want) {
 		t.Fatalf("definitions = %v, want %v", c.Providers.Definitions, want)
+	}
+}
+
+func TestConstraintsCheckMergedObjectsAndLiteralKeys(t *testing.T) {
+	root, home := layers(t, `version: 1
+providers:
+  github-issues:
+    task_management:
+      constraints:
+        search: {lock: true}
+        'transitions.pr\.merged': {lock: true}
+  slack:
+    notifications:
+      settings:
+        native: {workspace_id: T0123456789, channel_id: C0123456789}
+      constraints:
+        native.channel_id: {lock: true}
+`)
+	config(t, root, "task_management: {provider: github-issues, settings: {search: {limit: 30}}}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := c.Providers.TaskManagement.Explain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := map[string]any{}
+	for _, s := range settings {
+		if s.Constraint != nil {
+			locked[s.Path] = s.Value
+		}
+	}
+	if !reflect.DeepEqual(locked, map[string]any{`transitions.pr\.merged`: "closed", "search": map[string]any{"limit": 30, "open_only": true}}) {
+		t.Fatalf("explained locks = %#v", locked)
+	}
+	for _, tc := range []struct{ def, want string }{
+		{"github-issues: {task_management: {settings: {transitions: {pr.merged: open}}}}", `transitions.pr\.merged is locked`},
+		{"slack: {notifications: {settings: {native: null}}}", "native.channel_id is locked"},
+	} {
+		user(t, home, "override.yml", "version: 1\nproviders:\n  "+tc.def)
+		if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: got %v, want %q", tc.def, err, tc.want)
+		}
+	}
+}
+
+func TestReleaseConstraintsCheckLegacySettings(t *testing.T) {
+	root, _ := layers(t, "version: 1\nproviders:\n  jira: {task_management: {constraints: {projects: {allow: [PLAT]}}}}")
+	config(t, root, "jira: {projects: [OPS]}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "value OPS is not allowed") {
+		t.Fatalf("invalid inherited projects: %v", err)
+	}
+	config(t, root, "jira: {site: https://legacy.example, projects: [PLAT]}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Providers.KnowledgeBase.Sources["site"] != configSource || c.Providers.TaskManagement.Sources["projects"] != configSource {
+		t.Fatal("legacy settings lost their repository source")
+	}
+}
+
+func TestRepositoryScopeSurvivesReleaseAndUserDefaults(t *testing.T) {
+	root, home := layers(t, constrained)
+	config(t, root, "jira: {projects: [INFRA]}")
+	user(t, home, "user.yml", "version: 1\nproviders:\n  jira: {task_management: {settings: {projects: []}}}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := c.Providers.TaskManagement
+	if got := s.RepositorySettings("projects").(*JiraSettings).Projects; !reflect.DeepEqual(got, []string{"INFRA"}) {
+		t.Fatalf("trusted projects %v", got)
+	}
+	if len(s.Settings.(*JiraSettings).Projects) != 0 || s.CheckTarget("projects", "OTHER") == nil || s.CheckTarget("projects", "INFRA") != nil {
+		t.Fatal("user preference or release allowlist lost")
+	}
+}
+
+func TestInlineNullSettingsAreRejected(t *testing.T) {
+	root, _ := layers(t, "")
+	config(t, root, "task_management: {settings: null}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "task_management.settings: expected an object") {
+		t.Fatal(err)
+	}
+	config(t, root, "task_management: {provider: github-issues, settings: {repository: null}}")
+	if _, _, err := LoadRepo(root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWinningDefinitionOwnsSemanticError(t *testing.T) {
+	root, home := layers(t, "")
+	config(t, root, "task_management: {provider: asana}")
+	project(t, root, "project.yml", "version: 1\nproviders: {asana: {task_management: {settings: {project: '10'}}}}")
+	user(t, home, "override.yml", "version: 1\nproviders: {asana: {task_management: {settings: {project: bad/project}}}}")
+	_, _, err := LoadRepo(root)
+	var def *DefinitionError
+	if !errors.As(err, &def) || def.Source != (Source{LayerUser, "~/.devflow/providers/override.yml"}) || !strings.Contains(err.Error(), "task_management.settings.project") {
+		t.Fatal(err)
+	}
+}
+
+func TestLockDistinguishesUnconfiguredAndEmptyRoutes(t *testing.T) {
+	root, home := layers(t, "version: 1\nproviders: {router: {notifications: {constraints: {routes: {lock: true}}}}}")
+	config(t, root, "notifications: {provider: router}")
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := c.Providers.Notifications.Explain()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, s := range settings {
+		if s.Path == "routes" {
+			found = s.Constraint != nil && s.Value == nil
+		}
+	}
+	if !found {
+		t.Fatalf("unset locked routes lost in explain: %+v", settings)
+	}
+	user(t, home, "router.yml", "version: 1\nproviders: {router: {notifications: {settings: {routes: {}}}}}")
+	if _, _, err := LoadRepo(root); err == nil || !strings.Contains(err.Error(), "routes is locked") {
+		t.Fatalf("accepted a different typed route map: %v", err)
 	}
 }

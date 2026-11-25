@@ -50,7 +50,11 @@ func (a *App) defaultIssueRepo(ctx context.Context) (string, error) {
 	if configured := a.issueSettings().Repository; configured != nil {
 		return issueScope(*configured)
 	}
-	d, err := a.detectForge(ctx)
+	return a.detectIssueRepo(ctx, a.Cfg.Providers.CodeHosting.Settings)
+}
+
+func (a *App) detectIssueRepo(ctx context.Context, hosting any) (string, error) {
+	d, err := a.detectForgeWith(ctx, hosting)
 	if err != nil {
 		return "", err
 	}

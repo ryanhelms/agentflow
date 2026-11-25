@@ -89,6 +89,9 @@ func (a *App) createAsanaTask(ctx context.Context, project, typ, title, descript
 	if err := asana.ValidateDraft("asana", d); err != nil {
 		return nil, err
 	}
+	if err := a.taskWriteScope(ctx, d.Scope); err != nil {
+		return nil, err
+	}
 	if !a.asanaSettings().HasProject(d.Scope) {
 		return nil, fmt.Errorf("asana project %q is not configured", d.Scope)
 	}
@@ -171,6 +174,9 @@ func (a *App) commentAsanaTask(ctx context.Context, key, text, token string) (an
 	if err != nil {
 		return nil, err
 	}
+	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
+		return nil, err
+	}
 	body := text + viaNote(a)
 	mapped, err := nativemap.AsanaComment(ref, body)
 	write, err := bindTaskWrite(ctx, mapped, err)
@@ -190,6 +196,9 @@ func (a *App) commentAsanaTask(ctx context.Context, key, text, token string) (an
 func (a *App) applyAsanaTransition(ctx context.Context, plan TransitionResult) (TransitionResult, error) {
 	ref, err := a.taskRef(ctx, plan.Key)
 	if err != nil {
+		return plan, err
+	}
+	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
 		return plan, err
 	}
 	if plan.Key != ref.String() || a.taskTransitions(ref.Scope)[plan.Event] != plan.To || plan.To == "none" || plan.From == asana.StateCompleted {

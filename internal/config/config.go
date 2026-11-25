@@ -78,6 +78,8 @@ type Repo struct {
 		TestCmd           string   `yaml:"test_cmd"`
 		LintCmd           string   `yaml:"lint_cmd"`
 	} `yaml:"policy"`
+
+	legacyJiraSite, legacyConfluenceSite bool
 }
 
 // Commit holds commit message rules.
@@ -123,23 +125,11 @@ var (
 
 // LoadRepo reads <root>/.devflow/config.yml. A missing file yields defaults and ok=false.
 func LoadRepo(root string) (*Repo, bool, error) {
-	var file struct {
-		Repo  `yaml:",inline"`
-		Extra map[string]yaml.Node `yaml:",inline"`
+	c, extra, found, err := loadRepoFile(root)
+	if err != nil {
+		return nil, found, err
 	}
-	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
-	found := err == nil
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, false, err
-	}
-	if found {
-		if err := yaml.Unmarshal(b, &file); err != nil {
-			return nil, true, fmt.Errorf(".devflow/config.yml: %w", err)
-		}
-	}
-	c := &file.Repo
-	c.applyDefaults()
-	providers, err := resolveProviders(c, file.Extra, root)
+	providers, err := resolveProviders(c, extra, root)
 	var defErr *DefinitionError
 	if errors.As(err, &defErr) {
 		return nil, found, err
@@ -148,13 +138,47 @@ func LoadRepo(root string) (*Repo, bool, error) {
 		return nil, found, fmt.Errorf(".devflow/config.yml: %w", err)
 	}
 	c.Providers = providers
-	// GitHub Issues and Asana use a trailer for task identity. Keep an explicit Jira subject
-	// convention when the repository has configured one.
-	if (providers.TaskManagement.Provider == "github-issues" || providers.TaskManagement.Provider == "asana") && c.Commit.RequireKey == nil {
-		optional := false
-		c.Commit.RequireKey = &optional
-	}
 	return c, found, nil
+}
+
+// LoadRepoCore reads repository policy, update and commit settings independently
+// of optional provider files. Provider operations must use LoadRepo.
+func LoadRepoCore(root string) (*Repo, bool, error) {
+	c, _, found, err := loadRepoFile(root)
+	return c, found, err
+}
+
+func loadRepoFile(root string) (*Repo, map[string]yaml.Node, bool, error) {
+	var file struct {
+		Repo  `yaml:",inline"`
+		Extra map[string]yaml.Node `yaml:",inline"`
+	}
+	b, err := os.ReadFile(filepath.Join(root, ".devflow", "config.yml"))
+	found := err == nil
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, false, err
+	}
+	if found {
+		if err := yaml.Unmarshal(b, &file); err != nil {
+			return nil, nil, true, fmt.Errorf(".devflow/config.yml: %w", err)
+		}
+	}
+	c := &file.Repo
+	c.legacyJiraSite = c.Jira.Site != ""
+	c.legacyConfluenceSite = c.Confluence.Site != "" || c.legacyJiraSite
+	c.applyDefaults()
+	// The repo alone selects the task provider. Its commit convention must
+	// remain available even when an unrelated definition cannot be loaded.
+	if node, ok := file.Extra["task_management"]; ok && c.Commit.RequireKey == nil {
+		var task struct {
+			Provider string `yaml:"provider"`
+		}
+		if err := node.Decode(&task); err == nil && (task.Provider == "github-issues" || task.Provider == "asana") {
+			optional := false
+			c.Commit.RequireKey = &optional
+		}
+	}
+	return c, file.Extra, found, nil
 }
 
 func (c *Repo) applyDefaults() {

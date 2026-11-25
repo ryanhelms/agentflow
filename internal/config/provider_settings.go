@@ -28,9 +28,11 @@ func mergeSetting(dst reflect.Value, value any, path string, rules reflect.Struc
 			dst.SetZero()
 			return nil
 		}
-		if dst.IsNil() {
-			dst.Set(reflect.New(dst.Type().Elem()))
+		next := reflect.New(dst.Type().Elem())
+		if !dst.IsNil() {
+			next.Elem().Set(dst.Elem())
 		}
+		dst.Set(next)
 		return mergeSetting(dst.Elem(), value, path, rules)
 	case reflect.Slice:
 		items, ok := value.([]any)
@@ -49,9 +51,12 @@ func mergeSetting(dst reflect.Value, value any, path string, rules reflect.Struc
 		if !ok {
 			return fmt.Errorf("%s: expected an object with string keys", path)
 		}
-		if dst.IsNil() {
-			dst.Set(reflect.MakeMap(dst.Type()))
+		merged := reflect.MakeMapWithSize(dst.Type(), dst.Len())
+		iter := dst.MapRange()
+		for iter.Next() {
+			merged.SetMapIndex(iter.Key(), iter.Value())
 		}
+		dst.Set(merged)
 		for _, key := range slices.Sorted(maps.Keys(fields)) {
 			mapKey := reflect.ValueOf(key)
 			item := reflect.New(dst.Type().Elem()).Elem()
@@ -80,14 +85,19 @@ func mergeSetting(dst reflect.Value, value any, path string, rules reflect.Struc
 	return nil
 }
 
-func mergeFields(dst reflect.Value, fields map[string]any, path string) error {
+func settingFields(t reflect.Type) map[string]reflect.StructField {
 	properties := make(map[string]reflect.StructField)
-	for _, field := range reflect.VisibleFields(dst.Type()) {
+	for _, field := range reflect.VisibleFields(t) {
 		// Embedded inline structs expose their tagged fields at the same level.
 		if name := field.Tag.Get("yaml"); name != "" && name != ",inline" {
 			properties[name] = field
 		}
 	}
+	return properties
+}
+
+func mergeFields(dst reflect.Value, fields map[string]any, path string) error {
+	properties := settingFields(dst.Type())
 	for _, name := range slices.Sorted(maps.Keys(fields)) {
 		propertyPath := path + "." + name
 		field, ok := properties[name]
