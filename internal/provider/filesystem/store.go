@@ -105,7 +105,7 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 				return nil
 			}
 		}
-		r, err := s.read(name)
+		r, err := s.readFrom(ctx, s.root, name, name)
 		if errors.Is(err, okf.ErrNotConcept) {
 			return nil
 		}
@@ -130,32 +130,41 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 	return records, nil
 }
 
-func (s *store) read(name string) (record, error) {
-	return s.readFrom(s.root, name, name)
+// An atomic publish may replace a regular file between Lstat and OpenFile.
+// Retry that race so readers see a complete revision. Only read a descriptor
+// whose identity was observed as a regular (non-symlink) directory entry.
+func openRegular(ctx context.Context, dir *os.Root, file string) (*os.File, fs.FileInfo, error) {
+	for ctx.Err() == nil {
+		info, err := dir.Lstat(file)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, nil, fmt.Errorf("%q must be a regular file", file)
+		}
+		// Open without blocking in case a pipe appeared at this path.
+		f, err := dir.OpenFile(file, readFlags, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+		opened, err := f.Stat()
+		if err == nil && os.SameFile(info, opened) {
+			return f, opened, nil
+		}
+		_ = f.Close()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return nil, nil, ctx.Err()
 }
 
-func (s *store) readFrom(dir *os.Root, file, name string) (record, error) {
-	info, err := dir.Lstat(file)
-	if err != nil {
-		return record{}, err
-	}
-	if !info.Mode().IsRegular() {
-		return record{}, fmt.Errorf("%q must be a regular file", name)
-	}
-	// A concurrent replacement could turn the name into a pipe between Lstat
-	// and OpenFile. Open without blocking and check the actual descriptor.
-	f, err := dir.OpenFile(file, readFlags, 0)
+func (s *store) readFrom(ctx context.Context, dir *os.Root, file, name string) (record, error) {
+	f, opened, err := openRegular(ctx, dir, file)
 	if err != nil {
 		return record{}, err
 	}
 	defer f.Close()
-	opened, err := f.Stat()
-	if err != nil {
-		return record{}, err
-	}
-	if !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
-		return record{}, fmt.Errorf("file %q changed while opening: %w", name, provider.ErrConflict)
-	}
 	data, err := io.ReadAll(f)
 	if err != nil {
 		return record{}, err
@@ -289,7 +298,7 @@ func (s *store) install(ctx context.Context, r record, data []byte, dirHandle *o
 		return err
 	}
 	if r.revision != "" {
-		current, err := s.readFrom(dir, file, r.name)
+		current, err := s.readFrom(ctx, dir, file, r.name)
 		if err != nil {
 			return fmt.Errorf("recheck original %q: %w", r.name, err)
 		}

@@ -247,7 +247,7 @@ func TestWriterRejectsSymlinkParentAtInstall(t *testing.T) {
 	dir := t.TempDir()
 	k := writer(t, dir, "okf")
 	file := writeBundleFile(t, dir, "team/guides/item.md", managedConcept)
-	r, err := k.read("team/guides/item.md")
+	r, err := k.get(t.Context(), provider.Ref{Instance: instance, Scope: "engineering", ID: "provider-architecture"})
 	if err != nil {
 		t.Fatal(err)
 	}
