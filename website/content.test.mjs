@@ -23,11 +23,10 @@ test("release links follow heading versions, not the previous tag in a compariso
 
 test("relative links open the known documentation route and never render raw HTML", () => {
   const site = releaseMetadata({}, source);
-  const doc = renderDocument("# Test\n[Providers](../providers.md#provider-definitions)\n<script>alert(1)</script>",
+  const doc = renderDocument("# Test\n[Providers](../providers.md#provider-definitions)\n<ScRiPt>alert(1)</ScRiPt>",
     { id: "enable", title: "Test", path: "docs/launch/enable.md", group: "Get started" }, site);
   assert.match(doc.html, /href="#docs\/providers\/provider-definitions"/);
-  assert.doesNotMatch(doc.html, /<script>/);
-  assert.match(doc.html, /&lt;script&gt;/);
+  assert.ok(doc.html.includes("&lt;ScRiPt&gt;alert(1)&lt;/ScRiPt&gt;"));
 });
 
 test("every published document resolves at build time", () => {

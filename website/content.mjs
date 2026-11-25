@@ -78,7 +78,7 @@ export function renderDocument(source, document, site, isDirectory = () => false
     return renderer.renderToken(tokens, i, options);
   };
   markdown.renderer.rules.heading_open = renderHeading;
-  const text = source.replace(/<!--[\s\S]*?-->/g, "").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
+  const text = source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
   const body = text.replace(/^# .+\r?\n/, "");
   return {
     ...document,
