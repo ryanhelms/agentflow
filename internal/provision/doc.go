@@ -25,7 +25,7 @@
 // call BuildPlan again to reconcile from observed state. There is no journal to
 // recover, and already published, conforming artifacts are kept.
 //
-// Issue #22 still needs the provider manifest catalog and loading, concrete
-// bootstrap distribution and environment-scoped probe and installer adapters,
-// credential resolution, client registration, and CLI/MCP entry points.
+// Guided CLI and MCP setup use the local installer for a user-pinned gh
+// executable on native macOS and Linux. The managedgh package loads the pin,
+// prefers a working PATH executable and resolves verified cache receipts.
 package provision
