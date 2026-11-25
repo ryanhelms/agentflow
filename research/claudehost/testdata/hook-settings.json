@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "probe",
+            "tool": "record",
+            "input": {
+              "text": "${prompt}",
+              "ids": [7, 0, 42],
+              "enabled": false
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
