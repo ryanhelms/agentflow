@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
@@ -28,6 +29,7 @@ type jiraNativeFixture struct {
 	missing    string
 	prepareErr error
 	writeErr   error
+	expiresAt  time.Time
 }
 
 func (f *jiraNativeFixture) Prepare(_ context.Context, call native.Call) (native.WriteBinding, error) {
@@ -37,7 +39,7 @@ func (f *jiraNativeFixture) Prepare(_ context.Context, call native.Call) (native
 	if call.Tool == f.missing {
 		return native.WriteBinding{}, native.ErrUnavailable
 	}
-	return native.WriteBinding{Provider: call.Provider, Server: call.Server, Tool: call.Tool, Origin: "https://mcp.atlassian.com", Connection: f.route}, nil
+	return native.WriteBinding{Provider: call.Provider, Server: call.Server, Tool: call.Tool, Origin: "https://mcp.atlassian.com", Connection: f.route, ExpiresAt: f.expiresAt}, nil
 }
 
 func (f *jiraNativeFixture) Write(_ context.Context, binding native.WriteBinding, call native.Call) (json.RawMessage, error) {
@@ -140,12 +142,17 @@ func TestJiraNativeContextFindsIssueAndParentRemoteLinks(t *testing.T) {
 
 func TestJiraNativeCommentBindsPayloadAndConnection(t *testing.T) {
 	a, fixture, ctx := jiraNativeApp(t)
+	fixture.expiresAt = time.Now().UTC().Add(time.Minute)
 	const body = "<script>\n**literal**"
 	preview, err := a.Comment(ctx, "PLAT-1", body, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	token := confirmation(t, preview)
+	pending := preview.(*Pending)
+	if pending.Approval == nil || !pending.Approval.ExpiresAt.Equal(fixture.expiresAt) {
+		t.Fatalf("approval deadline must match the provider connection: %+v", pending.Approval)
+	}
 	if _, err := a.Comment(ctx, "PLAT-1", "different text", token); !errors.Is(err, policy.ErrToken) {
 		t.Fatalf("changed payload error = %v", err)
 	}

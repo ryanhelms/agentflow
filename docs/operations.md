@@ -1,5 +1,67 @@
 # devflow operations
 
+## Prepare and apply an operation
+
+Use `devflow policy explain ACTION` in the worktree to inspect the personal
+preference, repository ceiling, mandatory review rules and effective approval
+window. Local and remote class defaults are set in `~/.devflow/config.yml`.
+Repository ceilings live in `.devflow/config.yml`. See the
+[configuration examples](../README.md#control-agent-approvals).
+
+To prepare a commit without staging files or moving the branch, supply the
+message and paths you intend to commit. Omit `--path` to use the staged index.
+
+```sh
+devflow commit --prepare -m "fix(PLAT-123): restore the project path" --path internal/setup/path.go
+```
+
+Use `devflow pr --prepare --draft --title TITLE` to inspect the publication
+candidate before pushing or opening the draft. Both preparations return the
+same candidate the corresponding apply command checks, including the Git tree
+and parent for commits or the head SHA, destinations and PR details for publication.
+
+For a standalone branch push, use `devflow push --prepare` or
+`devflow_push_prepare`. For an existing draft PR, use
+`devflow pr mark-ready --prepare` or `devflow_pr_mark_ready_prepare`.
+Repeat the CLI command with `--confirm-token TOKEN` to apply either preview.
+
+| Response | Next step |
+| --- | --- |
+| `prepared` | The policy permits automatic execution. Apply the candidate with the returned token. |
+| `needs_confirmation` | The owner shows the summary once. After explicit approval, apply with the returned token or grant approval to a waiting worker. |
+| `awaiting_approval` | Another worker owns the prompt. Read `devflow policy status ID` while waiting for its decision. |
+| `suggest` | Present the suggested commands for the developer to run. |
+
+If the owner receives `approval.previously_issued` for the same operation,
+reuse the existing question when the user has already seen it.
+
+To apply a reviewed commit, repeat the message and paths with
+`devflow commit --confirm-token TOKEN`. For a reviewed PR, repeat its arguments
+with `devflow pr --confirm-token TOKEN`. A changed candidate or an expired
+approval requires a new preview.
+
+A tighter review window shortens an existing approval when the active gate
+loads the new settings. Raising the window applies to new approvals.
+
+An operation bound to a native provider connection must also use that exact
+authenticated connection. Its approval expires at the earlier of the configured
+review deadline and the connection's review deadline. If the provider session
+ends or the account changes, prepare a fresh operation in the active session.
+Approvals issued by an older version without the shared approval journal need
+a fresh preview after upgrading.
+
+For a handoff, the owner can record the user's decision with
+`devflow policy approve ID --confirm-token TOKEN`. The worker reads the status
+and submits the same action with the approved operation ID as its confirmation
+token. Recording approval and applying it are separate steps. Only one caller
+can claim that operation. The MCP equivalents are `devflow_approval_status` and
+`devflow_approval_approve`. Share the operation ID for coordination and keep
+the owner's token private.
+
+A declined interactive prompt or an unanswered prompt at end of input cancels
+its request. A worker stops waiting when the reported state is `cancelled`,
+`consumed` or `expired`.
+
 ## Org secrets and variables
 
 Set at the `nscaledev` org level, visible to repos that use devflow. The caller

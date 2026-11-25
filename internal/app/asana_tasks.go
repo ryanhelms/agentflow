@@ -122,7 +122,7 @@ func (a *App) createAsanaTask(ctx context.Context, project, typ, title, descript
 	if write != nil {
 		summary["native_write"] = write.taskWritePreview
 	}
-	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	var result provider.WriteResult
@@ -177,7 +177,7 @@ func (a *App) commentAsanaTask(ctx context.Context, key, text, token string) (an
 	if err := a.taskWriteScope(ctx, ref.Scope); err != nil {
 		return nil, err
 	}
-	body := text + viaNote(a)
+	body := text + viaNote(a, "comment")
 	mapped, err := nativemap.AsanaComment(ref, body)
 	write, err := bindTaskWrite(ctx, mapped, err)
 	if err != nil {

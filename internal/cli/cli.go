@@ -79,12 +79,17 @@ Work
   scope [--json]                 changes and new TODOs that look outside the ticket
   comment [KEY] TEXT [--yes]     comment on the task
   collisions [KEY] [--json]      other PRs on this task or touching your files
-  commit [-m MSG] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
+  policy explain [ACTION]          show autonomy, repository ceilings and review windows
+  policy status ID                inspect a shared approval
+  policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker
+  push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
+  pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
+  commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
   preview [MSG]                  configured task effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
   secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
                                  preview or create tasks from configured security events
-  pr [--check] [--run] [--title T] [--draft] [--yes]   readiness check, then open the PR
+  pr [--check] [--run] [--title T] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR
   review [threads] [--json]      unresolved review threads on this branch's PR
   review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
@@ -196,7 +201,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
+	case "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -204,6 +209,10 @@ func quietCommand(cmd string) bool {
 
 func run(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
+	case "policy":
+		return runPolicy(ctx, args)
+	case "push":
+		return runBranchWrite(ctx, "push", args)
 	case "ui":
 		return runUI(ctx, args)
 	case "mcp":
@@ -342,12 +351,9 @@ func run(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		a.Gate.Autonomy.Local = config.Auto // the developer asked for it directly
-		out, err := a.ADRDraft(ctx, strings.Join(args[1:], " "), "", "", "", "")
-		if err != nil {
-			return err
-		}
-		return printJSON(out)
+		return confirmLoop(false, func(token string) (any, error) {
+			return a.ADRDraft(ctx, strings.Join(args[1:], " "), "", "", "", token)
+		})
 	case "release":
 		return runRelease(ctx, args)
 	case "update":
@@ -633,6 +639,16 @@ func runStart(ctx context.Context, args []string) error {
 func runCommit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
 	msg := fs.String("m", "", "commit message (otherwise built interactively)")
+	prepare := fs.Bool("prepare", false, "prepare the exact commit without writing it")
+	token := fs.String("confirm-token", "", "resume the exact reviewed change")
+	var paths []string
+	fs.Func("path", "include only this path (repeatable)", func(path string) error {
+		if path == "" {
+			return errors.New("--path requires a path")
+		}
+		paths = append(paths, path)
+		return nil
+	})
 	split := fs.Bool("split", false, "show the proposed commit groups")
 	dry := fs.Bool("dry-run", false, "validate and preview only")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
@@ -642,6 +658,18 @@ func runCommit(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	if *prepare || *token != "" || len(paths) > 0 {
+		if *msg == "" || *split || *dry || (*prepare && (*token != "" || *yes)) {
+			return errors.New("use -m MSG for an exact commit and select one of --prepare or --confirm-token")
+		}
+		if *prepare {
+			return writeResult(a.CommitPrepare(ctx, *msg, paths))
+		}
+		if *token != "" {
+			return writeResult(a.Commit(ctx, *msg, paths, *token))
+		}
+		return confirmLoop(*yes, func(tok string) (any, error) { return a.Commit(ctx, *msg, paths, tok) })
 	}
 	if *split {
 		groups, err := a.CommitPlan(ctx)
@@ -797,7 +825,16 @@ func runTransition(ctx context.Context, args []string) error {
 }
 
 func runPR(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "mark-ready" {
+		return runBranchWrite(ctx, "pr mark-ready", args[1:])
+	}
 	fs := flag.NewFlagSet("pr", flag.ContinueOnError)
+	prepare := fs.Bool("prepare", false, "prepare the exact publication without publishing it")
+	token := fs.String("confirm-token", "", "resume the exact reviewed publication")
+	body := fs.String("body", "", "pull request body")
+	var labels, reviewers []string
+	fs.Func("label", "label to apply (repeatable)", func(v string) error { labels = append(labels, v); return nil })
+	fs.Func("reviewer", "reviewer to request (repeatable)", func(v string) error { reviewers = append(reviewers, v); return nil })
 	check := fs.Bool("check", false, "readiness check only")
 	runCmds := fs.Bool("run", false, "also run test and lint commands")
 	title := fs.String("title", "", "PR title")
@@ -809,6 +846,21 @@ func runPR(ctx context.Context, args []string) error {
 	a, err := open(ctx)
 	if err != nil {
 		return err
+	}
+	in := app.PROpenInput{Title: *title, Body: *body, Reviewers: reviewers, Labels: labels}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "draft" {
+			in.Draft = draft
+		}
+	})
+	if *prepare || *token != "" {
+		if *check || *runCmds || (*prepare && (*token != "" || *yes)) {
+			return errors.New("use one of --prepare, --confirm-token or --check")
+		}
+		if *prepare {
+			return writeResult(a.PRPrepare(ctx, in))
+		}
+		return writeResult(a.PROpen(ctx, in, *token))
 	}
 	r, err := a.PRReady(ctx, *runCmds)
 	if err != nil {
@@ -827,10 +879,6 @@ func runPR(ctx context.Context, args []string) error {
 		}
 		return nil
 	}
-	in := app.PROpenInput{Title: *title}
-	if *draft {
-		in.Draft = draft
-	}
 	return confirmLoop(*yes, func(tok string) (any, error) { return a.PROpen(ctx, in, tok) })
 }
 
@@ -843,15 +891,24 @@ func confirmLoop(yes bool, fn func(token string) (any, error)) error {
 	if p, ok := out.(*app.Pending); ok {
 		switch p.Status {
 		case "suggest":
-			fmt.Println("Your autonomy is set to suggest. Run:")
+			fmt.Println(p.Reason)
 			for _, c := range p.Commands {
 				fmt.Println("  " + c)
 			}
 			return nil
 		case "needs_confirmation":
-			_ = printJSON(p.Summary)
+			if !yes {
+				release, err := p.OpenPrompt()
+				if err != nil {
+					return err
+				}
+				defer release()
+			}
+			if err := printApproval(p); err != nil {
+				return errors.Join(err, p.Cancel())
+			}
 			if !yes && !strings.HasPrefix(strings.ToLower(ask("Proceed? [y/N]: ")), "y") {
-				return errors.New("cancelled")
+				return errors.Join(errors.New("cancelled"), p.Cancel())
 			}
 			if out, err = fn(p.ConfirmToken); err != nil {
 				return err

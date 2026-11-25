@@ -92,7 +92,8 @@ func (a *App) publishConfluence(ctx context.Context, in DocsPublishInput, summar
 			}
 		}
 	}
-	if p, err := a.gate(policy.Remote, "docs_publish", summary, token, false, nil); p != nil || err != nil {
+	binding, _ := summary["native_binding"].(native.WriteBinding)
+	if p, err := a.gate(policy.Remote, "docs_publish", summary, token, false, nil, binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	out, err := apply()

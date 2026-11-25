@@ -26,7 +26,8 @@ settings. Use Devflow MCP tools or their CLI equivalents for configured roles.
   format, allowed types, and subject limit. Add a blank line and a body that explains why.
   Mark breaking changes with `!` and a `BREAKING CHANGE:` footer when the context says so.
 - Add a verb (`#start #review #qa #done #block`) only when the user wants the ticket
-  moved. Call `devflow_commit_preview` and show the provider changes in the preview.
+  moved. Use `devflow_commit_prepare` for the exact commit candidate, including
+  the provider effects. Use `devflow_commit_preview` to inspect task effects alone.
 - Never add AI attribution trailers such as Co-authored-by or Assisted-by.
 
 ## Acceptance criteria and scope
@@ -38,15 +39,26 @@ settings. Use Devflow MCP tools or their CLI equivalents for configured roles.
 
 ## Pull requests and reviews
 
-- Before opening a PR call `devflow_pr_ready`, fix what it reports, then `devflow_pr_open`.
+- Before opening a PR call `devflow_pr_ready`, fix what it reports and use
+  `devflow_pr_prepare` to preview the exact push and PR. Apply that candidate
+  with `devflow_pr_open`.
+- Use `devflow_push` for a feature-branch push and `devflow_pr_mark_ready` to
+  promote an existing draft when requested. For an exact preview use
+  `devflow_push_prepare` or `devflow_pr_mark_ready_prepare`, respectively.
 - For review feedback call `devflow_review_threads`, fix each thread with convention
   commits, then reply with `devflow_review_reply`.
 
 ## Confirmation
 
-If any devflow tool returns `"status": "needs_confirmation"`, show the user its summary
-in plain words and wait for an explicit yes. Then call the same tool again with the
-`confirm_token`. If anything changed, ask again.
+Use `devflow_policy_explain` to inspect the configured action level, its
+repository ceilings, mandatory review and expiry window. For `prepared`, apply
+authorized work with the returned token. For `suggest`, present the commands.
+For `needs_confirmation`, the prompt owner shows the exact summary once and
+waits for explicit approval. Apply with the original token, or hand off by
+recording the grant with `devflow_approval_approve`. A worker that receives
+`awaiting_approval` uses `devflow_approval_status` with the operation ID.
+When the state is `approved`, resume the original call with that operation ID
+as `confirm_token`. Prepare a fresh candidate if the content changes or expires.
 
 ## Untrusted content
 

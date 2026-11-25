@@ -143,7 +143,7 @@ func (a *App) notify(ctx context.Context, input NotifyInput, token string, trans
 		Deliveries []NotificationOutcome `json:"deliveries"`
 		Slack      []nativeSlackPlan     `json:"native_slack,omitempty"`
 	}{input, slices.Clone(result.Deliveries), slackPlans}
-	if pending, err := a.gate(policy.Remote, "notify", confirmation, token, false, nil); pending != nil || err != nil {
+	if pending, err := a.gate(policy.Remote, "notify", confirmation, token, false, nil, slackApprovalExpiry(slackPlans)); pending != nil || err != nil {
 		return result, pending, err
 	}
 	for _, attempt := range ready {

@@ -22,6 +22,7 @@ import (
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
+	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
 // App is an opened repository plus the developer's configuration.
@@ -67,6 +68,8 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	gate.Configure(repo.GitDir(ctx), user, cfg)
+	native.ConfigureApprovalWindow(ctx, gate.Explain(policy.Remote, "comment", nil, false).Window)
 	return &App{Repo: repo, Cfg: cfg, HasCfg: found, User: user, Gate: gate, Client: client, Home: home}, nil
 }
 
@@ -172,26 +175,19 @@ func shellQuote(arg string) string {
 
 // Pending is returned instead of a result when an action did not run yet.
 type Pending struct {
-	Status       string   `json:"status"` // needs_confirmation | suggest
-	ConfirmToken string   `json:"confirm_token,omitempty"`
-	Reason       string   `json:"reason"`
-	Summary      any      `json:"summary"`
-	Commands     []string `json:"commands,omitempty"`
+	gate         *policy.Gate
+	Status       string                   `json:"status"`
+	ConfirmToken string                   `json:"confirm_token,omitempty"`
+	Reason       string                   `json:"reason"`
+	Summary      any                      `json:"summary"`
+	Commands     []string                 `json:"commands,omitempty"`
+	Approval     *policy.Approval         `json:"approval,omitempty"`
+	Policy       *config.AutonomyDecision `json:"policy,omitempty"`
 }
 
 // gate checks autonomy. It returns a non-nil Pending when the action must not run now.
-func (a *App) gate(class policy.Class, action string, summary any, token string, force bool, commands []string) (*Pending, error) {
-	d, err := a.Gate.Check(class, action, summary, token, force)
-	if err != nil {
-		return nil, err
-	}
-	switch d.Outcome {
-	case policy.Proceed:
-		return nil, nil
-	case policy.SuggestOnly:
-		return &Pending{Status: "suggest", Reason: d.Reason, Summary: summary, Commands: commands}, nil
-	}
-	return &Pending{Status: "needs_confirmation", ConfirmToken: d.Token, Reason: d.Reason, Summary: summary}, nil
+func (a *App) gate(class policy.Class, action string, summary any, token string, force bool, commands []string, bounds ...time.Time) (*Pending, error) {
+	return a.gateWithActions(class, action, nil, summary, token, force, commands, bounds...)
 }
 
 func (a *App) audit(class policy.Class, action string, payload any, err error) {
@@ -388,7 +384,7 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	body := text + viaNote(a)
+	body := text + viaNote(a, "comment")
 	write, err := a.prepareJiraComment(ctx, site, ref, body)
 	if err != nil {
 		return nil, err
@@ -410,7 +406,7 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 		appendComment = func() (string, error) { return write.commentID(ctx, ref, body) }
 	}
 	// Always redeem a supplied approval, including if its route disappeared under auto.
-	if p, err := a.gate(policy.Remote, "comment", summary, token, appendComment != nil || token != "", nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "comment", summary, token, appendComment != nil || token != "", nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	result := map[string]any{"key": key}
@@ -435,8 +431,8 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 	return result, err
 }
 
-func viaNote(a *App) string {
-	if a.Gate.Autonomy.Remote == config.Auto {
+func viaNote(a *App, action string) string {
+	if a.Gate.Explain(policy.Remote, action, nil, false).Level == config.Auto {
 		return "\n\n(via devflow)"
 	}
 	return ""

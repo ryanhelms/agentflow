@@ -304,7 +304,7 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 		summary["warning"] = "others already have work on this ticket: " + strings.Join(col.OthersOnTicket, ", ")
 	}
 	desktop := writes != nil && writes.Assignment.Binding.Owner == "devflow"
-	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}, writes.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	_, _ = a.Repo.Git(ctx, "fetch", "--quiet", "origin")
@@ -543,7 +543,7 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 			}
 		}
 	}
-	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	if apply != nil {

@@ -40,7 +40,9 @@ func runTask(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if term.IsTerminal(int(os.Stdin.Fd())) {
+	interactive := term.IsTerminal(int(os.Stdin.Fd()))
+	a.Gate.PreviewOnly = *dry || (!*yes && !interactive)
+	if interactive {
 		ctx = app.WithJiraWriteCLI(ctx)
 	}
 	create := func(token string) (any, error) {
@@ -63,18 +65,32 @@ func runTask(ctx context.Context, args []string) error {
 		}
 		return errors.New(p.Reason)
 	}
+	if p.Status == "prepared" && !*yes && !interactive {
+		if err := printApproval(p); err != nil {
+			return err
+		}
+		return errors.New("pass --yes to approve noninteractive task creation")
+	}
+	if p.Status == "awaiting_approval" {
+		return printApproval(p)
+	}
 	if p.Status != "needs_confirmation" || p.ConfirmToken == "" {
 		return errors.New("missing task creation confirmation")
 	}
 	if !*yes {
-		if err := printJSON(p.Summary); err != nil {
+		release, err := p.OpenPrompt()
+		if err != nil {
 			return err
+		}
+		defer release()
+		if err := printApproval(p); err != nil {
+			return errors.Join(err, p.Cancel())
 		}
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return errors.New("pass --yes to approve noninteractive task creation")
 		}
 		if !strings.EqualFold(ask("Create this task? [y/N] "), "y") {
-			return errors.New("cancelled")
+			return errors.Join(errors.New("cancelled"), p.Cancel())
 		}
 	}
 	out, err = create(p.ConfirmToken)

@@ -310,10 +310,17 @@ func TestLegacyPROpenApprovedDestination(t *testing.T) {
 	log := filepath.Join(bin, "push")
 	t.Setenv("FIXTURE_PUSH", log)
 	const script = `#!/bin/sh
-if [ "$1" = push ]; then
-	printf '%s\n' "$@" > "$FIXTURE_PUSH"
-	exit 0
-fi
+case " $* " in
+	*" push --no-follow-tags "*|*" ls-remote --refs "*)
+		while [ "$1" = -c ]; do shift 2; done
+		if [ "$1" = push ]; then
+			printf '%s\n' "$@" > "$FIXTURE_PUSH"
+		else
+			printf '%s\t%s\n' "$("$FIXTURE_GIT" rev-parse HEAD)" "$5"
+		fi
+		exit 0
+		;;
+esac
 exec "$FIXTURE_GIT" "$@"
 `
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0700); err != nil {
@@ -344,7 +351,8 @@ exec "$FIXTURE_GIT" "$@"
 		t.Fatalf("opened: %v, %v", v, err)
 	}
 	b, err := os.ReadFile(log)
-	if err != nil || string(b) != "push\n--set-upstream\n--\norigin\nrefs/heads/"+branch+":refs/heads/"+branch+"\n" {
+	sha, shaErr := a.Repo.Git(ctx, "rev-parse", "HEAD")
+	if err != nil || shaErr != nil || string(b) != "push\n--no-follow-tags\n--recurse-submodules=no\n--\norigin\n"+strings.TrimSpace(sha)+":refs/heads/"+branch+"\n" {
 		t.Fatalf("push args: %q, %v", b, err)
 	}
 }
