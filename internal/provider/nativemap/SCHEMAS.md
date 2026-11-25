@@ -10,14 +10,17 @@ the principal's access to the selected resource.
 | Jira Cloud | `task.get` | `getJiraIssue` | One known Jira issue key in its project, on the configured Rovo v2 site |
 | Confluence Cloud | `document.get` | `getConfluenceContent` | One published page by ID in a known space, with a full Markdown body and no reported conversion loss |
 | Asana | `task.get` | `get_task` | One task GID in a known project, in the configured Asana v2 workspace |
+| Asana | `task.create`, `task.transition`, `task.comment` | `create_tasks`, `update_tasks`, `add_comment` | One task in a configured project, with completion as the mapped transition |
 | Slack | `slack.thread.read` | `slack_read_thread` | First page of up to 20 messages in one known thread in a configured workspace |
 | Slack | `notification.deliver` | `slack_send_message` | One top-level message to a configured conversation, after policy and receipt preconditions |
 | GitHub | `task.get` | `issue_read`, method `get` | One issue number in a known github.com repository |
+| GitHub | `task.create`, `task.transition`, `task.comment` | `issue_write`, `add_issue_comment` | One issue in the exact github.com repository, with open-to-closed transitions |
 
-`CapabilityFor` returns `provider.ErrUnsupported` for other provider and
-operation pairs. In particular, native task search, creation, assignment,
-comments and transitions, document search and publication, and GitHub PR,
-release, deployment and security operations are outside this mapping.
+The task-write constructors return a separate `TaskWrite` with the vendor
+call and a typed acknowledgement decoder. The table's other operations
+are exposed through `CapabilityFor`. Native task search and assignment, plus
+GitHub PR, release, deployment and security operations, are outside these
+task mappings.
 
 ## Caller contract
 
@@ -173,3 +176,34 @@ may remove.
 [GitHub MCP issue tool inputs and implementation](https://github.com/github/github-mcp-server/blob/main/pkg/github/issues.go) ·
 [GitHub issue output schema](https://pkg.go.dev/github.com/github/github-mcp-server/v2/pkg/github#IssueDetailsOutput) ·
 [GitHub typed MCP results](https://github.com/github/github-mcp-server/blob/main/docs/typed-tool-schemas.md)
+
+
+## Task writes → `provider.WriteResult`
+
+An Asana create submits one item to `create_tasks` with an explicit
+`project_id` and matching `default_project`. The item's `notes` preserve
+Devflow template and link metadata. Completion submits one item to
+`update_tasks` with `task_id` and `completed: true`. The decoder requires
+one successful item and an empty failure list. Comments use the task GID and
+plain text. The story acknowledgement must identify that same task.
+
+A GitHub create supplies an exact owner, repository, title, Markdown body,
+and any labels to `issue_write` with method `create`. A bounded repository
+lookup checks the canonical repository name and binds its numeric identity in
+the approval. Closing uses method `update` with only the issue coordinates
+and state. A comment sends the literal body to `add_issue_comment`. The
+acknowledgement must contain an HTTPS issue permalink on the exact
+repository and, when applicable, the exact issue and comment numbers.
+
+Task writes use a prepared, direct authenticated connection. The application
+prepares the same route and payload on confirmation and uses reads on that
+connection to establish task identity, project membership or issue state.
+Create and comment spend a durable claim for the exact approval before
+dispatch. Any ambiguous acknowledgement retains the claim. Explicit
+automation IDs and GitHub template-marker creation use the existing
+provider adapters. Asana section moves use the existing project-scoped
+section route.
+
+[Asana MCP tools](https://developers.asana.com/docs/mcp-tools-reference) ·
+[GitHub issue write implementations](https://github.com/github/github-mcp-server/blob/main/pkg/github/issues.go) ·
+[GitHub repository lookup](https://github.com/github/github-mcp-server/blob/main/pkg/github/search.go)

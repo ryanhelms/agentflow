@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/nscaledev/devflow/internal/config"
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/asana"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -105,19 +108,83 @@ func (a *App) createAsanaTask(ctx context.Context, project, typ, title, descript
 		"provider": "asana", "task": d,
 		"field_mapping": map[string]string{"scope": "projects", "title": "name", "description": "notes", "template": "notes metadata", "links": "notes metadata"},
 	}
+	var write *boundTaskWrite
+	if os.Getenv("GITHUB_ACTIONS") != "true" {
+		mapped, err := nativemap.AsanaCreate(d)
+		write, err = bindTaskWrite(ctx, mapped, err)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if write != nil {
+		summary["native_write"] = write.taskWritePreview
+	}
 	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
-	tasks, err := a.asanaTasks()
-	if err != nil {
-		return nil, err
+	var result provider.WriteResult
+	if write != nil {
+		result, err = a.applyTaskAppend(ctx, token, write, func() (provider.WriteResult, error) {
+			return createBoundAsanaTask(ctx, d, write)
+		})
+	} else {
+		var tasks provider.Tasks
+		tasks, err = a.asanaTasks()
+		if err != nil {
+			return nil, err
+		}
+		result, err = tasks.Create(ctx, d, provider.WriteOptions{})
 	}
-	result, err := tasks.Create(ctx, d, provider.WriteOptions{})
 	a.audit(policy.Remote, "ticket_create", summary, err)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]string{"key": taskKey(result.Ref), "url": result.URL}, nil
+}
+
+func createBoundAsanaTask(ctx context.Context, draft provider.TaskDraft, write *boundTaskWrite) (provider.WriteResult, error) {
+	result, err := write.apply(ctx)
+	if err != nil {
+		return result, err
+	}
+	task, err := write.task(ctx, result.Ref)
+	if err != nil {
+		return provider.WriteResult{}, fmt.Errorf("%w: verify native asana task creation: %w", native.ErrWriteUncertain, err)
+	}
+	if task.Title != draft.Title || task.Description != draft.Description ||
+		!reflect.DeepEqual(task.Template, draft.Template) ||
+		(len(task.Links)+len(draft.Links) > 0 && !reflect.DeepEqual(task.Links, draft.Links)) {
+		return provider.WriteResult{}, fmt.Errorf("%w: asana creation did not preserve approved task fields: %w", native.ErrWriteUncertain, provider.ErrConflict)
+	}
+	result.URL = task.URL
+	return result, nil
+}
+
+func (a *App) commentAsanaTask(ctx context.Context, key, text, token string) (any, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, errors.New("asana comment is empty")
+	}
+	if os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("DEVFLOW_OPERATION_ID") != "" {
+		return nil, provider.Unsupported("asana", "idempotent automation comments")
+	}
+	ref, err := a.taskRef(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	body := text + viaNote(a)
+	mapped, err := nativemap.AsanaComment(ref, body)
+	write, err := bindTaskWrite(ctx, mapped, err)
+	if err != nil {
+		return nil, err
+	}
+	if write == nil {
+		return nil, provider.Unsupported("asana", "comments without a direct native connection")
+	}
+	task, err := a.taskForWrite(ctx, ref, write)
+	if err != nil {
+		return nil, err
+	}
+	return a.commentBoundTask(ctx, task, body, token, write)
 }
 
 func (a *App) applyAsanaTransition(ctx context.Context, plan TransitionResult) (TransitionResult, error) {

@@ -253,12 +253,11 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	if err != nil {
 		return nil, err
 	}
-	tasks, closeStore, err := a.openTaskStore(ctx)
+	write, err := a.taskTransitionWrite(ctx, ref, flowmap.BranchCreated, "")
 	if err != nil {
 		return nil, err
 	}
-	defer closeStore()
-	task, err := tasks.Get(ctx, ref)
+	task, write, err := a.prepareTaskForWrite(ctx, ref, write)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +290,10 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	var plan TransitionResult
 	var assignment provider.TaskAssignment
 	if a.usesIssues() {
+		tasks, err := a.issueTasks(ctx)
+		if err != nil {
+			return nil, err
+		}
 		var ok bool
 		assignment, ok = tasks.(provider.TaskAssignment)
 		if !ok {
@@ -306,6 +309,9 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 			return nil, err
 		}
 		s["transition"] = plan
+		if plan.To != "" && write != nil {
+			s["native_write"] = write.taskWritePreview
+		}
 	}
 	if assignment != nil || plan.To != "" {
 		level := a.Gate.Autonomy
@@ -313,7 +319,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 			class = policy.Remote
 		}
 	}
-	if p, err := a.gate(class, "start", s, token, false, nil); p != nil || err != nil {
+	if p, err := a.gate(class, "start", s, token, token != "", nil); p != nil || err != nil {
 		return p, err
 	}
 	if err := a.ensureTaskBranch(ctx, ref, res); err != nil {
@@ -330,7 +336,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		res.Assigned = true
 	}
 	if plan.To != "" {
-		tr, err := a.ApplyTransition(ctx, plan)
+		tr, err := a.applyPreparedTaskTransition(ctx, ref, plan, write)
 		res.Transition = &tr
 		if err != nil {
 			return res, err

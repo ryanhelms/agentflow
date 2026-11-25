@@ -317,6 +317,9 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 	if err != nil {
 		return nil, err
 	}
+	if !dryRun && (a.usesIssues() || a.usesAsana()) {
+		return a.transitionProviderTask(ctx, key, event, token, operationID)
+	}
 	plan, err := a.PlanTransition(ctx, key, event)
 	plan.operationID = operationID
 	if err != nil || dryRun || plan.To == "" {
@@ -330,17 +333,6 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 		Site string `json:"site"`
 	}{plan, a.jiraSettings().Site}
 	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
-	if a.usesIssues() || a.usesAsana() {
-		ref, err := a.taskRef(ctx, plan.Key)
-		if err != nil {
-			return nil, err
-		}
-		summary = struct {
-			TransitionResult
-			TaskRef string `json:"task_ref"`
-		}{plan, ref.String()}
-		commands = nil
-	}
 	if p, err := a.gate(policy.Remote, "transition", summary, token, false, commands); p != nil || err != nil {
 		return p, err
 	}
@@ -349,7 +341,10 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 
 // Comment posts a comment on a ticket.
 func (a *App) Comment(ctx context.Context, key, text, token string) (any, error) {
-	if a.usesFileTasks() || a.usesAsana() {
+	if a.usesAsana() {
+		return a.commentAsanaTask(ctx, key, text, token)
+	}
+	if a.usesFileTasks() {
 		return nil, provider.Unsupported(a.Cfg.Providers.TaskManagement.Provider, "comments")
 	}
 	if a.usesIssues() {
