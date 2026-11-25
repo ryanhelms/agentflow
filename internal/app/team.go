@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -182,8 +183,41 @@ func (a *App) PostEOD(ctx context.Context, notes map[string]string, token string
 	}
 	summary := maps.Clone(notes)
 	summary["site"] = site
-	if p, err := a.gate(policy.Remote, "eod", summary, token, false, nil); p != nil || err != nil {
+	var approval any = summary
+	writes := make([]*jiraWrite, 0, len(keys))
+	for _, key := range keys {
+		write, err := a.prepareJiraComment(ctx, site, refs[key], "End of day: "+notes[key]+viaNote(a))
+		if err != nil {
+			return nil, err
+		}
+		if write == nil {
+			if len(writes) != 0 {
+				return nil, errors.New("the jira connection cannot prepare every end-of-day comment")
+			}
+			break
+		}
+		writes = append(writes, write)
+	}
+	if len(writes) != 0 {
+		approval = struct {
+			Notes  map[string]string `json:"notes"`
+			Native []*jiraWrite      `json:"native"`
+		}{summary, writes}
+	}
+	if p, err := a.gate(policy.Remote, "eod", approval, token, false, nil); p != nil || err != nil {
 		return p, err
+	}
+	if len(writes) != 0 {
+		posted := make(map[string]bool, len(keys))
+		for i, write := range writes {
+			_, err := write.run(ctx)
+			a.audit(policy.Remote, "eod", write, err)
+			posted[keys[i]] = err == nil
+			if err != nil {
+				return posted, err
+			}
+		}
+		return posted, nil
 	}
 	j, err := a.jiraTasks(nil)
 	if err != nil {

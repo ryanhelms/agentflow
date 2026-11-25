@@ -77,7 +77,7 @@ func (a *App) ApplySetup(ctx context.Context, req SetupAction, token string) (an
 		}
 	default:
 		for _, requirement := range plan.Requirements {
-			if !requirement.Ready {
+			if !requirement.Ready && !requirement.VerifyInClient {
 				return plan, nil
 			}
 		}

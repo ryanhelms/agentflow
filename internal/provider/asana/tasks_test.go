@@ -258,7 +258,7 @@ func TestTemplateMetadataAndNativeEdits(t *testing.T) {
 	pin := provider.TaskTemplateRef{Name: "work", Revision: "01"}
 	link := provider.Ref{Instance: "filesystem", Scope: "design", ID: "capacity"}
 	draft := provider.TaskDraft{Title: "Plan", Scope: "10", Description: "## Objective\nEditable", Template: &pin, Links: []provider.Link{{Ref: &link}}}
-	notes, err := encodeNotes(draft)
+	notes, err := EncodeTaskNotes(draft)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func TestTemplateMetadataAndNativeEdits(t *testing.T) {
 
 func TestLiteralNotesPrefix(t *testing.T) {
 	literal := notesPrefix + "{user text}\n\nMore"
-	notes, err := encodeNotes(provider.TaskDraft{Description: literal})
+	notes, err := EncodeTaskNotes(provider.TaskDraft{Description: literal})
 	if err != nil {
 		t.Fatal(err)
 	}

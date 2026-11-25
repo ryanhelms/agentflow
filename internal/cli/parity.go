@@ -14,19 +14,31 @@ import (
 // equivalent a CLI command over the same internal/app method.
 
 // parseInterleaved parses flags that may appear before, between or after
-// positional arguments, so `ac done PLAT-1 --evidence abc123 item` works.
+// positional arguments. Everything after the flag terminator is literal,
+// including a comment body or checklist item spelled "--yes".
 func parseInterleaved(fs *flag.FlagSet, args []string) ([]string, error) {
-	var positional []string
-	for {
-		if err := fs.Parse(args); err != nil {
-			return nil, err
+	var options, positional []string
+	for len(args) > 0 {
+		arg := args[0]
+		args = args[1:]
+		if arg == "--" {
+			positional = append(positional, args...)
+			break
 		}
-		if fs.NArg() == 0 {
-			return positional, nil
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			positional = append(positional, arg)
+			continue
 		}
-		positional = append(positional, fs.Arg(0))
-		args = fs.Args()[1:]
+		options = append(options, arg)
+		name, _, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if f := fs.Lookup(name); f != nil && !inline && len(args) > 0 {
+			if b, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !b.IsBoolFlag() {
+				options = append(options, args[0])
+				args = args[1:]
+			}
+		}
 	}
+	return positional, fs.Parse(options)
 }
 
 const acUsage = "usage: devflow ac [list] [KEY] [--json] | devflow ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]"
@@ -161,8 +173,13 @@ func runReview(ctx context.Context, args []string) error {
 	if len(args) > 0 && args[0] == "threads" {
 		args = args[1:]
 	}
-	if len(args) != 0 {
-		return errors.New("usage: devflow review [threads] | devflow review reply THREAD_ID BODY [--yes]")
+	fs := flag.NewFlagSet("review", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print unresolved review threads as JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: devflow review [threads] [--json] | devflow review reply THREAD_ID BODY [--yes]")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -171,6 +188,9 @@ func runReview(ctx context.Context, args []string) error {
 	out, err := a.ReviewThreads(ctx)
 	if err != nil {
 		return err
+	}
+	if *asJSON {
+		return printJSON(out)
 	}
 	threads, _ := out["threads"].([]gh.Thread)
 	if out["pr"] == nil {

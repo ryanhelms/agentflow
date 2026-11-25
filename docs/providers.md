@@ -111,15 +111,15 @@ Jira task operations use `task_management.settings.site`. The project list in
 `task_management.settings.projects` scopes My Work, which looks in active sprints
 first. Existing Jira keys, acceptance checklists, and per-project event and verb
 mappings in `flow-map.yml` continue to work. A transition uses the destination
-status name and rechecks the current status before writing. When a provider
-overrides the legacy Jira site, pass its URL to `devflow login --site URL` to
-store the credential for that site.
+status name and rechecks the current status before writing. Jira issue context
+includes web links from the issue and its parent. For a legacy API connection,
+`devflow login --site URL` stores its credential for the configured site.
 
 Confluence search uses `knowledge_base.settings.site` and returns page IDs, space
-keys, titles, URLs, excerpts and published revisions. Set `CONFLUENCE_USER`
-and `CONFLUENCE_TOKEN` together to supply knowledge credentials. With those variables unset, a separate
-site uses its own Atlassian keychain entry. A shared site also accepts the existing
-`JIRA_USER` and `JIRA_TOKEN` environment pair.
+keys, titles, URLs, excerpts and published revisions. Existing REST automation
+can set `CONFLUENCE_USER` and `CONFLUENCE_TOKEN` together. With those variables
+unset, the legacy adapter can use its Atlassian keychain entry. A shared site
+also accepts the existing `JIRA_USER` and `JIRA_TOKEN` environment pair.
 
 For GitHub pull requests, forge detection selects the source remote for the
 push and the target repository for the PR. The source must have one GitHub.com
@@ -135,9 +135,89 @@ MCP client. Use `--client NAME` to select a desktop client even if its executabl
 is absent from the current shell.
 
 `devflow setup verify` and `devflow doctor --providers` report failed checks
-as errors. Use provider credentials in the environment where the command runs.
+as errors. The plan reports service-account prerequisites for headless runners.
 `devflow setup apply --client NAME` adds the project client entry after approval.
 Readiness diagnostics identify missing companions and hosted MCP prerequisites.
+
+### Interactive provider setup
+
+The plan lists official provider tools in `provider_tools`. The MCP client
+checks its own connected servers and uses the provider MCP when it supports the
+requested operation. Jira and Confluence share the Atlassian connector. Slack
+and Asana have their own OAuth connectors. GitHub has an official MCP and the
+existing managed `gh` fallback. Atlassian's Teamwork Graph CLI is available
+as a fallback for Jira and Confluence.
+
+If a connector is absent, the setup agent offers to install or register the
+official integration using the guide from the plan. When the provider reports
+sign-in required, the agent starts the client's OAuth action, then waits for
+the user to finish the consent flow. With Claude Code and Codex, it can use
+the configured server's name:
+
+```bash
+devflow setup login --provider jira --client claude-desktop --server atlassian
+devflow setup login --provider slack --client codex --server slack
+devflow setup login --provider jira  # starts the installed Teamwork Graph CLI login
+```
+
+The command delegates to the native tool and lets it store the login.
+Use the host's Connect or Sign in action for clients without a native login
+command. Retry the original operation in the chosen tool after sign-in. Jira and
+Confluence require separate product access checks even with the same connector.
+A permission denial calls for access to the affected product, project or space.
+
+A standalone plan cannot list the tools or sign-in state of a sibling MCP
+server owned by the host. Validate the available read capabilities in the
+agent session. Interactive setup works without exporting personal credentials.
+
+Devflow routes Jira work and issue context, Confluence search, and individual
+Asana and GitHub issue reads through the selected provider's MCP where supported.
+Codex can call a provider tool directly through App Server. In Claude Code and
+other MCP hosts, the Devflow read can return `native_read_required`. The host
+uses its existing provider connection for the exact requested tool and inputs,
+then passes the result back to the original Devflow tool in `native_results`.
+Other clients can opt into the same flow with `provider_mcp: true`.
+
+Jira and Confluence can use the signed-in Teamwork Graph CLI when the MCP
+capability is missing. Interactive GitHub API calls use the signed-in `gh`
+client. Explicit GitHub workflow tokens retain the existing service-account
+path. When a provider rejects access, report the rejected site or scope and
+check its permissions. When authentication is required, start the provider
+client's sign-in and retry after consent. Other existing REST or webhook
+operations retain their current credential behavior during migration.
+Devflow-managed writes continue through its confirmation and audit policy.
+
+Supported native writes use a connected Codex MCP client. On the CLI, use
+`devflow --native-client codex COMMAND` to select its provider connections.
+Devflow retains the OAuth session from preview until dispatch and binds the
+approval to the exact operation, arguments and host. If the provider needs
+sign-in, the setup agent launches its OAuth flow. After consent, request a
+fresh preview. A permission denial or uncertain write stops the operation
+on the selected route. Host-mediated read continuations also work in Claude
+Code and other clients. Direct OAuth session binding for writes is currently
+provided by Codex App Server.
+
+| Provider | Native writes |
+| --- | --- |
+| Jira | Unlinked issue creation, comments, self-assignment, forward transitions and web links |
+| Confluence | Version-checked replacement of an existing published page |
+| Asana | Task creation, completion and comments |
+| GitHub Issues | Untemplated issue creation, closing and comments. Existing-task template validation also uses the authenticated issue adapter when verifying raw issue body markers. |
+| Slack | Top-level delivery to a configured workspace and conversation after scope verification |
+
+For example, `devflow --native-client codex comment APP-42 "Ready for review"`
+uses the same task comment operation as `devflow_comment`. To post Jira end-of-day
+notes with the same client, run `devflow --native-client codex eod post "APP-42=Reviewed the change"`.
+When Devflow prompts, review the target and text before approving. The CLI also
+accepts `--yes` for that approval.
+
+To add a Jira web link, use `devflow_jira_remote_link` or
+`devflow --native-client codex task link APP-42 --url https://docs.example.org/runbook --title Runbook`.
+Atlassian's full catalog endpoint, `https://mcp.atlassian.com/v2/mcp?tools=all`,
+exposes the named Jira remote-link write capability. If that capability is
+unavailable, Devflow can use the signed-in Teamwork Graph CLI with a stable
+remote link ID. A matching existing link returns `already_applied`.
+[Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
 
 ### Claude Code Desktop
 
@@ -207,8 +287,8 @@ settings select services. The user manifest supplies artifacts for the built-in
    its `confirm_token` after approval. The local autonomy setting applies.
 3. Read the returned readiness checks. The installer verifies the digest before
    publishing. Setup then checks the executable, authentication and selected
-   GitHub reads. If authentication is needed, supply the usual credentials or run
-   the verified path shown in the plan with `auth login --hostname HOST`.
+   GitHub reads. If authentication is needed, start browser login using
+   the verified path shown in the plan with `auth login --hostname HOST --web`.
    Approve project registration separately with `setup apply --client NAME`.
 
 The cache lives under `DEVFLOW_HOME/companions/<os>-<arch>/gh/`. Devflow
@@ -353,8 +433,9 @@ only attempts to move open issues forward.
 
 ## Asana project tasks
 
-Supply `ASANA_ACCESS_TOKEN` in the environment that runs the CLI or MCP server.
-Quote GIDs in YAML. A task can belong to several projects, each with its own
+Connect the Asana MCP for supported interactive operations. The existing
+service adapter uses `ASANA_ACCESS_TOKEN` for operations such as project
+listing and section moves. Quote GIDs in YAML. A task can belong to several projects, each with its own
 current section and event mappings.
 
 ```yaml
@@ -386,9 +467,9 @@ PR bodies and commit trailers use the qualified form, e.g. `Task-Ref: asana/100/
 destination section memberships before moving the task. Unmapped events and
 `none` have no effect. Mapping an event to `completed` completes the **whole
 task across all its projects**. Completion is terminal. Section GIDs have
-no inherent order. Assignment, authenticated-user filtering, comments,
-operation-ID deduplication and conditional writes are unsupported. After an
-uncertain create response, check the project before trying again.
+no inherent order. The Asana MCP supports top-level comments on scope-verified
+tasks. After an uncertain create response, check the project before requesting
+a new creation.
 
 `devflow setup verify` probes read access to each configured project's task
 list and checks that each destination section belongs to the intended project.
@@ -610,8 +691,10 @@ devflow docs publish confluence/ENG/42 \
   --expected-revision 7 --operation-id quota-policy-1
 ```
 
-The CLI and `devflow_docs_publish` apply the remote autonomy policy. Confirmation
-covers the configured site, qualified reference, expected revision, operation ID
+The CLI and `devflow_docs_publish` apply the remote autonomy policy. An
+interactive write can use the configured Codex MCP first and a signed-in
+Teamwork Graph CLI if the native capability is unavailable. Confirmation
+covers the transport, configured site, qualified reference, expected revision, operation ID
 and complete replacement. Devflow checks the space key immediately before the
 update and verifies the space ID in the response. Confluence uses the page
 version as its write precondition. In this example the requested version is 8.

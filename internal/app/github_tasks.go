@@ -11,6 +11,8 @@ import (
 
 	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -79,7 +81,25 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 		return nil, errors.New("issue comment is empty")
 	}
 	body := text + viaNote(a)
-	s := map[string]any{"key": taskKey(ref), "task_ref": ref.String(), "comment": body, "operation_id": issueOperation()}
+	operationID := issueOperation()
+	var task provider.Task
+	if operationID == "" && os.Getenv("GITHUB_ACTIONS") != "true" {
+		mapped, err := nativemap.GitHubIssueComment(ref, body)
+		write, err := bindTaskWrite(ctx, mapped, err)
+		if err != nil {
+			return nil, err
+		}
+		if write != nil {
+			task, write, err = a.prepareTaskForWrite(ctx, ref, write)
+			if err != nil {
+				return nil, err
+			}
+			if write != nil {
+				return a.commentBoundTask(ctx, task, body, token, write)
+			}
+		}
+	}
+	s := map[string]any{"key": taskKey(ref), "task_ref": ref.String(), "comment": body, "operation_id": operationID}
 	tasks, err := a.issueTasks(ctx)
 	if err != nil {
 		return nil, err
@@ -88,9 +108,11 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if !ok {
 		return nil, provider.Unsupported(ref.Instance, "comments")
 	}
-	task, err := tasks.Get(ctx, ref)
-	if err != nil {
-		return nil, err
+	if task.Ref.ID == "" {
+		task, err = tasks.Get(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
 	}
 	snapshot, err := a.validateTaskTemplate(task)
 	if err != nil {
@@ -104,7 +126,7 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if snapshot != nil {
 		s["template"] = snapshot
 	}
-	if p, err := a.gate(policy.Remote, "comment", s, token, false, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "comment", s, token, token != "", nil); p != nil || err != nil {
 		return p, err
 	}
 	opts.CheckTask = a.checkTaskTemplate(snapshot)
@@ -138,6 +160,23 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 	if draft.Template != nil {
 		s["template"] = draft.Template
 	}
+	if s["operation_id"] == "" && os.Getenv("GITHUB_ACTIONS") != "true" {
+		mapped, err := nativemap.GitHubIssueCreate(draft)
+		write, err := bindTaskWrite(ctx, mapped, err)
+		if err != nil {
+			return nil, err
+		}
+		if write != nil {
+			id, err := issueRepositoryForWrite(ctx, draft.Scope, write)
+			if err == nil {
+				s["repository_id"] = id
+				return a.createBoundIssue(ctx, s, token, write)
+			}
+			if !errors.Is(err, native.ErrUnavailable) {
+				return nil, err
+			}
+		}
+	}
 	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
@@ -151,6 +190,29 @@ func (a *App) createIssue(ctx context.Context, project, issueType, title, descri
 	}
 	result, err := tasks.Create(ctx, draft, opts)
 	a.audit(policy.Remote, "ticket_create", s, err)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"key": taskKey(result.Ref)}, nil
+}
+
+// GitHub resolves repository names before creating issues. A same-session
+// lookup rejects stale or aliased names before sending the mutation.
+func issueRepositoryForWrite(ctx context.Context, scope string, write *boundTaskWrite) (int64, error) {
+	read, err := nativemap.GitHubIssueRepository(scope)
+	if err != nil {
+		return 0, err
+	}
+	return readBoundTaskData(ctx, write, read)
+}
+
+func (a *App) createBoundIssue(ctx context.Context, summary map[string]any, token string, write *boundTaskWrite) (any, error) {
+	summary["native_write"] = write.taskWritePreview
+	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
+		return p, err
+	}
+	result, err := a.applyTaskAppend(ctx, token, write, func() (provider.WriteResult, error) { return write.apply(ctx) })
+	a.audit(policy.Remote, "ticket_create", summary, err)
 	if err != nil {
 		return nil, err
 	}

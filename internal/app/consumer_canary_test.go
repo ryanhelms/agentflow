@@ -126,7 +126,7 @@ notifications:
 	if err := os.MkdirAll(filepath.Join(root, ".devflow", "knowledge"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	notify := NotifyInput{Signal: "incident.recorded", OperationID: "canary-notify-1", Title: "Canary replay"}
+	notify := NotifyInput{Signal: "incident.recorded", OperationID: "canary-notify-1", Title: "Canary replay", Automation: true}
 	doWrite := func(fn func(string) (any, error), want provider.WriteStatus) provider.WriteResult {
 		t.Helper()
 		out, err := fn("")

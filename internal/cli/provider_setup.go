@@ -20,6 +20,9 @@ func runProviderSetup(ctx context.Context, args []string) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		op, args = args[0], args[1:]
 	}
+	if op == "login" {
+		return runProviderLogin(ctx, args)
+	}
 	fs := flag.NewFlagSet("setup "+op, flag.ContinueOnError)
 	client := fs.String("client", "", "project adapter, including desktop clients without a CLI: "+strings.Join(setup.SetupClients, ", "))
 	asJSON := fs.Bool("json", false, "print the typed setup plan as JSON")
@@ -98,6 +101,13 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			}
 			fmt.Printf("%s  %s (%s)  %s\n", state, r.Role, r.Provider, r.Detail)
 		}
+		for _, tools := range plan.Tooling {
+			fmt.Printf("%s  preferred MCP: %s (%s)\n", tools.Provider, tools.MCP.Name, tools.MCP.Endpoint)
+			fmt.Printf("  Setup: %s\n", tools.MCP.Guide)
+			if tools.CLI != nil {
+				fmt.Printf("  CLI fallback: %s (installed: %t) · %s\n", tools.CLI.Command, tools.CLI.Installed, tools.CLI.Guide)
+			}
+		}
 		if i := plan.InstallGH; i != nil {
 			a := i.Artifact
 			fmt.Printf("Pinned gh %d.%d.%d from %s (SHA256 %s) under %s\n", a.Version.Major, a.Version.Minor, a.Version.Patch, a.Source, a.SHA256, i.Home)
@@ -126,4 +136,18 @@ func runProviderSetup(ctx context.Context, args []string) error {
 		return &hooks.ExitError{Code: 1}
 	}
 	return nil
+}
+
+func runProviderLogin(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("setup login", flag.ContinueOnError)
+	provider := fs.String("provider", "", "provider to authenticate")
+	client := fs.String("client", "", "MCP client, such as claude-desktop or codex")
+	server := fs.String("server", "", "existing MCP server name if different from the provider default")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *provider == "" || fs.NArg() != 0 {
+		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME]")
+	}
+	return setup.LoginProvider(ctx, ".", *provider, *client, *server, os.Stdin, os.Stdout, os.Stderr)
 }
