@@ -85,6 +85,9 @@ func verifySlackScope(ctx context.Context, binding native.WriteBinding, scope co
 	if err != nil && !errors.Is(err, native.ErrUnavailable) {
 		return identity, slackPreparationError(err)
 	}
+	if binding.Owner == "devflow" && identity.ActorID == "" {
+		return identity, fmt.Errorf("could not identify the enrolled slack user: %w", native.ErrDenied)
+	}
 	if scope.ActorID != "" && identity.ActorID != scope.ActorID {
 		return identity, fmt.Errorf("could not verify the configured slack actor: %w", native.ErrDenied)
 	}
@@ -95,14 +98,7 @@ func verifySlackScope(ctx context.Context, binding native.WriteBinding, scope co
 }
 
 func verifySlackWorkspaceChannel(read func(string, map[string]any) (json.RawMessage, error), scope config.SlackNativeSettings) error {
-	channelTypes := "public_channel,private_channel"
-	switch scope.ChannelID[0] {
-	case 'D':
-		channelTypes = "im"
-	case 'G':
-		channelTypes = "private_channel,mpim"
-	}
-	args := map[string]any{"team_id": scope.WorkspaceID, "types": channelTypes, "exclude_archived": true, "format": "names_only"}
+	args := map[string]any{"team_id": scope.WorkspaceID, "types": nativemap.SlackChannelTypes(scope.ChannelID), "exclude_archived": true, "format": "names_only"}
 	seen := map[string]bool{}
 	for range 8 {
 		raw, err := read("slack_list_user_channels", args)
@@ -130,7 +126,7 @@ func slackPreparationError(err error) error {
 	case errors.Is(err, native.ErrUnavailable):
 		return fmt.Errorf("required authenticated slack tools are unavailable: %w", native.ErrUnavailable)
 	case errors.Is(err, native.ErrSignIn):
-		return fmt.Errorf("sign in via the client's slack MCP connection: %w", native.ErrSignIn)
+		return fmt.Errorf("sign in to the selected slack MCP connection: %w", native.ErrSignIn)
 	case errors.Is(err, native.ErrDenied):
 		return fmt.Errorf("slack MCP access or scope verification was denied: %w", native.ErrDenied)
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

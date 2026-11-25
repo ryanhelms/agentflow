@@ -200,7 +200,8 @@ writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
 session and exact operation. Use `devflow --native-client codex` for supported
 CLI writes, `devflow_jira_remote_link` for Jira web links, and `devflow_notify`
-for delivery.
+for delivery. A Slack send with an uncertain outcome keeps its receipt claim and
+blocks another send for the same operation and destination.
 
 The Claude Code Desktop pilot uses separate Devflow Rovo enrollments for Jira
 and Confluence. Alongside Jira web links, a fixture-tested `devflow_comment`
