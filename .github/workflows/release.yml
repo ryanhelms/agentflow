@@ -98,7 +98,19 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --notes "$RUNNER_TEMP/release-notes.md" --update CHANGELOG.md
           # Keep the README status area on the current release.
           sed -i -E "s#(<!-- devflow:version -->)[^<]*(<!-- /devflow:version -->)#\1\`v$VERSION\`\2#" README.md
-          git add CHANGELOG.md README.md
+          # Publish matching host package versions in the same commit as the binary tag.
+          plugin_manifests=(
+            adapters/claude-code/.claude-plugin/plugin.json
+            .codex-plugin/plugin.json
+            .cursor-plugin/plugin.json
+            plugin.json
+            gemini-extension.json
+          )
+          for manifest in "${plugin_manifests[@]}"; do
+            jq --arg version "$VERSION" '.version = $version' "$manifest" > "$RUNNER_TEMP/plugin-manifest.json"
+            cp "$RUNNER_TEMP/plugin-manifest.json" "$manifest"
+          done
+          git add CHANGELOG.md README.md "${plugin_manifests[@]}"
           git commit -m "chore(release): v$VERSION"
           git tag -a "v$VERSION" -m "devflow v$VERSION"
           git push origin "HEAD:${GITHUB_REF_NAME}"
@@ -128,6 +140,8 @@ jobs:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
+            install.sh
+            install.ps1
 
       - name: Remove the tag if the release failed
         if: failure() && steps.version.outputs.release == 'true'

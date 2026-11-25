@@ -57,14 +57,14 @@ func githubHead(d gitx.Detection, branch string) string {
 	return branch
 }
 
-func (a *App) checkPushRemote(ctx context.Context, source *gitx.Remote) error {
+func (a *App) pushURL(ctx context.Context, source *gitx.Remote) (string, error) {
 	raw, err := a.Repo.Git(ctx, "remote", "get-url", "--push", "--all", "--", source.Name)
 	if err != nil {
-		return err
+		return "", err
 	}
 	push, err := gitx.ParseRemoteURL(strings.TrimSuffix(raw, "\n"))
 	if err != nil || !publicGitHubRemote(push) || !strings.EqualFold(push.Path, source.URL.Path) {
-		return errors.New("the source remote must have one GitHub push destination matching its repository")
+		return "", errors.New("the source remote must have one GitHub push destination matching its repository")
 	}
-	return nil
+	return strings.TrimSuffix(raw, "\n"), nil
 }

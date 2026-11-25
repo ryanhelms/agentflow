@@ -41,7 +41,7 @@ func hostError(kind Kind, operation, detail string) *Error {
 func classifyError(code int, message string) Kind {
 	message = strings.ToLower(message)
 	switch {
-	case code == 401 || containsAny(message, "unauthorized", "authentication required", "authentication failed",
+	case code == 401 || containsAny(message, "oauth app access restrictions", "unauthorized", "authentication required", "authentication failed",
 		"reauthentication", "not authenticated", "not logged in", "login required", "status: 401", "401 client error"):
 		return Authentication
 	case code == 403 || containsAny(message, "forbidden", "permission denied", "access denied",

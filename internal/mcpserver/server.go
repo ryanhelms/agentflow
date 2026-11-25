@@ -13,6 +13,7 @@ import (
 
 	"github.com/nscaledev/devflow/internal/app"
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/policy"
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/native"
@@ -51,6 +52,9 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		s.writer = rovohost.NewWriter()
 		s.slackWriter = slackhost.NewWriter()
 	}
+	window := a.Gate.Explain(policy.Remote, "comment", nil, false).Window
+	s.writer.SetApprovalWindow(window)
+	s.slackWriter.SetApprovalWindow(window)
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{InitializedHandler: s.initialized, Instructions: setup.AgentProviderSelection(a.Cfg) + "\n" + setup.AgentInstructions() + "\n\n" + nativeInstructions})
 	s.register()
 	return s, nil
@@ -165,6 +169,10 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 
 func errResult(err error) *mcp.CallToolResult {
 	msg := err.Error()
+	if code := policy.ErrorCode(err); code != "" {
+		data, _ := json.Marshal(map[string]string{"status": "error", "code": code, "reason": msg})
+		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: string(data)}}}
+	}
 	if errors.Is(err, update.ErrRestartRequired) {
 		msg += ". Ask the user to restart this AI session."
 	}
@@ -197,9 +205,13 @@ type pathsIn struct {
 type msgIn struct {
 	Message string `json:"message" jsonschema:"full commit message"`
 }
+type commitPrepareIn struct {
+	Message string   `json:"message" jsonschema:"full conventional commit message"`
+	Paths   []string `json:"paths,omitempty" jsonschema:"include only these paths or use the staged index"`
+}
 type commitIn struct {
 	Message      string   `json:"message" jsonschema:"full commit message: type(KEY): summary, blank line, body"`
-	Paths        []string `json:"paths,omitempty" jsonschema:"commit only these paths (they are staged first)"`
+	Paths        []string `json:"paths,omitempty" jsonschema:"commit only these paths; prepare leaves the index unchanged"`
 	ConfirmToken string   `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
 }
 type transitionIn struct {
@@ -286,6 +298,7 @@ func (s *Server) register() {
 	s.registerNotifications()
 	a := s.app
 	s.registerUI(a.Repo.Dir)
+	s.registerApprovalTools()
 	// Task awareness
 	add(s, "devflow_context", "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.", readOnly,
 		func(ctx context.Context, in nativeKeyIn) (any, error) {
@@ -343,6 +356,10 @@ func (s *Server) register() {
 			effects, warnings, err := a.Preview(ctx, in.Message)
 			return map[string]any{"effects": effects, "warnings": warnings}, err
 		})
+	add(s, "devflow_commit_prepare", "Prepare an exact commit for approval without staging files or creating a commit.", readOnly,
+		func(ctx context.Context, in commitPrepareIn) (any, error) {
+			return a.CommitPrepare(ctx, in.Message, in.Paths)
+		})
 	add(s, "devflow_commit", "Validate, secret-scan and commit. Returns needs_confirmation when the developer's autonomy is confirm.", local,
 		func(ctx context.Context, in commitIn) (any, error) {
 			return a.Commit(ctx, in.Message, in.Paths, in.ConfirmToken)
@@ -351,6 +368,16 @@ func (s *Server) register() {
 	// PR and review
 	add(s, "devflow_pr_ready", "Readiness check before a PR: branch, commit conventions, clean tree, secrets, acceptance criteria, and configured task effects. Optionally run tests and lint.", readOnly,
 		func(ctx context.Context, in prReadyIn) (any, error) { return a.PRReady(ctx, in.Run) })
+	add(s, "devflow_pr_prepare", "Prepare a branch push and pull request for approval without publishing.", readOnly,
+		func(ctx context.Context, in app.PROpenInput) (any, error) { return a.PRPrepare(ctx, in) })
+	add(s, "devflow_push_prepare", "Prepare the exact feature-branch push without publishing.", readOnly,
+		func(ctx context.Context, _ noIn) (any, error) { return a.PushPrepare(ctx) })
+	add(s, "devflow_push", "Publish the exact feature-branch head to the configured source remote.", remote,
+		func(ctx context.Context, in approvalTokenIn) (any, error) { return a.Push(ctx, in.ConfirmToken) })
+	add(s, "devflow_pr_mark_ready_prepare", "Prepare to mark the current draft pull request ready for review.", readOnly,
+		func(ctx context.Context, _ noIn) (any, error) { return a.MarkReadyPrepare(ctx) })
+	add(s, "devflow_pr_mark_ready", "Mark the current draft pull request ready for review at its reviewed head.", remote,
+		func(ctx context.Context, in approvalTokenIn) (any, error) { return a.MarkReady(ctx, in.ConfirmToken) })
 	add(s, "devflow_pr_open", "Push the branch and open a PR with a convention title, templated body, acceptance criteria and reviewers.", remote,
 		func(ctx context.Context, in prOpenIn) (any, error) {
 			return a.PROpen(ctx, in.PROpenInput, in.ConfirmToken)

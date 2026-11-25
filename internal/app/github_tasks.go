@@ -87,7 +87,7 @@ func (a *App) commentIssue(ctx context.Context, key, text, token string) (any, e
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("issue comment is empty")
 	}
-	body := text + viaNote(a)
+	body := text + viaNote(a, "comment")
 	operationID := issueOperation()
 	var task provider.Task
 	if operationID == "" && os.Getenv("GITHUB_ACTIONS") != "true" {
@@ -242,7 +242,7 @@ func issueRepositoryForWrite(ctx context.Context, scope string, write *boundTask
 
 func (a *App) createBoundIssue(ctx context.Context, summary map[string]any, token string, write *boundTaskWrite) (any, error) {
 	summary["native_write"] = write.taskWritePreview
-	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", summary, token, true, nil, write.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	result, err := applyTaskAppend(ctx, a.Home, token, write.Call.Provider, write.taskWritePreview, func() (provider.WriteResult, error) { return write.apply(ctx) })

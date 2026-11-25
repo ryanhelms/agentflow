@@ -231,6 +231,11 @@ func registerOverlay(dir string, tracked map[string]any, overlay func() (*Client
 		return err
 	}
 	defer project.Close()
+	if tracked == nil {
+		if err := recordEnrollment(project, filepath.ToSlash(r.Path), false); err != nil {
+			return err
+		}
+	}
 	parent := filepath.Dir(r.Path)
 	if err := project.Mkdir(parent, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
 		return err

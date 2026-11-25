@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Devflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Consumer rollout awaits architecture approval (Kyle Redelinghuys, Vishal Srini). `nscaledev/mcp-gateway` remains in warn-only mode. |
-| **Current release** | <!-- devflow:version -->`v0.43.0`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
+| **Current release** | <!-- devflow:version -->`v0.46.1`<!-- /devflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/devflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): design, automations and rollout plan under review |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -100,15 +100,34 @@ everything that starts in Jira. See [the blueprint](docs/blueprint.html#architec
 
 ### Enable devflow in a repository (repo owners)
 
-Prerequisites: the org-level secrets and variables in
-[docs/operations.md](docs/operations.md), and your project's block in
-[`flow-map.yml`](flow-map.yml).
+Sign in to the GitHub CLI with access to `nscaledev/devflow`. Run the command for
+your OS from the project or one of its subdirectories. If you start outside a
+Git worktree, the installer keeps asking for a checkout path until you supply
+one or cancel.
+
+**macOS or Linux**
 
 ```bash
-gh release download --repo nscaledev/devflow --pattern "devflow_*_$(uname -s | tr A-Z a-z)_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" -O - | tar -xz devflow
-./devflow init && rm ./devflow
-git add -A && git commit -m "chore(PLAT-123): enable devflow"
+s=$(gh release download -R nscaledev/devflow -p install.sh -O -) && bash -c "$s" devflow
 ```
+
+Append `--repo '/path/to/my project'` to target a checkout.
+
+**Windows PowerShell**
+
+```powershell
+$s = gh release download -R nscaledev/devflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
+```
+
+Add `-Repo 'C:\src\my project'` before the closing brace to supply the path.
+Both commands install the verified stable binary and run `devflow init`.
+The interactive setup shows provider evidence, lets you change a selection and
+asks about roles it cannot determine. Choices are saved with the project.
+Agents can read the same suggestions with `devflow init --detect-providers`
+and apply choices with `--non-interactive --provider ROLE=ID`.
+Review and commit the generated project files. For integrations, configure the
+organization-level settings and the project's flow map.
+[Agent installation guide](docs/knowledge/engineering/guides/project-installation.md) · [Operations](docs/operations.md) · [Flow map](flow-map.yml)
 
 `devflow init` writes the files in [`templates/repo/`](templates/repo/) and sets up
 releases:
@@ -116,6 +135,7 @@ releases:
 | File | Purpose |
 | --- | --- |
 | `.devflow/config.yml` | Provider selections, task templates, commit rules, autonomy ceiling, update channel |
+| `.devflow/installation.yml` | Pre-existing paths recorded by new installations for cleanup |
 | `.devflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
 | `.devflow/bin/devflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
@@ -153,13 +173,14 @@ installed; commit it in a PR. `devflow pin --check` and `devflow doctor` report 
 that is behind, and the Claude Code session hook offers `/devflow:pin` when it is. No
 Dependabot or GitHub App access is needed.
 
-**Removing devflow.** `devflow remove` (or `/devflow:remove`) undoes `init`: it deletes
-the generated configuration and launchers under `.devflow/`, the caller workflow,
-the release-please files (`--keep-releases` keeps them), and unchanged template files
-(`--force` deletes changed ones too). It removes devflow's entries from `AGENTS.md` and
-client configs, unsets `core.hooksPath`, and turns
-automatic setup off for that clone. `--dry-run` lists the changes first. Commit the result
-in a PR. Authored task and knowledge records under `.devflow/` are preserved.
+**Removing devflow.** Preview the affected files with `devflow remove --dry-run`,
+then run `devflow remove` or use `/devflow:manager remove`. Removal cleans up
+the generated files, Devflow's instruction block, managed client registrations
+and the hooks path it set. New installations record pre-existing project paths
+and preserve existing release configuration and custom hooks. For older
+installations, inspect the preview and use `--keep-releases` for project-owned
+release-please files. Removal preserves authored task and knowledge records and
+disables automatic re-enrollment in that clone. Review and commit the resulting diff.
 
 For provider MCP companions, removal compares each project entry with the receipt
 written by setup. It removes unchanged, recorded entries and lists edited or
@@ -212,11 +233,20 @@ The user approves in Slack. Devflow checks the workspace before storing the gran
 [Slack app and callback setup](docs/providers.md#devflow-slack-enrollment).
 
 Jira work and issue context, Confluence search, and individual Asana and
-GitHub issue reads can use the client’s connected provider MCP. When a
-connector is missing, Devflow returns a setup offer so the agent can ask
-whether to connect it in the current client. Reads can still use the
-signed-in Teamwork Graph or GitHub CLI where supported. If you approve,
-the agent starts the client's setup and any required sign-in.
+GitHub issue reads can use the client’s connected provider MCP. If the
+connector is unavailable or its OAuth sign-in fails, Devflow automatically
+tries the supported vendor CLI with its own saved login. It checks the
+executable and can install a checksum-pinned release of `gh` or `twg`
+in its user cache. If the CLI cannot finish the read, the agent can offer
+connector setup or start the vendor’s sign-in. Resource access denials
+remain final for the operation. Standalone task and knowledge reads can also
+prepare the configured provider’s CLI using the same installer.
+
+For GitHub Issues in Claude Code, Devflow can install the pinned official local
+GitHub MCP server and register it for the workspace after approval. The first
+GitHub read in a fresh session initiates browser OAuth. This registration
+exposes read-only issue tools. [GitHub OAuth setup](docs/providers.md#github-oauth-in-claude-code).
+
 A connected Codex MCP can also handle Jira issue
 writes and web links, Confluence page replacement, selected Asana and GitHub
 Issues writes, and Slack delivery. Devflow binds approval to the authenticated
@@ -397,6 +427,9 @@ Deployments and release lookup also support local JSON fixtures.
 | Preview Jira effects | `devflow preview` | shown before every commit |
 | Check PR readiness | `devflow pr --check` | `devflow_pr_ready` |
 | Open a PR | `devflow pr` | `/devflow:pr` |
+| Push a feature branch | `devflow push` | `devflow_push` |
+| Mark an existing draft ready for review | `devflow pr mark-ready` | `devflow_pr_mark_ready` |
+| Explain an approval | `devflow policy explain ACTION` | `devflow_policy_explain` |
 | Address review comments | `devflow review`, `devflow review reply THREAD_ID BODY` | `/devflow:review` |
 | Check CI, deploys, ticket | `devflow status` | `/devflow:status` |
 | Standup | `devflow standup` | `/devflow:standup` |
@@ -431,9 +464,55 @@ readiness if its other checks pass. To open a PR from that branch, supply a
 conventional title with `devflow pr --title "feat: add quota"` or the
 `devflow_pr_open` tool's `title` input.
 
-Each developer chooses an autonomy level per action class (`suggest`, `confirm` or
-`auto`) in `~/.devflow/config.yml`, capped by the repo's `policy.max_autonomy`. The
-default is `confirm`: the agent shows what it will do and waits.
+### Control agent approvals
+
+To allow local commits while keeping other writes under review, add this to your
+personal `~/.devflow/config.yml` (or `$DEVFLOW_HOME/config.yml`).
+
+```yaml
+autonomy:
+  local: confirm
+  remote: confirm
+  actions:
+    commit: auto
+approval_window: 15m
+```
+
+The two classes default to `confirm`. A named action overrides your class
+preference for that operation. The repository's `.devflow/config.yml` sets
+ceilings independently.
+
+```yaml
+policy:
+  max_autonomy:
+    local: auto
+    remote: confirm
+    actions:
+      review_reply: suggest
+  max_approval_window: 20m
+```
+
+A repo action ceiling can tighten its class ceiling. `suggest` returns commands
+for you to run, `confirm` requires your approval, and `auto` lets Devflow carry
+out an authorized operation. Task creation, release publication and other writes
+with mandatory review still require confirmation when set to `auto`.
+The default review window is five minutes. Configured windows accept one minute
+through one hour, subject to the repo maximum.
+
+In `devflow ui`, open **Autonomy** to inspect the effective rule for each action,
+save personal preferences or stage repository ceilings for review. Select
+**Inherit** to remove an override. Run `devflow policy explain commit` in the
+affected checkout to see which setting wins. Run `devflow policy explain` to see the supported actions. Restart
+a running Devflow MCP server after editing the configuration. Host sandbox
+permissions and provider sign-in prompts are controlled by their respective clients.
+
+Devflow runs configured Git commit hooks, including native hooks on Windows.
+It verifies the approved tree and message before Git moves the branch.
+
+Automatic draft publication requires both `push` and `pr_open_draft` to allow
+`auto`. Opening a reviewable PR uses `push` and `pr_open`. Promoting an existing
+draft uses `pr_ready_for_review`. For exact previews and approval handoff, see the
+[operations guide](docs/operations.md#prepare-and-apply-an-operation).
 
 The table above gives the terminal commands for the same day-to-day operations.
 When a provider write needs confirmation, the CLI shows the approval summary. Pass
@@ -503,9 +582,20 @@ The Claude Code plugin has a skill for every CLI command: `/devflow:init`, `remo
 `eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/devflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos devflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
-`update`) run only when you invoke them. Install the Claude Code plugin for yourself with
-`/plugin install devflow --marketplace nscaledev/devflow`; repos enable it for everyone
-through `.claude/settings.json`.
+`update`) run only when you invoke them. Install directly from the internal
+Devflow repository:
+
+```sh
+claude plugin marketplace add nscaledev/devflow
+claude plugin install devflow@nscale
+```
+
+Use `/devflow:manager install`, `update` or `remove` for a project. Update
+resolves GitHub's latest stable release, verifies it, and refreshes the project's
+workflow pins. The CLI equivalent is `devflow update --latest-stable` followed
+by `devflow pin` through the updated launcher. Project pins and major-version
+restrictions are reported for review. Other clients have their own installation
+commands and capabilities. [Client installation guide](docs/client-plugins.md).
 
 ## Security and governance
 

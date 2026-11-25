@@ -63,6 +63,7 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			return err
 		}
 		action := app.SetupAction{Client: *client, Companion: *companion, InstallGH: installGH, InstallMCP: installMCP}
+		a.Gate.PreviewOnly = !yes && !term.IsTerminal(int(os.Stdin.Fd()))
 		result, err := a.ApplySetup(ctx, action, "")
 		if err != nil {
 			return err
@@ -71,15 +72,26 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			if pending.Status == "suggest" {
 				return fmt.Errorf("setup apply requires local write permission: %s", pending.Reason)
 			}
+			if pending.Status == "prepared" && !yes {
+				return errors.New("review devflow setup plan, then pass --yes to approve the selected setup action")
+			}
+			if pending.Status != "needs_confirmation" {
+				return printApproval(pending)
+			}
 			if !yes {
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
 					return errors.New("review devflow setup plan, then pass --yes to approve the selected setup action")
 				}
-				if err := printJSON(pending.Summary); err != nil {
+				release, err := pending.OpenPrompt()
+				if err != nil {
 					return err
 				}
+				defer release()
+				if err := printApproval(pending); err != nil {
+					return errors.Join(err, pending.Cancel())
+				}
 				if !strings.EqualFold(ask("Apply this setup action? [y/N] "), "y") {
-					return errors.New("cancelled")
+					return errors.Join(errors.New("cancelled"), pending.Cancel())
 				}
 			}
 			result, err = a.ApplySetup(ctx, action, pending.ConfirmToken)
@@ -109,7 +121,11 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			fmt.Printf("%s  %s (%s)  %s\n", state, r.Role, r.Provider, r.Detail)
 		}
 		for _, tools := range plan.Tooling {
-			fmt.Printf("%s  preferred MCP: %s (%s)\n", tools.Provider, tools.MCP.Name, tools.MCP.Endpoint)
+			fmt.Printf("%s  preferred MCP: %s", tools.Provider, tools.MCP.Name)
+			if tools.MCP.Endpoint != "" {
+				fmt.Printf(" (%s)", tools.MCP.Endpoint)
+			}
+			fmt.Println()
 			fmt.Printf("  Setup: %s\n", tools.MCP.Guide)
 			if len(tools.MCP.RegisterArgs) > 0 {
 				fmt.Printf("  Register or connect: devflow %s\n", strings.Join(tools.MCP.RegisterArgs, " "))

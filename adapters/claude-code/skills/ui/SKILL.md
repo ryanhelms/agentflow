@@ -14,3 +14,6 @@ For an explicit directory or `--no-open` request, run `devflow ui $ARGUMENTS`
 in the intended worktree. The daemon stays running when the command returns.
 Keep the one-time launch URL on the developer’s
 machine. The developer reviews and approves configuration changes in the console.
+
+For approval settings, direct the developer to **Autonomy**. Personal preferences
+save on this workstation. Repository ceilings stage in **Configuration** for review.

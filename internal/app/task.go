@@ -47,6 +47,7 @@ type TicketContext struct {
 // Context builds the ticket bundle for key (or the current branch's key).
 // It degrades gracefully: missing credentials become warnings, not errors.
 func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
+	ctx = a.standaloneReadContext(ctx)
 	if a.Cfg.Providers.TaskManagement.Provider == "none" {
 		return &TicketContext{Branch: a.Repo.Branch(ctx), Text: "devflow · task management is disabled\n"}, nil
 	}
@@ -211,6 +212,7 @@ type WorkItem struct {
 
 // MyWork lists the developer's open tickets, active sprint first.
 func (a *App) MyWork(ctx context.Context) ([]WorkItem, error) {
+	ctx = a.standaloneReadContext(ctx)
 	if a.Cfg.Providers.TaskManagement.Provider == "none" {
 		return nil, nil
 	}
@@ -304,7 +306,7 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 		summary["warning"] = "others already have work on this ticket: " + strings.Join(col.OthersOnTicket, ", ")
 	}
 	desktop := writes != nil && writes.Assignment.Binding.Owner == "devflow"
-	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "start", summary, token, desktop || token != "", []string{"git switch -c " + branch + " origin/" + a.Repo.DefaultBranch(ctx)}, writes.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	_, _ = a.Repo.Git(ctx, "fetch", "--quiet", "origin")
@@ -543,7 +545,7 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 			}
 		}
 	}
-	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
+	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil, write.expiresAt()); p != nil || err != nil {
 		return p, err
 	}
 	if apply != nil {

@@ -169,6 +169,7 @@ func (s *server) review(w http.ResponseWriter, r *http.Request, publish bool) {
 	}
 	if !publish {
 		result["approval"] = dec.Token
+		result["reason"], result["policy"], result["request"] = dec.Reason, dec.Policy, dec.Approval
 		result["destination"] = target
 		if dec.Outcome == policy.SuggestOnly {
 			result["warning"] = dec.Reason
@@ -204,10 +205,10 @@ func (s *server) authorize(ctx context.Context, title string, payload any, token
 	if issues := commit.Validate(title, cfg.Commit, gitx.KeyFromBranch(s.repo.Branch(ctx))); len(issues) > 0 {
 		return policy.Decision{}, errors.New(issues[0].Message)
 	}
-	return s.checkGate(policy.Remote, "console.publish", payload, token)
+	return s.checkGate(ctx, policy.Remote, "console.publish", payload, token)
 }
 
-func (s *server) checkGate(class policy.Class, action string, payload any, token string) (policy.Decision, error) {
+func (s *server) checkGate(ctx context.Context, class policy.Class, action string, payload any, token string) (policy.Decision, error) {
 	cfg, _, err := config.LoadRepoCore(s.repo.Dir)
 	if err != nil {
 		return policy.Decision{}, err
@@ -228,5 +229,6 @@ func (s *server) checkGate(class policy.Class, action string, payload any, token
 		}
 	}
 	s.gate.Autonomy = level
+	s.gate.Configure(s.repo.GitDir(ctx), user, cfg)
 	return s.gate.Check(class, action, payload, token, true)
 }

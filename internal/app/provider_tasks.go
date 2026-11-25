@@ -108,7 +108,7 @@ func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, err
 		if err != nil {
 			return provider.Task{}, err
 		}
-		return mappedNativeRead(ctx, "asana", read, func() (provider.Task, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "asana", read, func(ctx context.Context) (provider.Task, error) {
 			return a.readTaskStore(ctx, ref)
 		})
 	case a.usesIssues():
@@ -116,7 +116,7 @@ func (a *App) getTask(ctx context.Context, ref provider.Ref) (provider.Task, err
 		if err != nil {
 			return provider.Task{}, err
 		}
-		return mappedNativeRead(ctx, "github", read, func() (provider.Task, error) {
+		return mappedNativeRead(ctx, a.Repo.Dir, "github", read, func(ctx context.Context) (provider.Task, error) {
 			return a.readTaskStore(ctx, ref)
 		})
 	default:
@@ -314,12 +314,14 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 		}
 	}
 	if assignment != nil || plan.To != "" {
-		level := a.Gate.Autonomy
-		if config.Min(level.Local, level.Remote) == level.Remote {
+		local := a.Gate.Explain(policy.Local, "start", nil, false).Level
+		remote := a.Gate.Explain(policy.Remote, "start", nil, false).Level
+		if config.Min(local, remote) == remote {
 			class = policy.Remote
 		}
 	}
-	if p, err := a.gate(class, "start", s, token, token != "", nil); p != nil || err != nil {
+	preview, _ := s["native_write"].(taskWritePreview)
+	if p, err := a.gate(class, "start", s, token, token != "", nil, preview.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
 	if err := a.ensureTaskBranch(ctx, ref, res); err != nil {

@@ -13,7 +13,7 @@ func (f testHost) Read(ctx context.Context, call Call) (json.RawMessage, error) 
 	return f(ctx, call)
 }
 
-func TestReadFallbackOnlyBeforeDispatch(t *testing.T) {
+func TestReadFallbackRequiresConnectorFailure(t *testing.T) {
 	network := errors.New("provider network failure")
 	for _, tc := range []struct {
 		name     string
@@ -24,7 +24,9 @@ func TestReadFallbackOnlyBeforeDispatch(t *testing.T) {
 	}{
 		{"mcp takes precedence", nil, `"mcp"`, "mcp", 0},
 		{"missing capability", ErrUnavailable, "", "cli", 1},
-		{"sign-in", ErrSignIn, "", "", 0},
+		{"sign-in", ErrSignIn, "", "cli", 1},
+		{"connection", ErrConnection, "", "cli", 1},
+		{"combined denial", errors.Join(ErrUnavailable, ErrDenied), "", "", 0},
 		{"denied", ErrDenied, "", "", 0},
 		{"network", network, "", "", 0},
 	} {
@@ -37,7 +39,10 @@ func TestReadFallbackOnlyBeforeDispatch(t *testing.T) {
 				var result string
 				err := Decode(v, &result)
 				return result, err
-			}, func() (string, error) {
+			}, func(reason error) (string, error) {
+				if !errors.Is(reason, tc.err) {
+					t.Fatalf("fallback reason: %v", reason)
+				}
 				calls++
 				return "cli", nil
 			})

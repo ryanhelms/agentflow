@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/devflow/internal/managedcli"
 	"github.com/nscaledev/devflow/internal/managedgh"
 	"github.com/nscaledev/devflow/internal/provider/rovooauth"
 	"github.com/nscaledev/devflow/internal/provider/slackoauth"
@@ -17,17 +18,12 @@ import (
 
 type MCPTool struct {
 	Name         string   `json:"name"`
-	Endpoint     string   `json:"endpoint"`
+	Endpoint     string   `json:"endpoint,omitempty"`
 	Guide        string   `json:"guide"`
 	RegisterArgs []string `json:"register_args,omitempty"`
 }
 
-type CLITool struct {
-	Command   string   `json:"command"`
-	LoginArgs []string `json:"login_args"`
-	Guide     string   `json:"guide"`
-	Installed bool     `json:"installed"`
-}
+type CLITool = managedcli.Tool
 
 type ProviderTooling struct {
 	Provider string   `json:"provider"`
@@ -42,33 +38,17 @@ var atlassianMCP = MCPTool{
 	Guide:    "https://support.atlassian.com/atlassian-ai-gateway/docs/get-started-with-the-atlassian-remote-mcp-server/",
 }
 
-var atlassianCLI = CLITool{
-	Command:   "twg",
-	LoginArgs: []string{"login"},
-	Guide:     "https://developer.atlassian.com/cloud/twg-cli/getting-started/installation/",
-}
-
 var githubMCP = MCPTool{
 	Name:     "github",
 	Endpoint: "https://api.githubcopilot.com/mcp/",
 	Guide:    "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
 }
 
-var githubCLI = CLITool{
-	Command:   "gh",
-	LoginArgs: []string{"auth", "login", "--web"},
-	Guide:     "https://cli.github.com/",
-}
-
 var providerTools = map[string]ProviderTooling{
-	"jira":       {MCP: atlassianMCP, CLI: &atlassianCLI},
-	"confluence": {MCP: atlassianMCP, CLI: &atlassianCLI},
-	"github":     {MCP: githubMCP, CLI: &githubCLI},
-	"github-issues": {MCP: githubMCP, CLI: &CLITool{
-		Command:   "gh",
-		LoginArgs: []string{"auth", "login", "--web", "--hostname", "github.com"},
-		Guide:     githubCLI.Guide,
-	}},
+	"jira":          {MCP: atlassianMCP},
+	"confluence":    {MCP: atlassianMCP},
+	"github":        {MCP: githubMCP},
+	"github-issues": {MCP: githubMCP},
 	"asana": {MCP: MCPTool{
 		Name:     "asana",
 		Endpoint: "https://mcp.asana.com/v2/mcp",
@@ -84,13 +64,18 @@ var providerTools = map[string]ProviderTooling{
 // ProviderMCP returns the official connector details for a provider and client.
 func ProviderMCP(provider, client string) MCPTool {
 	tool := providerTools[provider].MCP
+	if tool.Name == githubMCP.Name && runtimeClient(client) == "claude" {
+		tool.Endpoint = ""
+		tool.Guide = githubOAuthGuide
+		tool.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", client, "--register"}
+	}
 	if client == claudeDesktop && (provider == "slack" || provider == "asana") {
 		tool.RegisterArgs = []string{"setup", "login", "--provider", provider, "--client", claudeDesktop, "--register"}
 	}
 	return tool
 }
 
-func (p *ProviderSetupPlan) addProviderTooling(role, provider, client string, ghSelection *managedgh.Selection) {
+func (p *ProviderSetupPlan) addProviderTooling(ctx context.Context, role, provider, client string, ghSelection *managedgh.Selection) {
 	tools, ok := providerTools[provider]
 	if !ok {
 		return
@@ -103,12 +88,11 @@ func (p *ProviderSetupPlan) addProviderTooling(role, provider, client string, gh
 	}
 	tools.Provider, tools.Roles = provider, []string{role}
 	tools.MCP = ProviderMCP(provider, client)
-	if tools.CLI != nil {
-		cli := *tools.CLI
+	if cli, ok := managedcli.ForProvider(provider); ok {
 		if cli.Command == "gh" && ghSelection != nil {
 			cli.Installed = ghSelection.Command != ""
 		} else {
-			_, err := exec.LookPath(cli.Command)
+			_, err := managedcli.Resolve(ctx, p.Root, cli)
 			cli.Installed = err == nil
 		}
 		tools.CLI = &cli
@@ -127,10 +111,11 @@ func providerLoginCommand(provider, client, server string) ([]string, error) {
 		if server != "" {
 			return nil, errors.New("select the MCP client for the server")
 		}
-		if tools.CLI == nil {
+		cli, ok := managedcli.ForProvider(provider)
+		if !ok {
 			return nil, fmt.Errorf("%s uses its MCP client's sign-in flow", provider)
 		}
-		return append([]string{tools.CLI.Command}, tools.CLI.LoginArgs...), nil
+		return append([]string{cli.Command}, cli.LoginArgs...), nil
 	}
 
 	if server == "" {
@@ -183,11 +168,11 @@ func LoginProvider(ctx context.Context, dir, provider, client, server string, in
 	if err != nil {
 		return err
 	}
-	if args[0] == "gh" {
-		// Outside a checkout, login still works with the user's ordinary PATH.
-		// A managed pin must be resolved against the entire checkout.
+	if client == "" {
+		// Outside a checkout, login also works with the vendor executable on PATH.
 		if repo, err := gitx.Open(ctx, dir); err == nil {
-			args[0], err = managedgh.Command(ctx, repo.Dir)
+			tool, _ := managedcli.ForProvider(provider)
+			args[0], err = managedcli.Ensure(ctx, repo.Dir, tool)
 			if err != nil {
 				return err
 			}

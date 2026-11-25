@@ -14,12 +14,19 @@ independently using the same Atlassian connection. Report permission denials
 as access issues.
 
 If the connector is missing, offer to install or register the official provider
-integration in the current client. Use the plan's vendor guide when the user
-authorizes setup. Start the client's Connect or Sign in action when the tool
-requires authentication. With Claude Code, run
+integration in the current client. After approval, run the plan's
+`register_args` with `devflow` when available, or use the vendor guide.
+Prefer OAuth whenever available. Start the client's Connect or Sign in action
+when the tool requires authentication. Keep personal tokens out of the setup
+workflow, client config, and environment. With Claude Code, run
 `devflow setup login --provider NAME --client claude --server SERVER` using
 the registered MCP server name. Use `claude-desktop` for Claude Code Desktop.
 Allow the user to complete consent in the browser, then retry the read.
+For GitHub Issues, use the registration command from the plan. The pinned
+local GitHub MCP server uses browser OAuth on its first GitHub tool call.
+After registration, use a fresh session in the same workspace and retry the
+read to start sign-in. The registered connector is read-only.
+
 For Slack in Claude Code Desktop, when the user opts into workspace registration,
 run `devflow setup login --provider slack --client claude-desktop --register` from
 that workspace. Reuse an existing Slack connector. If sign-in is deferred, direct

@@ -108,6 +108,31 @@ records stay at their source. Automatic data migration and a per-repository
 scope selector are tracked in [issue #96](https://github.com/nscaledev/devflow/issues/96).
 See [provider definitions and precedence](providers.md#provider-definitions).
 
+## Set approval preferences and ceilings
+
+Open **Autonomy** to inspect the rule, source and review window for each action.
+Use **Find an action** to look up a name such as `commit`. Actions with both local
+and remote provider routes show a rule for each class. Mandatory or conditional
+review requirements appear alongside the action.
+
+Under **Personal preferences**, choose **Automatic** for **Create a local
+commit** and choose **Save preferences** to apply that choice for your user.
+The repository ceilings still apply. The personal form saves immediately to
+the Devflow user configuration. Restart an existing Devflow MCP server to use
+the updated settings.
+
+Under **Repository ceilings**, choose a class or an action, then choose
+**Stage repository settings**. **Review staged configuration** opens the shared
+source editor with the change alongside any other staged edits to the same file.
+The effective rules on the Autonomy page then reflect that proposed configuration.
+Preview and publish the change through the repository review flow below.
+
+Choose **Inherit** to remove a class or action setting. Leave **Approval window**
+empty to inherit the duration, or enter a duration from `1m` to `1h`.
+The personal window defaults to five minutes. A repository can set a shorter
+maximum. **Discard form edits** restores the selected scope to its last loaded
+or staged values.
+
 ## Edit and publish a repository file
 
 1. Open **Configuration** and select a file. The inventory includes existing
