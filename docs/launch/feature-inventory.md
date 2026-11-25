@@ -1,6 +1,6 @@
 # Feature inventory and history
 
-This review uses the Agentflow rename squash merge at `ba469a2`. Devflow `v0.52.2` is the last verified tag before that merge. A source entry below identifies implementation or repository evidence. A live launch rehearsal is still required where an operation depends on a client, provider, or runner.
+This review starts at the Agentflow rename squash merge at `ba469a2`. Devflow `v0.52.2` was the final pre-cutover release. Agentflow `v0.53.0` is the first signed release under the canonical repository name. A source entry below identifies implementation or repository evidence. A live launch rehearsal is still required where an operation depends on a client, provider, or runner.
 
 ## Milestones
 
@@ -12,7 +12,7 @@ This review uses the Agentflow rename squash merge at `ba469a2`. Devflow `v0.52.
 | Desktop provider connections and CLI/MCP parity | PRs #63–#82 and [client setup](../client-plugins.md) |
 | Open Knowledge Format adoption and verified consumer rehearsal | PRs #90–#93, [rollout evidence](../okf-rollout.md), and [consumer canary](../consumer-canary.md) |
 | Local repository console, shared approvals, configuration editors, and opt-in providers | PRs #98, #100, #105, #115, #116, #118, and #120 |
-| Agentflow naming and migration | PR #121, [migration guide](../agentflow-migration.md), and verified source merge `ba469a2` |
+| Agentflow naming and migration | PR #121, [migration guide](../agentflow-migration.md), and [signed Agentflow v0.53.0 release](https://github.com/nscaledev/agentflow/releases/tag/v0.53.0) |
 
 ## Capability inventory
 
@@ -42,6 +42,6 @@ This review uses the Agentflow rename squash merge at `ba469a2`. Devflow `v0.52.
 | Finding | Launch disposition |
 | --- | --- |
 | The existing site version list stopped at Devflow v0.46.0 and had outdated rollout status. | Replace hard-coded versions with the changelog and an explicitly verified release. |
-| The first signed Agentflow release depends on the in-place cutover. | Keep downloads gated until the canonical release and signer are verified. |
+| The cutover and first signed Agentflow release are complete. | Verify the pinned installer and signer when publishing each site image. |
 | The consumer canary exercised GitHub Issues and repository knowledge. Jira and Confluence need launch-specific cross-client evidence. | Run the approved sandbox in the terminal, Claude Code Desktop, and Codex. Publish only the observed support claims and reviewed captures. |
 | Preview and engineering access require deployment configuration and pilot approvals. | Engineering Enablement captures the approved host, access groups, image digest, and promotion evidence before widening access. |

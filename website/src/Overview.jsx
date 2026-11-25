@@ -116,7 +116,7 @@ export default function Overview() {
       <section className="launch-section">
         <ReleaseInstaller />
         {site.tag ? <Link external href={site.repository + "/releases/tag/" + site.tag}>Release {site.tag}</Link> :
-          <Text as="p" tone="muted">Cutover preview. The signed Agentflow installer will appear here after verification.</Text>}
+          <Text as="p" tone="muted">Preview build. Get signed installers from <Link external href={site.repository + "/releases/latest"}>Agentflow Releases</Link>.</Text>}
         <nav aria-label="More Agentflow resources" className="launch-links">
           <Link href="#docs/migration">Upgrade from Devflow</Link>
           <Link href="#docs/compatibility">Check compatibility</Link>

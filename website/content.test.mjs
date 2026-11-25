@@ -17,6 +17,7 @@ test("release links follow heading versions, not the previous tag in a compariso
   assert.deepEqual(site.tags, [tag]);
   assert.equal(site.tag, tag);
   assert.equal(releaseMetadata({}, source).tag, "");
+  assert.equal(releaseMetadata({}, source).repository, "https://github.com/nscaledev/agentflow");
   assert.throws(() => releaseMetadata({ ...published, AGENTFLOW_SITE_REPOSITORY: "nscaledev/devflow" }, source), /canonical/);
   assert.throws(() => releaseMetadata({ ...published, AGENTFLOW_SITE_RELEASE: "v1.2.2" }, source), /changelog/);
 });

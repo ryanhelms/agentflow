@@ -31,7 +31,7 @@ export const catalog = [
 const documentByPath = new Map(catalog.map(([id, , , path]) => [path, id]));
 
 export function releaseMetadata(env, changelog) {
-  const repository = env.AGENTFLOW_SITE_REPOSITORY || "nscaledev/devflow";
+  const repository = env.AGENTFLOW_SITE_REPOSITORY || "nscaledev/agentflow";
   const docsRef = env.AGENTFLOW_SITE_DOCS_REF || "";
   const tag = env.AGENTFLOW_SITE_RELEASE || "";
   const revision = env.AGENTFLOW_SITE_RELEASE_SHA || "";
