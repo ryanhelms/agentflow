@@ -1,0 +1,20 @@
+[
+  {
+    "id": " INC-7 ",
+    "title": "Service restoration",
+    "body": " The response team restored the service. ",
+    "severity": " High ",
+    "url": "https://STATUS.EXAMPLE.test:443/incidents/7",
+    "updated_at": "2026-02-01T00:00:00Z"
+  },
+  {
+    "id": "INC-4",
+    "title": "Earlier disruption",
+    "severity": "low",
+    "url": "https://status.example.test/incidents/4",
+    "updated_at": "2026-01-15T00:00:00Z"
+  },
+  {"title": "Missing ID", "severity": "high", "url": "https://status.example.test/incidents/8"},
+  {"id": "INC-9", "title": "Invalid URL", "severity": "critical", "url": "javascript:void(0)"},
+  {"id": "INC-10", "title": "Invalid time", "severity": "low", "url": "https://status.example.test/incidents/10", "updated_at": "yesterday"}
+]
