@@ -7,23 +7,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func TestResolveTaskTemplate(t *testing.T) {
 	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, ".devflow"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(root, ".agentflow"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	cfg := []byte(`task_management:
   provider: filesystem
   templates:
-    catalog: .devflow/templates.json
+    catalog: .agentflow/templates.json
     default: {name: professional, revision: '01'}
 `)
-	if err := os.WriteFile(filepath.Join(root, ".devflow", "config.yml"), cfg, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".agentflow", "config.yml"), cfg, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	c, _, err := config.LoadRepo(root)
@@ -38,7 +38,7 @@ func TestResolveTaskTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".devflow", "templates.json"), catalog, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".agentflow", "templates.json"), catalog, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {

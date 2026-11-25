@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 // Verbs are the canonical flow-map verbs a commit may carry.
@@ -25,7 +25,7 @@ var (
 	verbRe    = regexp.MustCompile(`(?:^|\s)#([a-z]+)\b`)
 	commentRe = regexp.MustCompile(`#comment\s+([^#\n]+)`)
 	timeRe    = regexp.MustCompile(`#time\s+((?:\d+[wdhm]\s*)+)`)
-	skipRe    = regexp.MustCompile(`(?i)\[devflow skip\]|^devflow:\s*skip\s*$`)
+	skipRe    = regexp.MustCompile(`(?i)\[agentflow skip\]|^agentflow:\s*skip\s*$`)
 	pastRe    = regexp.MustCompile(`^(added|fixed|updated|removed|changed|implemented|refactored|created|deleted|improved|renamed|moved)\b`)
 )
 
@@ -44,7 +44,7 @@ type Message struct {
 	Verbs        []string // canonical flow verbs found anywhere in the message
 	Comment      string   // Smart Commit #comment text
 	Time         string   // Smart Commit #time value
-	Skip         bool     // [devflow skip] or Devflow: skip trailer
+	Skip         bool     // [agentflow skip] or Agentflow: skip trailer
 	Exempt       bool     // merge/revert/fixup subjects
 	Valid        bool     // header matched the convention with Jira keys
 	Conventional bool     // header matched type(scope)?!?: summary, keys or not
@@ -318,7 +318,7 @@ func Category(p string) string {
 	case base == "go.mod", base == "go.sum", base == "package.json", base == "package-lock.json",
 		base == "Dockerfile", base == "Makefile", strings.HasSuffix(base, ".lock"), base == "pyproject.toml":
 		return "build"
-	case strings.HasPrefix(base, ".") || strings.HasSuffix(base, ".yaml") && strings.HasPrefix(p, ".devflow/"):
+	case strings.HasPrefix(base, ".") || strings.HasSuffix(base, ".yaml") && strings.HasPrefix(p, ".agentflow/"):
 		return "chore"
 	}
 	return "code"

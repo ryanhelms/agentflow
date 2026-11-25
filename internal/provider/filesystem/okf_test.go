@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func compatibleKnowledge(t *testing.T, instance, dir string) *Knowledge {
@@ -33,7 +33,7 @@ func writeBundleFile(t *testing.T, dir, name, data string) string {
 	return file
 }
 
-const managedConcept = "---\ntype: Reference\nx-devflow-ref: {scope: engineering, id: provider-architecture}\ntitle: Architecture\n---\nBody.\n"
+const managedConcept = "---\ntype: Reference\nx-agentflow-ref: {scope: engineering, id: provider-architecture}\ntitle: Architecture\n---\nBody.\n"
 
 func TestOKFBundleDiscovery(t *testing.T) {
 	dir := t.TempDir()
@@ -136,7 +136,7 @@ func TestOKFMixedLegacyPublication(t *testing.T) {
 	if err := os.Remove(renamed); err != nil {
 		t.Fatal(err)
 	}
-	raw := strings.Replace(managedConcept, "title:", "x-devflow-operations: {published: "+legacyPublishHash+"}\ntitle:", 1)
+	raw := strings.Replace(managedConcept, "title:", "x-agentflow-operations: {published: "+legacyPublishHash+"}\ntitle:", 1)
 	file := writeBundleFile(t, dir, "adopted/renamed.md", raw)
 	if replay, err := k.Publish(t.Context(), ref, draft, opts); err != nil || replay.Status != provider.AlreadyApplied || replay.Revision != digest([]byte(raw)) {
 		t.Fatalf("migrated receipt replay = %+v, %v", replay, err)
@@ -160,7 +160,7 @@ func TestOKFMixedLegacyPublication(t *testing.T) {
 
 func TestOKFAmbiguousAndInvalidIdentity(t *testing.T) {
 	for _, tc := range []struct{ name, data string }{
-		{"managed vs derived", "---\ntype: Article\nx-devflow-ref: {scope: eng, id: eng/a}\n---\n"},
+		{"managed vs derived", "---\ntype: Article\nx-agentflow-ref: {scope: eng, id: eng/a}\n---\n"},
 		{"v1 vs derived", "---\nversion: 1\nkind: document\ninstance: local\nscope: eng\nid: eng/a\ntitle: Legacy\n---\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -177,8 +177,8 @@ func TestOKFAmbiguousAndInvalidIdentity(t *testing.T) {
 			}
 		})
 	}
-	for _, ext := range []string{"x-devflow-ref: []", "x-devflow-ref: {scope: a}", "x-devflow-ref: {scope: a, id: 1}",
-		"x-devflow-ref: {scope: a, id: b, instance: spoof}", "x-devflow-operations: []", "x-devflow-operations: {op: broken}"} {
+	for _, ext := range []string{"x-agentflow-ref: []", "x-agentflow-ref: {scope: a}", "x-agentflow-ref: {scope: a, id: 1}",
+		"x-agentflow-ref: {scope: a, id: b, instance: spoof}", "x-agentflow-operations: []", "x-agentflow-operations: {op: broken}"} {
 		t.Run(ext, func(t *testing.T) {
 			dir := t.TempDir()
 			writeBundleFile(t, dir, "broken.md", "---\ntype: A\n"+ext+"\n---\n")

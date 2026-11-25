@@ -1,4 +1,4 @@
-// Package app implements devflow's operations. The CLI, the MCP server and
+// Package app implements agentflow's operations. The CLI, the MCP server and
 // the hooks are thin layers over these methods.
 package app
 
@@ -12,17 +12,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/contextx"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/managedcli"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/legacy"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/contextx"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/managedcli"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/legacy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 // App is an opened repository plus the developer's configuration.
@@ -181,12 +181,12 @@ func (a *App) keyOrCurrent(ctx context.Context, key string) (string, error) {
 		_, err := legacy.JiraRef("jira", key)
 		return key, err
 	}
-	return "", errors.New("no Jira key given and the branch name has none; pass a key or run devflow start")
+	return "", errors.New("no Jira key given and the branch name has none; pass a key or run agentflow start")
 }
 
 // Checklists returns the local acceptance-criteria store.
 func (a *App) Checklists(ctx context.Context) contextx.Store {
-	return contextx.Store{Dir: filepath.Join(a.Repo.GitDir(ctx), "devflow")}
+	return contextx.Store{Dir: filepath.Join(a.Repo.GitDir(ctx), "agentflow")}
 }
 
 // shellQuote preserves a single literal argument in a suggested POSIX shell command.
@@ -284,13 +284,13 @@ func jiraPlanFromStatus(fm *flowmap.Map, project string, res TransitionResult, s
 	target := res.To
 	switch {
 	case fm.Backwards(project, res.From, target):
-		res.Note = fmt.Sprintf("%s is before %s in the project's order; devflow only moves forward", target, res.From)
+		res.Note = fmt.Sprintf("%s is before %s in the project's order; agentflow only moves forward", target, res.From)
 		res.To = ""
 	case strings.EqualFold(res.From, target):
 		res.Note = "already in " + target
 		res.To = ""
 	case terminal:
-		res.Note = "ticket is done; devflow never moves it back"
+		res.Note = "ticket is done; agentflow never moves it back"
 		res.To = ""
 	}
 	return res
@@ -375,7 +375,7 @@ func (a *App) transition(ctx context.Context, key, event string, dryRun bool, to
 		TransitionResult
 		Site string `json:"site"`
 	}{plan, a.jiraSettings().Site}
-	commands := []string{"devflow transition " + key + " " + shellQuote(event)}
+	commands := []string{"agentflow transition " + key + " " + shellQuote(event)}
 	if p, err := a.gate(policy.Remote, "transition", summary, token, token != "", commands); p != nil || err != nil {
 		return p, err
 	}
@@ -423,7 +423,7 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 			summary = cli.Intent()
 			appendComment = func() (string, error) { return cli.Apply(ctx) }
 		}
-	case write.Binding.Owner == "devflow":
+	case write.Binding.Owner == "agentflow":
 		appendComment = func() (string, error) { return write.commentID(ctx, ref, body) }
 	}
 	// Always redeem a supplied approval, including if its route disappeared under auto.
@@ -454,7 +454,7 @@ func (a *App) Comment(ctx context.Context, key, text, token string) (any, error)
 
 func viaNote(a *App, action string) string {
 	if a.Gate.Explain(policy.Remote, action, nil, false).Level == config.Auto {
-		return "\n\n(via devflow)"
+		return "\n\n(via agentflow)"
 	}
 	return ""
 }

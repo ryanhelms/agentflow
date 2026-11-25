@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -73,7 +73,7 @@ func TestWikiPublishAndRead(t *testing.T) {
 	if err != nil || first.Status != provider.Applied || first.Ref != ref || first.Revision == "" || first.URL != wantURL {
 		t.Fatalf("publish: %+v, %v", first, err)
 	}
-	if paths := git(t, origin, "diff", "--name-only", branch+"^", branch); paths != "devflow-pages/"+slug+".md" {
+	if paths := git(t, origin, "diff", "--name-only", branch+"^", branch); paths != "agentflow-pages/"+slug+".md" {
 		t.Fatalf("changed paths: %q", paths)
 	}
 

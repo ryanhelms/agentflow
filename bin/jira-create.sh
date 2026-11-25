@@ -22,7 +22,7 @@ if [ -n "$existing" ]; then
   exit 0
 fi
 
-labels=$(printf '%s\n' "$label" devflow "$@" | jq -R . | jq -cs .)
+labels=$(printf '%s\n' "$label" agentflow "$@" | jq -R . | jq -cs .)
 payload=$(jq -cn --arg p "$project" --arg t "$type" --arg s "${summary:0:250}" --arg d "$description" --argjson l "$labels" '
   {fields:{project:{key:$p}, issuetype:{name:$t}, summary:$s, labels:$l,
     description:{type:"doc", version:1, content:

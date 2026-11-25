@@ -12,11 +12,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/release"
-	"github.com/nscaledev/devflow/internal/setup"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/release"
+	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 	"gopkg.in/yaml.v3"
 )
 

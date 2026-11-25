@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Generate devflow's CHANGELOG.md section for a release from Conventional Commits.
+# Generate agentflow's CHANGELOG.md section for a release from Conventional Commits.
 # Used by .github/workflows/release.yml; CHANGELOG.md is never edited by hand.
 #
 #   scripts/changelog.sh --version 0.2.0 [--from v0.1.0] [--to HEAD] \
-#                        [--repo nscaledev/devflow] [--date 2026-11-20] \
+#                        [--repo nscaledev/agentflow] [--date 2026-11-20] \
 #                        [--notes notes.md] [--update CHANGELOG.md]
 #
 # Prints the section to stdout. --notes also writes it (without the version heading)
@@ -14,7 +14,7 @@ set -euo pipefail
 version=""
 from=""
 to=HEAD
-repo=${GITHUB_REPOSITORY:-nscaledev/devflow}
+repo=${GITHUB_REPOSITORY:-nscaledev/agentflow}
 date=$(date -u +%Y-%m-%d)
 notes=""
 update=""
@@ -102,7 +102,7 @@ printf '%s' "$section"
 if [ -n "$notes" ]; then printf '%s' "$body" >"$notes"; fi
 
 if [ -n "$update" ]; then
-  header=$'# Changelog\n\nAll notable changes to devflow. This file is generated on release from\nConventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.\nFeatures, fixes, performance changes, reverts and breaking changes are listed;\ndocs, tests, CI and chores are not.\n\n'
+  header=$'# Changelog\n\nAll notable changes to agentflow. This file is generated on release from\nConventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.\nFeatures, fixes, performance changes, reverts and breaking changes are listed;\ndocs, tests, CI and chores are not.\n\n'
   existing=""
   [ -f "$update" ] && existing=$(cat "$update")
   # Keep everything from the first release heading down, minus any old copy of this version.

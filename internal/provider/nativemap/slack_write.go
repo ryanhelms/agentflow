@@ -13,9 +13,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/notifications"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/notifications"
 )
 
 var slackWorkspace = regexp.MustCompile(`^T[A-Z0-9]{8,31}$`)
@@ -143,7 +143,7 @@ func validSlackMessage(message string) bool {
 		!strings.ContainsFunc(message, func(r rune) bool { return unicode.IsControl(r) && r != '\r' && r != '\t' && r != '\n' })
 }
 
-// Deliver requires the caller's devflow policy gate and a durable receipt
+// Deliver requires the caller's agentflow policy gate and a durable receipt
 // store shared with retries. authorize must verify the selected session's
 // workspace and its live tool schema, and approve this exact intent. send
 // must dispatch that call at most once on the verified session and return a

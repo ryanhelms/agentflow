@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 const (
@@ -49,7 +49,7 @@ func publicationRepository(t *testing.T, basePolicy, branchPolicy, user string) 
 	t.Helper()
 	t.Chdir(t.TempDir())
 	home := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GH_TOKEN", "fixture")
@@ -63,30 +63,30 @@ func publicationRepository(t *testing.T, basePolicy, branchPolicy, user string) 
 	publicationGit(t, "init", "--quiet", "--template=", "--bare", "-b", "main", bare)
 	script := filepath.Join(t.TempDir(), "ssh.sh")
 	writePublicationFile(t, script, `case "$*" in
-  *git-receive-pack*) exec git-receive-pack "$DEVFLOW_TEST_BARE" ;;
-  *git-upload-pack*) exec git-upload-pack "$DEVFLOW_TEST_BARE" ;;
+  *git-receive-pack*) exec git-receive-pack "$AGENTFLOW_TEST_BARE" ;;
+  *git-upload-pack*) exec git-upload-pack "$AGENTFLOW_TEST_BARE" ;;
   *) exit 1 ;;
 esac
 `)
-	t.Setenv("DEVFLOW_TEST_BARE", filepath.ToSlash(bare))
-	t.Setenv("DEVFLOW_TEST_SSH", filepath.ToSlash(script))
-	t.Setenv("GIT_SSH_COMMAND", `sh "$DEVFLOW_TEST_SSH"`)
+	t.Setenv("AGENTFLOW_TEST_BARE", filepath.ToSlash(bare))
+	t.Setenv("AGENTFLOW_TEST_SSH", filepath.ToSlash(script))
+	t.Setenv("GIT_SSH_COMMAND", `sh "$AGENTFLOW_TEST_SSH"`)
 	t.Setenv("GIT_SSH_VARIANT", "simple")
 	publicationGit(t, "init", "--quiet", "--template=", "-b", "main")
 	publicationGit(t, "config", "user.name", "Fixture")
 	publicationGit(t, "config", "user.email", "test@example.org")
 	publicationGit(t, "remote", "add", "origin", "git@github.com:team/app.git")
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
-	writePublicationFile(t, ".devflow/config.yml", basePolicy)
-	publicationGit(t, "add", ".devflow/config.yml")
+	writePublicationFile(t, ".agentflow/config.yml", basePolicy)
+	publicationGit(t, "add", ".agentflow/config.yml")
 	publicationGit(t, "commit", "--quiet", "-m", "chore: configure repository policy")
 	publicationGit(t, "push", "--quiet", "-u", "origin", "main")
 	publicationGit(t, "remote", "set-head", "origin", "main")
 	publicationGit(t, "switch", "--quiet", "-c", "feature/pr")
-	writePublicationFile(t, ".devflow/config.yml", branchPolicy)
-	publicationGit(t, "add", ".devflow/config.yml")
+	writePublicationFile(t, ".agentflow/config.yml", branchPolicy)
+	publicationGit(t, "add", ".agentflow/config.yml")
 	publicationGit(t, "commit", "--quiet", "--allow-empty", "-m", publicationTitle)
 	return bare
 }
@@ -209,14 +209,14 @@ func TestPRPublicationCLIAndMCP(t *testing.T) {
 				Number int
 				Draft  bool
 			}
-			callPublicationTool(t, session, "devflow_pr_open", map[string]any{
+			callPublicationTool(t, session, "agentflow_pr_open", map[string]any{
 				"title": publicationTitle, "body": publicationBody, "draft": tc.draft, "confirm_token": p.ConfirmToken,
 			}, &response)
 			if response.Status != "opened" || response.Number != 7 || response.Draft != tc.draft || opened != 1 {
 				t.Fatalf("unexpected PR result: %+v, %d requests", response, opened)
 			}
 			var reply app.Pending
-			callPublicationTool(t, session, "devflow_review_reply", map[string]any{"thread_id": "T1", "body": "Fixed."}, &reply)
+			callPublicationTool(t, session, "agentflow_review_reply", map[string]any{"thread_id": "T1", "body": "Fixed."}, &reply)
 			if reply.Status != "needs_confirmation" {
 				t.Fatalf("review reply: %+v", reply)
 			}
@@ -278,7 +278,7 @@ func TestPRPublicationRechecksTargetBeforeApply(t *testing.T) {
 	// publishing worktree's origin/main and local object database untouched.
 	maintainer := t.TempDir()
 	publicationGit(t, "clone", "--quiet", bare, maintainer)
-	writePublicationFile(t, filepath.Join(maintainer, ".devflow/config.yml"), publicationPolicy)
+	writePublicationFile(t, filepath.Join(maintainer, ".agentflow/config.yml"), publicationPolicy)
 	publicationGit(t, "-C", maintainer, "-c", "user.name=Fixture", "-c", "user.email=test@example.org", "commit", "--quiet", "-am", "chore: disable automatic publication")
 	publicationGit(t, "-C", maintainer, "push", "--quiet", "origin", "main")
 

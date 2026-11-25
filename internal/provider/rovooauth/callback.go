@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 const callbackPath = "/oauth/rovo/callback"

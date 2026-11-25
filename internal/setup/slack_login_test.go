@@ -72,12 +72,12 @@ func TestRegisterProviderLoginUnsupported(t *testing.T) {
 	}
 }
 
-func TestDevflowSlackLoginRequiresTerminalAndPinnedServer(t *testing.T) {
+func TestAgentflowSlackLoginRequiresTerminalAndPinnedServer(t *testing.T) {
 	for _, tc := range []struct{ server, want string }{
 		{"", "interactive terminal"}, {"slack", "interactive terminal"}, {"other", "use the slack server"},
 	} {
 		var out bytes.Buffer
-		err := LoginProvider(t.Context(), t.TempDir(), "slack", "devflow", tc.server, strings.NewReader("mock-app-secret"), &out, &out)
+		err := LoginProvider(t.Context(), t.TempDir(), "slack", "agentflow", tc.server, strings.NewReader("mock-app-secret"), &out, &out)
 		if err == nil || !strings.Contains(err.Error(), tc.want) || out.Len() != 0 {
 			t.Fatalf("unexpected login result for %q: %v", tc.server, err)
 		}

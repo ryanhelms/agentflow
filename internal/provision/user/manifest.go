@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/provision/local"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision/local"
 )
 
 // Compare directory identities as well as following aliases. On case-insensitive
@@ -27,7 +27,7 @@ func ManifestHome(repo string) (string, error) {
 		return "", err
 	}
 	if !filepath.IsAbs(home) || strings.Contains("/"+filepath.ToSlash(home)+"/", "/../") {
-		return "", errors.New("managed companions require a clean, absolute devflow home outside the workspace")
+		return "", errors.New("managed companions require a clean, absolute agentflow home outside the workspace")
 	}
 	home = filepath.Clean(home)
 	root, err := os.Stat(repo)
@@ -38,7 +38,7 @@ func ManifestHome(repo string) (string, error) {
 		for {
 			info, err := os.Stat(path)
 			if err == nil && os.SameFile(info, root) {
-				return errors.New("managed companions require a devflow home outside the workspace")
+				return errors.New("managed companions require a agentflow home outside the workspace")
 			}
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err

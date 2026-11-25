@@ -44,12 +44,12 @@ func startHost(ctx context.Context, dir string) (*host, error) {
 	// The default provider can preconnect its model WebSocket at thread start.
 	// An inert provider avoids that connection while Codex retains its MCP setup.
 	cmd := exec.CommandContext(ctx, executable, "app-server", "--listen", "stdio://",
-		"-c", `mcp_servers.devflow={enabled=false,command="devflow"}`,
+		"-c", `mcp_servers.agentflow={enabled=false,command="agentflow"}`,
 		"-c", "features.hooks=false",
 		"-c", "analytics.enabled=false",
 		"-c", "check_for_update_on_startup=false",
-		"-c", `model_provider="devflow_codex_host"`,
-		"-c", `model_providers.devflow_codex_host={name="Devflow MCP transport",base_url="http://127.0.0.1:0",supports_websockets=false}`)
+		"-c", `model_provider="agentflow_codex_host"`,
+		"-c", `model_providers.agentflow_codex_host={name="Agentflow MCP transport",base_url="http://127.0.0.1:0",supports_websockets=false}`)
 	cmd.Dir = dir
 	cmd.Env = hostEnv()
 	// A nil Stderr discards arbitrary diagnostics without retaining secrets or

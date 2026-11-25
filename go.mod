@@ -1,4 +1,4 @@
-module github.com/nscaledev/devflow
+module github.com/nscaledev/agentflow
 
 go 1.26.0
 

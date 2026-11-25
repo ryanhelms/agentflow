@@ -1,5 +1,5 @@
 # Reusable: Claude drafts a PR description from the diff and the Jira ticket.
-# Opt-in: the calling repo must have the "devflow-ai" topic. Suggestions only; Claude
+# Opt-in: the calling repo must have the "agentflow-ai" topic. Suggestions only; Claude
 # posts a comment and never edits code, approves or merges.
 name: ai-pr-draft
 
@@ -23,7 +23,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action == 'opened' &&
-      contains(github.event.repository.topics, 'devflow-ai')
+      contains(github.event.repository.topics, 'agentflow-ai')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -39,7 +39,7 @@ jobs:
       - id: task
         name: Resolve task provider
         run: |
-          provider=$(devflow keys --provider)
+          provider=$(agentflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Fetch Jira context
         if: steps.task.outputs.provider == 'jira'

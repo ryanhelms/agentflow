@@ -7,12 +7,12 @@ const root = new URL('../', import.meta.url);
 const read = async path => (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
 const [start, posix, windows] = await Promise.all([
   read(new URL('adapters/plugin-mcp.cjs', root)),
-  read(new URL('templates/repo/.devflow/bin/devflow', root)),
-  read(new URL('templates/repo/.devflow/bin/devflow.ps1', root)),
+  read(new URL('templates/repo/.agentflow/bin/agentflow', root)),
+  read(new URL('templates/repo/.agentflow/bin/agentflow.ps1', root)),
 ]);
 const launchers = `const embeddedLaunchers = ${JSON.stringify({ posix, windows })};\n`;
 const args = ['-e', launchers + start, '--', '--embedded-launchers', 'codex'];
-const output = JSON.stringify({ mcpServers: { devflow: { command: 'node', args, startup_timeout_sec: 60 } } }, null, 2) + '\n';
+const output = JSON.stringify({ mcpServers: { agentflow: { command: 'node', args, startup_timeout_sec: 60 } } }, null, 2) + '\n';
 const path = new URL('adapters/codex/plugin-mcp.json', root);
 if (process.argv.includes('--check')) {
   if (await read(path) !== output) {

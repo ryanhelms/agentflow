@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

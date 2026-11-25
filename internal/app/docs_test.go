@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func docsGit(t *testing.T, dir string, args ...string) string {
@@ -47,24 +47,24 @@ func repositoryFixture(t *testing.T, role string) (*App, string) {
 set -eu
 [ "$1" = git@github.com ]
 case "$2" in
-  "git-upload-pack 'docs-team/handbook'") exec git-upload-pack "$DEVFLOW_FIXTURE_BARE" ;;
-  "git-receive-pack 'docs-team/handbook'") exec git-receive-pack "$DEVFLOW_FIXTURE_BARE" ;;
+  "git-upload-pack 'docs-team/handbook'") exec git-upload-pack "$AGENTFLOW_FIXTURE_BARE" ;;
+  "git-receive-pack 'docs-team/handbook'") exec git-receive-pack "$AGENTFLOW_FIXTURE_BARE" ;;
   *) exit 1 ;;
 esac
 `
 	if err := os.WriteFile(ssh, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DEVFLOW_FIXTURE_SSH", ssh)
-	t.Setenv("DEVFLOW_FIXTURE_BARE", bare)
-	docsGit(t, dir, "config", "--global", "core.sshCommand", `sh "$DEVFLOW_FIXTURE_SSH"`)
+	t.Setenv("AGENTFLOW_FIXTURE_SSH", ssh)
+	t.Setenv("AGENTFLOW_FIXTURE_BARE", bare)
+	docsGit(t, dir, "config", "--global", "core.sshCommand", `sh "$AGENTFLOW_FIXTURE_SSH"`)
 	docsGit(t, dir, "config", "--global", "ssh.variant", "simple")
 	docsGit(t, dir, "remote", "add", "origin", "git@github.com:engineers/application.git")
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := "devflow: 1\n" + role + ": {provider: repository, settings: {repository: " + fixtureOrigin + ", directory: records}}\n"
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+	cfg := "agentflow: 1\n" + role + ": {provider: repository, settings: {repository: " + fixtureOrigin + ", directory: records}}\n"
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(t.Context(), dir, "test")
@@ -103,7 +103,7 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 		switch r.Method {
 		case http.MethodGet:
 			q := r.URL.Query()
-			if !strings.HasPrefix(q.Get("head"), "docs-team:devflow/publication/") || q.Get("base") != "main" || q.Get("state") != "all" {
+			if !strings.HasPrefix(q.Get("head"), "docs-team:agentflow/publication/") || q.Get("base") != "main" || q.Get("state") != "all" {
 				t.Errorf("unexpected PR lookup: %s", r.URL.RawQuery)
 			}
 			if head == "" {
@@ -120,7 +120,7 @@ func TestDocsRepositoryPublishPR(t *testing.T) {
 				Head, Base string
 				Draft      *bool
 			}
-			if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Base != "main" || in.Draft == nil || *in.Draft || !strings.HasPrefix(in.Head, "devflow/publication/") {
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Base != "main" || in.Draft == nil || *in.Draft || !strings.HasPrefix(in.Head, "agentflow/publication/") {
 				t.Errorf("expected ordinary PR: %+v, %v", in, err)
 			}
 			head = in.Head
@@ -225,7 +225,7 @@ test "$1 $2 $3 $4" = 'api --hostname github.com --method'
 for endpoint do :; done
 case "$5 $endpoint" in
   'GET user')
-    [ "$DEVFLOW_FIXTURE_GH_LOGIN" = 'true' ] || exit 4
+    [ "$AGENTFLOW_FIXTURE_GH_LOGIN" = 'true' ] || exit 4
     printf 'HTTP/2.0 200 OK\r\n\r\n{"id":42,"login":"fixture"}' ;;
   'GET repos/docs-team/handbook/pulls?'*)
     printf 'HTTP/2.0 200 OK\r\n\r\n[]' ;;
@@ -241,7 +241,7 @@ esac
 	t.Setenv("PATH", filepath.Dir(command)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("GH_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")
-	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "false")
+	t.Setenv("AGENTFLOW_FIXTURE_GH_LOGIN", "false")
 	in := DocsPublishInput{
 		Ref:   provider.Ref{Instance: "repository", Scope: "engineering", ID: "knowledge"},
 		Title: "Knowledge", Body: "An OKF concept.", OperationID: "publish-native-cli",
@@ -250,7 +250,7 @@ esac
 	if _, err := a.DocsPublish(t.Context(), in, ""); !errors.Is(err, gh.ErrAuthentication) {
 		t.Fatalf("missing native login = %v", err)
 	}
-	t.Setenv("DEVFLOW_FIXTURE_GH_LOGIN", "true")
+	t.Setenv("AGENTFLOW_FIXTURE_GH_LOGIN", "true")
 	out, err := a.DocsPublish(t.Context(), in, "")
 	if err != nil {
 		t.Fatal(err)

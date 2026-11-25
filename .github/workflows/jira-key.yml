@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   validate:
-    if: vars.DEVFLOW_ENABLED != 'false'
+    if: vars.AGENTFLOW_ENABLED != 'false'
     runs-on: ubuntu-latest
     steps:
       # Fetch the merge ref so both parents (including a fork's head) are available.
@@ -44,11 +44,11 @@ jobs:
         continue-on-error: ${{ inputs.warn-only }}
         name: Resolve task provider
         run: |
-          provider=$(devflow keys --provider)
+          provider=$(agentflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Validate PR title, commits and task references
         env:
-          DEVFLOW_HOME: ${{ runner.temp }}/devflow-key-check
+          AGENTFLOW_HOME: ${{ runner.temp }}/agentflow-key-check
           WARN_ONLY: ${{ inputs.warn-only }}
           JIRA_BASE: ${{ vars.JIRA_BASE }}
           JIRA_USER: ${{ steps.task.outputs.provider == 'jira' && secrets.JIRA_USER || '' }}
@@ -58,7 +58,7 @@ jobs:
           GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || steps.task.outputs.provider == 'repository' && github.token || '' }}
         run: |
           if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
-          if ! devflow lint-msg --github-event; then
+          if ! agentflow lint-msg --github-event; then
             if [ "$WARN_ONLY" = true ]; then
               echo "::warning::Task validation failed. See the commit or reference diagnostic above."
             else

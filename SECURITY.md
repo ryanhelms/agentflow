@@ -1,6 +1,6 @@
 # Security
 
-devflow runs on every engineer's machine and in CI, with access to Jira, Confluence and
+agentflow runs on every engineer's machine and in CI, with access to Jira, Confluence and
 GitHub as that engineer. Treat it as security-sensitive code.
 
 ## Reporting
@@ -14,10 +14,10 @@ To stop a bad release from running anywhere, follow
 ## Design guarantees
 
 - **Release integrity.** Releases are built only by `.github/workflows/release.yml` in
-  `nscaledev/devflow`. Each archive is listed in `checksums.txt` and has a GitHub build
+  `nscaledev/agentflow`. Each archive is listed in `checksums.txt` and has a GitHub build
   provenance attestation. The launcher and the self-updater install a build only when
-  both the SHA-256 and `gh attestation verify --repo nscaledev/devflow --signer-workflow
-  nscaledev/devflow/.github/workflows/release.yml` pass, so a build from any other workflow
+  both the SHA-256 and `gh attestation verify --repo nscaledev/agentflow --signer-workflow
+  nscaledev/agentflow/.github/workflows/release.yml` pass, so a build from any other workflow
   in the repo is rejected.
 - **Credentials.** Developer tokens are stored in the OS keychain (macOS Keychain, Secret
   Service, Windows Credential Manager). They are never written to config files, logs or
@@ -25,6 +25,6 @@ To stop a bad release from running anywhere, follow
 - **Untrusted content.** Jira, Confluence and GitHub text is returned to AI agents inside
   labelled reference blocks. Agents are told not to follow instructions in it, and remote
   writes whose payload came from that text always require confirmation.
-- **Never list.** At every autonomy level devflow refuses to force-push, push to
+- **Never list.** At every autonomy level agentflow refuses to force-push, push to
   protected branches, merge PRs, delete remote branches, or act on tickets as another user.
-- **Audit.** Every local and remote action is appended to `~/.devflow/audit.log`.
+- **Audit.** Every local and remote action is appended to `~/.agentflow/audit.log`.

@@ -14,9 +14,9 @@ func TestRemovalPreservesUnrelatedProject(t *testing.T) {
 	dir := gitRepo(t)
 	files := map[string]string{
 		".claude/settings.json":      `{"includeCoAuthoredBy":false}`,
-		".codex/config.toml":         "# Workspace configuration\n[mcp_servers.devflow]\ncommand = \"my-company-command\"\n",
-		".devflow/config.yml":        "project: local\n",
-		".devflow/bin/devflow":       "#!/bin/sh\n# Another project tool\n",
+		".codex/config.toml":         "# Workspace configuration\n[mcp_servers.agentflow]\ncommand = \"my-company-command\"\n",
+		".agentflow/config.yml":      "project: local\n",
+		".agentflow/bin/agentflow":   "#!/bin/sh\n# Another project tool\n",
 		"release-please-config.json": "{}\n",
 	}
 	for rel, body := range files {
@@ -48,9 +48,9 @@ func TestProjectLifecyclePreservesSharedOwnership(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			dir := gitRepo(t)
 			const rel = ".claude/settings.json"
-			const original = `{"includeCoAuthoredBy":true,"enabledPlugins":{"devflow@nscale":true},"team":"project-private-value"}`
+			const original = `{"includeCoAuthoredBy":true,"enabledPlugins":{"agentflow@nscale":true},"team":"project-private-value"}`
 			setupFile(t, dir, rel, original, 0o600)
-			const codex = "# team-owned table\n[mcp_servers.devflow]\ncommand = \"custom\"\n"
+			const codex = "# team-owned table\n[mcp_servers.agentflow]\ncommand = \"custom\"\n"
 			setupFile(t, dir, ".codex/config.toml", codex, 0o600)
 			const existingGuidance = "# Team instructions\n\n" + blockStart + "\nTeam-managed version\n" + blockEnd + "\n"
 			if mode == "guided-client" {
@@ -116,7 +116,7 @@ func TestProjectLifecyclePreservesSharedOwnership(t *testing.T) {
 			if err := json.Unmarshal(read, &result); err != nil {
 				t.Fatal(err)
 			}
-			if result["includeCoAuthoredBy"] != true || result["extraKnownMarketplaces"] != nil || result["later"] != "another-private-value" || result["team"] != "project-private-value" || result["enabledPlugins"].(map[string]any)["devflow@nscale"] != true {
+			if result["includeCoAuthoredBy"] != true || result["extraKnownMarketplaces"] != nil || result["later"] != "another-private-value" || result["team"] != "project-private-value" || result["enabledPlugins"].(map[string]any)["agentflow@nscale"] != true {
 				t.Fatalf("unexpected cleanup: %s", read)
 			}
 			data, err = os.ReadFile(filepath.Join(dir, ".codex/config.toml"))

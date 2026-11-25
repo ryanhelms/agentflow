@@ -9,8 +9,8 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 type boundTransport struct {
@@ -88,7 +88,7 @@ func (e Enrollment) failure(err error, selecting bool) error {
 	case err == nil, errors.Is(err, e.ErrDenied), errors.Is(err, e.ErrGrantChanged):
 		return native.ErrDenied
 	case errors.Is(err, e.ErrLoginRequired):
-		return fmt.Errorf("%w: start devflow setup login --provider asana --client devflow", native.ErrSignIn)
+		return fmt.Errorf("%w: start agentflow setup login --provider asana --client agentflow", native.ErrSignIn)
 	case errors.Is(err, e.ErrTransport):
 		return errors.New("could not verify the Asana MCP grant")
 	case errors.Is(err, e.ErrNotEnrolled):

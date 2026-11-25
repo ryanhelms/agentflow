@@ -13,9 +13,9 @@ const methods = [
   ["plugin", "Plugin manager"],
 ];
 const steps = [
-  { title: "Task", heading: "Find the work", description: "Pick a task from the repository’s configured task provider.", command: "devflow work" },
-  { title: "Branch", heading: "Bind the branch", description: "Start the selected task. On the Devflow repository, give its GitHub issue number.", command: "devflow start '#123'" },
-  { title: "Pull request", heading: "Check PR readiness", description: "Check readiness before opening the pull request. Carry the task reference into the review.", command: "devflow pr --check" },
+  { title: "Task", heading: "Find the work", description: "Pick a task from the repository’s configured task provider.", command: "agentflow work" },
+  { title: "Branch", heading: "Bind the branch", description: "Start the selected task. On the Agentflow repository, give its GitHub issue number.", command: "agentflow start '#123'" },
+  { title: "Pull request", heading: "Check PR readiness", description: "Check readiness before opening the pull request. Carry the task reference into the review.", command: "agentflow pr --check" },
 ];
 
 function CommandBlock({ command, label, hint }) {
@@ -30,7 +30,7 @@ function CommandBlock({ command, label, hint }) {
   }
   return (
     <Stack gap={3}>
-      <pre className="devflow-code"><code>{command}</code></pre>
+      <pre className="agentflow-code"><code>{command}</code></pre>
       <Row className="copy-actions" wrap gap={3}>
         <Button variant="primary" icon={copyStatus === "Copied." ? "check" : "copy"} onClick={copy}>{label}</Button>
         <Text role="status" tone="muted">{copyStatus}</Text>
@@ -75,7 +75,7 @@ function Installer() {
                   placeholder={platform === "windows" ? "C:\\projects\\my-service" : "/path/to/repository"} />
               </FormField>
             </div>
-            <Text as="p" tone="muted">Sign in to GitHub CLI with access to <strong>nscaledev/devflow</strong>.</Text>
+            <Text as="p" tone="muted">Sign in to GitHub CLI with access to <strong>nscaledev/agentflow</strong>.</Text>
             <CommandBlock key={terminal} command={terminal} label="Copy command"
               hint="Run inside the target checkout or supply its path. An invalid checkout prompts for a replacement. Repeating setup preserves saved choices." />
             <details className="install-details">
@@ -86,7 +86,7 @@ function Installer() {
                   <Link external href={SOURCE_REPOSITORY + "/releases/tag/" + CURRENT_RELEASE}>release assets</Link>.
                   If the CLI is already installed, run this in the target checkout.
                 </Text>
-                <pre className="devflow-code"><code>devflow init</code></pre>
+                <pre className="agentflow-code"><code>agentflow init</code></pre>
               </Stack>
             </details>
           </Stack>
@@ -113,8 +113,8 @@ function Installer() {
             <Text as="p" tone="muted">Use your Git access to the internal Nscale repository. Open your client in the target checkout.</Text>
             <CommandBlock key={commands} command={commands} label="Copy plugin commands" />
             <Text as="p">
-              {plugin === "claude" ? <>Run <code>/devflow:manager install</code> in Claude Code.</> :
-                <>Ask “Use the Devflow manager to install Devflow in this project.”</>}{" "}
+              {plugin === "claude" ? <>Run <code>/agentflow:manager install</code> in Claude Code.</> :
+                <>Ask “Use the Agentflow manager to install Agentflow in this project.”</>}{" "}
               Use <code>update</code> to refresh it or <code>remove</code> to undo project setup.
             </Text>
           </Stack>
@@ -140,7 +140,7 @@ function Workflow() {
         <Stack key={step.title} className="workflow-step" gap={2} aria-live="polite">
           <Text as="h4" variant="h3">{step.heading}</Text>
           <Text as="p" tone="muted">{step.description}</Text>
-          <pre className="devflow-code"><code>{step.command}</code></pre>
+          <pre className="agentflow-code"><code>{step.command}</code></pre>
         </Stack>
       </Stack>
     </Panel>
@@ -149,9 +149,9 @@ function Workflow() {
 
 export default function Overview({ active }) {
   return (
-    <section className="devflow-overview" hidden={!active}>
+    <section className="agentflow-overview" hidden={!active}>
       <DashboardTemplate header={
-        <PageHeader title="Install Devflow"
+        <PageHeader title="Install Agentflow"
           description="Connect the work in your Git checkout to its task, engineering decisions, and pull request."
           actions={<Button to="#docs" variant="secondary">Explore the documentation</Button>}
           meta={<Text>Latest release <Link external href={SOURCE_REPOSITORY + "/releases/tag/" + CURRENT_RELEASE}>{CURRENT_RELEASE}</Link></Text>} />

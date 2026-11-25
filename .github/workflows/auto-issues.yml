@@ -32,7 +32,7 @@ on:
         required: false
       JIRA_TOKEN:
         required: false
-      DEVFLOW_APP_PRIVATE_KEY:
+      AGENTFLOW_APP_PRIVATE_KEY:
         required: false
       SECOPS_READ_TOKEN:
         required: false
@@ -58,7 +58,7 @@ jobs:
 
   issues:
     if: >-
-      vars.DEVFLOW_ENABLED != 'false' &&
+      vars.AGENTFLOW_ENABLED != 'false' &&
       (!inputs.provider-secops || (github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'))
     runs-on: ubuntu-latest
     env:
@@ -75,16 +75,16 @@ jobs:
         run: |
           config=$(reviewed-config.sh)
           cd "$config"
-          provider=$(devflow keys --provider)
+          provider=$(agentflow keys --provider)
           printf 'provider=%s\n' "$provider" >> "$GITHUB_OUTPUT"
 
       # Dependabot alerts need a GitHub App token with "Dependabot alerts: read".
       - id: app
-        if: steps.task.outputs.provider == 'jira' && ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.DEVFLOW_APP_ID != '')
+        if: steps.task.outputs.provider == 'jira' && ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.AGENTFLOW_APP_ID != '')
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.DEVFLOW_APP_ID }}
-          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.AGENTFLOW_APP_ID }}
+          private-key: ${{ secrets.AGENTFLOW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
@@ -107,7 +107,7 @@ jobs:
                   "[$sev] $REPO_SLUG: $summary" "Dependabot alert: $url" security
               done
           else
-            echo "::notice::DEVFLOW_APP_ID not set; skipping Dependabot alerts"
+            echo "::notice::AGENTFLOW_APP_ID not set; skipping Dependabot alerts"
           fi
           gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" \
             --jq '.[] | select(.rule.security_severity_level == "critical" or .rule.security_severity_level == "high")

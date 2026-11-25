@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/managedcli"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/managedcli"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func TestExplicitAtlassianCredentialsKeepHeadlessRoute(t *testing.T) {

@@ -7,7 +7,7 @@ import "./style.css";
 import Docs from "./Docs.jsx";
 import Overview from "./Overview.jsx";
 
-const themePreference = "devflow.website.theme";
+const themePreference = "agentflow.website.theme";
 
 function initialTheme() {
   try {
@@ -54,14 +54,14 @@ export default function App() {
 
   const themeLabel = activeTheme === "dark" ? "Use light theme" : "Use dark theme";
   return (
-    <div className="nscale-ui devflow-site" data-theme={activeTheme}>
+    <div className="nscale-ui agentflow-site" data-theme={activeTheme}>
       <header className="site-header">
         <Row className="site-header-inner" wrap justify="between" gap={4}>
-          <Link href="#overview" className="site-brand" aria-label="Devflow overview">
+          <Link href="#overview" className="site-brand" aria-label="Agentflow overview">
             <Logo variant="full" height={14} />
-            <Text className="site-product" weight="bold">Devflow</Text>
+            <Text className="site-product" weight="bold">Agentflow</Text>
           </Link>
-          <Row as="nav" aria-label="Devflow" className="site-nav" wrap gap={2}>
+          <Row as="nav" aria-label="Agentflow" className="site-nav" wrap gap={2}>
             <Link href="#overview" aria-current={page === "overview" ? "page" : undefined}>Overview</Link>
             <Link href="#docs" aria-current={page === "docs" ? "page" : undefined}>Documentation</Link>
             <Button variant="ghost" size="sm" icon={activeTheme === "dark" ? "sun" : "moon"}

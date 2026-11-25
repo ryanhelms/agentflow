@@ -1,5 +1,5 @@
-// Package nativemap maps bounded devflow operations to native provider tool
-// arguments and projects successful JSON results into devflow service objects.
+// Package nativemap maps bounded agentflow operations to native provider tool
+// arguments and projects successful JSON results into agentflow service objects.
 package nativemap
 
 import (
@@ -12,7 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 type Kind string

@@ -10,13 +10,13 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 func TestDesktopJiraCreate(t *testing.T) {
@@ -39,7 +39,7 @@ func TestDesktopJiraCreate(t *testing.T) {
 	mcp.AddTool(server, &mcp.Tool{Name: createTool, InputSchema: tools[createTool]}, func(_ context.Context, _ *mcp.CallToolRequest, in map[string]any) (*mcp.CallToolResult, map[string]any, error) {
 		writes++
 		want := map[string]any{"cloudId": site, "projectKey": "DEV", "summary": title, "issueType": "Task",
-			"description": "<p>&lt;book&gt;<br>Confirm link</p>", "contentFormat": "html", "labels": []any{"devflow"}}
+			"description": "<p>&lt;book&gt;<br>Confirm link</p>", "contentFormat": "html", "labels": []any{"agentflow"}}
 		if !reflect.DeepEqual(in, want) {
 			t.Errorf("wrong create arguments: %+v", in)
 		}
@@ -117,7 +117,7 @@ func TestDesktopJiraCreate(t *testing.T) {
 		t.Fatal("replayed create with uncertain result", err, writes)
 	}
 	server.RemoveTools(createTool)
-	call, err := nativemap.JiraCreate(site, provider.TaskDraft{Scope: "DEV", Type: "Task", Title: "Fixture", Labels: []string{"devflow"}})
+	call, err := nativemap.JiraCreate(site, provider.TaskDraft{Scope: "DEV", Type: "Task", Title: "Fixture", Labels: []string{"agentflow"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestDesktopJiraCreate(t *testing.T) {
 
 func TestDesktopJiraCreateAllowlist(t *testing.T) {
 	const site = "https://fixture.atlassian.net"
-	call, err := nativemap.JiraCreate(site, provider.TaskDraft{Scope: "DEV", Type: "Task", Title: "Title", Labels: []string{"devflow"}})
+	call, err := nativemap.JiraCreate(site, provider.TaskDraft{Scope: "DEV", Type: "Task", Title: "Title", Labels: []string{"agentflow"}})
 	if err != nil {
 		t.Fatal(err)
 	}

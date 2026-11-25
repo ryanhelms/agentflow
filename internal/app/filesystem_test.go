@@ -8,16 +8,16 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestDocsSearchWithFileSystemProvider(t *testing.T) {
 	dir := newRepo(t)
 	for path, content := range map[string]string{
-		".devflow/config.yml": "devflow: 1\nknowledge_base: {provider: filesystem, settings: {root: handbook}}\n",
-		"handbook/quota.md":   "---\nversion: 1\nkind: document\ninstance: filesystem\nscope: engineering\nid: quota\ntitle: Quota design\n---\nAn engineering decision.\n",
+		".agentflow/config.yml": "agentflow: 1\nknowledge_base: {provider: filesystem, settings: {root: handbook}}\n",
+		"handbook/quota.md":     "---\nversion: 1\nkind: document\ninstance: filesystem\nscope: engineering\nid: quota\ntitle: Quota design\n---\nAn engineering decision.\n",
 	} {
 		path = filepath.Join(dir, path)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -49,7 +49,7 @@ func TestKnowledgeRolesReadAndApproveOKFUpdate(t *testing.T) {
 			if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 				t.Fatal(err)
 			}
-			const raw = "---\ntype: Runbook\ntags: [quota]\ntitle: GPU quota\nx-devflow-ref: {scope: eng, id: quota}\n---\nA nested concept.\n"
+			const raw = "---\ntype: Runbook\ntags: [quota]\ntitle: GPU quota\nx-agentflow-ref: {scope: eng, id: quota}\n---\nA nested concept.\n"
 			if err := os.WriteFile(file, []byte(raw), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -63,11 +63,11 @@ func TestKnowledgeRolesReadAndApproveOKFUpdate(t *testing.T) {
 				before = docsGit(t, bare, "show-ref")
 				settings = fmt.Sprintf("{directory: handbook, publication: push, repository: %q, format: legacy}", bare)
 			}
-			if err := os.MkdirAll(filepath.Join(dir, ".devflow"), 0700); err != nil {
+			if err := os.MkdirAll(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			cfg := "devflow: 1\nknowledge_base: {provider: " + name + ", settings: " + settings + "}\n"
-			if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(cfg), 0600); err != nil {
+			cfg := "agentflow: 1\nknowledge_base: {provider: " + name + ", settings: " + settings + "}\n"
+			if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(cfg), 0600); err != nil {
 				t.Fatal(err)
 			}
 			a, err := Open(t.Context(), dir, "test")

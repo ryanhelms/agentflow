@@ -100,12 +100,12 @@ func TestNotificationTimeoutRemainsUnconfirmed(t *testing.T) {
 	if err != nil || strings.Contains(string(data), "fixture-secret") {
 		t.Fatal("notification result exposes a credential")
 	}
-	entries, err := os.ReadDir(filepath.Join(os.Getenv("DEVFLOW_HOME"), "notification-receipts"))
+	entries, err := os.ReadDir(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "notification-receipts"))
 	if err != nil || len(entries) != 3 {
 		t.Fatalf("receipt directory: %v, %v", entries, err)
 	}
 	for _, entry := range entries {
-		data, err := os.ReadFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "notification-receipts", entry.Name()))
+		data, err := os.ReadFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "notification-receipts", entry.Name()))
 		if err != nil || strings.Contains(string(data), "fixture-secret") || strings.Contains(string(data), fixtureBody) {
 			t.Fatal("receipt contains notification credentials or the message")
 		}
@@ -150,7 +150,7 @@ func TestNotificationLegacySlackAndUnconfiguredRoutes(t *testing.T) {
 	})
 	input.DryRun = true
 	assertNotificationStatuses(t, runNotificationFixture(t, dir, input, transport), NotificationPlanned)
-	if _, err := os.Stat(filepath.Join(os.Getenv("DEVFLOW_HOME"), "notification-receipts")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "notification-receipts")); !os.IsNotExist(err) {
 		t.Fatalf("preview touched receipt store: %v", err)
 	}
 	input.DryRun = false
@@ -165,7 +165,7 @@ func TestNotificationLegacySlackAndUnconfiguredRoutes(t *testing.T) {
 func notificationFixtureRepo(t *testing.T, fixture string) string {
 	t.Helper()
 	home, dir := t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("SLACK_WEBHOOK_URL", slackFixtureURL)
 	t.Setenv("WEBHOOK_URL", hookFixtureURL)
 	t.Setenv("FIXTURE_WEBHOOK_AUTH", "Bearer authorization-fixture-secret")
@@ -182,10 +182,10 @@ func notificationFixtureRepo(t *testing.T, fixture string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0o700); err != nil {
+		if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), data, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), data, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

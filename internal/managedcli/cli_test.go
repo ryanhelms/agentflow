@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 func TestEnsureInstallsAndReusesVerifiedCLI(t *testing.T) {
@@ -17,7 +17,7 @@ func TestEnsureInstallsAndReusesVerifiedCLI(t *testing.T) {
 		t.Skip("POSIX executable fixture")
 	}
 	t.Setenv("PATH", t.TempDir())
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	ctx, repo := t.Context(), t.TempDir()
 	raw := []byte("#!/bin/sh\n[ \"$1\" = --version ]\n")
 	source := filepath.Join(t.TempDir(), "cli")

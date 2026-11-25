@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "devflow": {
+    "agentflow": {
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/launch",
       "args": ["mcp", "--client", "claude"]
     }

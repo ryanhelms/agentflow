@@ -10,7 +10,7 @@
 | Action 1 | **Create page** (Confluence) in the team space, from template *Design Doc* (shared set, Engineering space). Title: `{{issue.key}} · {{issue.summary}}` |
 | Action 2 | **Comment on issue**: `Design doc: {{createdPage.url}}` |
 | Action 3 | **Edit issue** › add a web link to the page (optional; needs the Confluence link field) |
-| Actor | svc-devflow |
+| Actor | svc-agentflow |
 
 Template ownership: engineering managers (see `confluence-templates/design-doc.md`).
 If `{{createdPage.url}}` isn't available in your Automation version, use the page link the

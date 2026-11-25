@@ -1,4 +1,4 @@
-// Package githubissues adapts GitHub repository issues to devflow tasks.
+// Package githubissues adapts GitHub repository issues to agentflow tasks.
 package githubissues
 
 import (
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 type Adapter struct {

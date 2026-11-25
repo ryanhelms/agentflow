@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "devflow": {
+    "agentflow": {
       "command": "node",
       "args": [
         "${CURSOR_PLUGIN_ROOT}/adapters/plugin-mcp.cjs",

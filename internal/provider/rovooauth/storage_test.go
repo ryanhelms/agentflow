@@ -200,7 +200,7 @@ func TestChunkedSpendAndRotation(t *testing.T) {
 
 func TestLegacyInlineGrant(t *testing.T) {
 	f := newFixture(t)
-	g := grant{Generation: "original", ClientID: "devflow-fixture-client", Refresh: "fixture-refresh-"}
+	g := grant{Generation: "original", ClientID: "agentflow-fixture-client", Refresh: "fixture-refresh-"}
 	raw, err := json.Marshal(g)
 	if err != nil {
 		t.Fatal(err)

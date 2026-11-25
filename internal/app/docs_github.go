@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubwiki"
-	"github.com/nscaledev/devflow/internal/provider/repository"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubwiki"
+	"github.com/nscaledev/agentflow/internal/provider/repository"
 )
 
 func (a *App) knowledgeWiki(ctx context.Context, beforeWrite func(base, target string) error) (*githubwiki.Knowledge, error) {

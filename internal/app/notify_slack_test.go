@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 const (
@@ -258,10 +258,10 @@ func TestSlackIncomingWebhookAutomationOnly(t *testing.T) {
 
 func writeSlackNotificationConfig(t *testing.T, dir, raw string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(dir, ".devflow"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agentflow"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte(raw), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

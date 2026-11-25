@@ -2,7 +2,7 @@
 // branch. Enable Wikis in the repository settings and create the first page
 // in the web UI before using the adapter.
 //
-// The devflow-pages directory is reserved for FileSystem document records.
+// The agentflow-pages directory is reserved for FileSystem document records.
 // Ordinary Markdown pages elsewhere in the wiki, including Home.md, stay
 // editable in GitHub and are outside this provider's search and write scope.
 // To adopt an ordinary page, publish its body under a new provider reference.
@@ -22,12 +22,12 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/repository"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/repository"
 )
 
-const directory = "devflow-pages"
+const directory = "agentflow-pages"
 
 // Config identifies a github.com repository by owner/name. Origin optionally
 // overrides the Git transport with an absolute local path, for example to test

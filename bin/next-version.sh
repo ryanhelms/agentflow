@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print the semantic version a build of HEAD gets for one deployable unit.
-# Mirrors `devflow release version` (internal/release) so CI doesn't need the binary.
+# Mirrors `agentflow release version` (internal/release) so CI doesn't need the binary.
 #
 #   next-version.sh --path services/api --prefix api-v [--strategy trunk|gitflow] \
 #                   [--default-branch main] [--branch NAME]

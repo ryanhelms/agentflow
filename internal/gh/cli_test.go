@@ -33,27 +33,27 @@ test "$NO_COLOR" = 1
 test "$GH_NO_UPDATE_NOTIFIER" = 1
 test "$GH_TELEMETRY" = false
 /bin/cat > body
-if [ "${DEVFLOW_GH_MOCK_WAIT:-0}" = 1 ]; then
+if [ "${AGENTFLOW_GH_MOCK_WAIT:-0}" = 1 ]; then
 	exec /bin/sleep 10
 fi
-printf '%s' "$DEVFLOW_GH_MOCK_STDOUT"
-printf '%s' "$DEVFLOW_GH_MOCK_STDERR" >&2
-exit "$DEVFLOW_GH_MOCK_EXIT"
+printf '%s' "$AGENTFLOW_GH_MOCK_STDOUT"
+printf '%s' "$AGENTFLOW_GH_MOCK_STDERR" >&2
+exit "$AGENTFLOW_GH_MOCK_EXIT"
 `
 	if err := os.WriteFile(command, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("DEVFLOW_GH_MOCK_STDERR", "")
-	t.Setenv("DEVFLOW_GH_MOCK_WAIT", "0")
-	t.Setenv("DEVFLOW_GH_MOCK_STDOUT", "")
-	t.Setenv("DEVFLOW_GH_MOCK_EXIT", "0")
+	t.Setenv("AGENTFLOW_GH_MOCK_STDERR", "")
+	t.Setenv("AGENTFLOW_GH_MOCK_WAIT", "0")
+	t.Setenv("AGENTFLOW_GH_MOCK_STDOUT", "")
+	t.Setenv("AGENTFLOW_GH_MOCK_EXIT", "0")
 	return NewCLI(command, dir, host)
 }
 
 func fixtureResponse(t *testing.T, status, headers, body, exit string) {
 	t.Helper()
-	t.Setenv("DEVFLOW_GH_MOCK_STDOUT", "HTTP/2.0 "+status+"\r\n"+headers+"\r\n"+body)
-	t.Setenv("DEVFLOW_GH_MOCK_EXIT", exit)
+	t.Setenv("AGENTFLOW_GH_MOCK_STDOUT", "HTTP/2.0 "+status+"\r\n"+headers+"\r\n"+body)
+	t.Setenv("AGENTFLOW_GH_MOCK_EXIT", exit)
 }
 
 func cliFixtureFile(t *testing.T, client *Client, name string) string {
@@ -214,9 +214,9 @@ func TestCLIProcessFailures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := mockCLI(t, "")
-			t.Setenv("DEVFLOW_GH_MOCK_STDOUT", tc.stdout)
-			t.Setenv("DEVFLOW_GH_MOCK_EXIT", tc.exit)
-			t.Setenv("DEVFLOW_GH_MOCK_STDERR", "sensitive diagnostic fixture")
+			t.Setenv("AGENTFLOW_GH_MOCK_STDOUT", tc.stdout)
+			t.Setenv("AGENTFLOW_GH_MOCK_EXIT", tc.exit)
+			t.Setenv("AGENTFLOW_GH_MOCK_STDERR", "sensitive diagnostic fixture")
 			var out map[string]any
 			err := client.Do(t.Context(), tc.method, "/repos/acme/repo/issues", nil, &out)
 			if err == nil || (tc.want != nil && !errors.Is(err, tc.want)) ||
@@ -232,7 +232,7 @@ func TestCLIProcessFailures(t *testing.T) {
 
 func TestCLICallerDeadline(t *testing.T) {
 	client := mockCLI(t, "")
-	t.Setenv("DEVFLOW_GH_MOCK_WAIT", "1")
+	t.Setenv("AGENTFLOW_GH_MOCK_WAIT", "1")
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 	err := client.Do(ctx, http.MethodPost, "/repos/acme/repo/issues", nil, nil)

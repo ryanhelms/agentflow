@@ -3,7 +3,7 @@ package twg
 import (
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestJiraGetWithRemoteLinks(t *testing.T) {

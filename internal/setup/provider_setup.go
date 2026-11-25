@@ -1,4 +1,4 @@
-// Guided setup inspects the environment running devflow.
+// Guided setup inspects the environment running agentflow.
 package setup
 
 import (
@@ -12,14 +12,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/managedcli"
-	"github.com/nscaledev/devflow/internal/managedgh"
-	"github.com/nscaledev/devflow/internal/managedmcp"
-	"github.com/nscaledev/devflow/internal/provider/asana"
-	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/managedcli"
+	"github.com/nscaledev/agentflow/internal/managedgh"
+	"github.com/nscaledev/agentflow/internal/managedmcp"
+	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/nscaledev/agentflow/internal/provider/devopsfixture"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 type ProviderRequirement struct {
@@ -94,7 +94,7 @@ func PlanSetup(ctx context.Context, dir, client, companion string) (*ProviderSet
 	}
 	p := &ProviderSetupPlan{Root: root, Platform: provision.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}, Ready: true, Requirements: []ProviderRequirement{}, Tooling: []ProviderTooling{}}
 	if !found {
-		p.check("configuration", "devflow", false, "create .devflow/config.yml with the provider sections for this workspace")
+		p.check("configuration", "agentflow", false, "create .agentflow/config.yml with the provider sections for this workspace")
 		return p, nil
 	}
 	providers := cfg.Providers
@@ -355,7 +355,7 @@ func (p *ProviderSetupPlan) checkGit(ctx context.Context, env provision.Environm
 	var detail string
 	switch {
 	case errors.As(err, &conflict):
-		detail = "install git on PATH in the environment running devflow and rerun setup. No installation artifact is declared"
+		detail = "install git on PATH in the environment running agentflow and rerun setup. No installation artifact is declared"
 	case err != nil:
 		return false, err
 	default:

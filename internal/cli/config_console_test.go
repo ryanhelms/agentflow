@@ -13,18 +13,18 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
 )
 
 func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 	ctx := t.Context()
 	t.Chdir(t.TempDir())
 	home := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
-	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("AGENTFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 	t.Setenv("CODEX_THREAD_ID", "console-cli-owner")
 	t.Setenv("GH_TOKEN", "fixture")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -42,10 +42,10 @@ func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 			t.Fatalf("git %s: %v, %s", args[0], err, out)
 		}
 	}
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
-	const source = "devflow: 1\ncommit: {require_key: false}\ntask_management: {provider: github-issues}\n# repository source marker\n"
+	const source = "agentflow: 1\ncommit: {require_key: false}\ntask_management: {provider: github-issues}\n# repository source marker\n"
 	const privateMarker = "private-fixture-preference"
 	const personal = "autonomy: {remote: confirm}\n# " + privateMarker + "\n"
 	write := func(path, text string) {
@@ -82,11 +82,11 @@ func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 	}
 	annotations := map[string]bool{}
 	for _, tool := range listed.Tools {
-		if tool.Name == "devflow_config" || tool.Name == "devflow_config_apply" {
+		if tool.Name == "agentflow_config" || tool.Name == "agentflow_config_apply" {
 			annotations[tool.Name] = tool.Annotations != nil && tool.Annotations.ReadOnlyHint
 		}
 	}
-	if len(annotations) != 2 || !annotations["devflow_config"] || annotations["devflow_config_apply"] {
+	if len(annotations) != 2 || !annotations["agentflow_config"] || annotations["agentflow_config_apply"] {
 		t.Fatalf("configuration tools or read-only hints: %v", annotations)
 	}
 
@@ -136,8 +136,8 @@ func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 			t.Fatalf("config %s JSON: %v", op, err)
 		}
 	}
-	const query = "devflow_config"
-	const apply = "devflow_config_apply"
+	const query = "agentflow_config"
+	const apply = "agentflow_config_apply"
 
 	t.Run("typed source edits and bound publication", func(t *testing.T) {
 		var inventory consolecfg.Snapshot
@@ -251,7 +251,7 @@ func TestConfigConsoleThroughCLIAndMCP(t *testing.T) {
 		for _, tool := range available.Tools {
 			seen[tool.Name] = true
 		}
-		if !seen[query] || !seen[apply] || seen["devflow_commit"] {
+		if !seen[query] || !seen[apply] || seen["agentflow_commit"] {
 			t.Fatal("recovery must expose the config tools and withhold normal write tools")
 		}
 		response, err := recovery.CallTool(t.Context(), &mcp.CallToolParams{Name: query, Arguments: map[string]any{"operation": "read", "path": consolecfg.MainFile}})

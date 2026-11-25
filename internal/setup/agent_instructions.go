@@ -5,10 +5,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
-const agentInstructionsFile = "AGENTS.md"
+const (
+	agentInstructionsFile = "AGENTS.md"
+	legacyBlockStart      = "<!-- devflow:start -->"
+	legacyBlockEnd        = "<!-- devflow:end -->"
+)
 
 // AgentInstructions is the same workflow guidance written by Init and Install.
 func AgentInstructions() string {
@@ -18,7 +22,7 @@ func AgentInstructions() string {
 
 // AgentProviderSelection reports the resolved roles without embedding settings or credentials.
 func AgentProviderSelection(cfg *config.Repo) string {
-	return fmt.Sprintf("Devflow providers from .devflow/config.yml: task_management=%s, knowledge_base=%s.\n",
+	return fmt.Sprintf("Agentflow providers from .agentflow/config.yml: task_management=%s, knowledge_base=%s.\n",
 		cfg.Providers.TaskManagement.Provider, cfg.Providers.KnowledgeBase.Provider)
 }
 
@@ -41,7 +45,14 @@ func writeAgentInstructions(res *Result, repoDir string) error {
 		}
 		existing := string(current)
 		block := strings.TrimSpace(string(mustTemplate(agentInstructionsFile)))
-		first, last := strings.Index(existing, blockStart), strings.Index(existing, blockEnd)
+		start, end := blockStart, blockEnd
+		if strings.Contains(existing, legacyBlockStart) || strings.Contains(existing, legacyBlockEnd) {
+			if strings.Contains(existing, blockStart) || strings.Contains(existing, blockEnd) {
+				return fmt.Errorf("%s: found both agentflow and legacy instruction markers", agentInstructionsFile)
+			}
+			start, end = legacyBlockStart, legacyBlockEnd
+		}
+		first, last := strings.Index(existing, start), strings.Index(existing, end)
 		var next string
 		switch {
 		case first < 0 && last < 0:
@@ -53,10 +64,10 @@ func writeAgentInstructions(res *Result, repoDir string) error {
 				next += "\n"
 			}
 			next += block + "\n"
-		case first >= 0 && last > first && strings.Count(existing, blockStart) == 1 && strings.Count(existing, blockEnd) == 1:
-			next = existing[:first] + block + existing[last+len(blockEnd):]
+		case first >= 0 && last > first && strings.Count(existing, start) == 1 && strings.Count(existing, end) == 1:
+			next = existing[:first] + block + existing[last+len(end):]
 		default:
-			return fmt.Errorf("%s: expected one complete devflow instruction block", agentInstructionsFile)
+			return fmt.Errorf("%s: expected one complete agentflow instruction block", agentInstructionsFile)
 		}
 		if next == existing {
 			res.Notes = append(res.Notes, "AGENTS.md guidance is up to date")

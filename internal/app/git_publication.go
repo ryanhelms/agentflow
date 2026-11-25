@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 type publication struct {
@@ -73,7 +73,7 @@ func (p *publication) push(ctx context.Context, a *App) error {
 	// Keep the named remote so pre-push hooks and custom remote-tracking
 	// refspecs retain their usual behavior. Resolve a private alias directly to
 	// the already-validated transport, avoiding a second URL rewrite.
-	alias := "devflow-approved://" + rand.Text()
+	alias := "agentflow-approved://" + rand.Text()
 	key := "remote." + name
 	configArgs := []string{"-c", "url." + p.url + ".insteadOf=" + alias,
 		"-c", key + ".pushurl=", "-c", key + ".pushurl=" + alias, "-c", key + ".mirror=false"}

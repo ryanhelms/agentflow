@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // GitHubActionsContext binds a payload to trusted Actions metadata and repo
@@ -92,7 +92,7 @@ type pullRequestEvent struct {
 
 var (
 	repositoryPath = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$`)
-	skipBody       = regexp.MustCompile(`(?im)\[devflow skip\]|^Devflow:[\t \r\v\f]*skip`)
+	skipBody       = regexp.MustCompile(`(?im)\[agentflow skip\]|^Agentflow:[\t \r\v\f]*skip`)
 )
 
 // PlanGitHubActions parses a GitHub Actions payload without reading files,

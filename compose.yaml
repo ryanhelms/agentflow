@@ -3,7 +3,7 @@ services:
     build: ./website
     init: true
     ports:
-      - "127.0.0.1:${DEVFLOW_WEBSITE_PORT:-5173}:5173"
+      - "127.0.0.1:${AGENTFLOW_WEBSITE_PORT:-5173}:5173"
     volumes:
       - type: bind
         source: ./website/src

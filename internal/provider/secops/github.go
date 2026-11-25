@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // GitHubClient is the REST subset of gh.Client used by the alert sources.

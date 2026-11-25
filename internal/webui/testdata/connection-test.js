@@ -48,7 +48,7 @@
     }
     if (phase==="second") {
       await until(() => location.pathname==="/w/second/" && !byID("console-shell").hidden,"second worktree failed to open");
-      check(!byID("setting-dialog").open && !localStorage.getItem("devflow.drafts:/w/second/")?.includes("retained label"),"worktree inherited another checkout's state");
+      check(!byID("setting-dialog").open && !localStorage.getItem("agentflow.drafts:/w/second/")?.includes("retained label"),"worktree inherited another checkout's state");
       await goWorktree("first","returned");
       return;
     }
@@ -83,7 +83,7 @@
     await until(() => !byID("connection-options").hidden,"missing reconnect actions");
     check(byID("console-shell").hidden,"disconnected tab exposed the console");
     check(byID("chat-prompt").textContent.includes("task management provider editor"),"request lost the destination");
-    check(byID("reconnect-command").textContent === "devflow ui --screen providers --role task_management","incorrect terminal command");
+    check(byID("reconnect-command").textContent === "agentflow ui --screen providers --role task_management","incorrect terminal command");
 
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText: async () => { throw new Error("disabled"); }}});
     byID("copy-prompt").click();
@@ -99,7 +99,7 @@
     await until(() => !byID("console-shell").hidden && byID("role-title").textContent === "Task management","provider editor did not open");
     check(location.hash === "#providers?role=task_management","role link not restored");
     check(byID("connection").hidden,"connected tab still shows recovery");
-    check(sessionStorage.getItem("devflow.session:/w/first/") && !sessionStorage.getItem("devflow.session:/w/second/"),"credential shared across worktree routes");
+    check(sessionStorage.getItem("agentflow.session:/w/first/") && !sessionStorage.getItem("agentflow.session:/w/second/"),"credential shared across worktree routes");
     check((await fetch("/fixture/live")).ok,"tab registration failed");
     check(await openTab("auto&screen=handoff"),"background startup missed active worktree");
     check(location.hash === "#providers?role=task_management","background startup changed the active screen");
@@ -130,10 +130,10 @@
     check(blocked.status===409 && (await blocked.json()).error.includes("autonomy"),"cross-worktree navigation discarded pending Autonomy edits");
     byID("reset-autonomy").click();
     check(await openTab("screen=providers&role=task_management"),"could not return to the provider editor");
-    const capKey="devflow.commander:/w/first/";
+    const capKey="agentflow.commander:/w/first/";
     const grant=sessionStorage.getItem(capKey);
     check(grant && !Object.values(localStorage).some(v=>v.includes(grant)), "Commander grant escaped this tab");
-    check(!sessionStorage.getItem("devflow.commander:/w/second/"),"Commander grant reached a sibling worktree");
+    check(!sessionStorage.getItem("agentflow.commander:/w/second/"),"Commander grant reached a sibling worktree");
     check(await openTab("screen=overview"),"overview did not open");
     await until(() => !byID("page-overview").hidden,"overview not visible");
     byID("activity").click();
@@ -165,7 +165,7 @@
     const draft = source.value + "\n# recover this draft\n";
     source.value = draft;
     source.dispatchEvent(new Event("input",{bubbles:true}));
-    check(localStorage.getItem("devflow.browser"),"browser grant missing");
+    check(localStorage.getItem("agentflow.browser"),"browser grant missing");
     await fetch("/fixture/expire",{method:"POST"});
     byID("refresh").click();
     await until(() => !byID("refresh").disabled && !byID("console-shell").hidden,"valid browser grant did not resume automatically");
@@ -174,7 +174,7 @@
     await until(() => !byID("connection").hidden,"expired session failed to show recovery");
     check(byID("console-shell").hidden,"expired checkout stayed visible");
     check(!byID("reconnect-drafts").hidden && byID("draft-downloads").children.length === 1,"staged source not recoverable");
-    check(byID("reconnect-command").textContent === "devflow ui --screen configuration","configuration recovery command missing");
+    check(byID("reconnect-command").textContent === "agentflow ui --screen configuration","configuration recovery command missing");
 
     reopen(await ticket(),"configuration");
     await until(() => !byID("console-shell").hidden && !byID("page-configuration").hidden,"failed to reconnect this tab");
@@ -205,7 +205,7 @@
     const write=Storage.prototype.setItem;
     try {
       Storage.prototype.setItem=function(key,val) {
-        if (key.startsWith("devflow.drafts:")) throw new DOMException("full","QuotaExceededError");
+        if (key.startsWith("agentflow.drafts:")) throw new DOMException("full","QuotaExceededError");
         return write.call(this,key,val);
       };
       const blocked=await fetch("/fixture/navigate?worktree=w/second&screen=configuration",{method:"POST"});

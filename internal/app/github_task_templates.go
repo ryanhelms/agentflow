@@ -3,9 +3,9 @@ package app
 import (
 	"context"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func (a *App) resolveIssueDraft(ctx context.Context, project, title, description string, ref tasktemplate.Ref) (provider.TaskDraft, error) {

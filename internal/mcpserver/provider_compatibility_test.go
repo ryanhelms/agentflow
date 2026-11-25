@@ -11,7 +11,7 @@ import (
 )
 
 func TestLegacyProviderToolFields(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	ctx := t.Context()
 	server, err := New(ctx, gitRepo(t), "test")
 	if err != nil {
@@ -31,15 +31,15 @@ func TestLegacyProviderToolFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := map[string][]string{
-		"devflow_context":          {"key"},
-		"devflow_start":            {"key", "worktree", "confirm_token"},
-		"devflow_transition":       {"key", "event", "dry_run", "confirm_token"},
-		"devflow_ticket_create":    {"project", "type", "summary", "description", "link_to", "confirm_token"},
-		"devflow_jira_remote_link": {"key", "url", "title", "confirm_token"},
-		"devflow_ac_update":        {"key", "item", "done", "evidence", "post", "confirm_token"},
-		"devflow_docs_publish":     {"ref", "title", "body", "operation_id", "links", "expected_revision", "confirm_token", "type", "description", "tags"},
-		"devflow_docs_search":      {"query", "space"},
-		"devflow_pr_open":          {"title", "body", "draft", "reviewers", "labels", "confirm_token"},
+		"agentflow_context":          {"key"},
+		"agentflow_start":            {"key", "worktree", "confirm_token"},
+		"agentflow_transition":       {"key", "event", "dry_run", "confirm_token"},
+		"agentflow_ticket_create":    {"project", "type", "summary", "description", "link_to", "confirm_token"},
+		"agentflow_jira_remote_link": {"key", "url", "title", "confirm_token"},
+		"agentflow_ac_update":        {"key", "item", "done", "evidence", "post", "confirm_token"},
+		"agentflow_docs_publish":     {"ref", "title", "body", "operation_id", "links", "expected_revision", "confirm_token", "type", "description", "tags"},
+		"agentflow_docs_search":      {"query", "space"},
+		"agentflow_pr_open":          {"title", "body", "draft", "reviewers", "labels", "confirm_token"},
 	}
 	for _, tool := range result.Tools {
 		fields, ok := expected[tool.Name]
@@ -69,10 +69,10 @@ func TestLegacyProviderToolFields(t *testing.T) {
 }
 
 func TestMCPReportsUnassignedTaskAndKnowledge(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	ctx := t.Context()
 	dir := gitRepo(t)
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("devflow: 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte("agentflow: 1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	server, err := New(ctx, dir, "test")
@@ -93,8 +93,8 @@ func TestMCPReportsUnassignedTaskAndKnowledge(t *testing.T) {
 		args map[string]any
 		want string
 	}{
-		{"devflow_context", map[string]any{"key": "PLAT-123"}, "task management is disabled"},
-		{"devflow_docs_search", map[string]any{"query": "fixture"}, "none: document search"},
+		{"agentflow_context", map[string]any{"key": "PLAT-123"}, "task management is disabled"},
+		{"agentflow_docs_search", map[string]any{"query": "fixture"}, "none: document search"},
 	} {
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: check.tool, Arguments: check.args})
 		if err != nil {

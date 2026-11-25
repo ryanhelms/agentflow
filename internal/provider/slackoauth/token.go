@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 )
 
 const identityEndpoint = "https://slack.com/api/auth.test"

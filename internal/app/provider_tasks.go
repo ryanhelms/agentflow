@@ -8,15 +8,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/contextx"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/asana"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/contextx"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 func (a *App) usesFileTasks() bool {
@@ -146,9 +146,9 @@ func (a *App) providerContext(ctx context.Context, key string) (*TicketContext, 
 		return nil, err
 	}
 	if ref.ID == "" {
-		tc.Text = "devflow · no issue bound to branch " + tc.Branch + ". Call devflow_my_work to pick an issue, then devflow_start."
+		tc.Text = "agentflow · no issue bound to branch " + tc.Branch + ". Call agentflow_my_work to pick an issue, then agentflow_start."
 		if !a.usesIssues() {
-			tc.Text = "devflow · no task bound to branch " + tc.Branch + ". Pick a task from devflow_my_work and run devflow_start, or add a Task-Ref trailer to a branch commit."
+			tc.Text = "agentflow · no task bound to branch " + tc.Branch + ". Pick a task from agentflow_my_work and run agentflow_start, or add a Task-Ref trailer to a branch commit."
 		}
 		return tc, nil
 	}
@@ -370,7 +370,7 @@ func (a *App) ensureTaskBranch(ctx context.Context, ref provider.Ref, res StartR
 	if err != nil {
 		return err
 	}
-	_, err = a.Repo.Git(ctx, "config", "--local", "branch."+res.Branch+".devflowTaskRef", ref.String())
+	_, err = a.Repo.Git(ctx, "config", "--local", "branch."+res.Branch+".agentflowTaskRef", ref.String())
 	if err != nil {
 		return fmt.Errorf("created branch %s but could not save its binding to %s: %w", res.Branch, ref.String(), err)
 	}

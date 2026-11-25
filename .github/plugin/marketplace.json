@@ -5,9 +5,9 @@
   },
   "plugins": [
     {
-      "name": "devflow",
+      "name": "agentflow",
       "source": "./",
-      "description": "Devflow project tools and installation manager"
+      "description": "Agentflow project tools and installation manager"
     }
   ]
 }

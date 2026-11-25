@@ -11,15 +11,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // TestProviderConsumerCanary uses normal application entry points and a
 // disposable consumer profile. No hosted service receives fixture writes.
 func TestProviderConsumerCanary(t *testing.T) {
 	root := newRepo(t)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	run := func(rel, body string) {
 		t.Helper()
 		path := filepath.Join(root, rel)
@@ -69,17 +69,17 @@ func TestProviderConsumerCanary(t *testing.T) {
 	t.Setenv("CANARY_SLACK_URL", server.URL+"/slack")
 	t.Setenv("CANARY_WEBHOOK_URL", server.URL+"/webhook")
 
-	const legacy = "devflow: 1\njira: {site: https://jira.example.invalid, projects: [PLAT]}\nconfluence: {site: https://docs.example.invalid}\n"
-	const candidate = `devflow: 1
+	const legacy = "agentflow: 1\njira: {site: https://jira.example.invalid, projects: [PLAT]}\nconfluence: {site: https://docs.example.invalid}\n"
+	const candidate = `agentflow: 1
 task_management:
   provider: filesystem
-  settings: {root: .devflow/tasks, scope: canary}
+  settings: {root: .agentflow/tasks, scope: canary}
   templates:
-    catalog: .devflow/task-templates.json
+    catalog: .agentflow/task-templates.json
     default: {name: incident, revision: "1"}
 knowledge_base:
   provider: filesystem
-  settings: {root: .devflow/knowledge}
+  settings: {root: .agentflow/knowledge}
 devops:
   releases:
     provider: github
@@ -88,7 +88,7 @@ secops:
   provider: github
   settings:
     findings: []
-    incidents: {fixture: .devflow/incidents.json, scope: canary}
+    incidents: {fixture: .agentflow/incidents.json, scope: canary}
 notifications:
   provider: router
   settings:
@@ -98,14 +98,14 @@ notifications:
     routes:
       incident.recorded: [slack, webhook]
 `
-	run(".devflow/config.yml", legacy)
+	run(".agentflow/config.yml", legacy)
 	baseline, err := Open(t.Context(), root, "consumer-canary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	run(".devflow/config.yml", candidate)
-	run(".devflow/incidents.json", `[{"id":"replay","title":"Consumer canary","severity":"high","url":"https://status.example.invalid/incidents/replay"}]`)
-	run(".devflow/task-templates.json", `[{"name":"incident","revision":"1","required":["title"],"defaults":{"type":"Task"}}]`)
+	run(".agentflow/config.yml", candidate)
+	run(".agentflow/incidents.json", `[{"id":"replay","title":"Consumer canary","severity":"high","url":"https://status.example.invalid/incidents/replay"}]`)
+	run(".agentflow/task-templates.json", `[{"name":"incident","revision":"1","required":["title"],"defaults":{"type":"Task"}}]`)
 
 	open := func() *App {
 		t.Helper()
@@ -123,7 +123,7 @@ notifications:
 		Ref:   provider.Ref{Instance: "filesystem", Scope: "canary", ID: "evidence"},
 		Title: "Canary evidence", Body: "Release and rollback evidence.", OperationID: "canary-doc-1",
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".devflow", "knowledge"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".agentflow", "knowledge"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	notify := NotifyInput{Signal: "incident.recorded", OperationID: "canary-notify-1", Title: "Canary replay", Automation: true}
@@ -184,9 +184,9 @@ notifications:
 		t.Fatalf("unexpected fixture write counts: Slack=%d webhook attempts=%d release=%d", acceptedSlack.Load(), webhookAttempts.Load(), acceptedRelease.Load())
 	}
 
-	run(".devflow/config.yml", legacy)
+	run(".agentflow/config.yml", legacy)
 	restored := open()
-	actual, err := os.ReadFile(filepath.Join(root, ".devflow/config.yml"))
+	actual, err := os.ReadFile(filepath.Join(root, ".agentflow/config.yml"))
 	if err != nil || !bytes.Equal(actual, []byte(legacy)) ||
 		restored.Cfg.Providers.TaskManagement.Provider != baseline.Cfg.Providers.TaskManagement.Provider ||
 		restored.Cfg.Providers.KnowledgeBase.Provider != baseline.Cfg.Providers.KnowledgeBase.Provider {

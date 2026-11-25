@@ -1,5 +1,5 @@
 // Package contextx builds task context for the agent: acceptance criteria
-// checklists (stored locally in .git/devflow) and scope-drift checks.
+// checklists (stored locally in .git/agentflow) and scope-drift checks.
 package contextx
 
 import (
@@ -86,7 +86,7 @@ func ParseCriteria(desc string) []Item {
 	return items
 }
 
-// Store keeps checklists under <gitdir>/devflow.
+// Store keeps checklists under <gitdir>/agentflow.
 type Store struct {
 	Dir string
 }
@@ -238,7 +238,7 @@ func ScopeCheck(files, anchors []string, diff string) Drift {
 func housekeeping(f string) bool {
 	base := filepath.Base(f)
 	return base == "go.sum" || base == "go.mod" || base == "package-lock.json" || strings.HasSuffix(base, ".lock") ||
-		strings.HasPrefix(f, ".devflow/") || base == "CHANGELOG.md"
+		strings.HasPrefix(f, ".agentflow/") || base == "CHANGELOG.md"
 }
 
 // Areas returns the distinct top two path segments of files, used as anchors.

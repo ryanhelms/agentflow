@@ -15,7 +15,7 @@ func TestAsanaReadinessMissingPrerequisite(t *testing.T) {
 		{"{project: '10'}", "Asana MCP"},
 	} {
 		cfg := strings.Replace(headlessConfig, "provider: github-issues, settings: {repository: sample/project}", "provider: asana, settings: "+tc.settings, 1)
-		setupFile(t, root, ".devflow/config.yml", cfg, 0600)
+		setupFile(t, root, ".agentflow/config.yml", cfg, 0600)
 		plan := planFixture(t, root, "")
 		if plan.Ready || plan.InstallGH != nil {
 			t.Fatalf("readiness %+v", plan)

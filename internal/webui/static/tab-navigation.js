@@ -44,7 +44,7 @@ function consoleTabs({credential, commander, unauthorized, navigate, request}) {
       try {
         const headers = {Authorization:"Bearer " + key,Accept:"text/event-stream"};
         const actor = commander();
-        if (actor) headers["X-Devflow-Commander"] = actor;
+        if (actor) headers["X-Agentflow-Commander"] = actor;
         const response = await fetch("api/tabs/events?tab=" + tab,{signal,cache:"no-store",redirect:"error",credentials:"omit",headers});
         if (signal.aborted) return;
         if (response.status === 401) { if (await unauthorized(key)) continue; return; }
@@ -73,7 +73,7 @@ function consoleTabs({credential, commander, unauthorized, navigate, request}) {
       controller.abort();
       controller = null;
       if (credential()) fetch("api/tabs/leave",{method:"POST",keepalive:true,credentials:"omit",redirect:"error",
-        headers:{"Content-Type":"application/json","X-Devflow-Request":"console",Authorization:"Bearer " + credential()},
+        headers:{"Content-Type":"application/json","X-Agentflow-Request":"console",Authorization:"Bearer " + credential()},
         body:JSON.stringify({tab})}).catch(() => {});
     }
   };

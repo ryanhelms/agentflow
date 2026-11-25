@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
 
 func TestParse(t *testing.T) {
-	m := Parse("fix(INFRA-88,INFRA-90)!: rotate etcd certs before expiry #done #time 2h\n\nCerts expired in staging.\n\nDevflow: skip\n")
+	m := Parse("fix(INFRA-88,INFRA-90)!: rotate etcd certs before expiry #done #time 2h\n\nCerts expired in staging.\n\nAgentflow: skip\n")
 	if !m.Valid || m.Type != "fix" || !m.Breaking {
 		t.Fatalf("bad parse: %+v", m)
 	}

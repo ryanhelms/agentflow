@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 // currentPublicationConfig picks up local edits in long-lived MCP sessions.
@@ -50,7 +50,7 @@ func (a *App) reviewedPRPolicy(ctx context.Context, target, base string, local *
 	if _, err := hex.DecodeString(sha); err != nil {
 		return &cfg
 	}
-	content, err := a.Repo.Git(lookup, "--no-replace-objects", "cat-file", "blob", sha+":.devflow/config.yml")
+	content, err := a.Repo.Git(lookup, "--no-replace-objects", "cat-file", "blob", sha+":.agentflow/config.yml")
 	if err != nil {
 		return &cfg
 	}

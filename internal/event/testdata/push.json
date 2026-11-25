@@ -12,11 +12,11 @@
       "url": "https://github.com/acme/widget/commit/abc"
     },
     {
-      "message": "feat(OPS-3): work #start #block\n\nWaiting on access\n\nDevflow: ok",
+      "message": "feat(OPS-3): work #start #block\n\nWaiting on access\n\nAgentflow: ok",
       "url": "https://github.com/acme/widget/commit/def"
     },
     {
-      "message": "fix(PLAT-13): work #start\n\n[devflow skip]",
+      "message": "fix(PLAT-13): work #start\n\n[agentflow skip]",
       "url": "https://github.com/acme/widget/commit/ghi"
     }
   ]

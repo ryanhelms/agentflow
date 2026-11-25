@@ -1,5 +1,5 @@
 // Package nativeoauth contains the local browser, grant lock and HTTPS transport
-// shared by Devflow-owned OAuth enrollments.
+// shared by Agentflow-owned OAuth enrollments.
 package nativeoauth
 
 import (

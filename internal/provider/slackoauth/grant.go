@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 )
 
 const (
-	service = "devflow.slackoauth.v1"
+	service = "agentflow.slackoauth.v1"
 	account = Resource
 	// One atomic OS credential replacement. Fits Windows Credential Manager
 	// and go-keyring's encoded interactive command on macOS.

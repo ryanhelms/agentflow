@@ -8,15 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/setup"
-	"github.com/nscaledev/devflow/internal/setup/initproviders"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/setup/initproviders"
 )
 
 func TestGuidedInitCLI(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	if b, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git: %s: %v", b, err)
 	}
@@ -33,7 +33,7 @@ func TestGuidedInitCLI(t *testing.T) {
 			t.Fatalf("accepted %v", args)
 		}
 	}
-	if _, err := os.Stat(".devflow"); !os.IsNotExist(err) {
+	if _, err := os.Stat(".agentflow"); !os.IsNotExist(err) {
 		t.Fatal("inspection or invalid input created files")
 	}
 	for i := 0; i < 2; i++ {
@@ -60,14 +60,14 @@ func TestGuidedInitCLI(t *testing.T) {
 			t.Fatalf("selection not reused: %#v", r)
 		}
 	}
-	before, err := os.ReadFile(".devflow/config.yml")
+	before, err := os.ReadFile(".agentflow/config.yml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := setup.SaveInitProviderConfig(dir, []byte("stale"), []byte("overwritten")); err == nil {
 		t.Fatal("overwrote changed file")
 	}
-	after, err := os.ReadFile(".devflow/config.yml")
+	after, err := os.ReadFile(".agentflow/config.yml")
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("stale apply changed preferences: %v", err)
 	}

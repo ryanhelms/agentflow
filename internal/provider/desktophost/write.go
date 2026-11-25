@@ -1,14 +1,14 @@
-// Package desktophost composes Devflow-owned MCP connections for Desktop writes.
+// Package desktophost composes Agentflow-owned MCP connections for Desktop writes.
 package desktophost
 
 import (
 	"context"
 	"errors"
 
-	"github.com/nscaledev/devflow/internal/provider/asanahost"
-	"github.com/nscaledev/devflow/internal/provider/asanaoauth"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/rovohost"
+	"github.com/nscaledev/agentflow/internal/provider/asanahost"
+	"github.com/nscaledev/agentflow/internal/provider/asanaoauth"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/rovohost"
 )
 
 func NewWriter() *native.SessionWriter {
@@ -29,7 +29,7 @@ func NewWriter() *native.SessionWriter {
 		ErrDenied:        asanaoauth.ErrDenied,
 		ErrTransport:     asanaoauth.ErrTransport,
 	}, asanahost.Scope{EnableCompletion: true})
-	return native.NewRoutedSessionWriter("devflow", map[string]*native.SessionWriter{
+	return native.NewRoutedSessionWriter("agentflow", map[string]*native.SessionWriter{
 		"asana": asana,
 		"jira":  rovo, "confluence": rovo,
 	})

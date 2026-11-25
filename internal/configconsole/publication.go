@@ -10,12 +10,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/consolepublish"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/consolepublish"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 type Edit struct {
@@ -186,8 +186,8 @@ func Review(ctx context.Context, repo *gitx.Repo, gate *policy.Gate, session str
 		return out, nil
 	}
 	if out.Outcome == policy.SuggestOnly {
-		out.Warning = out.Reason + ". For a manual edit, save the preview diff as devflow-config.patch."
-		out.Commands = []string{"git apply --check devflow-config.patch", "git apply devflow-config.patch"}
+		out.Warning = out.Reason + ". For a manual edit, save the preview diff as agentflow-config.patch."
+		out.Commands = []string{"git apply --check agentflow-config.patch", "git apply agentflow-config.patch"}
 	}
 	if !apply || out.Outcome != policy.Proceed || token == "" {
 		return out, nil

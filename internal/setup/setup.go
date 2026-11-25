@@ -1,4 +1,4 @@
-// Package setup implements `devflow init` (repo bootstrap) and `devflow install`
+// Package setup implements `agentflow init` (repo bootstrap) and `agentflow install`
 // (per-client configuration).
 package setup
 
@@ -14,10 +14,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nscaledev/devflow/adapters"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/version"
-	"github.com/nscaledev/devflow/templates"
+	"github.com/nscaledev/agentflow/adapters"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/version"
+	"github.com/nscaledev/agentflow/templates"
 )
 
 // Result lists what a setup step did.
@@ -30,14 +30,14 @@ type Result struct {
 }
 
 const (
-	blockStart = "<!-- devflow:start -->"
-	blockEnd   = "<!-- devflow:end -->"
+	blockStart = "<!-- agentflow:start -->"
+	blockEnd   = "<!-- agentflow:end -->"
 )
 
-var executables = map[string]bool{".devflow/bin/devflow": true, ".githooks/commit-msg": true}
+var executables = map[string]bool{".agentflow/bin/agentflow": true, ".githooks/commit-msg": true}
 
 // Init writes templates/repo into the repository root. Existing files are left
-// alone unless force is set; AGENTS.md gets its devflow block inserted or refreshed.
+// alone unless force is set; AGENTS.md gets its agentflow block inserted or refreshed.
 func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 	res := &Result{}
 	root, err := os.OpenRoot(repoDir)
@@ -45,6 +45,9 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 		return res, err
 	}
 	defer root.Close()
+	if err := checkProjectMigration(root); err != nil {
+		return res, err
+	}
 	if err := recordEnrollment(root, "", true); err != nil {
 		return res, err
 	}
@@ -101,7 +104,7 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 		hooks = strings.TrimSpace(hooks)
 		switch {
 		case hooks == "" && hasDefaultHooks(ctx, repo):
-			res.Notes = append(res.Notes, "kept the existing Git hooks; chain .githooks/commit-msg from your commit-msg hook to enable Devflow lint")
+			res.Notes = append(res.Notes, "kept the existing Git hooks; chain .githooks/commit-msg from your commit-msg hook to enable Agentflow lint")
 		case hooks == "":
 			if _, err := repo.Git(ctx, "config", "--local", managedHooks, "true"); err != nil {
 				return res, err
@@ -111,15 +114,28 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 			}
 			res.Notes = append(res.Notes, "set core.hooksPath=.githooks for this clone")
 		case hooks != ".githooks":
-			res.Notes = append(res.Notes, "kept the existing core.hooksPath; chain .githooks/commit-msg from your hook to enable Devflow lint")
+			res.Notes = append(res.Notes, "kept the existing core.hooksPath; chain .githooks/commit-msg from your hook to enable Agentflow lint")
 		}
-		// An explicit init undoes the opt-out `devflow remove` leaves behind.
+		// An explicit init undoes the opt-out `agentflow remove` leaves behind.
 		_, _ = repo.Git(ctx, "config", "--local", "--unset", AutoInitKey)
 	}
 	res.Notes = append(res.Notes,
-		"review .devflow/config.yml and run `devflow setup providers --explain` to see the selected providers",
+		"review .agentflow/config.yml and run `agentflow setup providers --explain` to see the selected providers",
 		"review and commit the generated project files")
 	return res, nil
+}
+
+// Keep init from creating a new project with defaults over an existing installation.
+func checkProjectMigration(root *os.Root) error {
+	if _, err := root.Lstat(".agentflow/config.yml"); !os.IsNotExist(err) {
+		return err
+	}
+	if _, err := root.Lstat(".devflow/config.yml"); err == nil {
+		return fmt.Errorf("existing .devflow/config.yml: migrate the project before running agentflow init (see docs/agentflow-migration.md)")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Git's default hooks can live in the shared Git directory of a linked worktree.
@@ -322,7 +338,7 @@ func installCodex(res *Result, root *os.Root) error {
 		if err != nil {
 			return err
 		}
-		if strings.Contains(string(b), "[mcp_servers.devflow]") {
+		if strings.Contains(string(b), "[mcp_servers.agentflow]") {
 			res.Skipped = append(res.Skipped, rel)
 			return nil
 		}
@@ -357,7 +373,7 @@ func installCodex(res *Result, root *os.Root) error {
 			return err
 		}
 	}
-	res.Written = append(res.Written, promptDir+"/devflow-*.md")
-	res.Notes = append(res.Notes, "Codex reads .codex/config.toml only for trusted projects; if devflow tools don't appear, copy the [mcp_servers.devflow] block into ~/.codex/config.toml")
+	res.Written = append(res.Written, promptDir+"/agentflow-*.md")
+	res.Notes = append(res.Notes, "Codex reads .codex/config.toml only for trusted projects; if agentflow tools don't appear, copy the [mcp_servers.agentflow] block into ~/.codex/config.toml")
 	return nil
 }

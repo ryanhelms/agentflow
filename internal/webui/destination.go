@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 // Destination is a screen in the current worktree's console.
@@ -49,7 +49,7 @@ func (d Destination) Fragment() string {
 }
 
 func (d Destination) command() string {
-	cmd := "devflow ui --screen " + d.Screen
+	cmd := "agentflow ui --screen " + d.Screen
 	if d.Role != "" {
 		cmd += " --role " + d.Role
 	}

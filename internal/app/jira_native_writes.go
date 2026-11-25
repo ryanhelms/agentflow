@@ -13,16 +13,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/legacy"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/notifications"
-	"github.com/nscaledev/devflow/internal/provider/twg"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/legacy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/notifications"
+	"github.com/nscaledev/agentflow/internal/provider/twg"
 )
 
 type jiraWrite taskWritePreview
@@ -176,7 +176,7 @@ func (a *App) prepareJiraComment(ctx context.Context, site string, ref provider.
 	if err != nil {
 		return nil, err
 	}
-	if write.Binding.Owner == "devflow" {
+	if write.Binding.Owner == "agentflow" {
 		err = write.checkIssueIdentity(ctx, site, ref)
 	} else {
 		_, err = jiraNativeIssue(ctx, write, site, ref)
@@ -191,7 +191,7 @@ type jiraWriteCLIKey struct{}
 func WithJiraWriteCLI(ctx context.Context) context.Context {
 	ci, _ := strconv.ParseBool(os.Getenv("CI"))
 	actions, _ := strconv.ParseBool(os.Getenv("GITHUB_ACTIONS"))
-	if ci || actions || os.Getenv("DEVFLOW_OPERATION_ID") != "" ||
+	if ci || actions || os.Getenv("AGENTFLOW_OPERATION_ID") != "" ||
 		(os.Getenv("JIRA_USER") != "" && os.Getenv("JIRA_TOKEN") != "") {
 		return ctx
 	}
@@ -243,7 +243,7 @@ func (a *App) prepareJiraCreate(ctx context.Context, site string, draft provider
 	if err != nil {
 		return nil, err
 	}
-	if write.Binding.Owner == "devflow" {
+	if write.Binding.Owner == "agentflow" {
 		read, err := nativemap.JiraProjectIssueTypes(site, draft.Scope)
 		if err != nil {
 			return nil, err
@@ -300,7 +300,7 @@ func (a *App) prepareJiraTransition(ctx context.Context, site string, ref provid
 		return plan, nil, err
 	}
 	prepared := &jiraTransition{Write: write, From: issue.Status, Target: selected.To}
-	if write.Binding.Owner == "devflow" {
+	if write.Binding.Owner == "agentflow" {
 		current, err := jiraNativeIssue(ctx, write, site, ref)
 		if err != nil {
 			return plan, nil, err
@@ -332,7 +332,7 @@ func jiraTransitionForStatus(ctx context.Context, write *jiraWrite, site string,
 		if fromRank < 0 || toRank < fromRank {
 			return atlassian.Transition{}, fmt.Errorf("jira transition to %q is not verifiably forward: %w", target, provider.ErrConflict)
 		}
-		if write == nil || write.Binding.Owner != "devflow" {
+		if write == nil || write.Binding.Owner != "agentflow" {
 			return transition.Transition, nil
 		}
 		if match.ID != "" {
@@ -376,7 +376,7 @@ func (a *App) runJiraTransition(ctx context.Context, site string, ref provider.R
 	if err == nil {
 		_, err = prepared.Write.run(ctx)
 		plan.Applied = err == nil
-		if plan.Applied && prepared.Write.Binding.Owner == "devflow" {
+		if plan.Applied && prepared.Write.Binding.Owner == "agentflow" {
 			after, readErr := jiraNativeIssue(ctx, prepared.Write, site, ref)
 			if readErr != nil || after.Status != prepared.Target {
 				plan.Applied = false
@@ -433,13 +433,13 @@ func (a *App) tryNativeJiraTransition(ctx context.Context, ref provider.Ref, eve
 		FromCategory string `json:"from_category,omitempty"`
 		ToCategory   string `json:"to_category,omitempty"`
 	}{TransitionResult: plan, Site: site}
-	desktop := prepared.Write.Binding.Owner == "devflow"
+	desktop := prepared.Write.Binding.Owner == "agentflow"
 	if desktop {
 		intent.FromCategory = prepared.From.Category.Key
 		intent.ToCategory = prepared.Target.Category.Key
 	}
 	summary := jiraRemoteSummary(intent, prepared.Write)
-	commands := []string{"devflow transition " + ref.ID + " " + shellQuote(event)}
+	commands := []string{"agentflow transition " + ref.ID + " " + shellQuote(event)}
 	if p, err := a.gate(policy.Remote, "transition", summary, token, desktop || token != "", commands, prepared.Write.Binding.ExpiresAt); p != nil || err != nil {
 		return p, true, err
 	}
@@ -489,7 +489,7 @@ func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Re
 	if err != nil {
 		return "", plan, nil, err
 	}
-	if assignment.Binding.Owner == "devflow" {
+	if assignment.Binding.Owner == "agentflow" {
 		writes.PreviousAssignee = &issue.AccountID
 	}
 	fm, err := a.FlowMap(ctx)
@@ -505,7 +505,7 @@ func (a *App) prepareJiraStart(ctx context.Context, site string, ref provider.Re
 			return "", plan, nil, err
 		}
 		if writes.Transition != nil {
-			if assignment.Binding.Owner == "devflow" {
+			if assignment.Binding.Owner == "agentflow" {
 				writes.Transition.accountID = account
 			}
 			if err := checkJiraAccount(ctx, writes.Transition.Write, site, account); err != nil {
@@ -540,7 +540,7 @@ func (w *jiraStartWrites) assign(ctx context.Context, site string, ref provider.
 		return fmt.Errorf("jira assignee changed before self-assignment: %w", provider.ErrConflict)
 	}
 	_, err = w.Assignment.run(ctx)
-	if err == nil && w.Assignment.Binding.Owner == "devflow" {
+	if err == nil && w.Assignment.Binding.Owner == "agentflow" {
 		after, readErr := jiraNativeIssue(ctx, w.Assignment, site, ref)
 		if readErr != nil || after.AccountID != w.accountID {
 			return errors.Join(native.ErrWriteUncertain, errors.New("could not verify Jira self-assignment"), readErr)
@@ -575,7 +575,7 @@ func (a *App) LinkJiraRemote(ctx context.Context, key, linkURL, title, token str
 		return nil, err
 	}
 	digest := sha256.Sum256(fmt.Appendf(nil, "%q %q %q %q", strings.TrimRight(site, "/"), ref.String(), linkURL, title))
-	globalID := fmt.Sprintf("devflow:jira-remote-link:%x", digest)
+	globalID := fmt.Sprintf("agentflow:jira-remote-link:%x", digest)
 	intent := map[string]any{"site": site, "issue": key, "url": linkURL, "title": title, "operation_id": globalID}
 	backend, read, apply, err := a.prepareJiraRemoteLink(ctx, site, ref, call, linkURL, title, globalID, intent)
 	if err != nil {

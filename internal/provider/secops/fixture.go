@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // FixtureIncidents serves a fixed set of incidents from an in-memory fixture.

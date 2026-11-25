@@ -56,17 +56,17 @@ func TestWorkflowGitHubTaskReads(t *testing.T) {
 	if err := a.ValidateWorkflowMessage(t.Context(), msg, true, false); err == nil || !strings.Contains(err.Error(), "GH_TOKEN") {
 		t.Fatalf("missing token: %v", err)
 	}
-	if err := a.ValidateWorkflowMessage(t.Context(), msg+"\nTask-Ref: unused\nDevflow: skip", true, false); err != nil || reads != 2 {
+	if err := a.ValidateWorkflowMessage(t.Context(), msg+"\nTask-Ref: unused\nAgentflow: skip", true, false); err != nil || reads != 2 {
 		t.Fatalf("opt out: %v, reads=%d", err, reads)
 	}
 }
 
 func TestWorkflowJiraTaskReads(t *testing.T) {
 	dir := newRepo(t)
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("task_management: {provider: jira}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte("task_management: {provider: jira}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	a, err := Open(t.Context(), dir, "test")

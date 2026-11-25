@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Move a Jira issue for a canonical devflow event, using flow-map.yml.
+# Move a Jira issue for a canonical agentflow event, using flow-map.yml.
 #
 #   transition.sh <KEY> <event|#verb>
 #

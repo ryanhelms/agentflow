@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 func gateFor(t *testing.T, home, client string) *Gate {
@@ -138,10 +138,10 @@ func TestApprovalWindowAndPrepare(t *testing.T) {
 }
 
 func TestApprovalAcrossProcesses(t *testing.T) {
-	const helper = "DEVFLOW_POLICY_TEST_HELPER"
+	const helper = "AGENTFLOW_POLICY_TEST_HELPER"
 	if home := os.Getenv(helper); home != "" {
 		g := gateFor(t, home, fmt.Sprintf("worker-%d", os.Getpid()))
-		d, err := g.Check(Local, "commit", "staged-tree", os.Getenv("DEVFLOW_POLICY_TEST_RECEIPT"), false)
+		d, err := g.Check(Local, "commit", "staged-tree", os.Getenv("AGENTFLOW_POLICY_TEST_RECEIPT"), false)
 		fmt.Printf("POLICY_RESULT %s %s %s %s\n", d.Outcome, d.Token, func() string {
 			if d.Approval != nil {
 				return d.Approval.OperationID
@@ -158,7 +158,7 @@ func TestApprovalAcrossProcesses(t *testing.T) {
 		for range workers {
 			go func() {
 				cmd := exec.Command(os.Args[0], "-test.run=^TestApprovalAcrossProcesses$")
-				cmd.Env = append(os.Environ(), helper+"="+home, "DEVFLOW_POLICY_TEST_RECEIPT="+receipt)
+				cmd.Env = append(os.Environ(), helper+"="+home, "AGENTFLOW_POLICY_TEST_RECEIPT="+receipt)
 				data, err := cmd.CombinedOutput()
 				if err != nil {
 					results <- "error: " + err.Error()
@@ -236,7 +236,7 @@ func TestProviderBoundExpiry(t *testing.T) {
 }
 
 func TestInterruptedForegroundPrompt(t *testing.T) {
-	const variable = "DEVFLOW_TEST_FOREGROUND_PROMPT"
+	const variable = "AGENTFLOW_TEST_FOREGROUND_PROMPT"
 	if home := os.Getenv(variable); home != "" {
 		g := gateFor(t, home, "foreground")
 		d, err := g.Check(Local, "commit", "snapshot", "", false)

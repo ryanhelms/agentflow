@@ -1,5 +1,5 @@
 // Package slackhost dispatches mapped Slack operations over a separately
-// enrolled Devflow connection. The app owns destination policy and receipts.
+// enrolled Agentflow connection. The app owns destination policy and receipts.
 package slackhost
 
 import (
@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
-	"github.com/nscaledev/devflow/internal/provider/slackoauth"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
 )
 
 const (
@@ -45,7 +45,7 @@ func NewWriter() *native.SessionWriter {
 }
 
 func newWriter(enrollment Enrollment, transport http.RoundTripper) *native.SessionWriter {
-	return native.NewSessionWriter("devflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
+	return native.NewSessionWriter("agentflow", func(ctx context.Context, call native.Call) (native.WriteSession, error) {
 		if call.Provider != "slack" {
 			return nil, native.ErrUnavailable
 		}
@@ -71,7 +71,7 @@ func newWriter(enrollment Enrollment, transport http.RoundTripper) *native.Sessi
 			return nil, fmt.Errorf("%w: slack enrollment differs from the configured workspace or actor", native.ErrDenied)
 		}
 		wire := &boundTransport{enrollment: enrollment, generation: grant.Generation, transport: transport}
-		client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
+		client := mcp.NewClient(&mcp.Implementation{Name: "agentflow", Version: "1"}, &mcp.ClientOptions{
 			Capabilities: &mcp.ClientCapabilities{}, Logger: slog.New(slog.DiscardHandler),
 			MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true},
 		})

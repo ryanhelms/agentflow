@@ -7,19 +7,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 func TestProjectEnrollmentRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	dir := newRepo(t)
 	original := map[string]string{
-		"AGENTS.md":                     "# Project rules   ",
-		"release-please-config.json":    "{\"packages\":{}}\n",
-		".release-please-manifest.json": "{\".\":\"3.2.1\"}\n",
-		".githooks/commit-msg":          "#!/bin/sh\nexit 0\n",
-		".github/workflows/devflow.yml": "# pre-existing project workflow\n",
-		".jira/config.yml":              "project: TEAM\n",
+		"AGENTS.md":                       "# Project rules   ",
+		"release-please-config.json":      "{\"packages\":{}}\n",
+		".release-please-manifest.json":   "{\".\":\"3.2.1\"}\n",
+		".githooks/commit-msg":            "#!/bin/sh\nexit 0\n",
+		".github/workflows/agentflow.yml": "# pre-existing project workflow\n",
+		".jira/config.yml":                "project: TEAM\n",
 	}
 	for name, data := range original {
 		file := filepath.Join(dir, name)
@@ -43,7 +43,7 @@ func TestProjectEnrollmentRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 		if dry {
-			if _, err := os.Stat(filepath.Join(dir, ".devflow/installation.yml")); err != nil {
+			if _, err := os.Stat(filepath.Join(dir, ".agentflow/installation.yml")); err != nil {
 				t.Fatal("preview removed receipt", err)
 			}
 		} else {
@@ -61,7 +61,7 @@ func TestProjectEnrollmentRoundTrip(t *testing.T) {
 	if err != nil || string(hooks) != "custom-hooks\n" {
 		t.Fatalf("hooks %q: %v", hooks, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".devflow")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, ".agentflow")); !os.IsNotExist(err) {
 		t.Fatalf("install artifacts remain: %v", err)
 	}
 }

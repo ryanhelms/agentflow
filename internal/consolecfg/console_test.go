@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,7 +52,7 @@ func put(t *testing.T, root, name, content string) {
 func fixture(t *testing.T) (root, personal string) {
 	t.Helper()
 	root, personal = t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", personal)
+	t.Setenv("AGENTFLOW_HOME", personal)
 	return root, personal
 }
 
@@ -127,7 +127,7 @@ func TestRepairAndCatalogReferences(t *testing.T) {
 	if err != nil || len(s.Problems) == 0 || len(s.Files) != 1 || !s.Files[0].Editable {
 		t.Fatalf("repair unavailable: %+v %v", s, err)
 	}
-	good := "devflow: 1\ntask_management:\n  provider: github-issues\n  templates: {catalog: docs/tasks.json, default: {name: engineering, revision: '1'}}\n"
+	good := "agentflow: 1\ntask_management:\n  provider: github-issues\n  templates: {catalog: docs/tasks.json, default: {name: engineering, revision: '1'}}\n"
 	if _, err := Preview(ctx, root, MainFile, good, digest(bad)); err == nil {
 		t.Fatal("missing catalog accepted")
 	}
@@ -180,14 +180,14 @@ func TestManagedFilesLinksAndCredentialsStayPrivate(t *testing.T) {
 }
 
 func TestEditLiteralKeysAndProviderSwitch(t *testing.T) {
-	content := "task_management:\n  provider: github-issues\n  settings:\n    transitions:\n      pr.merged: closed\n  templates: {catalog: .devflow/task-templates.json}\n"
+	content := "task_management:\n  provider: github-issues\n  settings:\n    transitions:\n      pr.merged: closed\n  templates: {catalog: .agentflow/task-templates.json}\n"
 	next, err := EditSetting(content, "task_management", `transitions.pr\.merged`, json.RawMessage(`"none"`), false)
 	if err != nil || !strings.Contains(next, "pr.merged: \"none\"") {
 		t.Fatalf("escaped key: %v %s", err, next)
 	}
 	root, _ := fixture(t)
 	put(t, root, MainFile, "task_management: {provider: github-issues}\n")
-	put(t, root, ".devflow/task-templates.json", "[]")
+	put(t, root, ".agentflow/task-templates.json", "[]")
 	reset, err := EditSetting(next, "task_management", `transitions.pr\.merged`, nil, true)
 	if err != nil || strings.Contains(reset, "pr.merged:") {
 		t.Fatalf("reset: %v %s", err, reset)
@@ -207,10 +207,10 @@ func TestEditLiteralKeysAndProviderSwitch(t *testing.T) {
 
 func TestInvalidFileTypesAndUnchangedSensitiveReferences(t *testing.T) {
 	root, _ := fixture(t)
-	content := "devflow: 1\nflow_map: .env\n"
+	content := "agentflow: 1\nflow_map: .env\n"
 	put(t, root, MainFile, content)
 	put(t, root, ".env", "a-private-value")
-	put(t, root, ".devflow/releases.yml", "strategy: trunk\nunits: []\n")
+	put(t, root, ".agentflow/releases.yml", "strategy: trunk\nunits: []\n")
 	s, err := View(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
@@ -220,8 +220,8 @@ func TestInvalidFileTypesAndUnchangedSensitiveReferences(t *testing.T) {
 		t.Fatal("read private reference")
 	}
 	cases := []struct{ path, old, next string }{
-		{MainFile, content, "devflow: 1\n---\nunknown: true\n"},
-		{".devflow/releases.yml", "strategy: trunk\nunits: []\n", "strategy: wrong\nunits: []\n"},
+		{MainFile, content, "agentflow: 1\n---\nunknown: true\n"},
+		{".agentflow/releases.yml", "strategy: trunk\nunits: []\n", "strategy: wrong\nunits: []\n"},
 	}
 	for _, c := range cases {
 		if _, err := Preview(context.Background(), root, c.path, c.next, digest(c.old)); err == nil {

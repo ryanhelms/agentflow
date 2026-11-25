@@ -10,12 +10,12 @@
 #   library - Go submodule tag (path/vX.Y.Z), npm or PyPI publish, Terraform tag
 # and previews released task references and Jira Fix Versions for review.
 #
-# Units come from .devflow/releases.yml (devflow release init). Works with the
+# Units come from .agentflow/releases.yml (agentflow release init). Works with the
 # workflow's own token: the `releases` output feeds the caller's release-notes job, so
 # nothing depends on release events. GitHub doesn't run checks on a PR opened with that
 # token, so where branch rules require checks the Release PR waits until someone closes
-# and reopens it (or clicks "Update branch"); it then merges itself. An optional devflow
-# GitHub App (vars.DEVFLOW_APP_ID, secrets.DEVFLOW_APP_PRIVATE_KEY) removes that step.
+# and reopens it (or clicks "Update branch"); it then merges itself. An optional agentflow
+# GitHub App (vars.AGENTFLOW_APP_ID, secrets.AGENTFLOW_APP_PRIVATE_KEY) removes that step.
 name: semver-release
 
 on:
@@ -31,7 +31,7 @@ on:
         description: JSON array of released units {name, path, tag, version, url}
         value: ${{ jobs.release.outputs.matrix }}
     secrets:
-      DEVFLOW_APP_PRIVATE_KEY:
+      AGENTFLOW_APP_PRIVATE_KEY:
         required: false
       NPM_TOKEN:
         required: false
@@ -59,11 +59,11 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - id: app
-        if: vars.DEVFLOW_APP_ID != ''
+        if: vars.AGENTFLOW_APP_ID != ''
         uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
         with:
-          app-id: ${{ vars.DEVFLOW_APP_ID }}
-          private-key: ${{ secrets.DEVFLOW_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.AGENTFLOW_APP_ID }}
+          private-key: ${{ secrets.AGENTFLOW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
 
@@ -72,14 +72,14 @@ jobs:
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: |
-            /.devflow/releases.yml
+            /.agentflow/releases.yml
             /release-please-config.json
             /.release-please-manifest.json
 
       - name: Check release configuration
         run: |
-          for f in .devflow/releases.yml release-please-config.json .release-please-manifest.json; do
-            [ -f "$f" ] || { echo "::error::$f is missing. Run: devflow release init"; exit 1; }
+          for f in .agentflow/releases.yml release-please-config.json .release-please-manifest.json; do
+            [ -f "$f" ] || { echo "::error::$f is missing. Run: agentflow release init"; exit 1; }
           done
 
       - id: rp
@@ -111,7 +111,7 @@ jobs:
           paths=$(jq -c '.paths_released | fromjson' <<<"$OUTPUTS")
           registry=$(tr '[:upper:]' '[:lower:]' <<<"$REGISTRY")
           matrix=$(jq -c -n --argjson paths "$paths" --argjson out "$OUTPUTS" \
-                     --argjson units "$(yq -o=json '.units' .devflow/releases.yml)" \
+                     --argjson units "$(yq -o=json '.units' .agentflow/releases.yml)" \
                      --arg registry "$registry" '
             [ $paths[] as $p
               | ($units[] | select(.path == $p)) as $u
@@ -160,13 +160,13 @@ jobs:
           persist-credentials: false
       - name: Prepare artifact staging
         run: |
-          git -c advice.detachedHead=false switch --detach "$DEVFLOW_RELEASE_SHA"
-          test "$(git rev-parse HEAD)" = "$DEVFLOW_RELEASE_SHA"
-          artifacts="$RUNNER_TEMP/devflow-release-artifacts"
+          git -c advice.detachedHead=false switch --detach "$AGENTFLOW_RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$AGENTFLOW_RELEASE_SHA"
+          artifacts="$RUNNER_TEMP/agentflow-release-artifacts"
           mkdir -p "$artifacts"/{binaries,charts,libraries}
           printf 'ARTIFACTS=%s\n' "$artifacts" >> "$GITHUB_ENV"
         env:
-          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          AGENTFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
 
       - if: contains(matrix.unit.builds, 'binary') && hashFiles(format('{0}/go.mod', matrix.unit.path)) != ''
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -205,7 +205,7 @@ jobs:
           file: ${{ matrix.unit.path }}/${{ matrix.unit.dockerfile }}
           push: false
           outputs: type=docker,dest=${{ env.ARTIFACTS }}/image.tar
-          tags: devflow-release:build
+          tags: agentflow-release:build
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ matrix.unit.version }}
@@ -239,11 +239,11 @@ jobs:
 
       - name: Record artifact source and hashes
         env:
-          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          AGENTFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: release-artifacts.sh record "$ARTIFACTS"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: devflow-release-${{ strategy.job-index }}
+          name: agentflow-release-${{ strategy.job-index }}
           path: ${{ env.ARTIFACTS }}
           if-no-files-found: error
           overwrite: true
@@ -267,10 +267,10 @@ jobs:
     steps:
       - uses: $/actions/setup
       - name: Prepare artifact staging
-        run: printf 'ARTIFACTS=%s/devflow-release-artifacts\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+        run: printf 'ARTIFACTS=%s/agentflow-release-artifacts\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: devflow-release-${{ strategy.job-index }}
+          name: agentflow-release-${{ strategy.job-index }}
           path: ${{ env.ARTIFACTS }}
       - name: Verify artifacts against the reviewed release
         id: source
@@ -278,7 +278,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha=$(reviewed-revision.sh release "$TAG")
-          DEVFLOW_RELEASE_SHA="$sha" release-artifacts.sh verify "$ARTIFACTS"
+          AGENTFLOW_RELEASE_SHA="$sha" release-artifacts.sh verify "$ARTIFACTS"
           printf 'sha=%s\nshort_sha=%s\n' "$sha" "${sha:0:7}" >> "$GITHUB_OUTPUT"
 
       - if: contains(matrix.unit.builds, 'binary')
@@ -320,7 +320,7 @@ jobs:
           docker load --input "$ARTIFACTS/image.tar"
           while IFS= read -r target; do
             [ -n "$target" ] || continue
-            docker tag devflow-release:build "$target"
+            docker tag agentflow-release:build "$target"
             docker push "$target"
           done <<<"$TAGS"
           digest=$(docker image inspect --format '{{json .RepoDigests}}' "$IMAGE:$VERSION" \
@@ -355,9 +355,9 @@ jobs:
         if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'go' && matrix.unit.path != '.'
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          AGENTFLOW_RELEASE_SHA: ${{ steps.source.outputs.sha }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$UNIT_PATH/v$VERSION" -f sha="$DEVFLOW_RELEASE_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$UNIT_PATH/v$VERSION" -f sha="$AGENTFLOW_RELEASE_SHA"
       - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'npm'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -372,7 +372,7 @@ jobs:
       - if: contains(matrix.unit.builds, 'library') && matrix.unit.publish == 'pypi' && vars.PYPI_PUBLISH == 'true'
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
-          packages-dir: devflow-release-artifacts/libraries
+          packages-dir: agentflow-release-artifacts/libraries
 
       - name: List artifacts on the release
         env:
@@ -393,7 +393,7 @@ jobs:
             [[ ",$BUILDS," == *,helm,* ]] && echo "- Chart: \`oci://$REGISTRY/charts\` version \`$VERSION\`"
             [[ ",$BUILDS," == *,library,* ]] && echo "- Library: ${PUBLISH:-tag} \`$VERSION\`"
             echo
-            echo "Production deploys must reference this release (devflow release guard)."
+            echo "Production deploys must reference this release (agentflow release guard)."
           } > notes.md
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
 
@@ -413,7 +413,7 @@ jobs:
           binary: true
       - id: task
         name: Resolve release task provider
-        run: echo "provider=$(devflow keys --provider)" >> "$GITHUB_OUTPUT"
+        run: echo "provider=$(agentflow keys --provider)" >> "$GITHUB_OUTPUT"
       - name: Record released task references
         env:
           MATRIX: ${{ needs.release.outputs.matrix }}
@@ -441,7 +441,7 @@ jobs:
                 jira-fix-version.sh "$key" "$name $version" || echo "::warning::$key: could not set fix version"
               done
             else
-              devflow keys --shipped --range "$range" --path "$path" | while IFS= read -r key; do
+              agentflow keys --shipped --range "$range" --path "$path" | while IFS= read -r key; do
                 echo "Released task $key in $tag"
               done
             fi

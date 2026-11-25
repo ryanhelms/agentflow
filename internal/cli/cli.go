@@ -1,4 +1,4 @@
-// Package cli implements the devflow command line.
+// Package cli implements the agentflow command line.
 package cli
 
 import (
@@ -17,44 +17,44 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/auth"
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/hooks"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/codexhost"
-	"github.com/nscaledev/devflow/internal/provider/desktophost"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/slackhost"
-	"github.com/nscaledev/devflow/internal/setup"
-	"github.com/nscaledev/devflow/internal/setup/initproviders"
-	"github.com/nscaledev/devflow/internal/update"
-	"github.com/nscaledev/devflow/internal/version"
-	"github.com/nscaledev/devflow/internal/webui"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/auth"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/hooks"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/codexhost"
+	"github.com/nscaledev/agentflow/internal/provider/desktophost"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/slackhost"
+	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/setup/initproviders"
+	"github.com/nscaledev/agentflow/internal/update"
+	"github.com/nscaledev/agentflow/internal/version"
+	"github.com/nscaledev/agentflow/internal/webui"
 )
 
-const usage = `devflow links git work to your configured task, knowledge and code providers.
+const usage = `agentflow links git work to your configured task, knowledge and code providers.
 
-Usage: devflow <command> [flags]
+Usage: agentflow <command> [flags]
 
 Setup
   ui [--screen NAME] [--role ROLE] [--no-open] [--port N] [--foreground] [directory]
                                  open or reuse the local repository console
   ui --status | --stop           inspect or stop the shared local UI daemon
-  init [--force]                 write .devflow/, hooks, workflow, client configs and release setup
+  init [--force]                 write .agentflow/, hooks, workflow, client configs and release setup
   init --detect-providers        show local selection evidence and supported choices as JSON
   init [--guided|--non-interactive] [--provider ROLE=ID ...]
                                  review and persist provider choices; the terminal guides by default
   init --guidance-only           refresh the managed AGENTS.md block
   remove [--dry-run] [--force] [--keep-releases]
-                                 undo init: delete devflow's files, strip its entries from
+                                 undo init: delete agentflow's files, strip its entries from
                                  AGENTS.md and client configs, stop automatic init here
-  pin [--check]                  pin .github/workflows/devflow.yml to this devflow release
+  pin [--check]                  pin .github/workflows/agentflow.yml to this agentflow release
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
@@ -65,9 +65,9 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for Jira, Confluence, Asana or an approved Slack app
-  setup logout --provider NAME --client devflow
-                                 disconnect the selected local Devflow enrollment
+                                 use --client agentflow for Jira, Confluence, Asana or an approved Slack app
+  setup logout --provider NAME --client agentflow
+                                 disconnect the selected local Agentflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login
@@ -112,7 +112,7 @@ Work
                [--expected-revision REV] [--links JSON] [--type TYPE] [--description TEXT] [--tags JSON] [--yes]   publish a knowledge document
   adr new TITLE                  draft docs/adr/NNNN-title.md
   release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
-                                 .devflow/releases.yml and the release-please files
+                                 .agentflow/releases.yml and the release-please files
   release sync                   regenerate release-please files from releases.yml
   release plan [--unit U] [--json]   next version of each unit on this branch
   release version --unit U       print the version a build of this branch gets
@@ -142,7 +142,7 @@ func Main(args []string) int {
 	ctx := context.Background()
 	if len(args) > 0 && args[0] == "--native-client" {
 		if len(args) < 3 {
-			fmt.Fprintln(os.Stderr, "usage: devflow --native-client NAME COMMAND")
+			fmt.Fprintln(os.Stderr, "usage: agentflow --native-client NAME COMMAND")
 			return 1
 		}
 		command := args[2]
@@ -151,7 +151,7 @@ func Main(args []string) int {
 		}
 		writer, err := nativeWriter(args[1], command)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "devflow:", err)
+			fmt.Fprintln(os.Stderr, "agentflow:", err)
 			return 1
 		}
 		defer writer.Close()
@@ -182,7 +182,7 @@ func Main(args []string) int {
 	case errors.Is(err, flag.ErrHelp):
 		return 0
 	default:
-		fmt.Fprintln(os.Stderr, "devflow:", err)
+		fmt.Fprintln(os.Stderr, "agentflow:", err)
 		return 1
 	}
 }
@@ -202,7 +202,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 		case "notify":
 			return slackhost.NewWriter(), nil
 		default:
-			return nil, errors.New("usage: devflow --native-client claude-desktop COMMAND (comment, start, transition, task create or notify)")
+			return nil, errors.New("usage: agentflow --native-client claude-desktop COMMAND (comment, start, transition, task create or notify)")
 		}
 	default:
 		return nil, fmt.Errorf("unsupported native client %q", client)
@@ -231,7 +231,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "mcp":
 		fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
 		client := fs.String("client", "", "calling client name")
-		uiOnly := fs.Bool("ui-only", false, "expose only devflow_ui_open for local console requests")
+		uiOnly := fs.Bool("ui-only", false, "expose only agentflow_ui_open for local console requests")
 		autoOpen := fs.Bool("auto-open", false, "the host explicitly identifies an interactive lead session; open its local console at startup")
 		if err := fs.Parse(args); err != nil {
 			return err
@@ -245,7 +245,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 			return validateWorkflowPR(ctx)
 		}
 		if len(args) != 1 {
-			return errors.New("usage: devflow lint-msg FILE")
+			return errors.New("usage: agentflow lint-msg FILE")
 		}
 		return hooks.CommitMsg(ctx, args[0], os.Stderr)
 	case "keys":
@@ -360,7 +360,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runDocs(ctx, args)
 	case "adr":
 		if len(args) < 2 || args[0] != "new" {
-			return errors.New("usage: devflow adr new TITLE")
+			return errors.New("usage: agentflow adr new TITLE")
 		}
 		a, err := open(ctx)
 		if err != nil {
@@ -376,7 +376,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "version", "--version", "-v":
 		return runVersion(ctx)
 	}
-	return fmt.Errorf("unknown command %q; run devflow help", cmd)
+	return fmt.Errorf("unknown command %q; run agentflow help", cmd)
 }
 
 func open(ctx context.Context) (*app.App, error) {
@@ -389,7 +389,7 @@ func open(ctx context.Context) (*app.App, error) {
 
 func runHook(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow hook commit-msg FILE | session-start | pre-bash | stop")
+		return errors.New("usage: agentflow hook commit-msg FILE | session-start | pre-bash | stop")
 	}
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
@@ -410,14 +410,14 @@ func runHook(ctx context.Context, args []string) error {
 	switch name {
 	case "commit-msg":
 		if len(positional) != 1 {
-			return errors.New("usage: devflow hook commit-msg FILE")
+			return errors.New("usage: agentflow hook commit-msg FILE")
 		}
 		return hooks.CommitMsg(ctx, positional[0], os.Stderr)
 	case "session-start":
 		notice := ""
 		if u, err := newUpdater(ctx); err == nil && u != nil {
 			if err := u.Enforce(ctx); err != nil {
-				notice = "devflow: " + err.Error()
+				notice = "agentflow: " + err.Error()
 			}
 			if n := u.TakeNotice(); n != "" {
 				notice = strings.TrimSpace(notice + "\n" + n)
@@ -513,7 +513,7 @@ func runInit(ctx context.Context, args []string) error {
 		if err := setup.SaveInitProviderConfig(repo.Dir, edit.Before, edit.After); err != nil {
 			return err
 		}
-		fmt.Println("  updated  .devflow/config.yml provider selections")
+		fmt.Println("  updated  .agentflow/config.yml provider selections")
 	}
 	rel := res.Release
 	fmt.Printf("Release units (%s strategy):\n", rel.Strategy)
@@ -529,7 +529,7 @@ func runInit(ctx context.Context, args []string) error {
 func runRemove(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	var opt setup.RemoveOptions
-	fs.BoolVar(&opt.Force, "force", false, "also delete template files changed since devflow init")
+	fs.BoolVar(&opt.Force, "force", false, "also delete template files changed since agentflow init")
 	fs.BoolVar(&opt.DryRun, "dry-run", false, "list what would change without changing anything")
 	fs.BoolVar(&opt.KeepReleases, "keep-releases", false, "keep release-please-config.json and .release-please-manifest.json")
 	if err := fs.Parse(args); err != nil {
@@ -567,10 +567,10 @@ func runPin(ctx context.Context, args []string) error {
 	case !res.Changed:
 		fmt.Printf("%s is pinned to %s already.\n", res.File, res.To)
 	case *check:
-		fmt.Printf("%s: %s, devflow %s is installed. Run devflow pin.\n", res.File, from, res.To)
+		fmt.Printf("%s: %s, agentflow %s is installed. Run agentflow pin.\n", res.File, from, res.To)
 		return &hooks.ExitError{Code: 1}
 	default:
-		fmt.Printf("%s: %s -> %s. Commit it on a branch as `chore: pin devflow workflows to %s` and open a PR.\n", res.File, from, res.To, res.To)
+		fmt.Printf("%s: %s -> %s. Commit it on a branch as `chore: pin agentflow workflows to %s` and open a PR.\n", res.File, from, res.To, res.To)
 	}
 	return nil
 }
@@ -621,7 +621,7 @@ func printResult(res *setup.Result) {
 func runLogin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	email := fs.String("email", "", "Atlassian account email (default: git user.email)")
-	site := fs.String("site", "", "Atlassian site (default: from .devflow/config.yml)")
+	site := fs.String("site", "", "Atlassian site (default: from .agentflow/config.yml)")
 	stdin := fs.Bool("token-stdin", false, "read the API token from stdin")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -668,7 +668,7 @@ func runLogin(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("Signed in to %s as %s. Token saved in the OS keychain.\n", *site, me.DisplayName)
 	if _, err := auth.GitHubToken(ctx, ""); err != nil {
-		fmt.Println("GitHub: run `gh auth login` so devflow can open PRs and install updates.")
+		fmt.Println("GitHub: run `gh auth login` so agentflow can open PRs and install updates.")
 	}
 	return nil
 }
@@ -752,7 +752,7 @@ func runCommit(ctx context.Context, args []string) error {
 				fmt.Println("     ", f)
 			}
 		}
-		fmt.Println("\nStage one group (git add …) and run devflow commit for each.")
+		fmt.Println("\nStage one group (git add …) and run agentflow commit for each.")
 		return nil
 	}
 	if *msg == "" {
@@ -875,7 +875,7 @@ func runTransition(ctx context.Context, args []string) error {
 	case 2:
 		key, event = fs.Arg(0), fs.Arg(1)
 	default:
-		return errors.New("usage: devflow transition [KEY] EVENT")
+		return errors.New("usage: agentflow transition [KEY] EVENT")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -1071,13 +1071,13 @@ func maybeUpdate(ctx context.Context) {
 		fmt.Fprintln(os.Stderr, n)
 	}
 	if u.Opts.Pin != "" {
-		fmt.Fprintf(os.Stderr, "devflow: update.pin=%s is set in .devflow/config.yml; remove it when the incident is over\n", u.Opts.Pin)
+		fmt.Fprintf(os.Stderr, "agentflow: update.pin=%s is set in .agentflow/config.yml; remove it when the incident is over\n", u.Opts.Pin)
 	}
 	ectx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	err = u.Enforce(ectx)
 	cancel()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "devflow:", err)
+		fmt.Fprintln(os.Stderr, "agentflow:", err)
 		if errors.Is(err, update.ErrRestartRequired) {
 			os.Exit(75) // EX_TEMPFAIL: re-run picks up the new version through the launcher
 		}
@@ -1118,7 +1118,7 @@ func runUpdate(ctx context.Context, args []string) error {
 		}
 		v, err := u.Rollback()
 		if err == nil {
-			fmt.Printf("devflow now runs %s. Restart AI sessions to use it.\n", v)
+			fmt.Printf("agentflow now runs %s. Restart AI sessions to use it.\n", v)
 		}
 		return err
 	}
@@ -1133,9 +1133,9 @@ func runUpdate(ctx context.Context, args []string) error {
 	}
 	if rel == nil || (!*stable && !u.NewerThanCurrent(rel)) || u.Installed(rel.Version().String()) {
 		if *stable && rel != nil && !*quiet {
-			fmt.Printf("Devflow %s is already active in the verified installation cache.\n", rel.Tag)
+			fmt.Printf("Agentflow %s is already active in the verified installation cache.\n", rel.Tag)
 		} else if !*quiet {
-			fmt.Printf("devflow %s is up to date (channel %s)\n", version.Version, u.Opts.Channel)
+			fmt.Printf("agentflow %s is up to date (channel %s)\n", version.Version, u.Opts.Channel)
 		}
 		return nil
 	}
@@ -1145,7 +1145,7 @@ func runUpdate(ctx context.Context, args []string) error {
 		}
 		return err
 	}
-	msg := fmt.Sprintf("devflow updated %s → %s (%s). Restart AI sessions to use it.", version.Version, rel.Version(), rel.HTMLURL)
+	msg := fmt.Sprintf("agentflow updated %s → %s (%s). Restart AI sessions to use it.", version.Version, rel.Version(), rel.HTMLURL)
 	if *quiet {
 		u.SetNotice(msg)
 		return nil
@@ -1166,7 +1166,7 @@ func runVersion(ctx context.Context) error {
 		fmt.Println("last check:", st.ModTime().Format(time.RFC1123))
 	}
 	if rel, err := u.Latest(ctx); err == nil && rel != nil && u.NewerThanCurrent(rel) {
-		fmt.Printf("newer release available: %s (run devflow update)\n", rel.Tag)
+		fmt.Printf("newer release available: %s (run agentflow update)\n", rel.Tag)
 	}
 	return nil
 }
@@ -1194,21 +1194,21 @@ func runDoctor(ctx context.Context, args []string) error {
 		return &hooks.ExitError{Code: 1}
 	}
 	report(true, "git repository", a.Repo.Dir)
-	report(a.HasCfg, ".devflow/config.yml", map[bool]string{true: "found", false: "missing: run devflow init"}[a.HasCfg])
+	report(a.HasCfg, ".agentflow/config.yml", map[bool]string{true: "found", false: "missing: run agentflow init"}[a.HasCfg])
 	hp, _ := a.Repo.Git(ctx, "config", "core.hooksPath")
 	hooksOK := strings.TrimSpace(hp) == ".githooks"
 	if !hooksOK && *fix {
 		_, err := a.Repo.Git(ctx, "config", "core.hooksPath", ".githooks")
 		hooksOK = err == nil
 	}
-	report(hooksOK, "commit-msg hook", "core.hooksPath="+strings.TrimSpace(hp)+map[bool]string{true: "", false: " (run devflow doctor --fix)"}[hooksOK])
+	report(hooksOK, "commit-msg hook", "core.hooksPath="+strings.TrimSpace(hp)+map[bool]string{true: "", false: " (run agentflow doctor --fix)"}[hooksOK])
 	if from := setup.PinBehind(a.Repo.Dir); from != "" {
-		report(false, "workflow pin", setup.CallerWorkflow+" is pinned to "+from+": run devflow pin")
+		report(false, "workflow pin", setup.CallerWorkflow+" is pinned to "+from+": run agentflow pin")
 	} else if _, err := os.Stat(a.Repo.Dir + "/" + setup.CallerWorkflow); err == nil {
 		report(true, "workflow pin", "up to date")
 	}
-	_, lerr := os.Stat(a.Repo.Dir + "/.devflow/bin/devflow")
-	report(lerr == nil, "repo launcher", ".devflow/bin/devflow")
+	_, lerr := os.Stat(a.Repo.Dir + "/.agentflow/bin/agentflow")
+	report(lerr == nil, "repo launcher", ".agentflow/bin/agentflow")
 	if _, err := exec.LookPath("gh"); err != nil {
 		report(false, "gh CLI", "not installed: needed for GitHub auth and update verification")
 	} else {
@@ -1218,7 +1218,7 @@ func runDoctor(ctx context.Context, args []string) error {
 	name, login, err := a.LoginCheck(ctx)
 	switch {
 	case errors.Is(err, auth.ErrNoCredentials):
-		report(false, "Atlassian legacy API login", "interactive setup uses the Atlassian MCP; see devflow setup plan")
+		report(false, "Atlassian legacy API login", "interactive setup uses the Atlassian MCP; see agentflow setup plan")
 	case err != nil && name == "":
 		report(false, "Atlassian login", err.Error())
 	default:
@@ -1247,7 +1247,7 @@ func runDoctor(ctx context.Context, args []string) error {
 
 func runRelease(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow release init|sync|plan|version|preview|get|publish")
+		return errors.New("usage: agentflow release init|sync|plan|version|preview|get|publish")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -1259,7 +1259,7 @@ func runRelease(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("release "+sub, flag.ContinueOnError)
 	strategy := fs.String("strategy", "", "branching strategy: trunk or gitflow (default: detect)")
 	force := fs.Bool("force", false, "re-detect units even if releases.yml exists")
-	unit := fs.String("unit", "", "unit name from .devflow/releases.yml")
+	unit := fs.String("unit", "", "unit name from .agentflow/releases.yml")
 	asJSON := fs.Bool("json", false, "print JSON")
 	since := fs.String("since", "", "tag or ref (preview)")
 	if err := fs.Parse(rest); err != nil {

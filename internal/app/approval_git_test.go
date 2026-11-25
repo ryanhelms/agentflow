@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 func TestCommitPrepareBindsSelectedContentWithoutStaging(t *testing.T) {

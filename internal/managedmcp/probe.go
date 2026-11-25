@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 // Apply credentials only to requests to the declared HTTPS endpoint. Disable
@@ -57,7 +57,7 @@ func (s Status) probe(ctx context.Context, home string) (bool, string) {
 			},
 		}
 	}
-	client := mcp.NewClient(&mcp.Implementation{Name: "devflow-setup", Version: "1"}, &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}, Logger: slog.New(slog.DiscardHandler)})
+	client := mcp.NewClient(&mcp.Implementation{Name: "agentflow-setup", Version: "1"}, &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}, Logger: slog.New(slog.DiscardHandler)})
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return false, "MCP initialization failed. Check the declared transport and authentication reference"

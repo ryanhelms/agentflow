@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 const (
 	addURL   = "https://docs.example.test/releases/%2F?a=1&b=2#v1"
 	addTitle = "Release 'v1' & notes"
-	addID    = "devflow:link:abc123"
+	addID    = "agentflow:link:abc123"
 	addAck   = `{"data":{"success":true,"issue":{"idOrKey":"ENG-42"},"result":{"id":10001},"weblink":{"url":"` + addURL + `","title":"` + addTitle + `","globalId":"` + addID + `"}}}`
 )
 

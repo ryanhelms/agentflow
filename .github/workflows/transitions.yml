@@ -24,10 +24,10 @@ permissions:
 
 jobs:
   transition:
-    if: vars.DEVFLOW_ENABLED != 'false'
+    if: vars.AGENTFLOW_ENABLED != 'false'
     runs-on: ubuntu-latest
     concurrency:
-      group: devflow-transitions-${{ github.repository }}-${{ github.ref }}
+      group: agentflow-transitions-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
       - uses: $/actions/setup
@@ -44,7 +44,7 @@ jobs:
         name: Resolve task provider
         working-directory: ${{ steps.source.outputs.directory }}
         run: |
-          provider=$(devflow keys --provider)
+          provider=$(agentflow keys --provider)
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Apply legacy Jira transitions
         if: steps.task.outputs.provider == 'jira'
@@ -56,15 +56,15 @@ jobs:
         working-directory: ${{ steps.source.outputs.directory }}
         run: |
           if [ -z "$JIRA_BASE" ] || [ -z "$JIRA_TOKEN" ]; then
-            echo "::warning::JIRA_BASE or JIRA_TOKEN not set; devflow transitions skipped"
+            echo "::warning::JIRA_BASE or JIRA_TOKEN not set; agentflow transitions skipped"
             exit 0
           fi
           handle-event.sh
       - name: Preview linked task transitions
         if: steps.task.outputs.provider != 'jira' && steps.task.outputs.provider != 'none'
         env:
-          DEVFLOW_HOME: ${{ runner.temp }}/devflow-transitions
-          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          AGENTFLOW_HOME: ${{ runner.temp }}/agentflow-transitions
+          AGENTFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PROVIDER: ${{ steps.task.outputs.provider }}
           ASANA_ACCESS_TOKEN: ${{ steps.task.outputs.provider == 'asana' && secrets.ASANA_ACCESS_TOKEN || '' }}
           GH_TOKEN: ${{ steps.task.outputs.provider == 'github-issues' && (secrets.TASK_READ_TOKEN || github.token) || (steps.task.outputs.provider == 'repository') && github.token || '' }}
@@ -73,6 +73,6 @@ jobs:
         run: |
           if [ "$PROVIDER" = repository ]; then gh auth setup-git --hostname github.com; fi
           if [ "$DRY_RUN" != true ]; then
-            echo "::notice::Generic task workflows preview changes. Apply the reviewed transition through devflow transition."
+            echo "::notice::Generic task workflows preview changes. Apply the reviewed transition through agentflow transition."
           fi
-          devflow transition --github-event --dry-run
+          agentflow transition --github-event --dry-run

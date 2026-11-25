@@ -6,16 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/event"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/event"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestApplyGitHubTaskEventReplay(t *testing.T) {
 	a, fake := issueApp(t)
 	t.Setenv("GH_TOKEN", "fixture")
 	t.Setenv("GITHUB_SERVER_URL", "https://github.com")
-	fake.task.Ref.Scope, fake.task.Ref.ID = "nscaledev/devflow", "25"
+	fake.task.Ref.Scope, fake.task.Ref.ID = "nscaledev/agentflow", "25"
 	*a.issueSettings().Repository = fake.task.Ref.Scope
 	a.Gate.Autonomy.Remote = config.Auto
 	metadata := event.GitHubActionsContext{
@@ -84,7 +84,7 @@ func TestConsumerTaskEventCannotApply(t *testing.T) {
 	if err = os.WriteFile(path, []byte(body), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.ApplyGitHubTaskEvent(t.Context(), metadata, path, false); err == nil || !strings.Contains(err.Error(), "approved nscaledev/devflow") || len(f.writes) > 0 {
+	if _, err = a.ApplyGitHubTaskEvent(t.Context(), metadata, path, false); err == nil || !strings.Contains(err.Error(), "approved nscaledev/agentflow") || len(f.writes) > 0 {
 		t.Fatalf("consumer apply: writes=%v, err=%v", f.writes, err)
 	}
 }

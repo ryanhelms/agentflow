@@ -11,14 +11,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/confluence"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
-	"github.com/nscaledev/devflow/internal/provider/twg"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/confluence"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/provider/twg"
 )
 
 type confluenceCLIKey struct{}
@@ -144,7 +144,7 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 	}
 	// Acquire the authenticated route with the complete update shape before
 	// looking up the real snapshot. This probe can never be dispatched.
-	call := pub.UpdateCall("devflow-schema-probe")
+	call := pub.UpdateCall("agentflow-schema-probe")
 	binding, err := native.PrepareWrite(ctx, call)
 	if err != nil {
 		return zero, err
@@ -217,7 +217,7 @@ func prepareNativeConfluence(ctx context.Context, site string, ref provider.Ref,
 			// The flat Rovo update can return without page identity. Verify the
 			// persisted successor on the bound connection before reporting success.
 			confirmed := false
-			if exact.Owner != "devflow" {
+			if exact.Owner != "agentflow" {
 				payload, err := native.Payload(raw)
 				if err != nil {
 					return provider.WriteResult{}, errors.Join(native.ErrWriteUncertain, err)

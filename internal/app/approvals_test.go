@@ -6,19 +6,19 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 func TestPolicyExplainWorkingCopyPublicationOptIn(t *testing.T) {
 	root := newRepo(t) // This feature branch has no target remote.
-	if err := os.MkdirAll(filepath.Join(root, ".devflow"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".agentflow"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	workingPolicy := "policy: {max_autonomy: {remote: confirm, actions: {notify: suggest}}}"
-	if err := os.WriteFile(filepath.Join(root, ".devflow", "config.yml"), []byte(workingPolicy), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".agentflow", "config.yml"), []byte(workingPolicy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: auto}"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: auto}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ctx := t.Context()
@@ -29,10 +29,10 @@ func TestPolicyExplainWorkingCopyPublicationOptIn(t *testing.T) {
 	// The same connection picks up the new repository opt-in and the new
 	// personal preference. Its PR target is still unreviewed.
 	workingPolicy = "policy: {allow_auto_pr_publication: true, max_autonomy: {remote: confirm, actions: {notify: suggest}}}"
-	if err := os.WriteFile(filepath.Join(root, ".devflow", "config.yml"), []byte(workingPolicy), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".agentflow", "config.yml"), []byte(workingPolicy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: auto, actions: {pr_open_draft: suggest}}"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: auto, actions: {pr_open_draft: suggest}}"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	listed, err := a.PolicyExplain(ctx, "")
@@ -69,7 +69,7 @@ func TestPolicyExplainWorkingCopyPublicationOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(root, ".devflow", "config.yml")); err != nil {
+	if err := os.Remove(filepath.Join(root, ".agentflow", "config.yml")); err != nil {
 		t.Fatal(err)
 	}
 	missing, err := enabledSession.PolicyExplain(ctx, "pr_open")
@@ -81,7 +81,7 @@ func TestPolicyExplainWorkingCopyPublicationOptIn(t *testing.T) {
 			t.Fatalf("missing config permitted %s at %s", rule.Action, rule.Level)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), []byte("autonomy: private-invalid-value"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("autonomy: private-invalid-value"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := enabledSession.PolicyExplain(ctx, "pr_open"); err == nil || err.Error() != "cannot read personal approval settings" {

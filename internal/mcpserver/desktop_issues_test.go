@@ -18,16 +18,16 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/managedgh"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/managedgh"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	ctx := t.Context()
 	dir, home, fixture := gitRepo(t), t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("GH_FIXTURE", fixture)
-	for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "DEVFLOW_OPERATION_ID"} {
+	for _, name := range []string{"GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "AGENTFLOW_OPERATION_ID"} {
 		t.Setenv(name, "")
 	}
 	put := func(path, value string) {
@@ -36,7 +36,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	put(filepath.Join(dir, ".devflow", "config.yml"), "task_management: {provider: github-issues, settings: {repository: sample/project}}\n")
+	put(filepath.Join(dir, ".agentflow", "config.yml"), "task_management: {provider: github-issues, settings: {repository: sample/project}}\n")
 	bin := t.TempDir()
 	for _, name := range []string{"git", "bash"} {
 		path, err := exec.LookPath(name)
@@ -92,7 +92,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	defer session.Close()
 	read := func(args map[string]any) string {
 		t.Helper()
-		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_context", Arguments: args})
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_context", Arguments: args})
 		if err != nil || res.IsError {
 			t.Fatalf("issue context: %v, %v", res, err)
 		}
@@ -117,7 +117,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	args := map[string]any{"summary": "Example", "description": description}
 	create := func(wantError bool) string {
 		t.Helper()
-		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_ticket_create", Arguments: args})
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_ticket_create", Arguments: args})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestDesktopCreateIssueWithManagedGH(t *testing.T) {
 	if got := create(true); !strings.Contains(got, "authentication required") {
 		t.Fatal(got)
 	}
-	if err := setup.LoginProvider(ctx, filepath.Join(dir, ".devflow"), "github-issues", "", "", nil, io.Discard, io.Discard); err != nil {
+	if err := setup.LoginProvider(ctx, filepath.Join(dir, ".agentflow"), "github-issues", "", "", nil, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	readArgs["native_results"] = []map[string]string{{"id": request.ID, "status": "oauth_app_restricted"}}

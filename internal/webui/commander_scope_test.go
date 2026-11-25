@@ -39,7 +39,7 @@ func TestCommanderScopeCapturedAtLaunch(t *testing.T) {
 	})
 	capability := issueCommanderCapability(t, s, op.Commander)
 	header := httptest.NewRequest(http.MethodGet, "/", nil)
-	header.Header.Set("X-Devflow-Commander", capability)
+	header.Header.Set("X-Agentflow-Commander", capability)
 	binding, scope := s.commanderFor(header)
 	if binding != op.Commander || scope == "" {
 		t.Fatal("lost originating launch identity")
@@ -87,7 +87,7 @@ func TestCommanderGrantsRespectWorktreeAndForegroundActor(t *testing.T) {
 	separateCap := issueCommanderCapability(t, other, operator)
 	requestFor := func(capability string) *http.Request {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("X-Devflow-Commander", capability)
+		req.Header.Set("X-Agentflow-Commander", capability)
 		return req
 	}
 	if _, scope := linked.commanderFor(requestFor(oldCap)); scope != "" {
@@ -156,7 +156,7 @@ func TestCommanderCrossWorktreeTabScope(t *testing.T) {
 			}
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tc.authenticated {
-				req.Header.Set("X-Devflow-Commander", credentials.Commander)
+				req.Header.Set("X-Agentflow-Commander", credentials.Commander)
 			}
 			_, scope := s.commanderFor(req)
 			id := strings.Repeat("7", 32)
@@ -212,7 +212,7 @@ func TestCommanderNegotiationWithOlderDaemon(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		plain, err := aead.Open(nil, nil, data, []byte("devflow-control/v1"))
+		plain, err := aead.Open(nil, nil, data, []byte("agentflow-control/v1"))
 		if err != nil {
 			t.Error(err)
 			return
@@ -228,7 +228,7 @@ func TestCommanderNegotiationWithOlderDaemon(t *testing.T) {
 	i.Port = old.Listener.Addr().(*net.TCPAddr).Port
 	op := registration("/private/checkout", "link", "handoff")
 	op.Commander = commanderBinding{Socket: "/private/service.sock", Token: randomKey()}
-	if _, err := i.control(t.Context(), op); err == nil || !strings.Contains(err.Error(), "devflow ui --stop") || requests.Load() != 1 {
+	if _, err := i.control(t.Context(), op); err == nil || !strings.Contains(err.Error(), "agentflow ui --stop") || requests.Load() != 1 {
 		t.Fatalf("legacy control negotiation: %v (requests %d)", err, requests.Load())
 	}
 }

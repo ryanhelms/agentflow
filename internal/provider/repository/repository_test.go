@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -53,7 +53,7 @@ func setup(t *testing.T) fixture {
 	put(t, filepath.Join(engineer, "notes.txt"), "engineer's staged work")
 	git(t, engineer, "add", "--", "notes.txt")
 	put(t, filepath.Join(engineer, "notes.txt"), "engineer's unstaged work")
-	return fixture{origin, engineer, Config{Instance: "team", Origin: origin, Directory: ".devflow/records", Publication: "push"}}
+	return fixture{origin, engineer, Config{Instance: "team", Origin: origin, Directory: ".agentflow/records", Publication: "push"}}
 }
 
 func tasks(t *testing.T, cfg Config) *Tasks {

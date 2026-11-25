@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
 )
 
 func TestConcurrentPersonalAutonomySave(t *testing.T) {
@@ -36,14 +36,14 @@ func TestConcurrentPersonalAutonomySave(t *testing.T) {
 func autonomyFixture(t *testing.T, repo, user string) (*app.App, string) {
 	t.Helper()
 	root, home := t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
-	t.Setenv("DEVFLOW_NO_UPDATE", "1")
+	t.Setenv("AGENTFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	if out, err := exec.Command("git", "init", "-qb", "main", root).CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
-	if err := os.Mkdir(filepath.Join(root, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(root, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, consolecfg.MainFile), []byte(repo), 0600); err != nil {
@@ -61,7 +61,7 @@ func autonomyFixture(t *testing.T, repo, user string) (*app.App, string) {
 }
 func TestPersonalPatchApprovalAndExistingSettings(t *testing.T) {
 	const private = "private-setting-value"
-	const repo = "devflow: 1\ncommit: {require_key: false}\n"
+	const repo = "agentflow: 1\ncommit: {require_key: false}\n"
 	const initial = "custom_field: " + private + "\napproval_window: 10m\nautonomy:\n  actions: {push: auto, commit: suggest}\n"
 	a, file := autonomyFixture(t, repo, initial)
 	ctx := t.Context()
@@ -95,7 +95,7 @@ func TestPersonalPatchApprovalAndExistingSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := result.(personalSave)
-	if !strings.Contains(out.Note, "Restart running Devflow MCP sessions") {
+	if !strings.Contains(out.Note, "Restart running Agentflow MCP sessions") {
 		t.Fatal("missing restart note")
 	}
 	if out.Personal.Actions["push"] != config.Auto || out.Personal.Actions["commit"] != config.Auto || out.Personal.Window != "10m0s" {
@@ -124,7 +124,7 @@ func TestPersonalPatchApprovalAndExistingSettings(t *testing.T) {
 	}
 }
 func TestPersonalApprovalUsesCurrentPolicyAndPrivateErrors(t *testing.T) {
-	a, file := autonomyFixture(t, "devflow: 1\n", "autonomy: {local: auto}\n")
+	a, file := autonomyFixture(t, "agentflow: 1\n", "autonomy: {local: auto}\n")
 	ctx := t.Context()
 	view, err := InspectAutonomy(ctx, a.Repo.Dir, "", nil)
 	if err != nil {
@@ -170,7 +170,7 @@ func TestPersonalApprovalUsesCurrentPolicyAndPrivateErrors(t *testing.T) {
 	}
 }
 func TestStageRepositoryPatchPreservesStagedDraft(t *testing.T) {
-	const original = "devflow: 1\npolicy: {allow_auto_pr_publication: true, max_autonomy: {actions: {push: confirm, commit: suggest}}}\n"
+	const original = "agentflow: 1\npolicy: {allow_auto_pr_publication: true, max_autonomy: {actions: {push: confirm, commit: suggest}}}\n"
 	a, _ := autonomyFixture(t, original, "")
 	draft := original + "# staged edit\n"
 	base := hash([]byte(original))

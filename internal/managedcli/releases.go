@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/provision/user"
-	"github.com/nscaledev/devflow/internal/update"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision/user"
+	"github.com/nscaledev/agentflow/internal/update"
 )
 
 type pinnedRelease struct {
@@ -64,7 +64,7 @@ func (r pinnedRelease) open(ctx context.Context, artifact provision.Artifact) (i
 	if r.archiveSHA == "" {
 		return user.OpenArtifact(ctx, artifact)
 	}
-	stage, err := os.MkdirTemp("", "devflow-cli-")
+	stage, err := os.MkdirTemp("", "agentflow-cli-")
 	if err != nil {
 		return nil, err
 	}

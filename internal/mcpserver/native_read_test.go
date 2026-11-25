@@ -9,22 +9,22 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func TestJiraWorkUsesClientProviderMCP(t *testing.T) {
 	ctx := t.Context()
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("JIRA_USER", "")
 	t.Setenv("JIRA_TOKEN", "")
 	dir := gitRepo(t)
-	cfg := `devflow: 1
+	cfg := `agentflow: 1
 task_management:
   provider: jira
   settings: {site: "https://test-tenant.atlassian.net", projects: ["APP"]}
 `
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte(cfg), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(cfg), 0600); err != nil {
 		t.Fatal(err)
 	}
 	server, err := New(ctx, dir, "claude")
@@ -46,7 +46,7 @@ task_management:
 		if len(replies) > 0 {
 			args["native_results"] = replies
 		}
-		resp, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_my_work", Arguments: args})
+		resp, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_my_work", Arguments: args})
 		if err != nil {
 			t.Fatal(err)
 		}

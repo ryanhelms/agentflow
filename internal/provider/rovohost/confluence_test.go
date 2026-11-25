@@ -13,12 +13,12 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/nativemap"
 )
 
 func flatCatalog(t *testing.T, file string) map[string]*jsonschema.Schema {
@@ -36,7 +36,7 @@ func flatCatalog(t *testing.T, file string) map[string]*jsonschema.Schema {
 
 func TestConfluenceDesktopPublish(t *testing.T) {
 	const site = "https://fixture.atlassian.net"
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	tools := flatCatalog(t, "confluence-flat-schemas.json")
 	server := mcp.NewServer(&mcp.Implementation{Name: "confluence-fixture"}, nil)
 	version, writes, historyReads, spaceReads := 7, 0, 0, 0
@@ -88,7 +88,7 @@ func TestConfluenceDesktopPublish(t *testing.T) {
 	}
 	mcp.AddTool(server, &mcp.Tool{Name: updateTool, InputSchema: tools[updateTool]}, func(_ context.Context, _ *mcp.CallToolRequest, in updateInput) (*mcp.CallToolResult, map[string]any, error) {
 		if in.CloudID != site || in.ID != "42" || in.Title != "Runbook" ||
-			in.Snapshot != snapshot || !strings.HasPrefix(in.Message, "devflow docs publish ") || in.Body.Format != "html" || in.Body.Value != "<p>&lt;example&gt;</p>" {
+			in.Snapshot != snapshot || !strings.HasPrefix(in.Message, "agentflow docs publish ") || in.Body.Format != "html" || in.Body.Value != "<p>&lt;example&gt;</p>" {
 			return nil, nil, errors.New("wrong replacement")
 		}
 		writes++
@@ -122,10 +122,10 @@ func TestConfluenceDesktopPublish(t *testing.T) {
 	}, inProcessHTTP{handler})
 	t.Cleanup(writer.Close)
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow", "config.yml"), []byte("knowledge_base: {provider: confluence, settings: {site: "+site+", publish_spaces: [ENG]}}"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow", "config.yml"), []byte("knowledge_base: {provider: confluence, settings: {site: "+site+", publish_spaces: [ENG]}}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _, err := config.LoadRepo(dir)

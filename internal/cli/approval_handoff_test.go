@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 // Exercise both public clients against one real Git index and one approval
@@ -20,7 +20,7 @@ func TestCommitApprovalHandoffCLIAndMCP(t *testing.T) {
 	ctx := t.Context()
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("CODEX_THREAD_ID", "cli-owner")
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
@@ -37,10 +37,10 @@ func TestCommitApprovalHandoffCLIAndMCP(t *testing.T) {
 	git("config", "user.email", "test@example.org")
 	git("commit", "--quiet", "--allow-empty", "-m", "chore: initialize fixture")
 	head := git("rev-parse", "HEAD")
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("commit: {require_key: false}\ntask_management: {provider: none}\n"), 0600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte("commit: {require_key: false}\ntask_management: {provider: none}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	stage := func(s string) {
@@ -91,12 +91,12 @@ func TestCommitApprovalHandoffCLIAndMCP(t *testing.T) {
 	}
 	id := owner.Approval.OperationID
 	var waiting app.Pending
-	call("devflow_commit_prepare", map[string]any{"message": msg}, false, &waiting)
+	call("agentflow_commit_prepare", map[string]any{"message": msg}, false, &waiting)
 	if waiting.Status != "awaiting_approval" || waiting.ConfirmToken != "" || waiting.Approval == nil || waiting.Approval.OperationID != id {
 		t.Fatal("MCP worker did not wait on the same operation")
 	}
 	var state policy.Approval
-	call("devflow_approval_status", map[string]any{"operation_id": id}, false, &state)
+	call("agentflow_approval_status", map[string]any{"operation_id": id}, false, &state)
 	if state.State != "pending" || state.PromptOwner != owner.Approval.PromptOwner {
 		t.Fatalf("unexpected shared status: %+v", state)
 	}
@@ -107,22 +107,22 @@ func TestCommitApprovalHandoffCLIAndMCP(t *testing.T) {
 	args := map[string]any{"message": msg, "confirm_token": id}
 	var problem struct{ Code string }
 	stage("different content under the same filename\n")
-	call("devflow_commit", args, true, &problem)
+	call("agentflow_commit", args, true, &problem)
 	if problem.Code != "operation_changed" || git("rev-parse", "HEAD") != head {
 		t.Fatalf("accepted changed index or unclear failure: %s", problem.Code)
 	}
 	stage(initial)
 	var committed app.CommitResult
-	call("devflow_commit", args, false, &committed)
+	call("agentflow_commit", args, false, &committed)
 	if committed.Status != "committed" || git("rev-parse", committed.SHA) != git("rev-parse", "HEAD") || git("show", "HEAD:note.txt") != strings.TrimSpace(initial) || git("rev-list", "--count", head+"..HEAD") != "1" {
 		t.Fatalf("unexpected committed contents: %+v", committed)
 	}
-	call("devflow_approval_status", map[string]any{"operation_id": id}, false, &state)
+	call("agentflow_approval_status", map[string]any{"operation_id": id}, false, &state)
 	if state.State != "consumed" {
 		t.Fatal("approval was not consumed", state)
 	}
 	stage("subsequent change\n")
-	call("devflow_commit", args, true, &problem)
+	call("agentflow_commit", args, true, &problem)
 	if problem.Code != "approval_consumed" || git("rev-parse", "HEAD") != git("rev-parse", committed.SHA) {
 		t.Fatal("approval replay changed HEAD or returned the wrong reason", problem.Code)
 	}
@@ -154,12 +154,12 @@ func TestCommitApprovalHandoffCLIAndMCP(t *testing.T) {
 				t.Fatal("expected a declined CLI confirmation", err)
 			}
 			var cancelled policy.Approval
-			call("devflow_approval_status", map[string]any{"operation_id": shown.Approval.OperationID}, false, &cancelled)
+			call("agentflow_approval_status", map[string]any{"operation_id": shown.Approval.OperationID}, false, &cancelled)
 			if cancelled.State != "cancelled" {
 				t.Fatalf("abandoned owner kept the prompt after %s: %+v", tc.name, cancelled)
 			}
 			var next app.Pending
-			call("devflow_commit_prepare", map[string]any{"message": msg, "paths": []string{"note.txt"}}, false, &next)
+			call("agentflow_commit_prepare", map[string]any{"message": msg, "paths": []string{"note.txt"}}, false, &next)
 			if next.Status != "needs_confirmation" || next.Approval == nil || next.Approval.OperationID == shown.Approval.OperationID {
 				t.Fatalf("waiting worker could not take a fresh prompt after %s", tc.name)
 			}

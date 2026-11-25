@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func TestJiraCommentCLIRouting(t *testing.T) {
@@ -20,7 +20,7 @@ func TestJiraCommentCLIRouting(t *testing.T) {
 		t.Skip("twg fixture uses /bin/sh")
 	}
 	a, host, ctx := jiraNativeApp(t)
-	for _, name := range []string{"JIRA_USER", "JIRA_TOKEN", "CI", "GITHUB_ACTIONS", "DEVFLOW_OPERATION_ID"} {
+	for _, name := range []string{"JIRA_USER", "JIRA_TOKEN", "CI", "GITHUB_ACTIONS", "AGENTFLOW_OPERATION_ID"} {
 		t.Setenv(name, "")
 	}
 	dir := t.TempDir()
@@ -36,7 +36,7 @@ func TestJiraCommentCLIRouting(t *testing.T) {
 	writeFile("issue", issue)
 	const profile = `{"data":{"storage":"keychain","activeEnvironment":"prod","defaults":{"prod":"work-id"},"profiles":[{"id":"work-id","name":"work","environment":"prod","authMethod":"oauth","site":"https://tasks.example","userId":"fixture-account"}]}}`
 	writeFile("profile", profile)
-	writeFile("receipt", `{"command":"jira.workitem.comment.create","request":{"site":"https://tasks.example","issueId":"10001"},"data":{"id":"102","author":{"accountId":"fixture-account"},"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Ready\n\n(via devflow)"}]}]}}}`)
+	writeFile("receipt", `{"command":"jira.workitem.comment.create","request":{"site":"https://tasks.example","issueId":"10001"},"data":{"id":"102","author":{"accountId":"fixture-account"},"body":{"version":1,"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Ready\n\n(via agentflow)"}]}]}}}`)
 	writeFile("twg", fmt.Sprintf(`#!/bin/sh
 set -eu
 cd %q
@@ -73,7 +73,7 @@ esac
 		token := confirmation(t, out)
 		summary := out.(*Pending).Summary.(map[string]string)
 		if summary["backend"] != "twg" || summary["site"] != "https://tasks.example" || summary["issue_id"] != "10001" ||
-			summary["key"] != "PLAT-1" || summary["project"] != "PLAT" || summary["comment"] != text+"\n\n(via devflow)" {
+			summary["key"] != "PLAT-1" || summary["project"] != "PLAT" || summary["comment"] != text+"\n\n(via agentflow)" {
 			t.Fatal(summary)
 		}
 		return token
@@ -179,9 +179,9 @@ func TestJiraCommentCLIEligibility(t *testing.T) {
 			t.Setenv("GITHUB_ACTIONS", tc.actions)
 			t.Setenv("JIRA_USER", tc.user)
 			t.Setenv("JIRA_TOKEN", tc.token)
-			t.Setenv("DEVFLOW_OPERATION_ID", "")
+			t.Setenv("AGENTFLOW_OPERATION_ID", "")
 			if tc.name == "operation ID" {
-				t.Setenv("DEVFLOW_OPERATION_ID", "fixture-automation")
+				t.Setenv("AGENTFLOW_OPERATION_ID", "fixture-automation")
 			}
 			callCtx := t.Context()
 			if tc.optIn {

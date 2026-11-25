@@ -13,16 +13,16 @@ import (
 const (
 	callTimeout  = 60 * time.Second
 	maxPages     = 16
-	activeEnvKey = "DEVFLOW_CODEX_HOST_ACTIVE"
+	activeEnvKey = "AGENTFLOW_CODEX_HOST_ACTIVE"
 )
 
 // Call discovers and invokes one MCP tool in an ephemeral Codex thread. Codex
 // owns the server configuration and authentication. An error after dispatch
 // can leave the tool's outcome unknown.
 func Call(ctx context.Context, dir, server, tool string, args map[string]any) (json.RawMessage, error) {
-	if os.Getenv(activeEnvKey) != "" || strings.EqualFold(strings.TrimSpace(server), "devflow") ||
-		strings.HasPrefix(strings.ToLower(strings.TrimSpace(tool)), "devflow_") {
-		return nil, hostError(Permission, "select target", "recursive devflow calls are disabled")
+	if os.Getenv(activeEnvKey) != "" || strings.EqualFold(strings.TrimSpace(server), "agentflow") ||
+		strings.HasPrefix(strings.ToLower(strings.TrimSpace(tool)), "agentflow_") {
+		return nil, hostError(Permission, "select target", "recursive agentflow calls are disabled")
 	}
 	if strings.TrimSpace(server) == "" || strings.TrimSpace(tool) == "" {
 		return nil, hostError(Unavailable, "select target", "server and tool are required")
@@ -86,7 +86,7 @@ type toolCall struct {
 
 func (h *host) startThread(dir string) (string, error) {
 	_, err := h.request("initialize", map[string]any{
-		"clientInfo":   map[string]string{"name": "devflow", "version": "0.1.0"},
+		"clientInfo":   map[string]string{"name": "agentflow", "version": "0.1.0"},
 		"capabilities": map[string]bool{"explicitGatewayOauth": true},
 	})
 	if err != nil {

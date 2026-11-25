@@ -81,7 +81,7 @@ func (r *Repo) CleanCommitMessage(ctx context.Context, message string) (string, 
 // PreviewCommit uses private indexes and an ephemeral Git object database.
 // Filters and attributes are evaluated the same way they are for git add.
 func (r *Repo) PreviewCommit(ctx context.Context, paths []string) (*CommitTree, error) {
-	dir, err := os.MkdirTemp("", "devflow-commit-preview-*")
+	dir, err := os.MkdirTemp("", "agentflow-commit-preview-*")
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (r *Repo) CommitExact(ctx context.Context, expected *CommitTree, message st
 		return "", err
 	}
 	// Keep temporary indexes beside the original so replacing it is atomic.
-	dir, err := os.MkdirTemp(filepath.Dir(index), "devflow-commit-*")
+	dir, err := os.MkdirTemp(filepath.Dir(index), "agentflow-commit-*")
 	if err != nil {
 		return "", err
 	}
@@ -245,9 +245,9 @@ func (r *Repo) CommitExact(ctx context.Context, expected *CommitTree, message st
 	cmd := exec.CommandContext(ctx, "git", "-c", "core.hooksPath="+guard, "-c", "hook.reference-transaction.enabled=true", "commit", "--cleanup=verbatim", "--file=-")
 	cmd.Dir = r.Dir
 	cmd.Env = slices.Concat(c.env, []string{
-		"GIT_INDEX_FILE=" + c.selected, "DEVFLOW_ORIGINAL_HOOKS=" + hooks,
-		"DEVFLOW_EXPECTED_REF=" + actual.Ref, "DEVFLOW_EXPECTED_TREE=" + actual.Tree,
-		"DEVFLOW_EXPECTED_PARENTS=" + actual.Parents, "DEVFLOW_COMMIT_TMP=" + dir,
+		"GIT_INDEX_FILE=" + c.selected, "AGENTFLOW_ORIGINAL_HOOKS=" + hooks,
+		"AGENTFLOW_EXPECTED_REF=" + actual.Ref, "AGENTFLOW_EXPECTED_TREE=" + actual.Tree,
+		"AGENTFLOW_EXPECTED_PARENTS=" + actual.Parents, "AGENTFLOW_COMMIT_TMP=" + dir,
 	})
 	cmd.Stdin = strings.NewReader(message)
 	var stderr bytes.Buffer
@@ -272,28 +272,28 @@ func (r *Repo) CommitExact(ctx context.Context, expected *CommitTree, message st
 // catches branch switches and hooks that amend the tree during git commit.
 const transactionGuard = `#!/bin/sh
 set -eu
-log="$DEVFLOW_COMMIT_TMP/ref-input.$$"
+log="$AGENTFLOW_COMMIT_TMP/ref-input.$$"
 trap 'rm -f "$log"' EXIT
 cat >"$log"
 if [ "$1" = prepared ]; then
 	while read -r old new ref; do
 		case "$ref" in HEAD|refs/heads/*) ;; *) continue ;; esac
 		case "$ref" in HEAD) actual=$(git symbolic-ref -q HEAD || echo HEAD) ;; *) actual=$ref ;; esac
-		if [ "$actual" != "$DEVFLOW_EXPECTED_REF" ] ||
-		   [ "$(git --no-replace-objects show -s --no-show-signature --no-notes --format=%T "$new")" != "$DEVFLOW_EXPECTED_TREE" ] ||
-		   [ "$(git --no-replace-objects show -s --no-show-signature --no-notes --format=%P "$new")" != "$DEVFLOW_EXPECTED_PARENTS" ]; then
+		if [ "$actual" != "$AGENTFLOW_EXPECTED_REF" ] ||
+		   [ "$(git --no-replace-objects show -s --no-show-signature --no-notes --format=%T "$new")" != "$AGENTFLOW_EXPECTED_TREE" ] ||
+		   [ "$(git --no-replace-objects show -s --no-show-signature --no-notes --format=%P "$new")" != "$AGENTFLOW_EXPECTED_PARENTS" ]; then
 			echo "commit ref, parents or tree changed after approval" >&2
 			exit 1
 		fi
 		git --no-replace-objects cat-file commit "$new" | {
 			while IFS= read -r header && [ -n "$header" ]; do :; done
 			cat
-		} > "$DEVFLOW_COMMIT_TMP/actual-message"
-		if ! cmp -s "$DEVFLOW_COMMIT_TMP/message" "$DEVFLOW_COMMIT_TMP/actual-message"; then
+		} > "$AGENTFLOW_COMMIT_TMP/actual-message"
+		if ! cmp -s "$AGENTFLOW_COMMIT_TMP/message" "$AGENTFLOW_COMMIT_TMP/actual-message"; then
 			echo "commit message changed after approval" >&2
 			exit 1
 		fi
-		printf '%s\n' "$new" > "$DEVFLOW_COMMIT_TMP/committed"
+		printf '%s\n' "$new" > "$AGENTFLOW_COMMIT_TMP/committed"
 	done <"$log"
 fi
 `
@@ -342,7 +342,7 @@ func (c *commitIndex) guardHooks(original string, windows bool) (string, error) 
 	}
 	guard := transactionGuard
 	for name, suffix := range hooks {
-		target := `"$DEVFLOW_ORIGINAL_HOOKS/${0##*/}` + suffix + `"`
+		target := `"$AGENTFLOW_ORIGINAL_HOOKS/${0##*/}` + suffix + `"`
 		if name == "reference-transaction" {
 			guard += target + ` "$@" <"$log"` + "\n"
 			continue

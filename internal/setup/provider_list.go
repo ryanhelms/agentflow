@@ -5,20 +5,20 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
 )
 
-// Readiness says how devflow setup plan checks a provider.
+// Readiness says how agentflow setup plan checks a provider.
 const (
-	ReadinessBuiltIn          = "built-in"           // devflow probes it directly
+	ReadinessBuiltIn          = "built-in"           // agentflow probes it directly
 	ReadinessCompanion        = "companion"          // needs a declared MCP companion
 	ReadinessClient           = "client"             // verify through client tooling or a declared companion
 	ReadinessClientOrHeadless = "client-or-headless" // also supports a direct headless probe with explicit credentials
 	ReadinessNone             = "none"               // the role is disabled
 )
 
-// builtInReadiness lists providers whose standard readiness checks run directly in devflow.
+// builtInReadiness lists providers whose standard readiness checks run directly in agentflow.
 var builtInReadiness = []string{"auto", "github", "github-issues", "github-wiki", "filesystem", "repository", "fixture"}
 
 type ProviderOption struct {
@@ -46,7 +46,7 @@ type ProviderList struct {
 }
 
 // ListProviders reports every provider each role accepts and, when the
-// workspace has .devflow/config.yml, which one it selects. It reads local
+// workspace has .agentflow/config.yml, which one it selects. It reads local
 // configuration only and never contacts a provider. Explain adds each selected
 // provider's effective settings and the layer that set them.
 func ListProviders(ctx context.Context, dir string, explain bool) (*ProviderList, error) {

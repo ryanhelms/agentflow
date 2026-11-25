@@ -1,4 +1,4 @@
-// Package provider defines devflow's service objects and the operations its
+// Package provider defines agentflow's service objects and the operations its
 // application code can request from provider adapters.
 package provider
 

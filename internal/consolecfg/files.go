@@ -17,14 +17,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	MainFile          = ".devflow/config.yml"
-	definitionsDir    = ".devflow/providers"
+	MainFile          = ".agentflow/config.yml"
+	definitionsDir    = ".agentflow/providers"
 	maxSourceBytes    = 512 << 10
 	maxInventoryBytes = 8 << 20
 )
@@ -52,10 +52,10 @@ const (
 )
 
 var standard = []source{
-	{MainFile, core}, {".devflow/releases.yml", units},
-	{"flow-map.yml", flow}, {".devflow/task-templates.json", catalog},
+	{MainFile, core}, {".agentflow/releases.yml", units},
+	{"flow-map.yml", flow}, {".agentflow/task-templates.json", catalog},
 	{"docs/confluence.yml", docs}, {".jira/config.yml", envs},
-	{".github/workflows/devflow.yml", managed}, {".release-please-manifest.json", managed},
+	{".github/workflows/agentflow.yml", managed}, {".release-please-manifest.json", managed},
 	{"release-please-config.json", managed}, {".claude/settings.json", managed},
 	{".claude/settings.local.json", managed}, {".codex/config.toml", managed},
 	{".cursor/mcp.json", managed}, {".gemini/settings.json", managed},

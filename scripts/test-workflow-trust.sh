@@ -33,7 +33,7 @@ case "$2" in
   "repos/fixture/consumer/commits/$HEAD_SHA") printf '%040d\n' 1 ;;
   repos/fixture/consumer/git/trees/*)
     case "${2##*/}" in
-      "$(printf '%040d' 1)") entries=$(printf '[{"path":".devflow","sha":"%040d","type":"tree","mode":"040000"}]' 2) ;;
+      "$(printf '%040d' 1)") entries=$(printf '[{"path":"%s","sha":"%040d","type":"tree","mode":"040000"}]' "${FIXTURE_CONFIG_DIR:-.agentflow}" 2) ;;
       "$(printf '%040d' 2)") entries=$(printf '[{"path":"config.yml","sha":"%040d","type":"blob","mode":"100644"},{"path":"providers","sha":"%040d","type":"tree","mode":"040000"}]' 4 3) ;;
       "$(printf '%040d' 3)") entries=$(printf '[{"path":"fixture.yaml","sha":"%040d","type":"blob","mode":"100644"},{"path":"link.yml","type":"blob","mode":"120000"},{"path":"readme.txt","type":"blob","mode":"100644"}]' 5) ;;
       *) exit 1 ;;
@@ -66,10 +66,14 @@ grep -q 'base repository did not match' "$fixture/error"
 
 export PATH="$root/bin:$PATH"
 config=$(reviewed-config.sh)
-grep -Fx '{}' "$config/.devflow/config.yml" > /dev/null
-grep -Fx '{}' "$config/.devflow/providers/fixture.yaml" > /dev/null
-[[ ! -e "$config/.devflow/providers/link.yml" && ! -e "$config/.devflow/providers/readme.txt" ]]
+grep -Fx '{}' "$config/.agentflow/config.yml" > /dev/null
+grep -Fx '{}' "$config/.agentflow/providers/fixture.yaml" > /dev/null
+[[ ! -e "$config/.agentflow/providers/link.yml" && ! -e "$config/.agentflow/providers/readme.txt" ]]
 [[ $(git -C "$config" remote get-url origin) == "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" ]]
+legacy=$(FIXTURE_CONFIG_DIR=.devflow reviewed-config.sh)
+grep -Fx '{}' "$legacy/.devflow/config.yml" > /dev/null
+grep -Fx '{}' "$legacy/.devflow/providers/fixture.yaml" > /dev/null
+[[ ! -e "$legacy/.agentflow" ]]
 
 
 (
@@ -80,18 +84,18 @@ grep -Fx '{}' "$config/.devflow/providers/fixture.yaml" > /dev/null
   git config user.name 'Workflow Fixture'
   git config user.email 'workflow@example.invalid'
   git config core.hooksPath /dev/null
-  mkdir -p .devflow/tasks
-  printf '%s\n' 'reviewed task fixture' > .devflow/tasks/task.md
-  git add .devflow/tasks/task.md
+  mkdir -p .agentflow/tasks
+  printf '%s\n' 'reviewed task fixture' > .agentflow/tasks/task.md
+  git add .agentflow/tasks/task.md
   git commit --quiet -m 'fixture base'
   worktree_base=$(git rev-parse HEAD)
-  printf '%s\n' 'later task fixture' > .devflow/tasks/task.md
+  printf '%s\n' 'later task fixture' > .agentflow/tasks/task.md
   git commit --quiet -am 'fixture branch advances'
   worktree_head=$(git rev-parse HEAD)
   printf '{"pull_request":{"base":{"ref":"main","sha":"%s","repo":{"id":123}}}}\n' "$worktree_base" > "$GITHUB_EVENT_PATH"
   source=$(BASE_SHA="$worktree_base" HEAD_SHA="$worktree_head" reviewed-worktree.sh)
   [[ $(git -C "$source" rev-parse HEAD) == "$worktree_base" ]]
-  grep -Fx 'reviewed task fixture' "$source/.devflow/tasks/task.md" > /dev/null
+  grep -Fx 'reviewed task fixture' "$source/.agentflow/tasks/task.md" > /dev/null
   if git -C "$source" config --local --get credential.helper; then
     echo 'the fetch credential helper was persisted' >&2; exit 1
   fi
@@ -101,7 +105,7 @@ artifacts="$fixture/artifacts"
 mkdir -p "$artifacts/binaries"
 printf '%s\n' 'fixture archive data' > "$artifacts/binaries/example.tar.gz"
 guard="$root/bin/release-artifacts.sh"
-export DEVFLOW_RELEASE_SHA="$BASE_SHA" TAG=v1.0.0
+export AGENTFLOW_RELEASE_SHA="$BASE_SHA" TAG=v1.0.0
 "$guard" record "$artifacts"
 "$guard" verify "$artifacts"
 touch "$artifacts/binaries/unexpected.txt"
@@ -116,7 +120,7 @@ if "$guard" verify "$artifacts" 2> "$fixture/error"; then
 fi
 grep -q 'unexpected file in release artifacts' "$fixture/error"
 rm "$artifacts/unexpected.txt"
-if DEVFLOW_RELEASE_SHA="$HEAD_SHA" "$guard" verify "$artifacts" 2> "$fixture/error"; then
+if AGENTFLOW_RELEASE_SHA="$HEAD_SHA" "$guard" verify "$artifacts" 2> "$fixture/error"; then
   echo 'artifact from a different revision was accepted' >&2; exit 1
 fi
 grep -q 'source or checksums did not match' "$fixture/error"

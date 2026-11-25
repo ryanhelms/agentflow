@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/app"
 )
 
 func TestNotifyCLIPlansAndReportsConfigurationFailure(t *testing.T) {
@@ -15,16 +15,16 @@ func TestNotifyCLIPlansAndReportsConfigurationFailure(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("DEVFLOW_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(dir, "home"))
 	t.Setenv("WEBHOOK_URL", "")
 	if b, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, b)
 	}
-	if err := os.Mkdir(".devflow", 0o700); err != nil {
+	if err := os.Mkdir(".agentflow", 0o700); err != nil {
 		t.Fatal(err)
 	}
 	const cfg = "notifications: {provider: webhook, settings: {destination: audit}}\n"
-	if err := os.WriteFile(".devflow/config.yml", []byte(cfg), 0o600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	invoke := func(wantCode int, options ...string) app.NotificationResult {
@@ -60,7 +60,7 @@ func TestNotifyCLIPlansAndReportsConfigurationFailure(t *testing.T) {
 		t.Fatalf("failure = %+v", failed)
 	}
 	t.Setenv("WEBHOOK_URL", "https://example.invalid/webhook")
-	if err := os.WriteFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: suggest}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("autonomy: {remote: suggest}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	blocked := invoke(1, "--yes")

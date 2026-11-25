@@ -3,10 +3,10 @@
 The same rule is in AGENTS.md ("Keep the CLI and MCP at parity"); AGENTS.md is the source
 of truth.
 
-The devflow CLI is the engine. Anything devflow can do through an MCP tool must also be
+The agentflow CLI is the engine. Anything agentflow can do through an MCP tool must also be
 doable from the CLI, and both must behave the same.
 
-- Every `devflow_*` MCP tool has a CLI command. Both call the same `internal/app` method.
+- Every `agentflow_*` MCP tool has a CLI command. Both call the same `internal/app` method.
 - `internal/cli` and `internal/mcpserver` are thin layers: they parse input and format
   output. Business and provider-specific logic belongs in `internal/app` or a focused
   package.

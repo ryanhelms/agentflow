@@ -2,7 +2,7 @@
 # Resolve the caller repository's reviewed source through GitHub before checkout.
 set -euo pipefail
 
-fail() { printf 'devflow: %s\n' "$*" >&2; exit 1; }
+fail() { printf 'agentflow: %s\n' "$*" >&2; exit 1; }
 uri() { jq -rn --arg value "$1" '$value | @uri'; }
 is_sha() { [[ "$1" =~ ^[a-f0-9]{40}$ ]]; }
 

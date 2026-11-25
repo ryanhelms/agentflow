@@ -9,7 +9,7 @@
 #                the default branch)    -> pr.merged
 #   push                                -> #verbs in each commit (#done only on the default branch)
 #
-# Commits or PR bodies containing "[devflow skip]" or a "Devflow: skip" trailer are ignored.
+# Commits or PR bodies containing "[agentflow skip]" or a "Agentflow: skip" trailer are ignored.
 set -euo pipefail
 here=$(dirname "$0")
 # shellcheck source=bin/lib.sh
@@ -22,7 +22,7 @@ default_branch=$(jq -r '.repository.default_branch' "$ev")
 keys_in() { grep -Eo "$KEY_RE" <<<"$*" | sort -u || true; }
 
 move() { # key event link
-  TRANSITION_COMMENT="devflow: $2 — $3" "$here/transition.sh" "$1" "$2" \
+  TRANSITION_COMMENT="agentflow: $2 — $3" "$here/transition.sh" "$1" "$2" \
     || warn "$1: $2 failed"
 }
 
@@ -41,7 +41,7 @@ case "$name" in
     head=$(jq -r '.pull_request.head.ref' "$ev")
     base=$(jq -r '.pull_request.base.ref' "$ev")
     link=$(jq -r '.pull_request.html_url' "$ev")
-    if is_skipped "$body"; then log "PR opted out of devflow"; exit 0; fi
+    if is_skipped "$body"; then log "PR opted out of agentflow"; exit 0; fi
     keys=$(keys_in "$title" "$head")
     case "$action" in
       opened|reopened|ready_for_review)
@@ -82,6 +82,6 @@ case "$name" in
     ;;
 
   *)
-    log "event $name is not handled by devflow transitions"
+    log "event $name is not handled by agentflow transitions"
     ;;
 esac

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 const instance = "local"
@@ -407,7 +407,7 @@ func TestConcurrentWriters(t *testing.T) {
 func TestInterruptedWrite(t *testing.T) {
 	// The child dies holding the actual kernel lock with an incomplete stage.
 	// The parent then retries using a fresh adapter.
-	const helper = "DEVFLOW_FILESYSTEM_TEST_CHILD_ROOT"
+	const helper = "AGENTFLOW_FILESYSTEM_TEST_CHILD_ROOT"
 	if dir := os.Getenv(helper); dir != "" {
 		s := docsAt(t, dir)
 		lock, err := s.lock(t.Context())
@@ -415,7 +415,7 @@ func TestInterruptedWrite(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer lock.Close()
-		err = s.root.WriteFile(".devflow-stage-interrupted", []byte("---\nversion:"), 0600)
+		err = s.root.WriteFile(".agentflow-stage-interrupted", []byte("---\nversion:"), 0600)
 		if err != nil {
 			t.Fatal(err)
 		}

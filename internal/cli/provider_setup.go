@@ -11,10 +11,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/hooks"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/hooks"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 func runProviderSetup(ctx context.Context, args []string) error {
@@ -44,7 +44,7 @@ func runProviderSetup(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: devflow setup [plan|verify|apply] [--companion ID] [--client NAME] [--json]")
+		return errors.New("usage: agentflow setup [plan|verify|apply] [--companion ID] [--client NAME] [--json]")
 	}
 	var plan *setup.ProviderSetupPlan
 	switch op {
@@ -73,14 +73,14 @@ func runProviderSetup(ctx context.Context, args []string) error {
 				return fmt.Errorf("setup apply requires local write permission: %s", pending.Reason)
 			}
 			if pending.Status == "prepared" && !yes {
-				return errors.New("review devflow setup plan, then pass --yes to approve the selected setup action")
+				return errors.New("review agentflow setup plan, then pass --yes to approve the selected setup action")
 			}
 			if pending.Status != "needs_confirmation" {
 				return printApproval(pending)
 			}
 			if !yes {
 				if !term.IsTerminal(int(os.Stdin.Fd())) {
-					return errors.New("review devflow setup plan, then pass --yes to approve the selected setup action")
+					return errors.New("review agentflow setup plan, then pass --yes to approve the selected setup action")
 				}
 				release, err := pending.OpenPrompt()
 				if err != nil {
@@ -105,7 +105,7 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			return errors.New("setup changed during confirmation. Review the current plan")
 		}
 	default:
-		return errors.New("usage: devflow setup [plan|verify|apply] [--companion ID] [--client NAME] [--json]")
+		return errors.New("usage: agentflow setup [plan|verify|apply] [--companion ID] [--client NAME] [--json]")
 	}
 	if *asJSON {
 		if err := printJSON(plan); err != nil {
@@ -128,7 +128,7 @@ func runProviderSetup(ctx context.Context, args []string) error {
 			fmt.Println()
 			fmt.Printf("  Setup: %s\n", tools.MCP.Guide)
 			if len(tools.MCP.RegisterArgs) > 0 {
-				fmt.Printf("  Register or connect: devflow %s\n", strings.Join(tools.MCP.RegisterArgs, " "))
+				fmt.Printf("  Register or connect: agentflow %s\n", strings.Join(tools.MCP.RegisterArgs, " "))
 				if tools.Provider == "asana" {
 					fmt.Println("  For a new Asana connector, add --client-id ID from the approved MCP app.")
 				}
@@ -175,7 +175,7 @@ func runProviderList(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: devflow setup providers [--explain] [--json]")
+		return errors.New("usage: agentflow setup providers [--explain] [--json]")
 	}
 	list, err := setup.ListProviders(ctx, ".", *explain)
 	if err != nil {
@@ -185,7 +185,7 @@ func runProviderList(ctx context.Context, args []string) error {
 		return printJSON(list)
 	}
 	if !list.ConfigFound {
-		fmt.Printf("No .devflow/config.yml in %s; showing defaults.\n", list.Root)
+		fmt.Printf("No .agentflow/config.yml in %s; showing defaults.\n", list.Root)
 	}
 	for _, d := range list.Definitions {
 		fmt.Printf("definition  %s\n", d)
@@ -222,7 +222,7 @@ func runProviderList(ctx context.Context, args []string) error {
 	}
 	fmt.Println(`
 * selected
-built-in           devflow checks the provider directly
+built-in           agentflow checks the provider directly
 client             verify with the client MCP or a declared companion (Jira and Confluence also support signed-in Teamwork Graph CLI)
 client-or-headless use client verification, or run headless with ASANA_ACCESS_TOKEN for a direct Asana check
 companion          setup checks a declared MCP companion`)
@@ -267,7 +267,7 @@ func runProviderLogin(ctx context.Context, args []string) error {
 		return err
 	}
 	if *provider == "" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]")
+		return errors.New("usage: agentflow setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]")
 	}
 	public := false
 	fs.Visit(func(f *flag.Flag) {
@@ -300,8 +300,8 @@ func runProviderLogout(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *provider == "" || *client != "devflow" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup logout --provider NAME --client devflow")
+	if *provider == "" || *client != "agentflow" || fs.NArg() != 0 {
+		return errors.New("usage: agentflow setup logout --provider NAME --client agentflow")
 	}
 	return setup.DisconnectProvider(ctx, *provider)
 }

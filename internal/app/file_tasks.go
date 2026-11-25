@@ -10,13 +10,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/filesystem"
-	"github.com/nscaledev/devflow/internal/provider/repository"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/filesystem"
+	"github.com/nscaledev/agentflow/internal/provider/repository"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 func (a *App) fileTaskSettings() config.FileTaskSettings {

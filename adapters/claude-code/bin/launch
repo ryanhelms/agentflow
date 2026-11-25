@@ -1,16 +1,16 @@
 #!/bin/sh
 # Claude Code plugin launcher for the MCP server and hooks. Prefers the repo's launcher,
 # then the installed binary, then bootstraps the latest verified release through the
-# plugin's own bin/devflow, so the plugin works (and can run `devflow init`) in repos that
-# devflow has not set up yet.
+# plugin's own bin/agentflow, so the plugin works (and can run `agentflow init`) in repos that
+# agentflow has not set up yet.
 set -eu
 
 root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [ -n "$root" ] && [ -x "$root/.devflow/bin/devflow" ]; then
-  exec "$root/.devflow/bin/devflow" "$@"
+if [ -n "$root" ] && [ -x "$root/.agentflow/bin/agentflow" ]; then
+  exec "$root/.agentflow/bin/agentflow" "$@"
 fi
 
-installed="${XDG_CACHE_HOME:-$HOME/.cache}/devflow/current/devflow"
+installed="${XDG_CACHE_HOME:-$HOME/.cache}/agentflow/current/agentflow"
 if [ -x "$installed" ]; then
   exec "$installed" "$@"
 fi
@@ -24,7 +24,7 @@ esac
 here=$(cd "$(dirname "$0")" && pwd)
 if [ "${1:-}" = hook ]; then
   # session-start may bootstrap, but must not fail the session if that fails
-  "$here/devflow" "$@" || true
+  "$here/agentflow" "$@" || true
   exit 0
 fi
-exec "$here/devflow" "$@"
+exec "$here/agentflow" "$@"

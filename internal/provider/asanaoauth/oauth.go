@@ -1,4 +1,4 @@
-// Package asanaoauth enrolls a separately registered Devflow Asana V2 MCP app.
+// Package asanaoauth enrolls a separately registered Agentflow Asana V2 MCP app.
 package asanaoauth
 
 import (
@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 	"golang.org/x/term"
@@ -38,13 +38,13 @@ const (
 )
 
 var (
-	ErrNotEnrolled   = errors.New("no Devflow Asana MCP enrollment")
-	ErrLoginRequired = errors.New("explicit Devflow Asana MCP login required")
+	ErrNotEnrolled   = errors.New("no Agentflow Asana MCP enrollment")
+	ErrLoginRequired = errors.New("explicit Agentflow Asana MCP login required")
 	ErrGrantChanged  = errors.New("changed Asana MCP enrollment binding")
 	ErrDenied        = errors.New("authorization denied or app restricted for Asana MCP")
 	ErrTransport     = errors.New("could not complete Asana MCP enrollment request")
 	errMetadata      = errors.New("unsupported Asana V2 OAuth metadata")
-	errStorage       = errors.New("could not verify the Devflow Asana OS keychain entry")
+	errStorage       = errors.New("could not verify the Agentflow Asana OS keychain entry")
 	errResponse      = errors.New("invalid Asana MCP enrollment response")
 	gid              = regexp.MustCompile(`^[1-9][0-9]{0,31}$`)
 )
@@ -81,7 +81,7 @@ var local = enrollment{
 		return lc.Listen(ctx, "tcp4", callbackHost)
 	},
 	get: keyring.Get, set: keyring.Set, remove: keyring.Delete,
-	lockDir: func() (string, error) { return nativeoauth.UserLockDir(".devflow-asana") },
+	lockDir: func() (string, error) { return nativeoauth.UserLockDir(".agentflow-asana") },
 }
 
 // Login accepts only a local terminal and an owner-provisioned, per-install
@@ -91,7 +91,7 @@ func Login(ctx context.Context, input io.Reader, diagnostics io.Writer) error {
 	if !ok || f == nil || !term.IsTerminal(int(f.Fd())) || diagnostics == nil {
 		return errors.New("a local interactive terminal is required for Asana MCP enrollment")
 	}
-	if _, err := fmt.Fprintf(diagnostics, "Use the owner-approved Devflow MCP app registered for this installation and workspace. Register %s and select the same workspace in Asana.\n", redirectURI); err != nil {
+	if _, err := fmt.Fprintf(diagnostics, "Use the owner-approved Agentflow MCP app registered for this installation and workspace. Register %s and select the same workspace in Asana.\n", redirectURI); err != nil {
 		return err
 	}
 	read := func(prompt string) (string, error) {
@@ -106,11 +106,11 @@ func Login(ctx context.Context, input io.Reader, diagnostics io.Writer) error {
 		}
 		return string(b), nil
 	}
-	id, err := read("Devflow MCP app client ID: ")
+	id, err := read("Agentflow MCP app client ID: ")
 	if err != nil {
 		return err
 	}
-	secret, err := read("Devflow MCP app client secret (hidden): ")
+	secret, err := read("Agentflow MCP app client secret (hidden): ")
 	if err != nil {
 		return err
 	}

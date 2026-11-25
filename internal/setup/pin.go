@@ -8,39 +8,42 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/version"
+	"github.com/nscaledev/agentflow/internal/version"
 )
 
-// CallerWorkflow is the workflow `devflow init` writes; its nscaledev/devflow references
+// CallerWorkflow is the workflow `agentflow init` writes; its nscaledev/agentflow references
 // are pinned to a release commit.
-const CallerWorkflow = ".github/workflows/devflow.yml"
+const (
+	CallerWorkflow       = ".github/workflows/agentflow.yml"
+	legacyCallerWorkflow = ".github/workflows/devflow.yml"
+)
 
 var (
 	// a floating @v0 reference, as in the template
-	devflowRefRe = regexp.MustCompile(`(uses: nscaledev/devflow/[^@\s]+)@v0\b`)
+	agentflowRefRe = regexp.MustCompile(`(uses: nscaledev/agentflow/[^@\s]+)@v0\b`)
 	// any reference, with the `# vX.Y.Z` comment a pin carries
-	devflowAnyRefRe = regexp.MustCompile(`(uses: nscaledev/devflow/[^@\s]+)@[^\s#]+(?:[ \t]+#[ \t]*v[0-9][^\s]*)?`)
-	pinCommentRe    = regexp.MustCompile(`uses: nscaledev/devflow/[^@\s]+@[0-9a-f]{40}[ \t]+#[ \t]*(v[0-9][^\s]*)`)
+	agentflowAnyRefRe = regexp.MustCompile(`uses: nscaledev/(?:agentflow|devflow)/([^@\s]+)@[^\s#]+(?:[ \t]+#[ \t]*v[0-9][^\s]*)?`)
+	pinCommentRe      = regexp.MustCompile(`uses: nscaledev/(?:agentflow|devflow)/[^@\s]+@[0-9a-f]{40}[ \t]+#[ \t]*(v[0-9][^\s]*)`)
 )
 
-// PinWorkflow pins every floating @v0 nscaledev/devflow reference in a caller workflow to
+// PinWorkflow pins every floating @v0 nscaledev/agentflow reference in a caller workflow to
 // the commit of this release (`@<sha> # v<version>`), so a moved tag can't change what
 // runs with the repo's secrets. Non-release builds leave the @v0 references.
 func PinWorkflow(data []byte, sha, ver string) []byte {
 	if !version.ReleaseCommit(sha, ver) {
 		return data
 	}
-	return devflowRefRe.ReplaceAll(data, []byte("${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
+	return agentflowRefRe.ReplaceAll(data, []byte("${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
 }
 
-// RepinWorkflow moves every nscaledev/devflow reference, pinned or floating, to the
-// commit of this release. `devflow pin` uses it to update a repo to the installed
-// devflow; the developer reviews the change in a PR.
+// RepinWorkflow moves every nscaledev/agentflow reference, pinned or floating, to the
+// commit of this release. `agentflow pin` uses it to update a repo to the installed
+// agentflow; the developer reviews the change in a PR.
 func RepinWorkflow(data []byte, sha, ver string) []byte {
 	if !version.ReleaseCommit(sha, ver) {
 		return data
 	}
-	return devflowAnyRefRe.ReplaceAll(data, []byte("${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
+	return agentflowAnyRefRe.ReplaceAll(data, []byte("uses: nscaledev/agentflow/${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
 }
 
 // PinnedVersion returns the oldest release the caller workflow is pinned to ("" when it
@@ -84,37 +87,36 @@ type PinResult struct {
 	Changed bool   `json:"changed"`
 }
 
-// ErrNotRelease means the running devflow is not a release build and has no commit to
+// ErrNotRelease means the running agentflow is not a release build and has no commit to
 // pin to.
-var ErrNotRelease = errors.New("this devflow is not a release build; install a release (devflow update) to pin workflows")
+var ErrNotRelease = errors.New("this agentflow is not a release build; install a release (agentflow update) to pin workflows")
 
-// Pin re-pins the caller workflow in repoDir to the running devflow release. With check
+// Pin re-pins the caller workflow in repoDir to the running agentflow release. With check
 // it only reports.
 func Pin(repoDir string, check bool) (*PinResult, error) {
 	if !version.Release() {
 		return nil, ErrNotRelease
 	}
-	dest := filepath.Join(repoDir, filepath.FromSlash(CallerWorkflow))
-	data, err := os.ReadFile(dest)
+	file, data, err := readCallerWorkflow(repoDir)
 	if err != nil {
 		return nil, err
 	}
-	res := &PinResult{File: CallerWorkflow, From: PinnedVersion(data), To: "v" + strings.TrimPrefix(version.Version, "v")}
+	res := &PinResult{File: file, From: PinnedVersion(data), To: "v" + strings.TrimPrefix(version.Version, "v")}
 	out := RepinWorkflow(data, version.Commit, version.Version)
 	res.Changed = string(out) != string(data)
 	if !res.Changed || check {
 		return res, nil
 	}
-	return res, os.WriteFile(dest, out, 0o644)
+	return res, os.WriteFile(filepath.Join(repoDir, filepath.FromSlash(file)), out, 0o644)
 }
 
 // PinBehind reports the release the repo's caller workflow is pinned to when it is older
-// than the running devflow release, and "" otherwise.
+// than the running agentflow release, and "" otherwise.
 func PinBehind(repoDir string) string {
 	if !version.Release() {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(CallerWorkflow)))
+	_, data, err := readCallerWorkflow(repoDir)
 	if err != nil {
 		return ""
 	}
@@ -122,4 +124,16 @@ func PinBehind(repoDir string) string {
 		return from
 	}
 	return ""
+}
+
+func readCallerWorkflow(repoDir string) (string, []byte, error) {
+	file := CallerWorkflow
+	data, err := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(file)))
+	if errors.Is(err, os.ErrNotExist) {
+		legacy, legacyErr := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(legacyCallerWorkflow)))
+		if !errors.Is(legacyErr, os.ErrNotExist) {
+			return legacyCallerWorkflow, legacy, legacyErr
+		}
+	}
+	return file, data, err
 }

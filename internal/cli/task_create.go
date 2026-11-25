@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 	"golang.org/x/term"
 )
 
@@ -17,7 +17,7 @@ func runTask(ctx context.Context, args []string) error {
 		return runTaskLink(ctx, args[1:])
 	}
 	if len(args) == 0 || args[0] != "create" {
-		return errors.New("usage: devflow task create [flags] | devflow task link KEY --url URL [--title T] [--yes]")
+		return errors.New("usage: agentflow task create [flags] | agentflow task link KEY --url URL [--title T] [--yes]")
 	}
 	fs := flag.NewFlagSet("task create", flag.ContinueOnError)
 	project := fs.String("project", "", "project or scope")
@@ -102,7 +102,7 @@ func runTask(ctx context.Context, args []string) error {
 
 func runTaskLink(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow task link KEY --url URL [--title T] [--yes]")
+		return errors.New("usage: agentflow task link KEY --url URL [--title T] [--yes]")
 	}
 	fs := flag.NewFlagSet("task link", flag.ContinueOnError)
 	url := fs.String("url", "", "external web link")
@@ -112,7 +112,7 @@ func runTaskLink(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 || *url == "" {
-		return errors.New("usage: devflow task link KEY --url URL [--title T] [--yes]")
+		return errors.New("usage: agentflow task link KEY --url URL [--title T] [--yes]")
 	}
 	a, err := open(ctx)
 	if err != nil {

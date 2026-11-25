@@ -1,39 +1,39 @@
-# devflow for Claude Code
+# agentflow for Claude Code
 
 A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 
-- MCP server `devflow` (all `devflow_*` tools)
-- Skill `devflow` with the commit, PR, confirmation and untrusted-content rules
-- A skill per CLI command, run as `/devflow:<name>`: `init`, `remove`, `pin`, `install`,
+- MCP server `agentflow` (all `agentflow_*` tools)
+- Skill `agentflow` with the commit, PR, confirmation and untrusted-content rules
+- A skill per CLI command, run as `/agentflow:<name>`: `init`, `remove`, `pin`, `install`,
   `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`, `transition`, `pr`,
   `review`, `status`, `standup`, `docs`, `adr`, `release`, `update`, `version`. `init`,
   `remove`, `install`, `login`, `logout` and `update` run only when you invoke them.
-- `bin/devflow`, on Claude's Bash PATH: runs the installed devflow or installs the latest
+- `bin/agentflow`, on Claude's Bash PATH: runs the installed agentflow or installs the latest
   verified release, so the skills work before a repo is set up
 - Hooks: `SessionStart` (ticket context; in an unset repo owned by an org in `init.orgs`,
-  runs `devflow init` automatically, see the main README), `PreToolUse` on Bash (blocks raw `git commit`
+  runs `agentflow init` automatically, see the main README), `PreToolUse` on Bash (blocks raw `git commit`
   with an invalid message, force-push, pushes to protected branches and `gh pr merge`), `Stop` (reminds about uncommitted work and open criteria)
 
 To install it for yourself (Claude Code 2.1.275 or later):
 
 ```
-/plugin install devflow --marketplace nscaledev/devflow
+/plugin install agentflow --marketplace nscaledev/agentflow
 ```
 
-Repos turn it on for everyone in `.claude/settings.json` (written by `devflow init`):
+Repos turn it on for everyone in `.claude/settings.json` (written by `agentflow init`):
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "nscale": { "source": { "source": "github", "repo": "nscaledev/devflow" } }
+    "nscale": { "source": { "source": "github", "repo": "nscaledev/agentflow" } }
   },
-  "enabledPlugins": { "devflow@nscale": true },
+  "enabledPlugins": { "agentflow@nscale": true },
   "includeCoAuthoredBy": false
 }
 ```
 
-`bin/launch` runs the repo's `.devflow/bin/devflow`, then the installed binary, then
-`bin/devflow` to install one, so Claude Code uses the same self-updating binary as every
-other client. `bin/devflow` is a copy of `templates/repo/.devflow/bin/devflow`; a test
+`bin/launch` runs the repo's `.agentflow/bin/agentflow`, then the installed binary, then
+`bin/agentflow` to install one, so Claude Code uses the same self-updating binary as every
+other client. `bin/agentflow` is a copy of `templates/repo/.agentflow/bin/agentflow`; a test
 keeps them in sync. Hook and settings formats can change between
-Claude Code versions; `devflow doctor` checks them.
+Claude Code versions; `agentflow doctor` checks them.

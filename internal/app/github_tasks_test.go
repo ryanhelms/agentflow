@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/flowmap"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/flowmap"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 type fakeIssues struct {
@@ -78,7 +78,7 @@ func issueApp(t *testing.T) (*App, *fakeIssues) {
 	dir := newRepo(t)
 	r := &gitx.Repo{Dir: dir}
 	mustGit(t, r, "switch", "main")
-	full := filepath.Join(dir, ".devflow", "config.yml")
+	full := filepath.Join(dir, ".agentflow", "config.yml")
 	if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func issueApp(t *testing.T) (*App, *fakeIssues) {
 	// These fixtures exercise explicit cross-repository inputs and confirmation.
 	// A personal default supplies shorthand without setting a repository ceiling.
 	writeUserDefinition(t, "github-issues: {task_management: {settings: {repository: Org/Repo}}}")
-	mustGit(t, r, "add", ".devflow/config.yml")
+	mustGit(t, r, "add", ".agentflow/config.yml")
 	mustGit(t, r, "commit", "-qm", "chore: use github issues")
 	mustGit(t, r, "switch", "-c", "feature")
 	a, err := Open(t.Context(), dir, "test")
@@ -165,7 +165,7 @@ func TestIssueWorkAndContext(t *testing.T) {
 func TestIssueWriteConfirmationAndRetry(t *testing.T) {
 	a, f := issueApp(t)
 	ctx := t.Context()
-	t.Setenv("DEVFLOW_OPERATION_ID", "event-1")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "event-1")
 	v, err := a.Comment(ctx, "#42", "progress", "")
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ func TestIssueWriteConfirmationAndRetry(t *testing.T) {
 	if f.writes[1] != f.writes[2] {
 		t.Fatalf("unstable operation identity: %v", f.writes)
 	}
-	t.Setenv("DEVFLOW_OPERATION_ID", "event-2")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "event-2")
 	v, err = create("")
 	if err != nil {
 		t.Fatal(err)
@@ -382,7 +382,7 @@ func TestIssueBranchAmbiguityAndLocalPolicy(t *testing.T) {
 	if _, err := a.Comment(ctx, "org/repo#42", "progress", ""); err != nil {
 		t.Fatal(err)
 	}
-	mustGit(t, a.Repo, "config", "--local", "branch.feature.devflowTaskRef", "../../42")
+	mustGit(t, a.Repo, "config", "--local", "branch.feature.agentflowTaskRef", "../../42")
 	if _, err := a.Context(ctx, ""); err == nil {
 		t.Fatal("invalid local binding accepted")
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func TestOKFRepositoryMixedWrites(t *testing.T) {
@@ -84,7 +84,7 @@ func TestOKFRepositoryRejectsObsoleteV1Review(t *testing.T) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	put(t, filepath.Join(dir, "article.md"), "---\ntype: Reference\nx-devflow-ref: {scope: eng, id: page}\n---\n")
+	put(t, filepath.Join(dir, "article.md"), "---\ntype: Reference\nx-agentflow-ref: {scope: eng, id: page}\n---\n")
 	git(t, f.engineer, "add", "--", f.cfg.Directory)
 	git(t, f.engineer, "commit", "-m", "add OKF article")
 	git(t, f.engineer, "push", f.origin, "HEAD:refs/heads/trunk")

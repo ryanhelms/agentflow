@@ -57,34 +57,34 @@ jobs:
             exit 1
           fi
           slot=$(printf '%s\n' "$SIGNAL" "$SIGNAL_ID" | sha256sum | cut -d ' ' -f 1)
-          home=$(mktemp -d "$RUNNER_TEMP/devflow-notify.XXXXXX")
-          echo "DEVFLOW_HOME=$home" >> "$GITHUB_ENV"
-          echo "name=devflow-notify-$slot" >> "$GITHUB_OUTPUT"
+          home=$(mktemp -d "$RUNNER_TEMP/agentflow-notify.XXXXXX")
+          echo "AGENTFLOW_HOME=$home" >> "$GITHUB_ENV"
+          echo "name=agentflow-notify-$slot" >> "$GITHUB_OUTPUT"
           echo "previous=$((GITHUB_RUN_ATTEMPT - 1))" >> "$GITHUB_OUTPUT"
       - name: Restore receipts from the preceding run attempt
         if: github.run_attempt != 1
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ steps.slot.outputs.name }}-receipts-${{ steps.slot.outputs.previous }}
-          path: ${{ env.DEVFLOW_HOME }}
+          path: ${{ env.AGENTFLOW_HOME }}
       - name: Prepare durable replay metadata
         run: |
           umask 077
           if [[ "$GITHUB_RUN_ATTEMPT" != 1 ]]; then
-            if ! (cd "$DEVFLOW_HOME" &&
+            if ! (cd "$AGENTFLOW_HOME" &&
                   [[ $(cat snapshot-ready) == "$((GITHUB_RUN_ATTEMPT - 1))" ]] &&
                   sha256sum --check --strict checksums); then
               echo "::error::Prior notification state is unavailable or incomplete. Reconcile the prior delivery before sending again."
               exit 1
             fi
           fi
-          printf '%s\n' "$GITHUB_RUN_ATTEMPT" > "$DEVFLOW_HOME/reservation"
-          printf '%s\n' "$GITHUB_RUN_ATTEMPT" > "$DEVFLOW_HOME/snapshot-ready"
+          printf '%s\n' "$GITHUB_RUN_ATTEMPT" > "$AGENTFLOW_HOME/reservation"
+          printf '%s\n' "$GITHUB_RUN_ATTEMPT" > "$AGENTFLOW_HOME/snapshot-ready"
       - name: Reserve this notification slot before delivery
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.slot.outputs.name }}-reservation-${{ github.run_attempt }}
-          path: ${{ env.DEVFLOW_HOME }}/reservation
+          path: ${{ env.AGENTFLOW_HOME }}/reservation
           if-no-files-found: error
       - name: Deliver notification
         id: deliver
@@ -99,13 +99,13 @@ jobs:
           if [[ "$APPEND_RUN_LINK" == true ]]; then
             MESSAGE+=" <$RUN_URL|run>"
           fi
-          devflow notify "$SIGNAL" --operation-id "$GITHUB_REPOSITORY_ID/$GITHUB_RUN_ID/$SIGNAL_ID" \
-            --body "$MESSAGE" --yes | tee "$DEVFLOW_HOME/delivery.json"
+          agentflow notify "$SIGNAL" --operation-id "$GITHUB_REPOSITORY_ID/$GITHUB_RUN_ID/$SIGNAL_ID" \
+            --body "$MESSAGE" --yes | tee "$AGENTFLOW_HOME/delivery.json"
       - name: Verify and index receipt snapshot contents
         if: always() && (steps.deliver.outcome == 'success' || steps.deliver.outcome == 'failure')
         id: snapshot
         run: |
-          cd "$DEVFLOW_HOME"
+          cd "$AGENTFLOW_HOME"
           shopt -s nullglob
           sha256sum snapshot-ready delivery.json notification-receipts/*.claim notification-receipts/*.outcome > checksums
       - name: Save notification receipts and outcomes for replay
@@ -114,9 +114,9 @@ jobs:
         with:
           name: ${{ steps.slot.outputs.name }}-receipts-${{ github.run_attempt }}
           path: |
-            ${{ env.DEVFLOW_HOME }}/snapshot-ready
-            ${{ env.DEVFLOW_HOME }}/delivery.json
-            ${{ env.DEVFLOW_HOME }}/checksums
-            ${{ env.DEVFLOW_HOME }}/notification-receipts/*.claim
-            ${{ env.DEVFLOW_HOME }}/notification-receipts/*.outcome
+            ${{ env.AGENTFLOW_HOME }}/snapshot-ready
+            ${{ env.AGENTFLOW_HOME }}/delivery.json
+            ${{ env.AGENTFLOW_HOME }}/checksums
+            ${{ env.AGENTFLOW_HOME }}/notification-receipts/*.claim
+            ${{ env.AGENTFLOW_HOME }}/notification-receipts/*.outcome
           if-no-files-found: error

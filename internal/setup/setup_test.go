@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/adapters"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/version"
+	"github.com/nscaledev/agentflow/adapters"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/version"
 )
 
 func TestInitAndInstall(t *testing.T) {
@@ -31,7 +31,7 @@ func TestInitAndInstall(t *testing.T) {
 	if len(res.Written) < 10 {
 		t.Fatalf("written = %v", res.Written)
 	}
-	st, err := os.Stat(filepath.Join(dir, ".devflow", "bin", "devflow"))
+	st, err := os.Stat(filepath.Join(dir, ".agentflow", "bin", "agentflow"))
 	if err != nil || st.Mode()&0o111 == 0 {
 		t.Fatalf("launcher not executable: %v", err)
 	}
@@ -58,10 +58,10 @@ func TestInitAndInstall(t *testing.T) {
 	var vs map[string]map[string]any
 	b, _ := os.ReadFile(filepath.Join(dir, ".vscode", "mcp.json"))
 	_ = json.Unmarshal(b, &vs)
-	if vs["servers"]["other"] == nil || vs["servers"]["devflow"] == nil {
+	if vs["servers"]["other"] == nil || vs["servers"]["agentflow"] == nil {
 		t.Errorf("vscode merge lost keys: %s", b)
 	}
-	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".codex", "prompts", "devflow-commit.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".codex", "prompts", "agentflow-commit.md")); err != nil {
 		t.Error("codex prompts not installed")
 	}
 }
@@ -98,7 +98,7 @@ func TestRemoveUndoesInit(t *testing.T) {
 	if err != nil || len(dry.Removed) == 0 {
 		t.Fatalf("dry run: %+v %v", dry, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".devflow")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agentflow")); err != nil {
 		t.Fatal("dry run deleted files")
 	}
 
@@ -109,7 +109,7 @@ func TestRemoveUndoesInit(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(dir, "release-please-config.json")); err != nil || string(b) != "{}\n" {
 		t.Fatal("pre-existing release configuration changed")
 	}
-	for _, gone := range []string{".devflow", ".github", ".githooks", ".claude", ".codex", ".cursor", ".gemini", ".grok", ".jira"} {
+	for _, gone := range []string{".agentflow", ".github", ".githooks", ".claude", ".codex", ".cursor", ".gemini", ".grok", ".jira"} {
 		if _, err := os.Stat(filepath.Join(dir, gone)); err == nil {
 			t.Errorf("%s still exists (removed=%v)", gone, res.Removed)
 		}
@@ -119,7 +119,7 @@ func TestRemoveUndoesInit(t *testing.T) {
 		t.Errorf("AGENTS.md = %q", agents)
 	}
 	vs, _ := os.ReadFile(filepath.Join(dir, ".vscode", "mcp.json"))
-	if strings.Contains(string(vs), "devflow") || !strings.Contains(string(vs), "other") {
+	if strings.Contains(string(vs), "agentflow") || !strings.Contains(string(vs), "other") {
 		t.Errorf(".vscode/mcp.json = %s", vs)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "docs", "confluence.yml")); string(b) != "space: OPS\n" {
@@ -171,18 +171,18 @@ func TestPluginLauncherMatchesTemplate(t *testing.T) {
 		_, after, _ := strings.Cut(string(b), "\nset -eu\n")
 		return after
 	}
-	plugin, err := adapters.FS.ReadFile("claude-code/bin/devflow")
+	plugin, err := adapters.FS.ReadFile("claude-code/bin/agentflow")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if body(plugin) != body(mustTemplate(".devflow/bin/devflow")) {
-		t.Error("adapters/claude-code/bin/devflow drifted from templates/repo/.devflow/bin/devflow")
+	if body(plugin) != body(mustTemplate(".agentflow/bin/agentflow")) {
+		t.Error("adapters/claude-code/bin/agentflow drifted from templates/repo/.agentflow/bin/agentflow")
 	}
 }
 
 func TestPinWorkflow(t *testing.T) {
 	sha := strings.Repeat("ab12", 10)
-	src := []byte("    uses: nscaledev/devflow/.github/workflows/jira-key.yml@v0\n    uses: actions/checkout@v4\n")
+	src := []byte("    uses: nscaledev/agentflow/.github/workflows/jira-key.yml@v0\n    uses: actions/checkout@v4\n")
 	got := string(PinWorkflow(src, sha, "0.4.3"))
 	if !strings.Contains(got, "jira-key.yml@"+sha+" # v0.4.3\n") || !strings.Contains(got, "actions/checkout@v4") {
 		t.Errorf("pinned = %q", got)
@@ -203,12 +203,12 @@ func TestInitPinsCallerWorkflow(t *testing.T) {
 	if _, err := Init(context.Background(), dir, false); err != nil {
 		t.Fatal(err)
 	}
-	wf, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml"))
+	wf, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "agentflow.yml"))
 	if strings.Contains(string(wf), "@v0\n") || strings.Count(string(wf), "@"+version.Commit+" # v0.4.3") < 9 {
 		t.Errorf("caller workflow not pinned:\n%s", wf)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".github", "dependabot.yml")); err == nil {
-		t.Error("dependabot.yml must not be written: devflow pin replaces it")
+		t.Error("dependabot.yml must not be written: agentflow pin replaces it")
 	}
 
 	// A newer release re-pins every reference and reports where it came from.
@@ -223,13 +223,13 @@ func TestInitPinsCallerWorkflow(t *testing.T) {
 	if err != nil || !res.Changed || res.From != "v0.4.3" || res.To != "v0.5.0" {
 		t.Fatalf("Pin --check = %+v, %v", res, err)
 	}
-	if again, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml")); string(again) != string(wf) {
+	if again, _ := os.ReadFile(filepath.Join(dir, ".github", "workflows", "agentflow.yml")); string(again) != string(wf) {
 		t.Error("Pin with check wrote the file")
 	}
 	if _, err := Pin(dir, false); err != nil {
 		t.Fatal(err)
 	}
-	wf, _ = os.ReadFile(filepath.Join(dir, ".github", "workflows", "devflow.yml"))
+	wf, _ = os.ReadFile(filepath.Join(dir, ".github", "workflows", "agentflow.yml"))
 	if strings.Contains(string(wf), "0123456789") || strings.Count(string(wf), "@"+version.Commit+" # v0.5.0") < 9 {
 		t.Errorf("caller workflow not re-pinned:\n%s", wf)
 	}
@@ -240,7 +240,7 @@ func TestInitPinsCallerWorkflow(t *testing.T) {
 
 func TestRepinWorkflow(t *testing.T) {
 	sha := strings.Repeat("cd34", 10)
-	src := []byte("uses: nscaledev/devflow/a.yml@v0\nuses: nscaledev/devflow/b.yml@" + strings.Repeat("1", 40) + " # v0.5.1\nuses: nscaledev/devflow/c.yml@main\n")
+	src := []byte("uses: nscaledev/agentflow/a.yml@v0\nuses: nscaledev/agentflow/b.yml@" + strings.Repeat("1", 40) + " # v0.5.1\nuses: nscaledev/agentflow/c.yml@main\n")
 	got := string(RepinWorkflow(src, sha, "v0.6.0"))
 	if strings.Count(got, "@"+sha+" # v0.6.0\n") != 3 {
 		t.Errorf("repinned = %q", got)
@@ -263,7 +263,7 @@ func TestRemovePreservesProviderRecords(t *testing.T) {
 	if _, err := Init(t.Context(), dir, false); err != nil {
 		t.Fatal(err)
 	}
-	record := filepath.Join(dir, ".devflow", "tasks", "task.md")
+	record := filepath.Join(dir, ".agentflow", "tasks", "task.md")
 	if err := os.MkdirAll(filepath.Dir(record), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestRemovePreservesProviderRecords(t *testing.T) {
 	if data, err := os.ReadFile(record); err != nil || string(data) != content {
 		t.Fatalf("task record changed: %q, %v", data, err)
 	}
-	if exists(dir, ".devflow/config.yml") || exists(dir, ".devflow/bin/devflow") {
+	if exists(dir, ".agentflow/config.yml") || exists(dir, ".agentflow/bin/agentflow") {
 		t.Fatal("setup files were left behind")
 	}
 }

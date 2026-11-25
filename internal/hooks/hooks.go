@@ -10,12 +10,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 // ExitError carries a process exit code.
@@ -54,7 +54,7 @@ func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
 	if len(issues) == 0 {
 		return nil
 	}
-	fmt.Fprintln(stderr, "✖ devflow: commit message does not follow the convention")
+	fmt.Fprintln(stderr, "✖ agentflow: commit message does not follow the convention")
 	for _, i := range issues {
 		fmt.Fprintf(stderr, "  - %s\n", i.Message)
 		if i.Fix != "" {
@@ -82,14 +82,14 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 		fmt.Fprint(stdout, setup.AgentProviderSelection(a.Cfg))
 		if a.Cfg.Providers.TaskManagement.Provider != "none" {
 			if tc, err := a.Context(ctx, ""); err != nil {
-				fmt.Fprintf(stdout, "devflow: could not load task context: %v\n", err)
+				fmt.Fprintf(stdout, "agentflow: could not load task context: %v\n", err)
 			} else {
 				fmt.Fprint(stdout, tc.Text)
 			}
 		}
 		if from := setup.PinBehind(a.Repo.Dir); from != "" {
-			fmt.Fprintf(stdout, "devflow: %s is pinned to devflow %s, older than the installed devflow. "+
-				"Offer the developer `/devflow:pin`, which re-pins it and opens a PR for review.\n", setup.CallerWorkflow, from)
+			fmt.Fprintf(stdout, "agentflow: %s is pinned to agentflow %s, older than the installed agentflow. "+
+				"Offer the developer `/agentflow:pin`, which re-pins it and opens a PR for review.\n", setup.CallerWorkflow, from)
 		}
 	}
 	if notice != "" {
@@ -98,17 +98,17 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 	return nil
 }
 
-// autoInit handles a session in a repo without .devflow/config.yml, following the
+// autoInit handles a session in a repo without .agentflow/config.yml, following the
 // developer's init.auto setting (see setup.AutoInitDecision). Files are written but never
 // committed: the agent is told to show them and offer a branch and PR.
 func autoInit(ctx context.Context, a *app.App, client string, stdout io.Writer) {
 	switch setup.AutoInitDecision(ctx, a.Repo, a.User.Init.Auto, a.User.Init.Orgs) {
 	case setup.AutoAsk:
-		fmt.Fprintln(stdout, "devflow: this repo is not set up for devflow yet. Offer the developer `/devflow:init` (or `devflow init`); `devflow remove` undoes it.")
+		fmt.Fprintln(stdout, "agentflow: this repo is not set up for agentflow yet. Offer the developer `/agentflow:init` (or `agentflow init`); `agentflow remove` undoes it.")
 	case setup.AutoInit:
 		res, err := app.InitRepo(ctx, a.Repo.Dir, client, false)
 		if err != nil {
-			fmt.Fprintf(stdout, "devflow: automatic init failed: %v. The developer can run `devflow init` and `devflow doctor`.\n", err)
+			fmt.Fprintf(stdout, "agentflow: automatic init failed: %v. The developer can run `agentflow init` and `agentflow doctor`.\n", err)
 			return
 		}
 		var files []string
@@ -119,11 +119,11 @@ func autoInit(ctx context.Context, a *app.App, client string, stdout io.Writer) 
 		if res.Release != nil {
 			files = append(files, res.Release.Written...)
 		}
-		fmt.Fprintf(stdout, "devflow set this repo up automatically (init.auto in ~/.devflow/config.yml). "+
+		fmt.Fprintf(stdout, "agentflow set this repo up automatically (init.auto in ~/.agentflow/config.yml). "+
 			"It wrote %d files and committed nothing: %s.\n"+
-			"At the start of your first reply, tell the developer in one or two lines, then offer to: review .devflow/config.yml "+
-			"(providers and policy.test_cmd) and .devflow/releases.yml, commit the files on a new branch following "+
-			"the configured commit convention, and open a PR. If they don't want devflow here, offer `/devflow:remove`, "+
+			"At the start of your first reply, tell the developer in one or two lines, then offer to: review .agentflow/config.yml "+
+			"(providers and policy.test_cmd) and .agentflow/releases.yml, commit the files on a new branch following "+
+			"the configured commit convention, and open a PR. If they don't want agentflow here, offer `/agentflow:remove`, "+
 			"which deletes the files and stops automatic init in this clone.\n",
 			len(files), strings.Join(files, ", "))
 	}
@@ -148,7 +148,7 @@ var (
 
 // PreBash blocks never-list commands and invalid commit messages, PR titles and squash
 // subjects. Claude Code treats exit code 2 as "block" and shows stderr to the model.
-// conventionOnly skips the never-list: devflow's own repo uses it, because maintainers
+// conventionOnly skips the never-list: agentflow's own repo uses it, because maintainers
 // there ask agents to merge PRs explicitly.
 func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) error {
 	var in claudeHookInput
@@ -172,7 +172,7 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 		keyHint = gitx.KeyFromBranch(branch)
 	}
 	if reason := policy.Forbidden(cmd, protected, branch); reason != "" && !conventionOnly {
-		fmt.Fprintln(stderr, "devflow blocked this command: "+reason)
+		fmt.Fprintln(stderr, "agentflow blocked this command: "+reason)
 		return &ExitError{Code: 2, Msg: reason}
 	}
 	// PR titles become the squash commit on the default branch: check them before the
@@ -210,9 +210,9 @@ func report(stderr io.Writer, what string, issues []commit.Issue) error {
 	}
 	hint := ""
 	if what == "commit message" {
-		hint = " Use the devflow_commit tool instead of raw git commit."
+		hint = " Use the agentflow_commit tool instead of raw git commit."
 	}
-	fmt.Fprintf(stderr, "devflow: this %s does not follow the convention.%s\n", what, hint)
+	fmt.Fprintf(stderr, "agentflow: this %s does not follow the convention.%s\n", what, hint)
 	for _, i := range issues {
 		fmt.Fprintf(stderr, "- %s", i.Message)
 		if i.Fix != "" {
@@ -252,7 +252,7 @@ func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer)
 	}
 	var notes []string
 	if a.Repo.HasUncommitted(ctx) {
-		notes = append(notes, "there are uncommitted changes (use /devflow:commit)")
+		notes = append(notes, "there are uncommitted changes (use /agentflow:commit)")
 	}
 	if key := a.CurrentKey(ctx); key != "" {
 		if cl, err := a.Checklists(ctx).Load(key); err == nil && cl != nil {
@@ -264,5 +264,5 @@ func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer)
 	if len(notes) == 0 {
 		return nil
 	}
-	return json.NewEncoder(stdout).Encode(map[string]string{"systemMessage": "devflow: " + strings.Join(notes, "; ")})
+	return json.NewEncoder(stdout).Encode(map[string]string{"systemMessage": "agentflow: " + strings.Join(notes, "; ")})
 }

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/templates"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/templates"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,7 +38,7 @@ func (p *Plan) Prepare(answers map[string]string, force bool) (*Edit, error) {
 	}
 	next := string(base)
 	if len(bytes.TrimSpace(base)) == 0 {
-		next = "devflow: 1\n"
+		next = "agentflow: 1\n"
 	}
 	for _, role := range p.Roles {
 		id, ok := answers[role.Role]

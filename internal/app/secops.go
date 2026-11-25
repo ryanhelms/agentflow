@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
-	"github.com/nscaledev/devflow/internal/provider/secops"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/provider/secops"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 type SecOpsTriageInput struct {
@@ -138,7 +138,7 @@ func (a *App) secOpsEvents(ctx context.Context, settings *config.GitHubSecOpsSet
 }
 
 func (a *App) secOpsGitHub(ctx context.Context) (*gh.Client, error) {
-	if token := os.Getenv("DEVFLOW_SECOPS_TOKEN"); token != "" {
+	if token := os.Getenv("AGENTFLOW_SECOPS_TOKEN"); token != "" {
 		return gh.New(token), nil
 	}
 	return a.GitHub(ctx)

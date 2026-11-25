@@ -15,14 +15,14 @@
 
 body { margin: 0; }
 
-.devflow-site {
+.agentflow-site {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-size: 1rem;
 }
 
-.devflow-site [hidden] { display: none !important; }
+.agentflow-site [hidden] { display: none !important; }
 
 .site-header {
   position: sticky;
@@ -59,18 +59,18 @@ body { margin: 0; }
 
 .site-nav > a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
 
-.devflow-site .ph { --ph-gutter: var(--s-5); }
-.devflow-site .ph-main { padding-block: var(--s-6) var(--s-5); }
-.devflow-site .ph-title { font-size: clamp(2rem, 5.5vw, 3.5rem); line-height: 1.05; }
-.devflow-site .ph-desc { font-size: 1rem; line-height: 1.5; }
-.devflow-site .ph-meta { font-size: var(--fs-sm); color: var(--text-muted); }
+.agentflow-site .ph { --ph-gutter: var(--s-5); }
+.agentflow-site .ph-main { padding-block: var(--s-6) var(--s-5); }
+.agentflow-site .ph-title { font-size: clamp(2rem, 5.5vw, 3.5rem); line-height: 1.05; }
+.agentflow-site .ph-desc { font-size: 1rem; line-height: 1.5; }
+.agentflow-site .ph-meta { font-size: var(--fs-sm); color: var(--text-muted); }
 
-.devflow-overview .page { height: auto; overflow: visible; }
-.devflow-overview .page-scroll { overflow: visible; }
-.devflow-overview .page-scroll::after { content: none; }
-.devflow-overview .panel-body { padding: var(--s-5); }
-.devflow-overview .panel-head { padding-inline: var(--s-5); }
-.devflow-overview .panel-head h3 { font-size: var(--fs-xl); line-height: 1.3; }
+.agentflow-overview .page { height: auto; overflow: visible; }
+.agentflow-overview .page-scroll { overflow: visible; }
+.agentflow-overview .page-scroll::after { content: none; }
+.agentflow-overview .panel-body { padding: var(--s-5); }
+.agentflow-overview .panel-head { padding-inline: var(--s-5); }
+.agentflow-overview .panel-head h3 { font-size: var(--fs-xl); line-height: 1.3; }
 
 .install-fields,
 .guide-fields {
@@ -89,7 +89,7 @@ body { margin: 0; }
   border-color: var(--accent);
 }
 
-.devflow-code {
+.agentflow-code {
   margin: 0;
   border: var(--keyline) solid var(--border-strong);
   border-inline-start: 2px solid var(--accent);
@@ -101,7 +101,7 @@ body { margin: 0; }
   user-select: all;
 }
 
-.devflow-site code { font-family: var(--mono); }
+.agentflow-site code { font-family: var(--mono); }
 .copy-actions { min-height: 2rem; }
 
 .install-details {
@@ -124,10 +124,10 @@ body { margin: 0; }
 
 @media (max-width: 40rem) {
   .site-header-inner { gap: var(--s-1); padding-inline: var(--s-3); }
-  .devflow-site .ph { --ph-gutter: var(--s-3); }
-  .devflow-site .ph-main { padding-block: var(--s-5) var(--s-4); }
-  .devflow-overview .page-pad,
-  .devflow-overview .panel-body,
-  .devflow-overview .panel-head { padding-inline: var(--s-3); }
+  .agentflow-site .ph { --ph-gutter: var(--s-3); }
+  .agentflow-site .ph-main { padding-block: var(--s-5) var(--s-4); }
+  .agentflow-overview .page-pad,
+  .agentflow-overview .panel-body,
+  .agentflow-overview .panel-head { padding-inline: var(--s-3); }
   .mode-control .btn { padding-inline: var(--s-2); }
 }

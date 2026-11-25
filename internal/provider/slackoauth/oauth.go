@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 	"golang.org/x/term"
@@ -42,13 +42,13 @@ const (
 )
 
 var (
-	ErrNotEnrolled   = errors.New("no Devflow Slack enrollment")
-	ErrLoginRequired = errors.New("explicit Devflow Slack login required")
-	ErrGrantChanged  = errors.New("the Devflow Slack enrollment changed")
+	ErrNotEnrolled   = errors.New("no Agentflow Slack enrollment")
+	ErrLoginRequired = errors.New("explicit Agentflow Slack login required")
+	ErrGrantChanged  = errors.New("the Agentflow Slack enrollment changed")
 	errMetadata      = errors.New("official Slack OAuth metadata does not match the supported profile")
 	errToken         = errors.New("could not verify the Slack user grant and requested scope")
 	errWrongTeam     = errors.New("received a Slack grant for a different workspace than the expected team ID")
-	errStorage       = errors.New("could not verify the Devflow Slack grant in the OS keychain")
+	errStorage       = errors.New("could not verify the Agentflow Slack grant in the OS keychain")
 	clientIDSyntax   = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
 )
 
@@ -71,7 +71,7 @@ type enrollment struct {
 var local = enrollment{
 	client: nativeoauth.NewClient(), open: nativeoauth.OpenBrowser, listen: listenCallback,
 	get: keyring.Get, set: keyring.Set, remove: keyring.Delete,
-	lockDir: func() (string, error) { return nativeoauth.UserLockDir(".devflow-slack") },
+	lockDir: func() (string, error) { return nativeoauth.UserLockDir(".agentflow-slack") },
 }
 
 func listenCallback(ctx context.Context, cert *tls.Certificate) (net.Listener, error) {
@@ -91,7 +91,7 @@ func listenCallback(ctx context.Context, cert *tls.Certificate) (net.Listener, e
 func Login(ctx context.Context, input io.Reader, diagnostics io.Writer) error {
 	f, ok := input.(*os.File)
 	if !ok || !term.IsTerminal(int(f.Fd())) || diagnostics == nil {
-		return errors.New("an interactive terminal is required for Devflow Slack enrollment")
+		return errors.New("an interactive terminal is required for Agentflow Slack enrollment")
 	}
 	read := func(label string) (string, error) {
 		if _, err := fmt.Fprint(diagnostics, label); err != nil {
@@ -106,7 +106,7 @@ func Login(ctx context.Context, input io.Reader, diagnostics io.Writer) error {
 		return string(b), nil
 	}
 	_, err := fmt.Fprintf(diagnostics, "Use your approved internal or Marketplace Slack app. Register %s.\n"+
-		"Devflow requests %s for identity, conversation membership and sending messages.\n", redirectURI, scopes)
+		"Agentflow requests %s for identity, conversation membership and sending messages.\n", redirectURI, scopes)
 	if err != nil {
 		return err
 	}

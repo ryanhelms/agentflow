@@ -42,7 +42,7 @@ func WaitCallback(ctx context.Context, ln net.Listener, host, path, issuer, stat
 		consumed := false
 		once.Do(func() {
 			consumed = true
-			_, _ = io.WriteString(w, "Return to Devflow to see the enrollment result.")
+			_, _ = io.WriteString(w, "Return to Agentflow to see the enrollment result.")
 			results <- result
 		})
 		if !consumed {

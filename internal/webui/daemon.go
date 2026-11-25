@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/gitx"
 )
 
 type registeredWorktree struct {
@@ -318,9 +318,9 @@ func (d *daemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if r.Host == "127.0.0.1:"+strconv.Itoa(d.Port) || (d.Port == 80 && r.Host == "127.0.0.1") {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/_devflow/instance":
+		case r.Method == http.MethodGet && r.URL.Path == "/_agentflow/instance":
 			d.proveInstance(w, r)
-		case r.Method == http.MethodPost && r.URL.Path == "/_devflow/control":
+		case r.Method == http.MethodPost && r.URL.Path == "/_agentflow/control":
 			d.handleControl(w, r)
 		default:
 			http.NotFound(w, r)
@@ -357,7 +357,7 @@ func (d *daemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if selected == nil {
-		if first != nil && r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_devflow/") {
+		if first != nil && r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_agentflow/") {
 			d.pickerResource(w, r, *first)
 			d.mu.Unlock()
 			return

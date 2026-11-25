@@ -1,4 +1,4 @@
-name: devflow release guard
+name: agentflow release guard
 description: >
   Run before a production deploy. Passes only when the ref being deployed is a
   published, non-draft, non-prerelease GitHub Release tag, or, for an approved hotfix,
@@ -74,7 +74,7 @@ runs:
           title="Patch release required for hotfix $REF"
           if [ -z "$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --json number -q '.[0].number')" ]; then
             gh issue create --repo "$REPO" --title "$title" --label hotfix --body \
-              "A hotfix from \`$REF\` was deployed to production without a release ($RUN_URL). Merge it to the default branch with a \`fix(KEY): ...\` commit so devflow publishes the patch release, then redeploy that release." \
+              "A hotfix from \`$REF\` was deployed to production without a release ($RUN_URL). Merge it to the default branch with a \`fix(KEY): ...\` commit so agentflow publishes the patch release, then redeploy that release." \
               >/dev/null 2>&1 || gh issue create --repo "$REPO" --title "$title" --body "Hotfix $REF deployed without a release ($RUN_URL); merge it so a patch release is published." >/dev/null
           fi
           echo "::warning::Approved hotfix deploy of $REF. A patch release must follow; a tracking issue is open."

@@ -7,19 +7,19 @@ reference a release, the task follow-up sets configured Jira fix versions, and C
 
 ## Rules
 
-| Rule | How devflow enforces it |
+| Rule | How agentflow enforces it |
 | --- | --- |
 | Versions come from commits, never by hand | release-please reads Conventional Commits: `fix`/`perf` → patch, `feat` → minor, `!` or `BREAKING CHANGE:` → major. Before 1.0.0 a breaking change bumps the minor version. |
 | Releases are fully automatic | `semver-release.yml` runs on every push to the default branch, auto-merges the Release PR, tags and publishes the release, then builds and attaches artifacts. |
-| One version per deployable unit | Units are listed in `.devflow/releases.yml`. Monorepo tags carry the unit (`api-v1.4.0`); single-unit repos use `v1.4.0`. A commit only bumps the units whose path it touches. |
+| One version per deployable unit | Units are listed in `.agentflow/releases.yml`. Monorepo tags carry the unit (`api-v1.4.0`); single-unit repos use `v1.4.0`. A commit only bumps the units whose path it touches. |
 | Branches build prerelease versions | Builds off the default branch are versioned `X.Y.Z-<id>.<n>+<sha>`, following the repo's branching strategy (below). They sort before the release they lead to. |
 | Production deploys only releases | `actions/release-guard` fails a production deploy unless the ref is a published, non-prerelease GitHub Release, or an approved hotfix. |
 | Hotfixes still end in a release | A hotfix may deploy through the `production-hotfix` environment (required reviewers = the approval). The guard opens a tracking issue; merging the `fix(...)` to the default branch publishes the patch release, which is then redeployed. |
 
 ## Branching strategy
 
-`devflow release init` detects the strategy (a `develop` branch means GitFlow) and
-records it in `.devflow/releases.yml`. Stable releases only ever come from the default
+`agentflow release init` detects the strategy (a `develop` branch means GitFlow) and
+records it in `.agentflow/releases.yml`. Stable releases only ever come from the default
 branch.
 
 | Branch | trunk | gitflow | Example |
@@ -37,7 +37,7 @@ metadata, which SemVer ignores for ordering.
 
 | `builds:` | What a release produces |
 | --- | --- |
-| `binary` | GoReleaser archives per platform plus `checksums.txt`, attached to the release, with build provenance attestations. The unit needs a `.goreleaser.yaml`; set `release: disable: true` there, since devflow uploads. |
+| `binary` | GoReleaser archives per platform plus `checksums.txt`, attached to the release, with build provenance attestations. The unit needs a `.goreleaser.yaml`; set `release: disable: true` there, since agentflow uploads. |
 | `image` | Image pushed to `ghcr.io/<owner>/<unit>` (or `image:`), tagged `X.Y.Z`, `X.Y`, `X` (from 1.0.0) and the short SHA, with an attestation in the registry. `VERSION` is passed as a build arg. |
 | `helm` | Chart packaged with `version` and `appVersion` set to the release, pushed to `oci://ghcr.io/<owner>/charts` and attached. release-please also updates `Chart.yaml` in the Release PR. |
 | `library` | `publish: go` adds the `path/vX.Y.Z` tag Go needs for submodules; `npm` publishes to GitHub Packages (or `NPM_TOKEN`); `pypi` builds and, with `vars.PYPI_PUBLISH=true`, publishes with trusted publishing; `terraform` is tag-only. |
@@ -45,18 +45,18 @@ metadata, which SemVer ignores for ordering.
 ## Setup
 
 ```bash
-devflow release init             # detect units + strategy; writes .devflow/releases.yml,
+agentflow release init             # detect units + strategy; writes .agentflow/releases.yml,
                                  # release-please-config.json, .release-please-manifest.json
-devflow release plan             # each unit: current → next version, bump, build version
-devflow release version --unit api   # the version this branch builds as
-devflow release sync             # after editing releases.yml
+agentflow release plan             # each unit: current → next version, bump, build version
+agentflow release version --unit api   # the version this branch builds as
+agentflow release sync             # after editing releases.yml
 ```
 
-`devflow init` runs `release init` for you. Existing tags (`v1.2.0`, `api-v1.2.0`) seed the
-manifest, so adopting devflow doesn't restart versions. The caller workflow written by
-`devflow init` runs `semver-release.yml` on pushes to the default branch.
+`agentflow init` runs `release init` for you. Existing tags (`v1.2.0`, `api-v1.2.0`) seed the
+manifest, so adopting agentflow doesn't restart versions. The caller workflow written by
+`agentflow init` runs `semver-release.yml` on pushes to the default branch.
 
-`.devflow/releases.yml`:
+`.agentflow/releases.yml`:
 
 ```yaml
 strategy: trunk            # or gitflow
@@ -84,11 +84,11 @@ release repository. Preview the exact destination, tag, commit and metadata
 before confirming publication.
 
 ```bash
-devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+agentflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
   --title 'API 1.4.0' --notes 'Release notes' --dry-run
-devflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
+agentflow release publish api-v1.4.0 --revision "$(git rev-parse HEAD)" \
   --title 'API 1.4.0' --notes 'Release notes'
-devflow release get api-v1.4.0
+agentflow release get api-v1.4.0
 ```
 
 The preview uses local configuration. Publication resolves the full commit SHA
@@ -96,7 +96,7 @@ against GitHub and requires confirmation. Use `--yes` to accept the prompt in
 an authorized run. A matching stable release returns `already_applied` on retry.
 A tag at a different commit or a release with different metadata is a conflict.
 The operation can create a tag when one is absent. GitHub tag protections apply.
-After a retry, use `devflow release get TAG` to inspect the existing assets.
+After a retry, use `agentflow release get TAG` to inspect the existing assets.
 The reusable workflow builds and uploads artifacts for its release-please releases.
 
 ## Release build and publication
@@ -115,7 +115,7 @@ Tag staging builds with the branch version:
 - uses: actions/checkout@v4
   with: { fetch-depth: 0 }
 - id: version
-  uses: nscaledev/devflow/actions/version@v0
+  uses: nscaledev/agentflow/actions/version@v0
   with: { unit: api }
 - run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api
 ```
@@ -127,7 +127,7 @@ deploy-production:
   environment: production          # or production-hotfix for an approved hotfix
   runs-on: ubuntu-latest
   steps:
-    - uses: nscaledev/devflow/actions/release-guard@v0
+    - uses: nscaledev/agentflow/actions/release-guard@v0
       with:
         environment: production
         ref: ${{ github.ref_name }}  # the release tag being deployed, e.g. api-v1.4.0
@@ -143,7 +143,7 @@ review is the hotfix approval.
   job, so they don't depend on release events. GitHub runs no checks on a Release PR
   opened with that token: if branch rules require checks, close and reopen the Release PR
   (or click "Update branch") once per release, and it merges itself when they pass. The
-  optional devflow GitHub App (`vars.DEVFLOW_APP_ID`, `secrets.DEVFLOW_APP_PRIVATE_KEY`)
+  optional agentflow GitHub App (`vars.AGENTFLOW_APP_ID`, `secrets.AGENTFLOW_APP_PRIVATE_KEY`)
   removes that step.
 - Repo setting "Allow auto-merge", or no required checks on the default branch.
 - `packages: write` for images, charts and npm packages (granted by the caller workflow).

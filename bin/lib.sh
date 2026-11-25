@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for devflow workflow scripts. Source, don't execute.
+# Shared helpers for agentflow workflow scripts. Source, don't execute.
 # shellcheck disable=SC2034
 
 KEY_RE='[A-Z][A-Z0-9]+-[0-9]+'
@@ -38,7 +38,7 @@ atl() {
   done
 }
 
-# is_skipped TEXT — true when a commit or PR body opts out of devflow.
+# is_skipped TEXT — true when a commit or PR body opts out of agentflow.
 is_skipped() {
-  grep -Eqi '\[devflow skip\]|^Devflow:[[:space:]]*skip' <<<"$1"
+  grep -Eqi '\[agentflow skip\]|^Agentflow:[[:space:]]*skip' <<<"$1"
 }

@@ -6,7 +6,7 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/app"
 )
 
 func runReleaseGet(ctx context.Context, args []string) error {
@@ -15,7 +15,7 @@ func runReleaseGet(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 1 {
-		return errors.New("usage: devflow release get TAG")
+		return errors.New("usage: agentflow release get TAG")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -30,7 +30,7 @@ func runReleaseGet(ctx context.Context, args []string) error {
 
 func runReleasePublish(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: devflow release publish TAG --revision SHA [--title T] [--notes TEXT] [--dry-run] [--yes]")
+		return errors.New("usage: agentflow release publish TAG --revision SHA [--title T] [--notes TEXT] [--dry-run] [--yes]")
 	}
 	in := app.ReleasePublishInput{Tag: args[0]}
 	fs := flag.NewFlagSet("release publish TAG", flag.ContinueOnError)

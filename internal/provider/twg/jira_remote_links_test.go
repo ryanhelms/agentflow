@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/atlassian"
 )
 
 func TestJiraRemoteLinksListsExactWebLinks(t *testing.T) {

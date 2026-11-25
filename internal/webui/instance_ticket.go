@@ -21,9 +21,9 @@ func signature(key, purpose, challenge string) string {
 // The port can be recycled after a crash. Prove the listener has the key in
 // the private instance record. Neither the key nor a browser ticket is sent.
 func (i instance) proveInstance(w http.ResponseWriter, r *http.Request) {
-	nonce := r.Header.Get("X-Devflow-Challenge")
+	nonce := r.Header.Get("X-Agentflow-Challenge")
 	if len(nonce) != 43 || r.Header.Get("Origin") != "" || i.Key == "" ||
-		!hmac.Equal([]byte(r.Header.Get("X-Devflow-Proof")), []byte(signature(i.Key, "client/v1", nonce))) {
+		!hmac.Equal([]byte(r.Header.Get("X-Agentflow-Proof")), []byte(signature(i.Key, "client/v1", nonce))) {
 		http.Error(w, "invalid instance challenge", http.StatusBadRequest)
 		return
 	}

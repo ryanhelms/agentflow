@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func runSecOps(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] != "triage" {
-		return errors.New("usage: devflow secops triage [--source REF] [--since RFC3339] [--apply] [--yes]")
+		return errors.New("usage: agentflow secops triage [--source REF] [--since RFC3339] [--apply] [--yes]")
 	}
 	in := app.SecOpsTriageInput{}
 	fs := flag.NewFlagSet("secops triage", flag.ContinueOnError)

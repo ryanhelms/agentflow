@@ -6,21 +6,21 @@ const path = require('node:path');
 
 const client = process.argv[2];
 if (!['codex', 'cursor', 'gemini', 'vscode'].includes(client)) {
-  process.stderr.write('devflow: expected a plugin client name\n');
+  process.stderr.write('agentflow: expected a plugin client name\n');
   process.exit(1);
 }
 
 const windows = process.platform === 'win32';
-const filename = windows ? 'devflow.ps1' : 'devflow';
-let launcher = path.join(__dirname, '../templates/repo/.devflow/bin', filename);
+const filename = windows ? 'agentflow.ps1' : 'agentflow';
+let launcher = path.join(__dirname, '../templates/repo/.agentflow/bin', filename);
 if (typeof embeddedLaunchers !== 'undefined') {
   try {
-    const directory = mkdtempSync(path.join(tmpdir(), 'devflow-launcher-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'agentflow-launcher-'));
     process.once('exit', () => rmSync(directory, { recursive: true, force: true }));
     launcher = path.join(directory, filename);
     writeFileSync(launcher, windows ? embeddedLaunchers.windows : embeddedLaunchers.posix, { flag: 'wx', mode: 0o600 });
   } catch (error) {
-    process.stderr.write('devflow: could not prepare the plugin launcher: ' + error.message + '\n');
+    process.stderr.write('agentflow: could not prepare the plugin launcher: ' + error.message + '\n');
     process.exit(1);
   }
 }
@@ -31,7 +31,7 @@ const server = windows
   ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', launcher, ...mcp], options)
   : spawn('sh', [launcher, ...mcp], options);
 server.on('error', error => {
-  process.stderr.write('devflow: could not start the plugin launcher: ' + error.message + '\n');
+  process.stderr.write('agentflow: could not start the plugin launcher: ' + error.message + '\n');
   process.exitCode = 1;
 });
 for (const signal of ['SIGINT', 'SIGTERM']) {

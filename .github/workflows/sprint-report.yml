@@ -44,7 +44,7 @@ jobs:
       - id: providers
         name: Resolve report providers
         run: |
-          config=$(devflow setup providers --json)
+          config=$(agentflow setup providers --json)
           task=$(jq -r '.roles[] | select(.role == "task_management") | .selected // "none"' <<<"$config")
           knowledge=$(jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"' <<<"$config")
           printf 'task=%s\nknowledge=%s\n' "$task" "$knowledge" >> "$GITHUB_OUTPUT"
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           # shellcheck source=/dev/null
-          source "$DEVFLOW_ROOT/bin/lib.sh"
+          source "$AGENTFLOW_ROOT/bin/lib.sh"
           since=$(date -u -d "-$DAYS days" +%Y-%m-%d)
 
           if [ "$TASK_PROVIDER" = jira ]; then

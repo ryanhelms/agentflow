@@ -1,13 +1,13 @@
-# Contributing to devflow
+# Contributing to agentflow
 
 ## Commits
 
-This repo follows the same commit convention devflow enforces in the repos that use it,
+This repo follows the same commit convention agentflow enforces in the repos that use it,
 checked by `.githooks/commit-msg` (`make install-hooks`) and by the `convention` CI job on
 every PR title and commit (`make install-hooks` also adds a `pre-push` check). PR titles
 are checked as the squash commit they become, `<title> (#123)`, so keep them to 64
-characters. Jira keys are optional here until devflow has a Jira project
-(`commit.require_key: false` in `.devflow/config.yml`). The version and the changelog come
+characters. Jira keys are optional here until agentflow has a Jira project
+(`commit.require_key: false` in `.agentflow/config.yml`). The version and the changelog come
 straight from the commit types:
 
 ```
@@ -31,13 +31,13 @@ Claude Code is denied edits to it by `.claude/settings.json`, and CI fails if an
 - CI must pass: `go vet`, `go test -race`, golangci-lint, shellcheck, actionlint and a
   GoReleaser snapshot build.
 - Changes to `flow-map.yml` need the owning team lead's approval (see `CODEOWNERS`).
-- Changes to the reusable workflows reach every repo through its `devflow pin` PR (and
+- Changes to the reusable workflows reach every repo through its `agentflow pin` PR (and
   `actions/setup` changes reach them at once through `@v0`). Keep them backwards
   compatible within a major version.
 
 ## How releases happen
 
-devflow releases from a single branch. There is no Release PR and no version-bump commit.
+agentflow releases from a single branch. There is no Release PR and no version-bump commit.
 
 1. Merging to `main` runs `.github/workflows/release.yml`.
 2. `bin/next-version.sh` reads the commits since the last `vX.Y.Z` tag. If any is a
@@ -49,8 +49,8 @@ devflow releases from a single branch. There is no Release PR and no version-bum
 4. GoReleaser builds five platforms and `checksums.txt`, and publishes the GitHub Release
    with the same notes. Build provenance is attested.
 5. The release is published as a normal, stable release and becomes "Latest". The
-   floating major tag (`v0` while devflow is 0.x) moves to it. Repos that pin devflow by SHA pick it up with
-   `devflow pin`, which the Claude Code session hook suggests once the pin is behind.
+   floating major tag (`v0` while agentflow is 0.x) moves to it. Repos that pin agentflow by SHA pick it up with
+   `agentflow pin`, which the Claude Code session hook suggests once the pin is behind.
 
 Use squash merges with a convention PR title: the title becomes the commit on `main`,
 decides the bump and is the changelog entry. Never edit `CHANGELOG.md` by hand; CI fails
@@ -59,7 +59,7 @@ PRs that change it.
 ## Local development
 
 ```bash
-make build         # build ./devflow
+make build         # build ./agentflow
 make test          # unit tests
 make check         # everything CI runs (needs golangci-lint, shellcheck, actionlint)
 make snapshot      # goreleaser --snapshot --clean
@@ -99,7 +99,7 @@ Source edits work with either startup command. With the detached server, rerun
 package archives, Vite configuration, or Dockerfile. To add a dependency, use npm from
 `website/` and include the updated `package-lock.json` with the change.
 
-Set `DEVFLOW_WEBSITE_PORT=5174` in your shell or a root Compose `.env` file to
+Set `AGENTFLOW_WEBSITE_PORT=5174` in your shell or a root Compose `.env` file to
 use another host port. If Docker Desktop or WSL misses file changes, set
 `VITE_USE_POLLING=1` the same way. Run the startup command again to apply
 either setting. The website binds to the loopback address on the host.
@@ -110,10 +110,10 @@ For development directly with Node 24, run `npm ci` and `npm run dev` in
 
 ## Testing the Claude Code plugin
 
-`make e2e` (or `scripts/e2e-claude.sh`) builds devflow, creates a throwaway repo with
-`devflow init`, and drives `claude -p` with the plugin loaded from `adapters/claude-code`.
+`make e2e` (or `scripts/e2e-claude.sh`) builds agentflow, creates a throwaway repo with
+`agentflow init`, and drives `claude -p` with the plugin loaded from `adapters/claude-code`.
 It checks that the MCP server connects with every tool, the skills and
-SessionStart context load, `/devflow:commit` makes a convention commit through the
+SessionStart context load, `/agentflow:commit` makes a convention commit through the
 confirmation flow, and the PreToolUse hook blocks invalid commits, pushes to `main`,
 force-pushes and `gh pr merge`. It needs a logged-in `claude` CLI and `gh auth`, and it
 uses your Claude account. `KEEP=1` keeps the temp directory.

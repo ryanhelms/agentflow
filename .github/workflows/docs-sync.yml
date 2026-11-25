@@ -19,10 +19,10 @@ permissions:
 
 jobs:
   sync:
-    if: vars.DEVFLOW_ENABLED != 'false' && vars.CONFLUENCE_BASE != ''
+    if: vars.AGENTFLOW_ENABLED != 'false' && vars.CONFLUENCE_BASE != ''
     runs-on: ubuntu-latest
     concurrency:
-      group: devflow-docs-${{ github.repository }}
+      group: agentflow-docs-${{ github.repository }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -34,7 +34,7 @@ jobs:
       - id: knowledge
         name: Resolve knowledge provider
         run: |
-          provider=$(devflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
+          provider=$(agentflow setup providers --json | jq -r '.roles[] | select(.role == "knowledge_base") | .selected // "none"')
           echo "provider=$provider" >> "$GITHUB_OUTPUT"
       - name: Install pandoc
         if: steps.knowledge.outputs.provider == 'confluence'

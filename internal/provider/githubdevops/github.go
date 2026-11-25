@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/gh"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 const instance = "github"

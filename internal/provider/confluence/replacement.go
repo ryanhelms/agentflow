@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // ReplacementVersion checks the options supported by every publish backend.
@@ -68,7 +68,7 @@ func NewReplacement(pageURL string, ref provider.Ref, draft provider.DocumentDra
 	return Replacement{
 		Ref: ref, URL: pageURL, Title: draft.Title, HTML: atlassian.ConfluenceLiteralHTML(draft.Body),
 		Expected: expected, Successor: atlassian.PageVersion{
-			Number: expected + 1, Message: fmt.Sprintf("devflow docs publish %x", sha256.Sum256(payload)),
+			Number: expected + 1, Message: fmt.Sprintf("agentflow docs publish %x", sha256.Sum256(payload)),
 		},
 	}, nil
 }

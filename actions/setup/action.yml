@@ -1,18 +1,18 @@
-name: devflow setup
+name: agentflow setup
 description: >
-  Put devflow's workflow scripts on PATH and point FLOW_MAP at the shared flow map.
+  Put agentflow's workflow scripts on PATH and point FLOW_MAP at the shared flow map.
   The runner downloads this whole repository at the referenced tag to run the action,
   so no extra token is needed to read bin/ or flow-map.yml. With binary: true it also
-  builds the devflow CLI from that same source and puts it on PATH.
+  builds the agentflow CLI from that same source and puts it on PATH.
 inputs:
   binary:
-    description: Build the devflow CLI (for example for `devflow lint-msg`) and put it on PATH
+    description: Build the agentflow CLI (for example for `agentflow lint-msg`) and put it on PATH
     required: false
     default: "false"
 runs:
   using: composite
   steps:
-    - name: Expose devflow scripts
+    - name: Expose agentflow scripts
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -20,27 +20,27 @@ runs:
         set -euo pipefail
         source_root=$(cd "$ACTION_PATH/../.." && pwd -P)
         runner_root=$(cd "$RUNNER_TEMP" && pwd -P)
-        root=$(mktemp -d "$runner_root/devflow.XXXXXXXX")
-        if [[ "$root" != "$runner_root"/devflow.* || "$root" == *$'\r'* || "$root" == *$'\n'* ]]; then
-          echo "::error::Invalid Devflow runner directory"
+        root=$(mktemp -d "$runner_root/agentflow.XXXXXXXX")
+        if [[ "$root" != "$runner_root"/agentflow.* || "$root" == *$'\r'* || "$root" == *$'\n'* ]]; then
+          echo "::error::Invalid Agentflow runner directory"
           exit 1
         fi
         cp -R -- "$source_root/bin" "$root/bin"
         cp -- "$source_root/flow-map.yml" "$root/flow-map.yml"
         printf '%s\n' "$root/bin" >> "$GITHUB_PATH"
-        printf 'DEVFLOW_ROOT=%s\nFLOW_MAP=%s/flow-map.yml\n' "$root" "$root" >> "$GITHUB_ENV"
+        printf 'AGENTFLOW_ROOT=%s\nFLOW_MAP=%s/flow-map.yml\n' "$root" "$root" >> "$GITHUB_ENV"
     - name: Set up Go
       if: inputs.binary == 'true'
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
       with:
         go-version-file: ${{ github.action_path }}/../../go.mod
         cache: false
-    - name: Build devflow
+    - name: Build agentflow
       if: inputs.binary == 'true'
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
       run: |
         set -euo pipefail
-        (cd "$ACTION_PATH/../.." && go build -trimpath -o "$DEVFLOW_ROOT/bin/devflow" ./cmd/devflow)
-        printf '%s\n' 'DEVFLOW_NO_UPDATE=1' >> "$GITHUB_ENV"
+        (cd "$ACTION_PATH/../.." && go build -trimpath -o "$AGENTFLOW_ROOT/bin/agentflow" ./cmd/agentflow)
+        printf '%s\n' 'AGENTFLOW_NO_UPDATE=1' >> "$GITHUB_ENV"

@@ -7,10 +7,10 @@ import (
 	"os"
 	"slices"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/asana"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
-	"github.com/nscaledev/devflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/tasktemplate"
 )
 
 // ResolveTaskTemplate selects an exact ref from the repository's configured catalog.

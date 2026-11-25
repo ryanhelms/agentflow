@@ -11,14 +11,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/githubissues"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/githubissues"
 )
 
 func TestSecOpsTriageReconcilesAmbiguousIssueCreate(t *testing.T) {
 	dir := newRepo(t)
-	t.Setenv("DEVFLOW_SECOPS_TOKEN", "")
+	t.Setenv("AGENTFLOW_SECOPS_TOKEN", "")
 	t.Setenv("GH_TOKEN", "fixture")
 	readFixture := func(name string) []byte {
 		t.Helper()
@@ -79,12 +79,12 @@ func TestSecOpsTriageReconcilesAmbiguousIssueCreate(t *testing.T) {
 		}
 	})}
 
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	write := func(name, data string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, ".devflow", name), []byte(data), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".agentflow", name), []byte(data), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -93,12 +93,12 @@ func TestSecOpsTriageReconcilesAmbiguousIssueCreate(t *testing.T) {
 		write("config.yml", `secops:
   settings:
     repository: Example/Project
-    incidents: {fixture: .devflow/incidents.json, scope: example/project}
+    incidents: {fixture: .agentflow/incidents.json, scope: example/project}
 task_management:
   provider: github-issues
   settings: {repository: example/triage}
   templates:
-    catalog: .devflow/templates.json
+    catalog: .agentflow/templates.json
     default: {name: security, revision: "`+revision+`"}
 `)
 		a, err := Open(t.Context(), dir, "test")

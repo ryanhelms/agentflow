@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// DEVFLOW_TEST_CHROME is an installed Chrome or Chromium executable. The test
+// AGENTFLOW_TEST_CHROME is an installed Chrome or Chromium executable. The test
 // loads the same embedded editor as the console and uses a private profile.
 func TestTypedEditorBrowser(t *testing.T) {
 	runBrowserFixture(t, "", func(mux *http.ServeMux, _ string) {
@@ -42,9 +42,9 @@ func TestTypedEditorBrowser(t *testing.T) {
 
 func runBrowserFixture(t *testing.T, path string, configure func(*http.ServeMux, string)) {
 	t.Helper()
-	chrome := os.Getenv("DEVFLOW_TEST_CHROME")
+	chrome := os.Getenv("AGENTFLOW_TEST_CHROME")
 	if chrome == "" {
-		t.Skip("set DEVFLOW_TEST_CHROME to an installed Chrome or Chromium executable")
+		t.Skip("set AGENTFLOW_TEST_CHROME to an installed Chrome or Chromium executable")
 	}
 	mux := http.NewServeMux()
 	srv := httptest.NewUnstartedServer(mux)

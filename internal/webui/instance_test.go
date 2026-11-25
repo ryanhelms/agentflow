@@ -53,12 +53,12 @@ func startTestDaemon(t *testing.T, registry string, op daemonRequest) (*url.URL,
 }
 
 func TestDaemonRegistryAcrossProcesses(t *testing.T) {
-	if dir := os.Getenv("DEVFLOW_TEST_REGISTRY_WORKTREE"); dir != "" {
-		raw, found, err := findRegistered(t.Context(), os.Getenv("DEVFLOW_TEST_REGISTRY_ROOT"), registration(dir, "link", "providers"), 0)
+	if dir := os.Getenv("AGENTFLOW_TEST_REGISTRY_WORKTREE"); dir != "" {
+		raw, found, err := findRegistered(t.Context(), os.Getenv("AGENTFLOW_TEST_REGISTRY_ROOT"), registration(dir, "link", "providers"), 0)
 		if err != nil || !found {
 			t.Fatalf("child process failed to find daemon: %v", err)
 		}
-		if err := os.WriteFile(os.Getenv("DEVFLOW_TEST_REGISTRY_RESULT"), []byte(raw), 0600); err != nil {
+		if err := os.WriteFile(os.Getenv("AGENTFLOW_TEST_REGISTRY_RESULT"), []byte(raw), 0600); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -69,7 +69,7 @@ func TestDaemonRegistryAcrossProcesses(t *testing.T) {
 	defer stop()
 	childPath := filepath.Join(t.TempDir(), "private-result")
 	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestDaemonRegistryAcrossProcesses$")
-	cmd.Env = append(os.Environ(), "DEVFLOW_TEST_REGISTRY_WORKTREE="+filepath.Join(root, ".devflow"), "DEVFLOW_TEST_REGISTRY_ROOT="+registry, "DEVFLOW_TEST_REGISTRY_RESULT="+childPath)
+	cmd.Env = append(os.Environ(), "AGENTFLOW_TEST_REGISTRY_WORKTREE="+filepath.Join(root, ".agentflow"), "AGENTFLOW_TEST_REGISTRY_ROOT="+registry, "AGENTFLOW_TEST_REGISTRY_RESULT="+childPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("second process: %v %s", err, out)
 	}
@@ -111,7 +111,7 @@ func daemonBrowser(t *testing.T, u *url.URL, method, path, ticket, session strin
 		t.Fatal(err)
 	}
 	req.Header.Set("Origin", origin)
-	req.Header.Set("X-Devflow-Request", "console")
+	req.Header.Set("X-Agentflow-Request", "console")
 	req.Header.Set("Content-Type", "application/json")
 	if session != "" {
 		req.Header.Set("Authorization", "Bearer "+session)
@@ -208,7 +208,7 @@ func TestConsoleDiscoveryAuthenticatesPort(t *testing.T) {
 		if bytes.Contains(body, []byte("private-checkout")) {
 			t.Error("plaintext checkout disclosure")
 		}
-		reply(w, 200, r.Header.Get("X-Devflow-Proof"))
+		reply(w, 200, r.Header.Get("X-Agentflow-Proof"))
 	}))
 	defer fake.Close()
 	u, _ := url.Parse(fake.URL)
@@ -230,7 +230,7 @@ func TestConsoleDiscoveryAuthenticatesPort(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", fake.URL, nil)
-	r.Header.Set("X-Devflow-Challenge", randomKey())
+	r.Header.Set("X-Agentflow-Challenge", randomKey())
 	i.proveInstance(w, r)
 	if w.Code == 200 {
 		t.Fatal("accepted unsigned probe")
@@ -239,7 +239,7 @@ func TestConsoleDiscoveryAuthenticatesPort(t *testing.T) {
 
 func TestRegistryOutsideWorktree(t *testing.T) {
 	root := testServer(t).repo.Dir
-	dir := filepath.Join(root, ".devflow-ui")
+	dir := filepath.Join(root, ".agentflow-ui")
 	if _, err := openRequest(t.Context(), dir, root, Destination{}, "open"); err == nil {
 		t.Fatal("accepted registry inside checkout")
 	}
@@ -425,7 +425,7 @@ func TestBareCloneWorktreePickerRequiresBrowserGrant(t *testing.T) {
 	if code, _ := daemonBrowser(t, &cloneURL, "GET", "", "", ""); code != 200 {
 		t.Fatal("missing clone picker")
 	}
-	if code, _ := daemonBrowser(t, &cloneURL, "GET", "_devflow/worktrees", "", ""); code != 401 {
+	if code, _ := daemonBrowser(t, &cloneURL, "GET", "_agentflow/worktrees", "", ""); code != 401 {
 		t.Fatal("disclosed picker list without browser grant")
 	}
 	prefix, err := daemonPrefix(registry)
@@ -442,7 +442,7 @@ func TestBareCloneWorktreePickerRequiresBrowserGrant(t *testing.T) {
 	}
 	key := signature(identity.Key, "remember/v1", info.CloneID+"\x00http://"+firstURL.Host)
 	grant := grantToken(key, "browser/v1", time.Now().Add(rememberBrowserFor))
-	if code, _ := daemonBrowser(t, &cloneURL, "GET", "_devflow/worktrees", "", grant); code != 200 {
+	if code, _ := daemonBrowser(t, &cloneURL, "GET", "_agentflow/worktrees", "", grant); code != 200 {
 		t.Fatal("remembered browser could not choose its worktree")
 	}
 }

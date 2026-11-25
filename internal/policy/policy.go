@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/config"
 )
 
 // Class is the kind of side effect an action has.
@@ -162,7 +162,7 @@ func (g *Gate) CheckActionsUntil(class Class, action string, related []string, p
 	return d, err
 }
 
-// Audit appends one JSON line to ~/.devflow/audit.log.
+// Audit appends one JSON line to ~/.agentflow/audit.log.
 func (g *Gate) Audit(class Class, action string, payload any, result string) {
 	b, _ := json.Marshal(payload)
 	sum := sha256.Sum256(b)
@@ -192,9 +192,9 @@ var (
 func Forbidden(cmd string, protected []string, currentBranch string) string {
 	switch {
 	case forcePushRe.MatchString(cmd):
-		return "force-push is never allowed through devflow-managed agents"
+		return "force-push is never allowed through agentflow-managed agents"
 	case deleteRefRe.MatchString(cmd):
-		return "deleting remote branches is never allowed through devflow-managed agents"
+		return "deleting remote branches is never allowed through agentflow-managed agents"
 	case ghMergeRe.MatchString(cmd):
 		return "merging PRs is a human decision; ask the user to merge"
 	}

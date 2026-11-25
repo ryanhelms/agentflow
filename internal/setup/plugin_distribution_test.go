@@ -35,9 +35,9 @@ func pluginServer(t *testing.T, path string) pluginCommand {
 	if err := json.Unmarshal([]byte(readPluginFile(t, path)), &config); err != nil {
 		t.Fatal(err)
 	}
-	entry := config.Servers["devflow"]
+	entry := config.Servers["agentflow"]
 	if entry.Command != "node" {
-		t.Fatalf("%s: expected a Devflow Node launcher", path)
+		t.Fatalf("%s: expected a Agentflow Node launcher", path)
 	}
 	return entry
 }
@@ -51,8 +51,8 @@ func TestCodexPluginCarriesCurrentVerifiedLaunchers(t *testing.T) {
 		POSIX   string `json:"posix"`
 		Windows string `json:"windows"`
 	}{
-		readPluginFile(t, "templates/repo/.devflow/bin/devflow"),
-		readPluginFile(t, "templates/repo/.devflow/bin/devflow.ps1"),
+		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow"),
+		readPluginFile(t, "templates/repo/.agentflow/bin/agentflow.ps1"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -125,17 +125,17 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 
 func pluginFixture(t *testing.T, cache string) {
 	t.Helper()
-	active := filepath.Join(cache, "devflow", "current")
+	active := filepath.Join(cache, "agentflow", "current")
 	if err := os.MkdirAll(active, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if runtime.GOOS != "windows" {
-		if err := os.WriteFile(filepath.Join(active, "devflow"), []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o700); err != nil {
+		if err := os.WriteFile(filepath.Join(active, "agentflow"), []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-	if err := os.WriteFile(filepath.Join(cache, "devflow", "current.txt"), []byte(active), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cache, "agentflow", "current.txt"), []byte(active), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	source := filepath.Join(t.TempDir(), "main.go")
@@ -151,7 +151,7 @@ func main() {
 	if err := os.WriteFile(source, []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(active, "devflow.exe"), source)
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(active, "agentflow.exe"), source)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build Windows plugin fixture: %v: %s", err, output)
 	}

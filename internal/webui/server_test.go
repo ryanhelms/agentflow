@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/consolepublish"
-	"github.com/nscaledev/devflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/consolepublish"
+	"github.com/nscaledev/agentflow/internal/gitx"
 )
 
 func hash(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }
@@ -24,18 +24,18 @@ func hash(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(
 func testServer(t *testing.T) *server {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
-	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://github.com/example/devflow-console"}, {"-c", "user.name=Fixture", "-c", "user.email=test@example.org", "commit", "-q", "--allow-empty", "-m", "chore: initial commit"}} {
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://github.com/example/agentflow-console"}, {"-c", "user.name=Fixture", "-c", "user.email=test@example.org", "commit", "-q", "--allow-empty", "-m", "chore: initial commit"}} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git: %v %s", err, out)
 		}
 	}
-	if err := os.Mkdir(filepath.Join(dir, ".devflow"), 0700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".devflow/config.yml"), []byte("devflow: 1\ncommit:\n  require_key: false\ntask_management:\n  provider: github-issues\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte("agentflow: 1\ncommit:\n  require_key: false\ntask_management:\n  provider: github-issues\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return &server{repo: &gitx.Repo{Dir: dir}, origin: "http://127.0.0.1:41511", instanceKey: randomKey(), session: randomKey(), rememberKey: randomKey()}
@@ -58,10 +58,10 @@ func request(t *testing.T, s *server, method, path, origin, key string, body any
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	if len(commander) == 1 {
-		req.Header.Set("X-Devflow-Commander", commander[0])
+		req.Header.Set("X-Agentflow-Commander", commander[0])
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Devflow-Request", "console")
+	req.Header.Set("X-Agentflow-Request", "console")
 	w := httptest.NewRecorder()
 	s.handler().ServeHTTP(w, req)
 	return w
@@ -102,12 +102,12 @@ func TestConsoleSessionBoundary(t *testing.T) {
 
 func TestPreviewBoundToExactEdit(t *testing.T) {
 	s := testServer(t)
-	file := filepath.Join(s.repo.Dir, ".devflow/config.yml")
+	file := filepath.Join(s.repo.Dir, ".agentflow/config.yml")
 	original, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := edit{Path: ".devflow/config.yml", Base: hash(original), Content: string(original) + "  settings:\n    search: {limit: 48}\n", Title: "chore: tune search limit", Draft: true}
+	in := edit{Path: ".agentflow/config.yml", Base: hash(original), Content: string(original) + "  settings:\n    search: {limit: 48}\n", Title: "chore: tune search limit", Draft: true}
 	w := request(t, s, "POST", "/api/preview", s.origin, "session", in)
 	if w.Code != 200 {
 		t.Fatalf("preview %d: %s", w.Code, w.Body.String())
@@ -138,15 +138,15 @@ func TestPreviewBoundToExactEdit(t *testing.T) {
 
 func TestSuggestOnlyPreventsPublishing(t *testing.T) {
 	s := testServer(t)
-	home := os.Getenv("DEVFLOW_HOME")
+	home := os.Getenv("AGENTFLOW_HOME")
 	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("autonomy: {remote: suggest}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	original, err := os.ReadFile(filepath.Join(s.repo.Dir, ".devflow", "config.yml"))
+	original, err := os.ReadFile(filepath.Join(s.repo.Dir, ".agentflow", "config.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := edit{Path: ".devflow/config.yml", Base: hash(original), Content: string(original) + "# reviewed\n", Title: "chore: document configuration"}
+	in := edit{Path: ".agentflow/config.yml", Base: hash(original), Content: string(original) + "# reviewed\n", Title: "chore: document configuration"}
 	w := request(t, s, "POST", "/api/publish", s.origin, "session", in)
 	if w.Code != 403 {
 		t.Fatalf("suggest only: %d %s", w.Code, w.Body.String())
@@ -155,7 +155,7 @@ func TestSuggestOnlyPreventsPublishing(t *testing.T) {
 
 func TestConfirmedPreviewPublishesOnlyOnce(t *testing.T) {
 	s := testServer(t)
-	const path = ".devflow/config.yml"
+	const path = ".agentflow/config.yml"
 	original, err := os.ReadFile(filepath.Join(s.repo.Dir, path))
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +164,7 @@ func TestConfirmedPreviewPublishesOnlyOnce(t *testing.T) {
 	calls := 0
 	s.publishTo = func(_ context.Context, root, destination, file, before, after, title string, draft bool, _ map[string]string, task ...string) (consolepublish.Result, error) {
 		calls++
-		if root != s.repo.Dir || destination != "example/devflow-console" || file != path || before != string(original) || after != in.Content || title != in.Title || !draft {
+		if root != s.repo.Dir || destination != "example/agentflow-console" || file != path || before != string(original) || after != in.Content || title != in.Title || !draft {
 			t.Fatal("published arguments differ from review")
 		}
 		return consolepublish.Result{State: "draft"}, nil

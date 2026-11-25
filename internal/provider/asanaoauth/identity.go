@@ -11,13 +11,13 @@ import (
 	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 // The enrollment's only resource operation is get_me. The SDK owns the
 // Streamable HTTP handshake and accepts both JSON and finite POST event streams.
 func (e *enrollment) verifyIdentity(ctx context.Context, token, workspace string) (string, error) {
-	client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
+	client := mcp.NewClient(&mcp.Implementation{Name: "agentflow", Version: "1"}, &mcp.ClientOptions{
 		Logger: slog.New(slog.DiscardHandler), Capabilities: &mcp.ClientCapabilities{}, MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true},
 	})
 	httpClient := *e.client

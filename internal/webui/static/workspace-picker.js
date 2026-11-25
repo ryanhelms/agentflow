@@ -3,9 +3,9 @@
 async function showWorktrees() {
   const message = document.getElementById("picker-message");
   try {
-    const remember = localStorage.getItem("devflow.browser");
+    const remember = localStorage.getItem("agentflow.browser");
     if (remember) {
-      const response = await fetch("/_devflow/worktrees", {
+      const response = await fetch("/_agentflow/worktrees", {
         headers: {Authorization: "Bearer " + remember}, cache: "no-store", redirect: "error"
       });
       if (response.ok) {
@@ -26,9 +26,9 @@ async function showWorktrees() {
         return;
       }
     }
-    message.textContent = "In Agent Commander, ask to open devflow for the worktree you want. You can also run devflow ui from that checkout.";
+    message.textContent = "In Agent Commander, ask to open agentflow for the worktree you want. You can also run agentflow ui from that checkout.";
   } catch {
-    message.textContent = "Open devflow from Agent Commander or run devflow ui in the worktree to reconnect.";
+    message.textContent = "Open agentflow from Agent Commander or run agentflow ui in the worktree to reconnect.";
   }
 }
 

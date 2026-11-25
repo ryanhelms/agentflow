@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/filesystem"
 )
 
 // The object database and index are private to one operation. Using blobs
@@ -26,10 +26,10 @@ type checkout struct {
 
 func (c checkout) git(ctx context.Context, input []byte, args ...string) (string, error) {
 	flags := []string{"--literal-pathspecs", "-c", "core.protectHFS=true", "-c", "core.protectNTFS=true", "-c", "core.hooksPath=" + os.DevNull,
-		"-c", "user.name=devflow", "-c", "user.email=devflow@localhost"}
+		"-c", "user.name=agentflow", "-c", "user.email=agentflow@localhost"}
 	cmd := exec.CommandContext(ctx, "git", append(flags, args...)...)
 	cmd.Dir = c.root
-	// A hook may launch devflow with GIT_DIR or GIT_INDEX_FILE pointing
+	// A hook may launch agentflow with GIT_DIR or GIT_INDEX_FILE pointing
 	// at the engineer's checkout. Never inherit Git's repository overrides.
 	for _, entry := range os.Environ() {
 		if !strings.HasPrefix(strings.ToUpper(entry), "GIT_") {
@@ -85,10 +85,10 @@ func (c checkout) fetch(ctx context.Context, branch string) (string, error) {
 // Inspect Git's effective push destination in this private checkout before
 // asking the caller to approve the configured origin.
 func (c checkout) checkPushOrigin(ctx context.Context) error {
-	if _, err := c.git(ctx, nil, "config", "--local", "remote.devflow-approval.url", c.origin); err != nil {
+	if _, err := c.git(ctx, nil, "config", "--local", "remote.agentflow-approval.url", c.origin); err != nil {
 		return err
 	}
-	pushURL, err := c.git(ctx, nil, "remote", "get-url", "--push", "--all", "devflow-approval")
+	pushURL, err := c.git(ctx, nil, "remote", "get-url", "--push", "--all", "agentflow-approval")
 	if err != nil {
 		return err
 	}
@@ -310,7 +310,7 @@ func (c checkout) commit(ctx context.Context, base, directory, operation string,
 	if changed != repoPath+"\x00" {
 		return "", fmt.Errorf("expected only %q to change: %w", repoPath, provider.ErrConflict)
 	}
-	msg := "chore: update provider record\n\nDevflow-Operation: " + operation
+	msg := "chore: update provider record\n\nAgentflow-Operation: " + operation
 	commit, err := c.git(ctx, nil, "commit-tree", "--no-gpg-sign", tree, "-p", base, "-m", msg)
 	return strings.TrimSpace(commit), err
 }

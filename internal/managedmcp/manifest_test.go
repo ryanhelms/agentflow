@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision"
 )
 
 func TestTrustedMCPManifest(t *testing.T) {
 	repo, home := t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("MCP_MISSING", "")
 	const good = `mcp:
 - id: fixture
@@ -33,11 +33,11 @@ func TestTrustedMCPManifest(t *testing.T) {
 	if s, err := inspect(); err != nil || len(s) != 0 {
 		t.Fatal("accepted project declaration", err)
 	}
-	t.Setenv("DEVFLOW_HOME", repo)
+	t.Setenv("AGENTFLOW_HOME", repo)
 	if _, err := inspect(); err == nil {
 		t.Fatal("accepted project-owned home")
 	}
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	put(home, good)
 	s, err := inspect()
 	if err != nil || len(s) != 1 || s[0].Ready || !strings.Contains(s[0].Detail, "MCP_MISSING") {

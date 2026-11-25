@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/gh"
 )
 
 // The commands in this file give the MCP tools that had no terminal
@@ -45,7 +45,7 @@ func parseInterleaved(fs *flag.FlagSet, args []string) ([]string, error) {
 	return positional, fs.Parse(options)
 }
 
-const acUsage = "usage: devflow ac [list] [KEY] [--json] | devflow ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]"
+const acUsage = "usage: agentflow ac [list] [KEY] [--json] | agentflow ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]"
 
 func runAC(ctx context.Context, args []string) error {
 	sub := "list"
@@ -124,7 +124,7 @@ func runScope(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: devflow scope [--json]")
+		return errors.New("usage: agentflow scope [--json]")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -161,7 +161,7 @@ func runComment(ctx context.Context, args []string) error {
 	case 2:
 		key, text = pos[0], pos[1]
 	default:
-		return errors.New("usage: devflow comment [KEY] TEXT [--yes]")
+		return errors.New("usage: agentflow comment [KEY] TEXT [--yes]")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -186,7 +186,7 @@ func runReview(ctx context.Context, args []string) error {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New("usage: devflow review [threads] [--json] | devflow review reply THREAD_ID BODY [--yes]")
+		return errors.New("usage: agentflow review [threads] [--json] | agentflow review reply THREAD_ID BODY [--yes]")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -219,7 +219,7 @@ func runReviewReply(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(pos) != 2 {
-		return errors.New("usage: devflow review reply THREAD_ID BODY [--yes]")
+		return errors.New("usage: agentflow review reply THREAD_ID BODY [--yes]")
 	}
 	a, err := open(ctx)
 	if err != nil {
@@ -229,7 +229,7 @@ func runReviewReply(ctx context.Context, args []string) error {
 }
 
 func runEOD(ctx context.Context, args []string) error {
-	const usage = "usage: devflow eod post KEY=NOTE [KEY=NOTE...] [--yes]"
+	const usage = "usage: agentflow eod post KEY=NOTE [KEY=NOTE...] [--yes]"
 	if len(args) == 0 || args[0] != "post" {
 		return errors.New(usage)
 	}
@@ -266,7 +266,7 @@ func runCollisions(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(pos) > 1 {
-		return errors.New("usage: devflow collisions [KEY] [--json]")
+		return errors.New("usage: agentflow collisions [KEY] [--json]")
 	}
 	a, err := open(ctx)
 	if err != nil {

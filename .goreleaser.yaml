@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: devflow
+project_name: agentflow
 
 before:
   hooks:
@@ -9,9 +9,9 @@ before:
     - go test ./...
 
 builds:
-  - id: devflow
-    main: ./cmd/devflow
-    binary: devflow
+  - id: agentflow
+    main: ./cmd/agentflow
+    binary: agentflow
     env:
       - CGO_ENABLED=0
     goos: [darwin, linux, windows]
@@ -23,14 +23,14 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/nscaledev/devflow/internal/version.Version={{ .Version }}
-      - -X github.com/nscaledev/devflow/internal/version.Commit={{ .FullCommit }}
-      - -X github.com/nscaledev/devflow/internal/version.Date={{ .Date }}
+      - -X github.com/nscaledev/agentflow/internal/version.Version={{ .Version }}
+      - -X github.com/nscaledev/agentflow/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/nscaledev/agentflow/internal/version.Date={{ .Date }}
 
 archives:
-  - id: devflow
-    ids: [devflow]
-    name_template: "devflow_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: agentflow
+    ids: [agentflow]
+    name_template: "agentflow_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -70,9 +70,10 @@ release:
     - glob: install.ps1
   github:
     owner: nscaledev
-    name: devflow
-  # Every release is a normal, stable release and becomes "Latest" immediately.
+    name: agentflow
+  # The release workflow verifies provenance before publishing the draft.
+  draft: true
   prerelease: "false"
-  make_latest: "true"
+  make_latest: "false"
   footer: |
-    Install or update: `devflow update`. Verify: `gh attestation verify <archive> --repo nscaledev/devflow`.
+    Install or update: `agentflow update`. Verify: `gh attestation verify <archive> --repo nscaledev/agentflow`.

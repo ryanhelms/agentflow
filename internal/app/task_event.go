@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/event"
+	"github.com/nscaledev/agentflow/internal/event"
 )
 
 type GitHubTaskEventResult struct {
@@ -51,10 +51,10 @@ func (a *App) ApplyGitHubTaskEvent(ctx context.Context, actions event.GitHubActi
 		return result, nil
 	}
 	if !dryRun {
-		if !a.usesIssues() || actions.Repository.Host != "github.com" || !strings.EqualFold(actions.Repository.Path, "nscaledev/devflow") ||
+		if !a.usesIssues() || actions.Repository.Host != "github.com" || !strings.EqualFold(actions.Repository.Path, "nscaledev/agentflow") ||
 			actions.EventName != "pull_request" || result.Plan.Lifecycle != "pr.merged" || len(result.Plan.Transitions) != 1 ||
 			result.Plan.Transitions[0].Task.ID != actions.ApprovedIssue {
-			return result, fmt.Errorf("github task writes require one approved nscaledev/devflow issue on a default-branch pull_request merge")
+			return result, fmt.Errorf("github task writes require one approved nscaledev/agentflow issue on a default-branch pull_request merge")
 		}
 	}
 	if err := a.prepareWorkflowTasks(); err != nil {

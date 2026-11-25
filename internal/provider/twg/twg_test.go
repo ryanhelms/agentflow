@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 const testSite = "https://example.atlassian.net"

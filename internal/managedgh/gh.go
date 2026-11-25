@@ -14,9 +14,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/nscaledev/devflow/internal/provision"
-	"github.com/nscaledev/devflow/internal/provision/local"
-	"github.com/nscaledev/devflow/internal/provision/user"
+	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/nscaledev/agentflow/internal/provision/local"
+	"github.com/nscaledev/agentflow/internal/provision/user"
 )
 
 const manifestName = "companions.yml"
@@ -53,9 +53,9 @@ func working(ctx context.Context, dir, path string) bool {
 }
 
 // Inspect prefers a working PATH installation. Only a pin in the user's
-// devflow home can select a managed executable. Planning never opens its source.
+// agentflow home can select a managed executable. Planning never opens its source.
 func Inspect(ctx context.Context, repo string) (Selection, error) {
-	missing := Selection{Detail: "install gh on PATH in the environment running devflow and rerun setup"}
+	missing := Selection{Detail: "install gh on PATH in the environment running agentflow and rerun setup"}
 	if path, err := exec.LookPath("gh"); err == nil {
 		if working(ctx, repo, path) {
 			return Selection{Command: path, Detail: "gh --version succeeded"}, nil
@@ -104,7 +104,7 @@ func Inspect(ctx context.Context, repo string) (Selection, error) {
 	step := plan.Steps()[0]
 	if step.Action == provision.Install {
 		return Selection{Install: user.InstallationFor(home, plan, cache),
-			Detail: "run devflow setup apply --install-gh to install the pinned gh executable"}, nil
+			Detail: "run agentflow setup apply --install-gh to install the pinned gh executable"}, nil
 	}
 	receipt, err := cache.Resolve(ctx, env, target)
 	if err != nil {

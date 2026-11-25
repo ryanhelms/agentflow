@@ -16,9 +16,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 // Start the real CLI dispatcher and an MCP client in the same isolated
@@ -31,7 +31,7 @@ func TestSetupPlanAndApplyAcrossClients(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("DEVFLOW_HOME", filepath.Join(t.TempDir(), "devflow"))
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(t.TempDir(), "agentflow"))
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	bin := t.TempDir()
 	for _, program := range []string{"git", "sh"} {
@@ -57,7 +57,7 @@ func TestSetupPlanAndApplyAcrossClients(t *testing.T) {
 		}
 	}
 	const cfg = `code_hosting: {provider: none}
-task_management: {provider: filesystem, settings: {root: .devflow/tasks}}
+task_management: {provider: filesystem, settings: {root: .agentflow/tasks}}
 knowledge_base: {provider: none}
 devops:
   checks: {provider: none}
@@ -66,10 +66,10 @@ devops:
 secops: {provider: none}
 notifications: {provider: none}
 `
-	write(".devflow/config.yml", cfg, 0o644)
-	write(".devflow/tasks/fixture.md", "# Fixture", 0o644)
+	write(".agentflow/config.yml", cfg, 0o644)
+	write(".agentflow/tasks/fixture.md", "# Fixture", 0o644)
 	// Executable sentinels would fail if either readiness path launched them.
-	write(".devflow/bin/devflow", "#!/bin/sh\nexit 91\n", 0o755)
+	write(".agentflow/bin/agentflow", "#!/bin/sh\nexit 91\n", 0o755)
 	capture := func(wantExit int, args ...string) setup.ProviderSetupPlan {
 		t.Helper()
 		f, err := os.CreateTemp(t.TempDir(), "stdout")
@@ -81,7 +81,7 @@ notifications: {provider: none}
 		os.Stdout = f
 		defer func() { os.Stdout = stdout }()
 		if exit := Main(args); exit != wantExit {
-			t.Fatalf("devflow %v: exit %d, want %d", args, exit, wantExit)
+			t.Fatalf("agentflow %v: exit %d, want %d", args, exit, wantExit)
 		}
 		data, err := os.ReadFile(f.Name())
 		var plan setup.ProviderSetupPlan
@@ -94,17 +94,17 @@ notifications: {provider: none}
 	if blocked.Ready || !bytes.Contains(mustJSON(t, blocked), []byte("gh attestation verify")) {
 		t.Fatalf("missing bootstrap: %+v", blocked)
 	}
-	write(filepath.Join(os.Getenv("XDG_CACHE_HOME"), "devflow/current/devflow"), "#!/bin/sh\nexit 92\n", 0o755)
+	write(filepath.Join(os.Getenv("XDG_CACHE_HOME"), "agentflow/current/agentflow"), "#!/bin/sh\nexit 92\n", 0o755)
 	cliPlan := capture(0, "setup", "plan", "--client", "vscode", "--json")
 	if cliPlan.Registration == nil || cliPlan.Registration.State != "pending" {
 		t.Fatalf("desktop selection: %+v", cliPlan)
 	}
-	if _, err := os.Stat(os.Getenv("DEVFLOW_HOME")); !os.IsNotExist(err) {
+	if _, err := os.Stat(os.Getenv("AGENTFLOW_HOME")); !os.IsNotExist(err) {
 		t.Fatal("preview created developer state")
 	}
 
 	// Setup writes still require explicit consent when local autonomy is auto.
-	write(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), "autonomy: {local: auto}\n", 0o600)
+	write(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), "autonomy: {local: auto}\n", 0o600)
 	ctx := t.Context()
 	server, err := mcpserver.New(ctx, dir, "vscode")
 	if err != nil {
@@ -131,24 +131,24 @@ notifications: {provider: none}
 	}
 	input := map[string]any{"client": "vscode"}
 	var mcpPlan setup.ProviderSetupPlan
-	call("devflow_setup_plan", input, &mcpPlan)
+	call("agentflow_setup_plan", input, &mcpPlan)
 	if !reflect.DeepEqual(cliPlan, mcpPlan) {
 		t.Fatalf("terminal and MCP plans differ: %+v and %+v", cliPlan, mcpPlan)
 	}
 	// A newly missing provider dependency blocks registration, even if the
 	// client previously saw a plan with all provider requirements satisfied.
-	githubConfig := strings.Replace(cfg, "filesystem, settings: {root: .devflow/tasks}", "github-issues, settings: {repository: sample/project}", 1)
-	write(".devflow/config.yml", githubConfig, 0o644)
-	call("devflow_setup_apply", input, &mcpPlan)
+	githubConfig := strings.Replace(cfg, "filesystem, settings: {root: .agentflow/tasks}", "github-issues, settings: {repository: sample/project}", 1)
+	write(".agentflow/config.yml", githubConfig, 0o644)
+	call("agentflow_setup_apply", input, &mcpPlan)
 	if mcpPlan.Ready || !bytes.Contains(mustJSON(t, mcpPlan), []byte("install gh on PATH")) {
 		t.Fatalf("missing gh did not block apply: %+v", mcpPlan)
 	}
-	write(".devflow/config.yml", cfg, 0o644)
+	write(".agentflow/config.yml", cfg, 0o644)
 	var pending struct {
 		Status string `json:"status"`
 		Token  string `json:"confirm_token"`
 	}
-	call("devflow_setup_apply", input, &pending)
+	call("agentflow_setup_apply", input, &pending)
 	if pending.Status != "needs_confirmation" || pending.Token == "" {
 		t.Fatalf("missing confirmation: %+v", pending)
 	}
@@ -156,7 +156,7 @@ notifications: {provider: none}
 		t.Fatal("preview modified project registration")
 	}
 	input["confirm_token"] = pending.Token
-	call("devflow_setup_apply", input, &mcpPlan)
+	call("agentflow_setup_apply", input, &mcpPlan)
 	if plan := capture(0, "setup", "verify", "--json", "--client", "vscode"); !plan.Ready || !reflect.DeepEqual(plan, mcpPlan) {
 		t.Fatalf("registration not verified: %+v, MCP %+v", plan, mcpPlan)
 	}
@@ -171,17 +171,17 @@ notifications: {provider: none}
 		preview := capture(1, "doctor", "--providers", "--client", "claude-desktop", "--json")
 		args := map[string]any{"client": "claude-desktop"}
 		var plan setup.ProviderSetupPlan
-		call("devflow_setup_plan", args, &plan)
+		call("agentflow_setup_plan", args, &plan)
 		if !reflect.DeepEqual(preview, plan) || plan.Registration == nil || plan.Registration.State != "pending" || plan.Registration.Path != ".mcp.json" {
 			t.Fatalf("unexpected desktop plan: %+v", plan)
 		}
 		var consent app.Pending
-		call("devflow_setup_apply", args, &consent)
+		call("agentflow_setup_apply", args, &consent)
 		if consent.ConfirmToken == "" {
 			t.Fatal("desktop registration requires confirmation")
 		}
 		args["confirm_token"] = consent.ConfirmToken
-		call("devflow_setup_apply", args, &plan)
+		call("agentflow_setup_apply", args, &plan)
 		verified := capture(0, "setup", "verify", "--client", "claude-desktop", "--json")
 		if !plan.Ready || !reflect.DeepEqual(verified, plan) {
 			t.Fatalf("desktop registration not verified: %+v", plan)
@@ -196,7 +196,7 @@ notifications: {provider: none}
 		if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 			t.Skip("local installer requires macOS or Linux")
 		}
-		home := os.Getenv("DEVFLOW_HOME")
+		home := os.Getenv("AGENTFLOW_HOME")
 		log := filepath.Join(t.TempDir(), "calls")
 		t.Setenv("GH_FIXTURE_LOG", log)
 		t.Setenv("GH_TOKEN", "")
@@ -217,7 +217,7 @@ esac
 		if p := capture(0, "setup", "plan", "--json"); p.InstallGH != nil {
 			t.Fatal("offered gh for filesystem provider")
 		}
-		write(".devflow/config.yml", githubConfig, 0o644)
+		write(".agentflow/config.yml", githubConfig, 0o644)
 		plan := capture(0, "setup", "plan", "--json")
 		if plan.Ready || plan.InstallGH == nil || plan.InstallGH.Artifact.SHA256 != digest {
 			t.Fatalf("unexpected offer: %+v", plan)
@@ -225,7 +225,7 @@ esac
 		// Registration-only approval cannot fetch or select the companion.
 		capture(1, "setup", "apply", "--client", "cursor", "--yes", "--json")
 		args := map[string]any{"install_gh": true}
-		call("devflow_setup_apply", args, &pending)
+		call("agentflow_setup_apply", args, &pending)
 		if pending.Status != "needs_confirmation" || pending.Token == "" {
 			t.Fatalf("missing installation confirmation: %+v", pending)
 		}
@@ -234,14 +234,14 @@ esac
 		}
 		args["confirm_token"] = pending.Token
 		write(manifest, strings.Replace(pin, "2.3.4", "2.3.5", 1), 0o600)
-		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_setup_apply", Arguments: args})
+		res, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_setup_apply", Arguments: args})
 		if err != nil || !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "confirmation token") {
 			t.Fatalf("changed pin accepted: %+v, %v", res, err)
 		}
 		write(manifest, pin, 0o600)
 		write(source, raw, 0o600)
 		var installed setup.ProviderSetupPlan
-		call("devflow_setup_apply", args, &installed)
+		call("agentflow_setup_apply", args, &installed)
 		if !installed.Ready || installed.InstallGH != nil {
 			t.Fatalf("installed gh failed readiness: %+v", installed)
 		}
@@ -336,14 +336,14 @@ if [ "$2" = list ]; then printf '%s\n' 'slack: custom - ✔ Connected'; fi
 
 func TestSetupLoginPublicSlackOptions(t *testing.T) {
 	for _, tc := range []struct{ flags, want string }{
-		{"--provider slack --client claude-desktop --public-client-id 123.456 --team-id T12345", "--client devflow"},
-		{"--provider jira --client devflow --public-client-id 123.456 --team-id T12345", "--provider slack"},
-		{"--provider slack --client devflow --public-client-id 123.456 --team-id T12345 --register", "choose either"},
-		{"--provider slack --client devflow --public-client-id 123.456 --team-id T12345 --server other", "slack server"},
-		{"--provider slack --client devflow --public-client-id=", "supply both"},
-		{"--provider slack --client devflow --team-id T12345", "supply both"},
-		{"--provider slack --client devflow --public-client-id bad --team-id T12345", "invalid Slack app"},
-		{"--provider slack --client devflow --public-client-id 123.456 --team-id other", "expected workspace"},
+		{"--provider slack --client claude-desktop --public-client-id 123.456 --team-id T12345", "--client agentflow"},
+		{"--provider jira --client agentflow --public-client-id 123.456 --team-id T12345", "--provider slack"},
+		{"--provider slack --client agentflow --public-client-id 123.456 --team-id T12345 --register", "choose either"},
+		{"--provider slack --client agentflow --public-client-id 123.456 --team-id T12345 --server other", "slack server"},
+		{"--provider slack --client agentflow --public-client-id=", "supply both"},
+		{"--provider slack --client agentflow --team-id T12345", "supply both"},
+		{"--provider slack --client agentflow --public-client-id bad --team-id T12345", "invalid Slack app"},
+		{"--provider slack --client agentflow --public-client-id 123.456 --team-id other", "expected workspace"},
 	} {
 		err := runProviderLogin(t.Context(), strings.Fields(tc.flags))
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

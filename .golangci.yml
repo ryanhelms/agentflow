@@ -18,8 +18,8 @@ linters:
   settings:
     gosec:
       excludes:
-        - G204 # devflow shells out to git and gh by design
-        - G301 # repo dirs it creates (docs/adr, .devflow, client config dirs) are meant to be readable
+        - G204 # agentflow shells out to git and gh by design
+        - G301 # repo dirs it creates (docs/adr, .agentflow, client config dirs) are meant to be readable
         - G304 # paths come from git rev-parse, config and the user's own repo
         - G306 # files written into the repo are committed and must be world-readable
         - G703 # same as G304: paths are derived from the repo root or cache dir

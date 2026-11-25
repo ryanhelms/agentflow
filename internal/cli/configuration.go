@@ -10,12 +10,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/configconsole"
 	"golang.org/x/term"
 )
 
-const configUsage = "devflow config OP [--input FILE|-]\nOperations: list, read, compose, autonomy, stage_autonomy, preview_personal, preview, readiness, save_personal, publish"
+const configUsage = "agentflow config OP [--input FILE|-]\nOperations: list, read, compose, autonomy, stage_autonomy, preview_personal, preview, readiness, save_personal, publish"
 
 func runConfig(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {

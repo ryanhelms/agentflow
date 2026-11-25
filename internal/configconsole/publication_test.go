@@ -10,28 +10,28 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/consolepublish"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/consolepublish"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/policy"
 )
 
 func TestAgentPublicationSharesApprovalAndRechecksPolicy(t *testing.T) {
 	ctx := t.Context()
 	home, dir := t.TempDir(), t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	repo := &gitx.Repo{Dir: dir}
-	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://github.com/example/console"}, {"-c", "user.name=Test", "-c", "user.email=devflow@example.test", "commit", "-q", "--allow-empty", "-m", "test: initial checkout"}} {
+	for _, args := range [][]string{{"init", "-q", "-b", "main"}, {"remote", "add", "origin", "https://github.com/example/console"}, {"-c", "user.name=Test", "-c", "user.email=agentflow@example.test", "commit", "-q", "--allow-empty", "-m", "test: initial checkout"}} {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = dir
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git: %v %s", err, b)
 		}
 	}
-	const path = ".devflow/config.yml"
-	const original = "devflow: 1\ncommit:\n  require_key: false\n"
+	const path = ".agentflow/config.yml"
+	const original = "agentflow: 1\ncommit:\n  require_key: false\n"
 	file := filepath.Join(dir, filepath.FromSlash(path))
 	if err := os.Mkdir(filepath.Dir(file), 0700); err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestAgentPublicationSharesApprovalAndRechecksPolicy(t *testing.T) {
 	if err := os.WriteFile(file, []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
-	caller := filepath.Join(dir, ".github", "workflows", "devflow.yml")
+	caller := filepath.Join(dir, ".github", "workflows", "agentflow.yml")
 	const workflow = "on: [push]\njobs:\n  verify:\n    uses: org/ci/.github/workflows/check.yml@first\n"
 	if err := os.MkdirAll(filepath.Dir(caller), 0700); err != nil {
 		t.Fatal(err)

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/policy"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/devopsfixture"
-	"github.com/nscaledev/devflow/internal/provider/githubdevops"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/devopsfixture"
+	"github.com/nscaledev/agentflow/internal/provider/githubdevops"
 )
 
 // ReleaseGet looks up a published release in the selected release provider.

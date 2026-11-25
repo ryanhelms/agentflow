@@ -14,10 +14,10 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/mcpserver"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/filesystem"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/filesystem"
 )
 
 type taskTransport func(*http.Request) (*http.Response, error)
@@ -56,13 +56,13 @@ func TestTaskCreationCLIAndMCP(t *testing.T) {
 			ctx := t.Context()
 			dir := t.TempDir()
 			t.Chdir(dir)
-			t.Setenv("DEVFLOW_HOME", t.TempDir())
-			t.Setenv("DEVFLOW_OPERATION_ID", "")
+			t.Setenv("AGENTFLOW_HOME", t.TempDir())
+			t.Setenv("AGENTFLOW_OPERATION_ID", "")
 			t.Setenv("ASANA_ACCESS_TOKEN", "fixture")
 			if out, err := exec.CommandContext(ctx, "git", "init", "--quiet", "--template=", "-b", "main").CombinedOutput(); err != nil {
 				t.Fatalf("git init: %s, %v", out, err)
 			}
-			if err := os.Mkdir(".devflow", 0700); err != nil {
+			if err := os.Mkdir(".agentflow", 0700); err != nil {
 				t.Fatal(err)
 			}
 			settings := "project: '10'"
@@ -70,7 +70,7 @@ func TestTaskCreationCLIAndMCP(t *testing.T) {
 				settings = "scope: '10', root: tasks"
 			}
 			cfg := "task_management:\n  provider: " + name + "\n  settings: {" + settings + "}\n  templates: {catalog: catalog.json, default: {name: plan, revision: '01'}}\n"
-			if err := os.WriteFile(".devflow/config.yml", []byte(cfg), 0600); err != nil {
+			if err := os.WriteFile(".agentflow/config.yml", []byte(cfg), 0600); err != nil {
 				t.Fatal(err)
 			}
 			const catalog = `[{"name":"plan","revision":"01","defaults":{"title":"Default title"},"required":["title"]},{"name":"plan","revision":"2","defaults":{"title":"Selected title"},"required":["title"],"sections":[{"heading":"Scope","body":"Fixture"}],"checklist":["Verify"]},{"name":"required","revision":"1","required":["description"]}]`
@@ -124,7 +124,7 @@ func TestTaskCreationCLIAndMCP(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "--yes") {
 				t.Fatalf("headless approval: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml"), []byte("autonomy: {local: suggest, remote: suggest}\n"), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("autonomy: {local: suggest, remote: suggest}\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := taskCLI(t, append(args, "--yes")...); err == nil || !strings.Contains(err.Error(), "suggest") {
@@ -136,7 +136,7 @@ func TestTaskCreationCLIAndMCP(t *testing.T) {
 			if _, err := os.Stat("tasks"); !os.IsNotExist(err) {
 				t.Fatalf("task store before approval: %v", err)
 			}
-			if err := os.Remove(filepath.Join(os.Getenv("DEVFLOW_HOME"), "config.yml")); err != nil {
+			if err := os.Remove(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml")); err != nil {
 				t.Fatal(err)
 			}
 
@@ -154,7 +154,7 @@ func TestTaskCreationCLIAndMCP(t *testing.T) {
 			fields := map[string]any{"template": "plan", "template_revision": "2", "summary": "Override"}
 			call := func() string {
 				t.Helper()
-				out, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "devflow_ticket_create", Arguments: fields})
+				out, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "agentflow_ticket_create", Arguments: fields})
 				if err != nil {
 					t.Fatal(err)
 				}

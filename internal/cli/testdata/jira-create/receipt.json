@@ -1,5 +1,5 @@
 {
   "command":"jira.workitem.create",
-  "request":{"input":{"site":"https://fixture.atlassian.net","projectRef":"100","issueTypeRef":"101","summary":"--fix 'kiosk'","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"First\n<literal> & $HOME"}]}]},"labels":["devflow"]}},
+  "request":{"input":{"site":"https://fixture.atlassian.net","projectRef":"100","issueTypeRef":"101","summary":"--fix 'kiosk'","description":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"First\n<literal> & $HOME"}]}]},"labels":["agentflow"]}},
   "data":{"success":true,"issue":{"id":"1042","key":"ENG-42","self":"https://fixture.atlassian.net/rest/api/3/issue/1042"}}
 }

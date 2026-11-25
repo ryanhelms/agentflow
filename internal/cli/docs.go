@@ -7,14 +7,14 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/atlassian"
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/atlassian"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 func runDocs(ctx context.Context, args []string) error {
 	if len(args) < 2 {
-		return errors.New("usage: devflow docs get REF [--json] | devflow docs search QUERY [--space S] | devflow docs publish REF --title T --body TEXT --operation-id ID [--expected-revision REV] [--links JSON] [--type TYPE] [--description TEXT] [--tags JSON] [--yes]")
+		return errors.New("usage: agentflow docs get REF [--json] | agentflow docs search QUERY [--space S] | agentflow docs publish REF --title T --body TEXT --operation-id ID [--expected-revision REV] [--links JSON] [--type TYPE] [--description TEXT] [--tags JSON] [--yes]")
 	}
 	switch args[0] {
 	case "get":
@@ -25,7 +25,7 @@ func runDocs(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(pos) != 1 {
-			return errors.New("usage: devflow docs get REF [--json]")
+			return errors.New("usage: agentflow docs get REF [--json]")
 		}
 		ref, err := provider.ParseRef(pos[0])
 		if err != nil {

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider"
 )
 
 // Asana notes are plain text. A single reserved first line round-trips the
 // template pin and qualified links alongside the editable task description.
-const notesPrefix = "devflow-task-v1: "
+const notesPrefix = "agentflow-task-v1: "
 
 type metadata struct {
 	Template *provider.TaskTemplateRef `json:"template,omitempty"`
@@ -46,7 +46,7 @@ func ValidateDraft(instance string, draft provider.TaskDraft) error {
 	return (metadata{draft.Template, draft.Links}).validate()
 }
 
-// EncodeTaskNotes preserves Devflow template and link metadata in plain notes.
+// EncodeTaskNotes preserves Agentflow template and link metadata in plain notes.
 func EncodeTaskNotes(draft provider.TaskDraft) (string, error) {
 	if draft.Template == nil && len(draft.Links) == 0 && !strings.HasPrefix(draft.Description, notesPrefix) {
 		return draft.Description, nil
@@ -66,12 +66,12 @@ func decodeNotes(notes string) (string, metadata, error) {
 	line, body, _ := strings.Cut(encoded, "\n")
 	var m metadata
 	if !strings.HasPrefix(line, "{") || json.Unmarshal([]byte(line), &m) != nil {
-		return "", m, errors.New("invalid devflow metadata in asana notes")
+		return "", m, errors.New("invalid agentflow metadata in asana notes")
 	}
 	return strings.TrimPrefix(body, "\n"), m, m.validate()
 }
 
-// DecodeTaskNotes extracts Devflow's task template and links from provider notes.
+// DecodeTaskNotes extracts Agentflow's task template and links from provider notes.
 func DecodeTaskNotes(notes string) (string, *provider.TaskTemplateRef, []provider.Link, error) {
 	body, meta, err := decodeNotes(notes)
 	return body, meta.Template, meta.Links, err

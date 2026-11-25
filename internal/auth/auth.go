@@ -14,10 +14,13 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/nscaledev/devflow/internal/managedgh"
+	"github.com/nscaledev/agentflow/internal/managedgh"
 )
 
-const service = "devflow"
+const (
+	service       = "agentflow"
+	legacyService = "devflow"
+)
 
 // Atlassian is a site credential. Token is an API token (basic auth) or an
 // OAuth access token when Bearer is true.
@@ -28,8 +31,8 @@ type Atlassian struct {
 	Bearer bool   `json:"bearer,omitempty"`
 }
 
-// ErrNoCredentials is returned when the developer has not run `devflow login`.
-var ErrNoCredentials = errors.New("no Atlassian credentials: run `devflow login`")
+// ErrNoCredentials is returned when the developer has not run `agentflow login`.
+var ErrNoCredentials = errors.New("no Atlassian credentials: run `agentflow login`")
 
 // SaveAtlassian stores a credential for its site in the OS keychain.
 func SaveAtlassian(c Atlassian) error {
@@ -66,7 +69,11 @@ func LoadConfluence(site, jiraSite string) (Atlassian, error) {
 }
 
 func storedAtlassian(site string) (Atlassian, error) {
-	s, err := keyring.Get(service, "atlassian:"+site)
+	account := "atlassian:" + site
+	s, err := keyring.Get(service, account)
+	if errors.Is(err, keyring.ErrNotFound) {
+		s, err = keyring.Get(legacyService, account)
+	}
 	if errors.Is(err, keyring.ErrNotFound) {
 		return Atlassian{}, ErrNoCredentials
 	}
@@ -82,11 +89,14 @@ func storedAtlassian(site string) (Atlassian, error) {
 
 // DeleteAtlassian removes a stored credential.
 func DeleteAtlassian(site string) error {
-	err := keyring.Delete(service, "atlassian:"+site)
-	if errors.Is(err, keyring.ErrNotFound) {
-		return nil
+	account := "atlassian:" + site
+	// Delete the fallback first so removing the current credential cannot revive it.
+	for _, namespace := range []string{legacyService, service} {
+		if err := keyring.Delete(namespace, account); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 // GitHubToken returns GH_TOKEN/GITHUB_TOKEN or the token from the gh CLI.

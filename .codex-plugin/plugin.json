@@ -1,12 +1,12 @@
 {
-  "name": "devflow",
+  "name": "agentflow",
   "version": "0.52.2",
-  "description": "Manage Devflow in a project and use its delivery workflow tools.",
+  "description": "Manage Agentflow in a project and use its delivery workflow tools.",
   "skills": "./skills/",
   "mcpServers": "./adapters/codex/plugin-mcp.json",
   "onboardingSkill": "./skills/manager/SKILL.md",
   "interface": {
-    "displayName": "Devflow",
-    "shortDescription": "Manage Devflow and use the project’s workflow tools"
+    "displayName": "Agentflow",
+    "shortDescription": "Manage Agentflow and use the project’s workflow tools"
   }
 }

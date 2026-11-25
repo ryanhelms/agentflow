@@ -1,6 +1,6 @@
-// Package update keeps devflow on the latest verified release.
+// Package update keeps agentflow on the latest verified release.
 //
-// Installs live in ${XDG_CACHE_HOME:-~/.cache}/devflow/<version>/devflow with a
+// Installs live in ${XDG_CACHE_HOME:-~/.cache}/agentflow/<version>/agentflow with a
 // "current" symlink, the same layout the repo launcher uses. A new release is
 // downloaded to a staging dir, verified (SHA-256 from checksums.txt and the
 // GitHub build attestation via `gh attestation verify`), extracted, and then
@@ -30,11 +30,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/gh"
+	"github.com/nscaledev/agentflow/internal/gh"
 )
 
 // Repo is where releases and the version policy live.
-const Repo = "nscaledev/devflow"
+const Repo = "nscaledev/agentflow"
 
 // Options configures the updater from repo and user config.
 type Options struct {
@@ -42,7 +42,7 @@ type Options struct {
 	Track      *int   // major version to follow; nil = current major
 	Pin        string
 	CheckEvery time.Duration
-	Disabled   bool // DEVFLOW_NO_UPDATE or update.auto: false
+	Disabled   bool // AGENTFLOW_NO_UPDATE or update.auto: false
 }
 
 // Updater checks for and installs releases.
@@ -60,7 +60,7 @@ func New(current string, opts Options, client *gh.Client) (*Updater, error) {
 	if err != nil {
 		return nil, err
 	}
-	if os.Getenv("DEVFLOW_NO_UPDATE") == "1" {
+	if os.Getenv("AGENTFLOW_NO_UPDATE") == "1" {
 		opts.Disabled = true
 	}
 	if opts.CheckEvery == 0 {
@@ -69,12 +69,12 @@ func New(current string, opts Options, client *gh.Client) (*Updater, error) {
 	return &Updater{Current: current, Opts: opts, GH: client, Dir: dir, Log: func(string, ...any) {}}, nil
 }
 
-// CacheDir returns the install cache root: %LOCALAPPDATA%\devflow on Windows,
-// otherwise ${XDG_CACHE_HOME:-~/.cache}/devflow. The repo launchers use the same paths.
+// CacheDir returns the install cache root: %LOCALAPPDATA%\agentflow on Windows,
+// otherwise ${XDG_CACHE_HOME:-~/.cache}/agentflow. The repo launchers use the same paths.
 func CacheDir() (string, error) {
 	if runtime.GOOS == "windows" {
 		if la := os.Getenv("LOCALAPPDATA"); la != "" {
-			dir := filepath.Join(la, "devflow")
+			dir := filepath.Join(la, "agentflow")
 			return dir, os.MkdirAll(dir, 0o755)
 		}
 	}
@@ -86,7 +86,7 @@ func CacheDir() (string, error) {
 		}
 		base = filepath.Join(home, ".cache")
 	}
-	dir := filepath.Join(base, "devflow")
+	dir := filepath.Join(base, "agentflow")
 	return dir, os.MkdirAll(dir, 0o755)
 }
 
@@ -292,7 +292,7 @@ func (u *Updater) FetchPolicy(ctx context.Context) (*Policy, error) {
 }
 
 // ErrRestartRequired means a forced update was installed; re-run the command.
-var ErrRestartRequired = errors.New("devflow was updated because this version is blocked; restart the command or session")
+var ErrRestartRequired = errors.New("agentflow was updated because this version is blocked; restart the command or session")
 
 // Enforce blocks only if this build must not run. It installs the latest
 // release when the policy requires it.
@@ -309,7 +309,7 @@ func (u *Updater) Enforce(ctx context.Context) error {
 		err = u.Install(ctx, rel)
 	}
 	if err != nil {
-		return fmt.Errorf("devflow %s is blocked (%s) and the update failed: %w", u.Current, pol.Message, err)
+		return fmt.Errorf("agentflow %s is blocked (%s) and the update failed: %w", u.Current, pol.Message, err)
 	}
 	return ErrRestartRequired
 }
@@ -333,7 +333,7 @@ func (u *Updater) Due() bool {
 // Touch records a check now (used before spawning a detached updater).
 func (u *Updater) Touch() { u.touch() }
 
-// SetNotice stores a one-time message shown by the next devflow run.
+// SetNotice stores a one-time message shown by the next agentflow run.
 func (u *Updater) SetNotice(msg string) {
 	_ = os.WriteFile(filepath.Join(u.Dir, "notice"), []byte(msg), 0o644)
 }
@@ -368,7 +368,7 @@ func (u *Updater) Background(ctx context.Context, notify func(*Release)) {
 			return
 		}
 		if err := u.Install(ctx, rel); err != nil {
-			u.Log("devflow: update to %s failed, staying on %s: %v", rel.Tag, u.Current, err)
+			u.Log("agentflow: update to %s failed, staying on %s: %v", rel.Tag, u.Current, err)
 			return
 		}
 		if notify != nil {
@@ -407,7 +407,7 @@ func AssetName(version string) string {
 	if runtime.GOOS == "windows" {
 		ext = "zip"
 	}
-	return fmt.Sprintf("devflow_%s_%s_%s.%s", version, runtime.GOOS, runtime.GOARCH, ext)
+	return fmt.Sprintf("agentflow_%s_%s_%s.%s", version, runtime.GOOS, runtime.GOARCH, ext)
 }
 
 // Install downloads, verifies and activates a release.
@@ -534,13 +534,13 @@ func VerifyDigest(file, want string) error {
 	return nil
 }
 
-// SignerWorkflow is the only workflow allowed to have built a release devflow installs.
+// SignerWorkflow is the only workflow allowed to have built a release agentflow installs.
 const SignerWorkflow = Repo + "/.github/workflows/release.yml"
 
-// VerifyAttestation runs `gh attestation verify` against the devflow repo, requiring the
-// provenance to come from devflow's release workflow (not any workflow in the repo).
+// VerifyAttestation runs `gh attestation verify` against the agentflow repo, requiring the
+// provenance to come from agentflow's release workflow (not any workflow in the repo).
 func VerifyAttestation(ctx context.Context, file string) error {
-	if os.Getenv("DEVFLOW_INSECURE_SKIP_ATTESTATION") == "1" {
+	if os.Getenv("AGENTFLOW_INSECURE_SKIP_ATTESTATION") == "1" {
 		return nil // tests and air-gapped mirrors only
 	}
 	cmd := exec.CommandContext(ctx, "gh", "attestation", "verify", file, "--repo", Repo, "--signer-workflow", SignerWorkflow)
@@ -553,7 +553,7 @@ func VerifyAttestation(ctx context.Context, file string) error {
 }
 
 func extract(archive, dest string) error {
-	bin := "devflow"
+	bin := "agentflow"
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
@@ -712,5 +712,5 @@ func (u *Updater) lock() (func(), error) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return nil, errors.New("another devflow process is installing an update")
+	return nil, errors.New("another agentflow process is installing an update")
 }

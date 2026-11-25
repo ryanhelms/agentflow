@@ -11,7 +11,7 @@ import (
 )
 
 // Claude reads the approved app secret directly from the terminal and stores
-// it for this connector. Devflow handles only its public registration metadata.
+// it for this connector. Agentflow handles only its public registration metadata.
 func registerAsanaLogin(ctx context.Context, dir, server, clientID string, interactive bool, input io.Reader, output, diagnostics io.Writer) error {
 	if server != "" && !serverName.MatchString(server) {
 		return errors.New("supply a valid Asana MCP server name")

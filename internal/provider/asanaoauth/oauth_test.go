@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/devflow/internal/provider/nativeoauth"
+	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 )
 
@@ -123,7 +123,7 @@ func newFixture(t *testing.T) *fixture {
 	f.e = enrollment{client: nativeoauth.NewClient(), lockDir: func() (string, error) { return dir, nil }}
 	f.e.client.Transport = wire(f.request)
 	check := func(s, a string) {
-		if s != "devflow.asanaoauth.v2.1" || a != "https://app.asana.com https://mcp.asana.com/v2" {
+		if s != "agentflow.asanaoauth.v2.1" || a != "https://app.asana.com https://mcp.asana.com/v2" {
 			t.Fatal("foreign keychain entry")
 		}
 	}
@@ -310,7 +310,7 @@ func TestEnrollmentLifecycle(t *testing.T) {
 		// The child has its own process, lock descriptor and heap.
 		dir, _ := f.e.lockDir()
 		child := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestLeaseChild$")
-		child.Env = []string{"DEVFLOW_TEST_ASANA_LOCK=" + dir}
+		child.Env = []string{"AGENTFLOW_TEST_ASANA_LOCK=" + dir}
 		if err := child.Run(); err != nil {
 			t.Fatal("dispatch lease did not exclude another process", err)
 		}
@@ -342,7 +342,7 @@ func TestEnrollmentLifecycle(t *testing.T) {
 }
 
 func TestLeaseChild(t *testing.T) {
-	dir := os.Getenv("DEVFLOW_TEST_ASANA_LOCK")
+	dir := os.Getenv("AGENTFLOW_TEST_ASANA_LOCK")
 	if dir == "" {
 		t.Skip("subprocess fixture")
 	}
@@ -488,7 +488,7 @@ func TestFailClosedKeychainAndGenerations(t *testing.T) {
 	}
 	generation := f.e.cached.Load().binding.Generation
 	// No other client's record, bearer, or record for the retired SSE resource
-	// can become a Devflow enrollment even when a bearer remains in memory.
+	// can become a Agentflow enrollment even when a bearer remains in memory.
 	for _, bad := range []string{`{"access_token":"foreign-client"}`,
 		strings.Replace(f.record, Resource, Origin+"/sse", 1),
 		strings.Replace(f.record, testWorkspace, "1201000000000080", 1),

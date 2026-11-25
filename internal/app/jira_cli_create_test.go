@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/agentflow/internal/provider/native"
 )
 
 func TestJiraCreateStopsOnMCPFailure(t *testing.T) {
@@ -15,7 +15,7 @@ func TestJiraCreateStopsOnMCPFailure(t *testing.T) {
 	if _, err := a.Repo.Git(ctx, "switch", "main"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"JIRA_USER", "JIRA_TOKEN", "CI", "GITHUB_ACTIONS", "DEVFLOW_OPERATION_ID"} {
+	for _, name := range []string{"JIRA_USER", "JIRA_TOKEN", "CI", "GITHUB_ACTIONS", "AGENTFLOW_OPERATION_ID"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("PATH", t.TempDir()) // Any accidental fallback would offer a REST preview.
@@ -52,7 +52,7 @@ func TestJiraCreateServiceRESTFallback(t *testing.T) {
 	})
 	t.Setenv("CI", "")
 	t.Setenv("GITHUB_ACTIONS", "")
-	t.Setenv("DEVFLOW_OPERATION_ID", "")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	ctx := WithJiraWriteCLI(t.Context())
 	if _, err := a.Repo.Git(ctx, "switch", "main"); err != nil {
 		t.Fatal(err)

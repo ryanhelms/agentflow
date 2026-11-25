@@ -121,9 +121,9 @@ func TestCallUnavailableAndRecursiveTarget(t *testing.T) {
 	t.Setenv(activeEnvKey, "")
 	_, err := Call(context.Background(), ".", "fixture", "write_note", nil)
 	checkError(t, err, Unavailable)
-	_, err = Call(context.Background(), ".", "Devflow", "write_note", nil)
+	_, err = Call(context.Background(), ".", "Agentflow", "write_note", nil)
 	checkError(t, err, Permission)
-	_, err = Call(context.Background(), ".", "alias", "devflow_commit", nil)
+	_, err = Call(context.Background(), ".", "alias", "agentflow_commit", nil)
 	checkError(t, err, Permission)
 	t.Setenv(activeEnvKey, "1")
 	_, err = Call(context.Background(), ".", "fixture", "write_note", nil)
@@ -174,7 +174,7 @@ func handshake(t *testing.T, dir string) []exchange {
 		t.Fatal(err)
 	}
 	return []exchange{
-		{`{"method":"initialize","id":1,"params":{"clientInfo":{"name":"devflow","version":"0.1.0"},"capabilities":{"explicitGatewayOauth":true}}}`,
+		{`{"method":"initialize","id":1,"params":{"clientInfo":{"name":"agentflow","version":"0.1.0"},"capabilities":{"explicitGatewayOauth":true}}}`,
 			[]string{`{"id":1,"result":{"userAgent":"fixture"}}`}},
 		{`{"method":"initialized"}`, nil},
 		{`{"id":2,"method":"thread/start","params":{"cwd":` + string(cwd) + `,"ephemeral":true,"approvalPolicy":"never","sandbox":"read-only"}}`,
@@ -258,11 +258,11 @@ func fakeAppServer() {
 	defer trace.Close()
 	_, _ = fmt.Fprintln(trace, "started")
 	want := []string{"app-server", "--listen", "stdio://",
-		"-c", `mcp_servers.devflow={enabled=false,command="devflow"}`,
+		"-c", `mcp_servers.agentflow={enabled=false,command="agentflow"}`,
 		"-c", "features.hooks=false", "-c", "analytics.enabled=false",
 		"-c", "check_for_update_on_startup=false",
-		"-c", `model_provider="devflow_codex_host"`,
-		"-c", `model_providers.devflow_codex_host={name="Devflow MCP transport",base_url="http://127.0.0.1:0",supports_websockets=false}`}
+		"-c", `model_provider="agentflow_codex_host"`,
+		"-c", `model_providers.agentflow_codex_host={name="Agentflow MCP transport",base_url="http://127.0.0.1:0",supports_websockets=false}`}
 	if !reflect.DeepEqual(os.Args[1:], want) || os.Getenv(activeEnvKey) != "1" || os.Getenv("CODEX_HOME") == "" {
 		_, _ = fmt.Fprintln(trace, "invalid flags or host environment")
 		return

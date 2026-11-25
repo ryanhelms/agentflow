@@ -15,15 +15,15 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/devflow/internal/commit"
-	"github.com/nscaledev/devflow/internal/config"
-	"github.com/nscaledev/devflow/internal/gitx"
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/templates"
+	"github.com/nscaledev/agentflow/internal/commit"
+	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/templates"
 	"gopkg.in/yaml.v3"
 )
 
-const configFile = ".devflow/config.yml"
+const configFile = ".agentflow/config.yml"
 
 type Evidence struct {
 	Provider string `json:"provider"`
@@ -58,7 +58,7 @@ func Detect(ctx context.Context, repo *gitx.Repo) (*Plan, error) {
 		return nil, err
 	}
 	defs := map[string][]byte{}
-	for _, pattern := range []string{".devflow/providers/*.yml", ".devflow/providers/*.yaml"} {
+	for _, pattern := range []string{".agentflow/providers/*.yml", ".agentflow/providers/*.yaml"} {
 		names, err := fs.Glob(root.FS(), pattern)
 		if err != nil {
 			return nil, err
@@ -235,8 +235,8 @@ func discover(ctx context.Context, repo *gitx.Repo, root *os.Root, fields map[st
 	for _, pattern := range []string{".github/workflows/*.yml", ".github/workflows/*.yaml"} {
 		names, _ := fs.Glob(root.FS(), pattern)
 		for _, name := range names {
-			// Devflow installs its own caller even when a team disables these roles.
-			if name == ".github/workflows/devflow.yml" {
+			// Agentflow installs its own caller even when a team disables these roles.
+			if name == ".github/workflows/agentflow.yml" {
 				continue
 			}
 			b, _ := readFile(root, name)
@@ -264,7 +264,7 @@ func discover(ctx context.Context, repo *gitx.Repo, root *os.Root, fields map[st
 				for _, action := range uses {
 					a, _, _ := strings.Cut(strings.ToLower(action), "@")
 					switch a {
-					case "googleapis/release-please-action", "goreleaser/goreleaser-action", "softprops/action-gh-release", "nscaledev/devflow/.github/workflows/semver-release.yml":
+					case "googleapis/release-please-action", "goreleaser/goreleaser-action", "softprops/action-gh-release", "nscaledev/agentflow/.github/workflows/semver-release.yml":
 						add("devops.releases", "github", name+" release action")
 					case "github/codeql-action/analyze":
 						add("secops", "github", name+" CodeQL action")

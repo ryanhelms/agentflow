@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nscaledev/devflow/internal/app"
-	"github.com/nscaledev/devflow/internal/consolecfg"
-	"github.com/nscaledev/devflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/nscaledev/agentflow/internal/setup"
 )
 
 // Candidate fields are shared so a caller can resubmit the exact preview.
@@ -135,7 +135,7 @@ func Inspect(ctx context.Context, a *app.App, in Query) (any, error) {
 		return Readiness(ctx, root)
 	case "compose", "autonomy", "stage_autonomy":
 		if in.Path != "" && in.Path != consolecfg.MainFile {
-			return nil, errors.New("provider and autonomy controls use .devflow/config.yml")
+			return nil, errors.New("provider and autonomy controls use .agentflow/config.yml")
 		}
 		switch in.Operation {
 		case "compose":

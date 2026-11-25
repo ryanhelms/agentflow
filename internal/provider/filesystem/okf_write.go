@@ -9,8 +9,8 @@ import (
 	"slices"
 	"unicode/utf8"
 
-	"github.com/nscaledev/devflow/internal/provider"
-	"github.com/nscaledev/devflow/internal/provider/okf"
+	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/nscaledev/agentflow/internal/provider/okf"
 	"gopkg.in/yaml.v3"
 )
 
@@ -105,12 +105,12 @@ func (r *record) prepareDocument(old *record, format string) error {
 		}
 	}
 	if old == nil || !old.explicitRef {
-		if err := okf.SetField(mapping, "x-devflow-ref", map[string]string{"scope": r.Ref.Scope, "id": r.Ref.ID}); err != nil {
+		if err := okf.SetField(mapping, "x-agentflow-ref", map[string]string{"scope": r.Ref.Scope, "id": r.Ref.ID}); err != nil {
 			return err
 		}
 	}
 	if r.Links != nil && (old == nil || !reflect.DeepEqual(r.Links, old.Links)) {
-		return okf.SetField(mapping, "x-devflow-links", r.Links)
+		return okf.SetField(mapping, "x-agentflow-links", r.Links)
 	}
 	return nil
 }

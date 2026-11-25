@@ -44,9 +44,9 @@
 // different input returns provider.ErrConflict. Receipts remain in the record.
 //
 // Writers in this package coordinate through a kernel lock on the directory
-// (on Windows, on a persistent .devflow-write.lock file). Independent editors
+// (on Windows, on a persistent .agentflow-write.lock file). Independent editors
 // must serialize concurrent mutations with these writers. Leave the Windows lock
-// file in place and exclude it and .devflow-stage-* from version control.
+// file in place and exclude it and .agentflow-stage-* from version control.
 // Interrupted staging files are ignored. Windows syncs the file contents only.
 // Each operation scans the directory. These adapters suit small local collections.
 package filesystem

@@ -80,7 +80,7 @@ func TestPreBashConventionOnly(t *testing.T) {
 }
 
 func TestSessionStartAutoInit(t *testing.T) {
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/nscaledev/demo.git"}} {
@@ -93,18 +93,18 @@ func TestSessionStartAutoInit(t *testing.T) {
 	if err := SessionStart(context.Background(), "claude", "", &out); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".devflow", "config.yml")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agentflow", "config.yml")); err != nil {
 		t.Fatalf("auto init did not run: %s", out.String())
 	}
-	if !strings.Contains(out.String(), "set this repo up automatically") || !strings.Contains(out.String(), "/devflow:remove") {
+	if !strings.Contains(out.String(), "set this repo up automatically") || !strings.Contains(out.String(), "/agentflow:remove") {
 		t.Errorf("context = %s", out.String())
 	}
 
-	// after devflow remove the clone is opted out and the hook stays silent
-	if out, err := exec.Command("git", "-C", dir, "config", "devflow.autoinit", "false").CombinedOutput(); err != nil {
+	// after agentflow remove the clone is opted out and the hook stays silent
+	if out, err := exec.Command("git", "-C", dir, "config", "agentflow.autoinit", "false").CombinedOutput(); err != nil {
 		t.Fatalf("%v %s", err, out)
 	}
-	_ = os.RemoveAll(filepath.Join(dir, ".devflow"))
+	_ = os.RemoveAll(filepath.Join(dir, ".agentflow"))
 	out.Reset()
 	if err := SessionStart(context.Background(), "claude", "", &out); err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestSessionStartAutoInit(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("opted-out clone got context: %s", out.String())
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".devflow", "config.yml")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, ".agentflow", "config.yml")); err == nil {
 		t.Error("auto init ran in an opted-out clone")
 	}
 }
@@ -121,14 +121,14 @@ func TestCoreHooksSurviveInvalidProviderDefinition(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	home := t.TempDir()
-	t.Setenv("DEVFLOW_HOME", home)
+	t.Setenv("AGENTFLOW_HOME", home)
 	if out, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
 	}
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(".devflow/config.yml", []byte("task_management: {provider: asana}\ncommit: {types: [docs]}\npolicy: {protected_branches: [production]}"), 0600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte("task_management: {provider: asana}\ncommit: {types: [docs]}\npolicy: {protected_branches: [production]}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(home, "providers"), 0700); err != nil {
@@ -154,15 +154,15 @@ func TestCoreHooksSurviveInvalidProviderDefinition(t *testing.T) {
 func TestSessionStartReportsConfiguredProviders(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	t.Setenv("DEVFLOW_HOME", t.TempDir())
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	if out, err := exec.CommandContext(t.Context(), "git", "init", "-q", "-b", "PLAT-1-disabled").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %s, %v", out, err)
 	}
-	if err := os.Mkdir(".devflow", 0700); err != nil {
+	if err := os.Mkdir(".agentflow", 0700); err != nil {
 		t.Fatal(err)
 	}
 	const config = "task_management: {provider: none}\nknowledge_base: {provider: repository}\n"
-	if err := os.WriteFile(".devflow/config.yml", []byte(config), 0600); err != nil {
+	if err := os.WriteFile(".agentflow/config.yml", []byte(config), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer

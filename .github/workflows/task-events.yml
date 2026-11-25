@@ -14,12 +14,12 @@ permissions:
 
 jobs:
   transitions:
-    if: vars.DEVFLOW_ENABLED != 'false' && github.event_name == 'pull_request'
+    if: vars.AGENTFLOW_ENABLED != 'false' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       merged-issue: ${{ steps.preview.outputs.merged-issue }}
     concurrency:
-      group: devflow-task-events-${{ github.repository_id }}-${{ github.event.pull_request.number }}
+      group: agentflow-task-events-${{ github.repository_id }}-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
       - name: Read trusted repository configuration
@@ -34,11 +34,11 @@ jobs:
         id: preview
         env:
           GH_TOKEN: ${{ github.token }}
-          DEVFLOW_HOME: ${{ runner.temp }}/devflow-task-events
-          DEVFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          AGENTFLOW_HOME: ${{ runner.temp }}/agentflow-task-events
+          AGENTFLOW_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         shell: bash
         run: |
-          devflow transition --github-event --dry-run | tee "$RUNNER_TEMP/task-preview.json"
+          agentflow transition --github-event --dry-run | tee "$RUNNER_TEMP/task-preview.json"
           jq -r --arg repo "$GITHUB_REPOSITORY" '
             select((.effects | length) == 1 and (.effects[0].to == "closed" or .effects[0].from == "closed"))
             | .plan | select(.lifecycle == "pr.merged" and (.transitions | length) == 1)

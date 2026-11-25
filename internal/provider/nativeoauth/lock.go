@@ -14,7 +14,7 @@ var errLock = errors.New("could not lock OAuth grant storage")
 
 func UserLockDir(name string) (string, error) {
 	// Every process using this OS user's credential store must share the lock,
-	// regardless of checkout, DEVFLOW_HOME or XDG configuration.
+	// regardless of checkout, AGENTFLOW_HOME or XDG configuration.
 	u, err := user.Current()
 	if err != nil || !filepath.IsAbs(u.HomeDir) {
 		return "", errLock
