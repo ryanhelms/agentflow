@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,6 +68,18 @@ func TestRegisterProviderLoginUnsupported(t *testing.T) {
 		err := RegisterProviderLogin(t.Context(), ".", pair[0], pair[1], "", "", false, nil, nil, nil)
 		if err == nil || !strings.Contains(err.Error(), "--register supports only") {
 			t.Fatalf("%v: %v", pair, err)
+		}
+	}
+}
+
+func TestDevflowSlackLoginRequiresTerminalAndPinnedServer(t *testing.T) {
+	for _, tc := range []struct{ server, want string }{
+		{"", "interactive terminal"}, {"slack", "interactive terminal"}, {"other", "use the slack server"},
+	} {
+		var out bytes.Buffer
+		err := LoginProvider(t.Context(), t.TempDir(), "slack", "devflow", tc.server, strings.NewReader("mock-app-secret"), &out, &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || out.Len() != 0 {
+			t.Fatalf("unexpected login result for %q: %v", tc.server, err)
 		}
 	}
 }

@@ -71,5 +71,15 @@ when the workspace owner has authorized the app. Let the user enter its app
 secret directly in the prompt and complete browser consent. Request a fresh
 write preview afterward. Report any app, workspace, or project access denial.
 
+When the user selects Devflow’s own Slack connection and authorizes sign-in,
+use the approved PKCE-enabled app’s public client ID and the selected Slack
+destination’s `native.workspace_id`. Start the browser from the local workspace
+by running `devflow setup login --provider slack --client devflow --public-client-id CLIENT_ID --team-id TEAM_ID`
+with those values. Let the user approve in Slack and wait for the command to
+verify and save the grant before requesting a preview. The app must register
+`http://localhost:53668/oauth/slack/callback`. For a confidential registration,
+the user enters the certificate paths and app credentials at hidden prompts
+in their terminal with `devflow setup login --provider slack --client devflow`.
+
 When asked to disconnect, run `devflow setup logout --provider NAME --client devflow`
 with the selected provider name.

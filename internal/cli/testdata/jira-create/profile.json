@@ -1,0 +1,1 @@
+{"data":{"storage":"file","activeEnvironment":"prod","defaults":{"prod":"other"},"profiles":[{"id":"jira-1","name":"work","environment":"prod","authMethod":"oauth","userId":"fixture-user","revision":2,"site":"fixture"}]}}

@@ -333,3 +333,21 @@ if [ "$2" = list ]; then printf '%s\n' 'slack: custom - ✔ Connected'; fi
 		t.Fatalf("calls %q, err %v", calls, err)
 	}
 }
+
+func TestSetupLoginPublicSlackOptions(t *testing.T) {
+	for _, tc := range []struct{ flags, want string }{
+		{"--provider slack --client claude-desktop --public-client-id 123.456 --team-id T12345", "--client devflow"},
+		{"--provider jira --client devflow --public-client-id 123.456 --team-id T12345", "--provider slack"},
+		{"--provider slack --client devflow --public-client-id 123.456 --team-id T12345 --register", "choose either"},
+		{"--provider slack --client devflow --public-client-id 123.456 --team-id T12345 --server other", "slack server"},
+		{"--provider slack --client devflow --public-client-id=", "supply both"},
+		{"--provider slack --client devflow --team-id T12345", "supply both"},
+		{"--provider slack --client devflow --public-client-id bad --team-id T12345", "invalid Slack app"},
+		{"--provider slack --client devflow --public-client-id 123.456 --team-id other", "expected workspace"},
+	} {
+		err := runProviderLogin(t.Context(), strings.Fields(tc.flags))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: got %v, want %q", tc.flags, err, tc.want)
+		}
+	}
+}

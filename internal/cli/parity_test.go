@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/nscaledev/devflow/internal/mcpserver"
+	"github.com/nscaledev/devflow/internal/provider/native"
 )
 
 // mcpToCLI maps every statically registered MCP tool to the CLI command that
@@ -217,14 +218,22 @@ func TestParityCommandsRunLocally(t *testing.T) {
 }
 
 func TestDesktopNativeClientRoutesSupportedCommands(t *testing.T) {
-	for _, command := range []string{"comment", "start", "transition", "task"} {
+	for command, provider := range map[string]string{
+		"comment": "asana", "start": "asana", "transition": "asana", "task create": "asana", "notify": "slack",
+	} {
 		writer, err := nativeWriter("claude-desktop", command)
 		if err != nil {
 			t.Fatal(err)
 		}
-		writer.Close()
+		t.Cleanup(writer.Close)
+		// A recognized provider rejects this malformed call before enrollment.
+		// A writer without that provider returns ErrUnavailable instead.
+		call := native.Call{Provider: provider, Server: provider, Tool: "unsupported"}
+		if _, err := writer.Prepare(t.Context(), call); !errors.Is(err, native.ErrDenied) {
+			t.Errorf("%s did not select the writer for %s: %v", command, provider, err)
+		}
 	}
-	for _, command := range []string{"eod", "ac", "commit", "docs"} {
+	for _, command := range []string{"task", "task list", "eod", "ac", "commit", "docs"} {
 		if _, err := nativeWriter("claude-desktop", command); err == nil {
 			t.Fatalf("enabled Desktop writer for %s", command)
 		}

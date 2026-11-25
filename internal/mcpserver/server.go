@@ -15,6 +15,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/codexhost"
 	"github.com/nscaledev/devflow/internal/provider/desktophost"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/slackhost"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 	"github.com/nscaledev/devflow/internal/update"
 	"github.com/nscaledev/devflow/internal/version"
@@ -33,12 +34,13 @@ const Instructions = `devflow links this repo's work to Jira, Confluence and Git
 
 // Server wraps the MCP server and the app.
 type Server struct {
-	mcp       *mcp.Server
-	app       *app.App
-	blocked   error
-	updater   *update.Updater
-	updateMsg string
-	writer    *native.SessionWriter
+	mcp         *mcp.Server
+	app         *app.App
+	blocked     error
+	updater     *update.Updater
+	updateMsg   string
+	writer      *native.SessionWriter
+	slackWriter *native.SessionWriter
 }
 
 // New builds a server for the repo in dir.
@@ -53,6 +55,7 @@ func New(ctx context.Context, dir, client string) (*Server, error) {
 		s.writer = codexhost.NewWriter(a.Repo.Dir)
 	case "claude", "claude-desktop":
 		s.writer = desktophost.NewWriter()
+		s.slackWriter = slackhost.NewWriter()
 	}
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "devflow", Version: version.Version}, &mcp.ServerOptions{Instructions: Instructions})
 	s.register()
@@ -69,6 +72,9 @@ func (s *Server) SetUpdater(u *update.Updater) { s.updater = u }
 func (s *Server) Run(ctx context.Context) error {
 	if s.writer != nil {
 		defer s.writer.Close()
+	}
+	if s.slackWriter != nil {
+		defer s.slackWriter.Close()
 	}
 	if s.updater != nil {
 		ectx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -118,6 +124,8 @@ func (s *Server) writerForTool(name string) *native.SessionWriter {
 	switch name {
 	case "devflow_comment", "devflow_docs_publish", "devflow_jira_remote_link", "devflow_ticket_create", "devflow_start", "devflow_transition":
 		return s.writer
+	case "devflow_notify":
+		return s.slackWriter
 	default:
 		return nil
 	}
@@ -298,8 +306,11 @@ func (s *Server) register() {
 		})
 	add(s, "devflow_scope_check", "Find changes and new TODOs that look outside the current ticket.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.ScopeCheck(ctx) })
-	add(s, "devflow_ticket_create", "Create a linked task with confirmation. Repository publication can return a pending review PR.", remote,
+	add(s, "devflow_ticket_create", "Create a task with confirmation and an optional related task. Repository publication can return a pending review PR.", remote,
 		func(ctx context.Context, in ticketIn) (any, error) {
+			if s.interactiveClient() {
+				ctx = app.WithJiraWriteCLI(ctx)
+			}
 			return a.CreateTicketWithTemplate(ctx, in.Project, in.Type, in.Summary, in.Description, in.LinkTo, tasktemplate.Ref{Name: in.Template, Revision: in.TemplateRevision}, in.ConfirmToken)
 		})
 	add(s, "devflow_transition", "Move a task by configured event or verb. Use dry_run to preview. A pending_review result requires a PR merge.", remote,
@@ -309,7 +320,7 @@ func (s *Server) register() {
 	add(s, "devflow_comment", "Comment on a task when its provider supports comments.", remote,
 		func(ctx context.Context, in commentIn) (any, error) {
 			if s.interactiveClient() {
-				ctx = app.WithJiraCommentCLI(ctx)
+				ctx = app.WithJiraWriteCLI(ctx)
 			}
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})

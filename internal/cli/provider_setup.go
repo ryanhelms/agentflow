@@ -245,11 +245,28 @@ func runProviderLogin(ctx context.Context, args []string) error {
 	register := fs.Bool("register", false, "register the official Slack or Asana connector in the Claude Code Desktop workspace")
 	server := fs.String("server", "", "MCP server name if different from the provider default")
 	clientID := fs.String("client-id", "", "public OAuth client ID of your approved Asana MCP app")
+	publicID := fs.String("public-client-id", "", "approved Slack desktop app client ID")
+	teamID := fs.String("team-id", "", "expected Slack workspace ID for public desktop consent")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *provider == "" || fs.NArg() != 0 {
-		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID]]")
+		return errors.New("usage: devflow setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]")
+	}
+	public := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "public-client-id" || f.Name == "team-id" {
+			public = true
+		}
+	})
+	if public {
+		if *register {
+			return errors.New("choose either --register or --public-client-id with --team-id")
+		}
+		if *clientID != "" {
+			return errors.New("--client-id requires --register for Asana in Claude Code Desktop")
+		}
+		return setup.LoginPublicSlack(ctx, *provider, *client, *server, *publicID, *teamID, os.Stdout)
 	}
 	if *register {
 		return setup.RegisterProviderLogin(ctx, ".", *provider, *client, *server, *clientID, term.IsTerminal(int(os.Stdin.Fd())), os.Stdin, os.Stdout, os.Stderr)

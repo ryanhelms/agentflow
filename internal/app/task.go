@@ -18,7 +18,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/provider/native"
-	"github.com/nscaledev/devflow/internal/provider/nativemap"
+	"github.com/nscaledev/devflow/internal/provider/twg"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -514,22 +514,35 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 		return nil, err
 	}
 	s := jiraRemoteSummary(map[string]string{"site": site, "project": project, "type": issueType, "summary": summary, "description": description, "link_to": linkTo}, write)
+	var apply func() (provider.Ref, error)
+	if write != nil {
+		apply = func() (provider.Ref, error) { return write.create(ctx, project) }
+	} else if len(draft.Links) == 0 {
+		cli, err := a.interactiveJiraCLI(ctx, site)
+		if err != nil {
+			return nil, err
+		}
+		if cli != nil {
+			prepared, err := cli.PrepareCreate(ctx, draft)
+			switch {
+			case err == nil:
+				s = prepared.Intent()
+				apply = func() (provider.Ref, error) { return prepared.Apply(ctx) }
+			case !errors.Is(err, twg.ErrToolAbsent):
+				return nil, atlCLIError("jira", err)
+			}
+		}
+	}
 	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
 		return p, err
 	}
-	if write != nil {
-		apply := func() (provider.Ref, error) {
-			payload, err := write.run(ctx)
-			if err != nil {
-				return provider.Ref{}, err
-			}
-			created, err := nativemap.DecodeJiraCreated(payload, "jira", project)
-			if err != nil {
-				return provider.Ref{}, errors.Join(native.ErrWriteUncertain, err)
-			}
-			return created, nil
+	if apply != nil {
+		receiptIntent := s
+		if write != nil {
+			// Keep the fingerprint of existing MCP approval receipts.
+			receiptIntent = taskWritePreview(*write)
 		}
-		created, err := applyTaskAppend(ctx, a.Home, token, write.Call.Provider, taskWritePreview(*write), apply)
+		created, err := applyTaskAppend(ctx, a.Home, token, "jira", receiptIntent, apply)
 		a.audit(policy.Remote, "ticket_create", s, err)
 		return map[string]string{"key": created.ID}, err
 	}

@@ -106,6 +106,9 @@ func connect(ctx context.Context, call native.Call, token tokenSource, transport
 		return nil, transportError(call.Provider, err)
 	}
 	tools, err := listTools(ctx, connected, call)
+	if err == nil && call.Tool == createTool && tools[createTool] == nil {
+		err = native.ErrUnavailable
+	}
 	if err != nil {
 		_ = connected.Close()
 		return nil, err
