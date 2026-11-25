@@ -14,12 +14,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/nscaledev/devflow/internal/provider"
+	"github.com/nscaledev/devflow/internal/provider/okf"
 )
 
 type store struct {
-	root     *os.Root
-	instance string
-	kind     string
+	root         *os.Root
+	instance     string
+	kind         string
+	okfKnowledge bool
 }
 
 func openStore(instance, directory, kind string) (*store, error) {
@@ -71,36 +73,75 @@ func (s *store) scan(ctx context.Context, scope string) ([]record, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	entries, err := fs.ReadDir(s.root.FS(), ".")
-	if err != nil {
-		return nil, fmt.Errorf("list provider directory: %w", err)
-	}
 	seen := make(map[provider.Ref]string)
 	var records []record
+	err := s.walk(ctx, func(name string) error {
+		r, err := s.read(name)
+		if errors.Is(err, okf.ErrNotConcept) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read %q: %w", name, err)
+		}
+		inScope := scope == "" || r.Ref.Scope == scope
+		if r.Kind != s.kind || r.Ref.Instance != s.instance || (!s.okfKnowledge && !inScope) {
+			return nil
+		}
+		if other, ok := seen[r.Ref]; ok {
+			return fmt.Errorf("duplicate %s in %q and %q: %w", r.Ref, other, r.name, provider.ErrConflict)
+		}
+		seen[r.Ref] = r.name
+		if inScope {
+			records = append(records, r)
+		}
+		return nil
+	})
+	if err != nil {
+		if s.okfKnowledge {
+			return nil, fmt.Errorf("%w: %w", ErrKnowledgeScan, err)
+		}
+		return nil, err
+	}
+	return records, nil
+}
+
+func (s *store) walk(ctx context.Context, visit func(string) error) error {
+	if s.okfKnowledge {
+		return fs.WalkDir(s.root.FS(), ".", func(name string, e fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if e.IsDir() && name != "." && strings.HasPrefix(e.Name(), ".") {
+				return fs.SkipDir
+			}
+			if e.Type().IsRegular() && IsKnowledgeCandidate(name) {
+				return visit(name)
+			}
+			return nil
+		})
+	}
+	entries, err := fs.ReadDir(s.root.FS(), ".")
+	if err != nil {
+		return fmt.Errorf("list provider directory: %w", err)
+	}
 	for _, e := range entries {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
 		if !strings.EqualFold(filepath.Ext(e.Name()), ".md") {
 			continue
 		}
 		if !e.Type().IsRegular() {
-			return nil, fmt.Errorf("%q must be a regular Markdown file", e.Name())
+			return fmt.Errorf("%q must be a regular Markdown file", e.Name())
 		}
-		r, err := s.read(e.Name())
-		if err != nil {
-			return nil, fmt.Errorf("read %q: %w", e.Name(), err)
+		if err := visit(e.Name()); err != nil {
+			return err
 		}
-		if r.Kind != s.kind || r.Ref.Instance != s.instance || (scope != "" && scope != r.Ref.Scope) {
-			continue
-		}
-		if other, ok := seen[r.Ref]; ok {
-			return nil, fmt.Errorf("duplicate %s in %q and %q: %w", r.Ref, other, r.name, provider.ErrConflict)
-		}
-		seen[r.Ref] = r.name
-		records = append(records, r)
 	}
-	return records, nil
+	return nil
 }
 
 func (s *store) read(name string) (record, error) {
@@ -129,7 +170,12 @@ func (s *store) read(name string) (record, error) {
 	if err != nil {
 		return record{}, err
 	}
-	r, err := parse(data)
+	var r record
+	if s.okfKnowledge {
+		r, err = parseKnowledge(s.instance, name, data)
+	} else {
+		r, err = parse(data)
+	}
 	r.name, r.mode = name, info.Mode().Perm()
 	return r, err
 }
@@ -261,6 +307,7 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 		return zero, err
 	}
 	var old *record
+	var receiptErr error
 	replayed := false
 	for i := range records {
 		existing := &records[i]
@@ -268,11 +315,18 @@ func (s *store) write(ctx context.Context, op verb, r record, opts provider.Writ
 			old = existing
 		}
 		if hash, ok := existing.Operations[opts.OperationID]; ok {
-			if hash != fingerprint || existing.Ref != r.Ref {
-				return zero, fmt.Errorf("operation ID %q already used for a different request: %w", opts.OperationID, provider.ErrConflict)
+			if hash == fingerprint && existing.Ref == r.Ref {
+				replayed = true
+			} else {
+				receiptErr = fmt.Errorf("operation ID %q already used for a different request: %w", opts.OperationID, provider.ErrConflict)
 			}
-			replayed = true
 		}
+	}
+	if old != nil && old.okfConcept && (!replayed || receiptErr != nil) {
+		return zero, fmt.Errorf("OKF document %s is read-only: %w", old.Ref, errors.Join(provider.ErrUnsupported, receiptErr))
+	}
+	if receiptErr != nil {
+		return zero, receiptErr
 	}
 	if op == transition && old != nil {
 		if opts.CheckTask != nil {
