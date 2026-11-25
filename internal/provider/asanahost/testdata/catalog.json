@@ -1,0 +1,8 @@
+[
+  {"name":"get_user","inputSchema":{"type":"object"}},
+  {"name":"get_project","inputSchema":{"type":"object","properties":{"project_id":{"type":"string"}},"required":["project_id"]}},
+  {"name":"get_task","inputSchema":{"type":"object","properties":{"task_gid":{"type":"string"},"include_comments":{"type":"boolean"},"include_subtasks":{"type":"boolean"}},"required":["task_gid"]}},
+  {"name":"create_tasks","inputSchema":{"type":"object","properties":{"default_project":{"type":"string"},"tasks":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"project_id":{"type":"string"},"notes":{"type":"string"}},"required":["name"]}}},"required":["tasks"]}},
+  {"name":"add_comment","inputSchema":{"type":"object","properties":{"task_id":{"type":"string"},"text":{"type":"string"}},"required":["task_id","text"]}},
+  {"name":"update_tasks","inputSchema":{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","properties":{"task_id":{"type":"string"},"completed":{"type":"boolean"}},"required":["task_id"]}}},"required":["tasks"]}}
+]
