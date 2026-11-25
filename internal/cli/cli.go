@@ -56,9 +56,9 @@ Setup
                                  install or register one declared MCP companion
   setup login --provider NAME [--client NAME] [--server NAME] [--register]
                                  start sign-in through a provider CLI or MCP client
-                                 use --client devflow for the Jira or Confluence pilot
+                                 use --client devflow for Jira, Confluence or an approved Slack app
   setup logout --provider NAME --client devflow
-                                 disconnect the local Devflow Rovo enrollment
+                                 disconnect the selected local Devflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
   login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
   logout                         remove the legacy Atlassian API-token login

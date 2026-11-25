@@ -386,6 +386,41 @@ requires a confirmed write and a verified successor.
 
 [Atlassian's tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools)
 
+### Devflow Slack enrollment
+
+An administrator provisions a dedicated confidential Slack app approved for
+internal use or published in the Slack Marketplace. Register the exact callback
+`https://127.0.0.1:53668/oauth/slack/callback` for that app. The user running
+login needs its client ID and secret, plus a PEM certificate chain trusted by
+their browser for IP address `127.0.0.1` and its matching PEM private key.
+Use a dedicated loopback certificate. The callback listener runs only during
+login. Keep the app confidential. Devflow uses both the client secret and an
+S256 code challenge advertised by Slack's issuer. If the app rejects that
+combination, enrollment stops. Slack's separate PKCE app setting converts
+the registration to a public client. [Slack MCP authentication](https://docs.slack.dev/ai/slack-mcp-server/) · [Slack OAuth redirects](https://docs.slack.dev/authentication/installing-with-oauth/) · [Slack app PKCE settings](https://docs.slack.dev/authentication/using-pkce/).
+
+Configure the following **user scopes** on the approved app. Devflow requires
+the returned scope set to match the request exactly.
+
+| Operation | Scopes |
+| --- | --- |
+| Verify the authenticated Slack profile | `users:read`, `users:read.email` |
+| Verify membership in the configured conversation | `channels:read`, `groups:read`, `im:read`, `mpim:read` |
+| Request permission to send a message | `chat:write` |
+
+Run `devflow setup login --provider slack --client devflow` in an interactive
+terminal. Enter the paths to the certificate and key, then enter the approved
+app's client ID and secret at the hidden prompts. Review the app, workspace
+and permissions in Slack's browser consent screen. On success Devflow stores
+one local enrollment in the OS keychain. New consent replaces the preceding
+enrollment and invalidates previews bound to it. Token rotation preserves
+that binding after Devflow verifies the refresh response. An ambiguous refresh
+requires another login. [Slack’s user token exchange](https://docs.slack.dev/reference/methods/oauth.v2.user.access/) · [Token rotation](https://docs.slack.dev/authentication/using-token-rotation/).
+
+Run `devflow setup logout --provider slack --client devflow` to delete the
+local app credentials and grant. To revoke the app's authorization in Slack,
+remove its installation or authorization through Slack.
+
 ### Claude Code Desktop
 
 The `claude` setup mode configures the Claude Code plugin marketplace. If a
