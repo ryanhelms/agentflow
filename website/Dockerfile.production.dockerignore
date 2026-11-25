@@ -1,0 +1,17 @@
+**
+!website/
+!website/package.json
+!website/package-lock.json
+!website/vendor/
+!website/vendor/**
+!website/content.mjs
+!website/vite.config.js
+!website/nginx.conf
+!website/src/
+!website/src/**
+!docs/
+!docs/**
+!README.md
+!CONTRIBUTING.md
+!CHANGELOG.md
+!SECURITY.md

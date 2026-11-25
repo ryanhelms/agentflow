@@ -1,16 +1,23 @@
 services:
   website:
-    build: ./website
+    build:
+      context: .
+      dockerfile: website/Dockerfile
     init: true
     ports:
       - "127.0.0.1:${AGENTFLOW_WEBSITE_PORT:-5173}:5173"
     volumes:
       - type: bind
         source: ./website/src
-        target: /home/node/src
+        target: /home/node/website/src
         read_only: true
         bind:
           create_host_path: false
+      - ./docs:/home/node/docs:ro
+      - ./README.md:/home/node/README.md:ro
+      - ./CONTRIBUTING.md:/home/node/CONTRIBUTING.md:ro
+      - ./CHANGELOG.md:/home/node/CHANGELOG.md:ro
+      - ./SECURITY.md:/home/node/SECURITY.md:ro
     environment:
       VITE_USE_POLLING: "${VITE_USE_POLLING:-0}"
     healthcheck:
@@ -29,5 +36,7 @@ services:
           path: ./website/vendor
         - action: rebuild
           path: ./website/vite.config.js
+        - action: rebuild
+          path: ./website/content.mjs
         - action: rebuild
           path: ./website/Dockerfile

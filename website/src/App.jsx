@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Button, Link, Logo, Row, Text } from "@nscaledev/design-components/atoms";
 import "@nscaledev/design-tokens/tokens.css";
 import "@nscaledev/design-components/styles.css";
 import "@nscaledev/design-patterns/styles.css";
 import "./style.css";
-import Docs from "./Docs.jsx";
 import Overview from "./Overview.jsx";
+import Demo from "./Demo.jsx";
+
+const Docs = lazy(() => import("./Docs.jsx"));
 
 const themePreference = "agentflow.website.theme";
 
@@ -20,7 +22,8 @@ function initialTheme() {
 }
 
 function currentPage() {
-  return location.hash === "#docs" ? "docs" : "overview";
+  const [section, id, anchor] = location.hash.slice(1).split("/");
+  return { section: ["docs", "demo"].includes(section) ? section : "overview", id, anchor };
 }
 
 export default function App() {
@@ -62,16 +65,22 @@ export default function App() {
             <Text className="site-product" weight="bold">Agentflow</Text>
           </Link>
           <Row as="nav" aria-label="Agentflow" className="site-nav" wrap gap={2}>
-            <Link href="#overview" aria-current={page === "overview" ? "page" : undefined}>Overview</Link>
-            <Link href="#docs" aria-current={page === "docs" ? "page" : undefined}>Documentation</Link>
+            <Link href="#overview" aria-current={page.section === "overview" ? "page" : undefined}>Overview</Link>
+            <Link href="#demo" aria-current={page.section === "demo" ? "page" : undefined}>Walkthrough</Link>
+            <Link href="#docs" aria-current={page.section === "docs" ? "page" : undefined}>Documentation</Link>
             <Button variant="ghost" size="sm" icon={activeTheme === "dark" ? "sun" : "moon"}
               onClick={toggleTheme} aria-label={themeLabel} title={themeLabel} />
           </Row>
         </Row>
       </header>
       <main className="site-main">
-        <Overview active={page === "overview"} />
-        <Docs active={page === "docs"} />
+        {page.section === "overview" && <Overview />}
+        {page.section === "demo" && <Demo />}
+        {page.section === "docs" && (
+          <Suspense fallback={<p role="status">Loading documentation…</p>}>
+            <Docs id={page.id} anchor={page.anchor} />
+          </Suspense>
+        )}
       </main>
     </div>
   );

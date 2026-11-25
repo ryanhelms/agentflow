@@ -1,0 +1,44 @@
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: agentflow-website-access
+spec:
+  default:
+    iap:
+      enabled: true
+  targetRef:
+    group: ""
+    kind: Service
+    name: agentflow-website
+---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: agentflow-website-health
+spec:
+  default:
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8080
+        requestPath: /healthz
+  targetRef:
+    group: ""
+    kind: Service
+    name: agentflow-website
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: agentflow-website
+spec:
+  parentRefs:
+    - name: engineering-https
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - agentflow.example.invalid
+  rules:
+    - backendRefs:
+        - name: agentflow-website
+          port: 8080

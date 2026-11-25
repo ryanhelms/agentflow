@@ -1,0 +1,105 @@
+name: Agentflow website
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - 'deploy/website/**'
+      - '.github/workflows/website.yml'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'SECURITY.md'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Published Agentflow tag to display and install
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: website
+      - run: npm test
+        working-directory: website
+      - run: npm run build
+        working-directory: website
+      - run: kubectl kustomize deploy/website/overlays/gke-example > /dev/null
+
+  publish:
+    needs: website
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'nscaledev/agentflow' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: website-publish
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify release and signed installers
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.release }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
+            | jq -e '(.isDraft or .isPrerelease) | not' >/dev/null
+          revision=$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")
+          git merge-base --is-ancestor "$revision" HEAD
+          download=$(mktemp -d)
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern install.sh --pattern install.ps1 --dir "$download"
+          for installer in install.sh install.ps1; do
+            gh attestation verify "$download/$installer" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+            expected=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+              --jq ".assets[] | select(.name == \"$installer\") | .digest")
+            actual=$(sha256sum "$download/$installer" | cut -d' ' -f1)
+            [[ "$expected" == "sha256:$actual" ]]
+          done
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.AGENTFLOW_SITE_WIF_PROVIDER }}
+          service_account: ${{ vars.AGENTFLOW_SITE_PUBLISHER }}
+      - uses: google-github-actions/setup-gcloud@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push the website
+        id: image
+        env:
+          IMAGE_NAME: ${{ vars.AGENTFLOW_SITE_IMAGE }}
+          RELEASE_TAG: ${{ inputs.release }}
+          RELEASE_SHA: ${{ steps.release.outputs.revision }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_NAME" =~ ^[a-z0-9-]+-docker\.pkg\.dev/[a-z0-9-]+/[a-z0-9-]+/agentflow-website$ ]]
+          gcloud auth configure-docker "${IMAGE_NAME%%/*}" --quiet
+          docker buildx build -f website/Dockerfile.production --push \
+            --build-arg "AGENTFLOW_SITE_REPOSITORY=$GITHUB_REPOSITORY" \
+            --build-arg "AGENTFLOW_SITE_DOCS_REF=$GITHUB_SHA" \
+            --build-arg "AGENTFLOW_SITE_RELEASE=$RELEASE_TAG" \
+            --build-arg "AGENTFLOW_SITE_RELEASE_SHA=$RELEASE_SHA" \
+            --metadata-file "$RUNNER_TEMP/website-image.json" \
+            --tag "$IMAGE_NAME:$GITHUB_SHA" .
+          digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/website-image.json")
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'GitOps image: %s@%s\n' "$IMAGE_NAME" "$digest" >> "$GITHUB_STEP_SUMMARY"

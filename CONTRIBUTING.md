@@ -78,10 +78,9 @@ docker compose up --build --wait website
 Open [the local website](http://127.0.0.1:5173). Edit React components and CSS in
 `website/src/` with your usual editor. Vite uses React Fast Refresh and reloads
 the page for HTML edits. Installer commands live in `website/src/install.js`.
-The release index and searchable summaries live in `website/src/docs-data.js`.
+The document catalog lives in `website/content.mjs`. Sources live in `docs/`, the README, and the generated changelog. Edit the Markdown source to update the displayed document and search index. Open `#docs/enable` to check a direct link.
 
-The site uses the Nscale design system's Dashboard and Workbench page
-templates, shared React components, and theme tokens. The published archives
+The site uses the Nscale design system's shared React components and theme tokens. The published archives
 in `website/vendor/` are pinned in the npm lockfile so local Docker builds
 can install them without GitHub Packages credentials. When updating the
 design system, obtain the published archives, update the file dependencies,
@@ -90,7 +89,7 @@ then regenerate and commit the lockfile. [Nscale design system](https://github.c
 | Task | Command |
 | --- | --- |
 | Follow Vite logs and errors | `docker compose logs -f website` |
-| Check that the website builds for production | `docker compose exec website npm run build` |
+| Check that the website builds for production | `docker compose exec website sh -c "npm test && npm run build"` |
 | Automatically rebuild the image when dependencies or Vite configuration change | `docker compose up --build --watch website` |
 | Stop the local environment | `docker compose down` |
 
@@ -107,6 +106,8 @@ either setting. The website binds to the loopback address on the host.
 For development directly with Node 24, run `npm ci` and `npm run dev` in
 `website/`. Run `npm run build` to write a static site to `website/dist/`;
 `npm run preview` serves that build locally.
+
+For the production image, release verification, and access rollout, see [Deploy the launch website](deploy/website/README.md).
 
 ## Testing the Claude Code plugin
 

@@ -1,31 +1,21 @@
-const macLinuxInstaller = 's=$(gh release download -R nscaledev/agentflow -p install.sh -O -) && bash -c "$s" agentflow';
-const windowsInstaller = '$s = gh release download -R nscaledev/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n"))';
-
-export function installerCommand(platform, path) {
+export function installerCommand(platform, tag) {
+  if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error("a pinned release is required");
+  const repo = "nscaledev/agentflow";
+  const signer = repo + "/.github/workflows/release.yml";
   if (platform === "windows") {
-    // PowerShell also treats typographic apostrophes as string delimiters.
-    const quoted = "'" + path.replace(/['\u2018\u2019\u201A\u201B]/g, (character) => "'" + character) + "'";
-    return windowsInstaller + (path ? " -Repo " + quoted : "") + " }";
+    return [
+      "$installer = Join-Path ([System.IO.Path]::GetTempPath()) ('agentflow-' + [guid]::NewGuid() + '.ps1')",
+      `gh release download ${tag} --repo ${repo} --pattern install.ps1 --output $installer`,
+      "if ($LASTEXITCODE -ne 0) { throw 'Download failed' }",
+      `gh attestation verify $installer --repo ${repo} --signer-workflow ${signer}`,
+      "if ($LASTEXITCODE -ne 0) { throw 'Verification failed' }",
+      "& $installer -Repo (Get-Location).Path",
+    ].join("\n");
   }
-  const quoted = "'" + path.split("'").join("'\u0022'\u0022'") + "'";
-  return macLinuxInstaller + (path ? " --repo " + quoted : "");
+  return [
+    'installer=$(mktemp) &&',
+    `gh release download ${tag} --repo ${repo} --pattern install.sh --output "$installer" --clobber &&`,
+    `gh attestation verify "$installer" --repo ${repo} --signer-workflow ${signer} &&`,
+    'bash "$installer" --repo "$PWD"',
+  ].join("\n");
 }
-
-export function agentPrompt(project) {
-  const name = project.trim();
-  return "Install Agentflow from https://github.com/nscaledev/agentflow in " +
-    (name ? "the project " + JSON.stringify(name) : "this project") +
-    ". Reuse saved provider choices. For any unconfigured role, suggest a provider when project evidence is clear and ask me when it is ambiguous. Preview changes before applying them, then verify setup and show me what changed.";
-}
-
-export const pluginCommands = {
-  claude: [
-    "claude plugin marketplace add nscaledev/agentflow",
-    "claude plugin install agentflow@nscale",
-  ].join("\n"),
-  codex: [
-    "codex plugin marketplace add nscaledev/agentflow",
-    "codex plugin add agentflow@nscale",
-  ].join("\n"),
-  gemini: "gemini extensions install https://github.com/nscaledev/agentflow",
-};

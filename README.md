@@ -732,6 +732,8 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 
 | Document | For |
 | --- | --- |
+| [Launch website](CONTRIBUTING.md#website) | Preview, build, and maintain the launch site |
+| [Feature inventory](docs/launch/feature-inventory.md) | Implementation history, capabilities, and launch findings |
 | [docs/blueprint.html](docs/blueprint.html) | Architecture, automations, plugin, rollout and decisions |
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |

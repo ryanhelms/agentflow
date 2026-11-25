@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: agentflow
+resources:
+  - ../../base
+  - access.yaml
+images:
+  - name: agentflow-website
+    newName: example-docker.pkg.dev/PROJECT/REPOSITORY/agentflow-website
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
