@@ -280,6 +280,7 @@ func (s *Server) register() {
 		func(ctx context.Context, in commentIn) (any, error) {
 			return a.Comment(ctx, in.Key, in.Text, in.ConfirmToken)
 		})
+	s.registerJiraRemoteLink()
 
 	// Commit messaging
 	add(s, "devflow_commit_plan", "Group the working tree into logical commits (code with tests per area, then docs, CI, build).", readOnly,

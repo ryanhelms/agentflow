@@ -35,6 +35,8 @@ raw git or ad hoc API calls for anything ticket-related.
 - If work drifts outside the ticket (unrelated files, new bugs, TODOs), call
   `devflow_scope_check` and offer the user a linked ticket via `devflow_ticket_create`
   instead of folding the work in.
+- To attach a design page or other URL to a Jira work item, call
+  `devflow_jira_remote_link` when the session supports authenticated provider writes.
 
 ## Pull requests and reviews
 

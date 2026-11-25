@@ -187,6 +187,25 @@ client's sign-in and retry after consent. Other existing REST or webhook
 operations retain their current credential behavior during migration.
 Devflow-managed writes continue through its confirmation and audit policy.
 
+#### Jira context and writes
+
+Jira context reads web links from the issue and its parent through the same
+provider route it used for the issue. The Teamwork Graph CLI requests those
+links with `twg jira workitem get <KEY> --remote-links`.
+
+With a supported authenticated Atlassian MCP session, Devflow can post Jira
+comments, assign the current user when starting work, move tickets forward by
+the flow map, and create unlinked tickets. Confirmations bind the Jira site,
+exact arguments, and provider connection. Operations that create a ticket
+with a Jira `link_to` relationship use the existing Jira REST workflow. The
+`devflow_jira_remote_link` MCP tool attaches an HTTP or HTTPS URL to an existing
+Jira issue. It accepts a `key`, `url`, optional `title`, and `confirm_token` when
+policy requires approval. This tool requires Atlassian's deferred
+`createJiraIssueRemoteIssueLink` capability in the session's direct catalog.
+Atlassian exposes its full catalog through
+`https://mcp.atlassian.com/v2/mcp?tools=all`.
+See the [Atlassian Rovo tool catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#how-the-server-exposes-tools).
+
 ### Claude Code Desktop
 
 The `claude` setup mode configures the Claude Code plugin marketplace. If a

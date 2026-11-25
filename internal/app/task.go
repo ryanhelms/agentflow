@@ -18,6 +18,7 @@ import (
 	"github.com/nscaledev/devflow/internal/provider"
 	"github.com/nscaledev/devflow/internal/provider/legacy"
 	"github.com/nscaledev/devflow/internal/provider/native"
+	"github.com/nscaledev/devflow/internal/provider/nativemap"
 	"github.com/nscaledev/devflow/internal/tasktemplate"
 )
 
@@ -62,15 +63,7 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	var api *atlassian.Client
-	task, err := a.nativeJiraTask(ctx, ref, func() (provider.Task, error) {
-		client, err := a.Jira()
-		if err != nil {
-			return provider.Task{}, err
-		}
-		api = client
-		return legacy.NewJira("jira", client.Base, client, nil).GetFields(ctx, ref)
-	})
+	task, remoteLinks, err := a.jiraContextTask(ctx, ref)
 	if err != nil {
 		var request *native.Request
 		if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
@@ -79,19 +72,21 @@ func (a *App) Context(ctx context.Context, key string) (*TicketContext, error) {
 		tc.Warnings = append(tc.Warnings, "Jira: "+err.Error())
 	} else {
 		tc.Summary, tc.Status, tc.Type, tc.Assignee = task.Title, task.State.Name, task.Type, task.Assignee
+		refs := make([]provider.Ref, 0, 2)
 		for _, parent := range task.Links {
 			if parent.Ref == nil {
 				continue
 			}
 			tc.Epic = parent.Ref.ID + " " + parent.Title
-			if api != nil {
-				if links, err := api.RemoteLinks(ctx, parent.Ref.ID); err == nil {
-					tc.Docs = append(tc.Docs, confluenceOnly(links)...)
-				}
-			}
+			refs = append(refs, *parent.Ref)
 		}
-		if api != nil {
-			if links, err := api.RemoteLinks(ctx, key); err == nil {
+		for _, target := range append(refs, ref) {
+			links, err := remoteLinks(target)
+			var request *native.Request
+			if errors.As(err, &request) || errors.Is(err, native.ErrSignIn) || errors.Is(err, native.ErrDenied) {
+				return nil, err
+			}
+			if err == nil {
 				tc.Docs = append(tc.Docs, confluenceOnly(links)...)
 			}
 		}
@@ -254,26 +249,42 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if err != nil {
 		return nil, err
 	}
-	j, err := a.jiraTasks(nil)
+	site, err := a.jiraSite()
 	if err != nil {
 		return nil, err
 	}
-	task, err := j.GetFields(ctx, ref)
+	title, plan, writes, err := a.prepareJiraStart(ctx, site, ref)
 	if err != nil {
 		return nil, err
 	}
-	branch := BranchName(key, task.Title)
+	var j *legacy.Jira
+	if writes == nil {
+		j, err = a.jiraTasks(nil)
+		if err != nil {
+			return nil, err
+		}
+		task, err := j.GetFields(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		title = task.Title
+		var planErr error
+		plan, planErr = a.PlanTransition(ctx, key, flowmap.BranchCreated)
+		if planErr != nil {
+			// Starting without a flow map still creates and assigns the branch.
+			plan.To = ""
+			plan.Note = planErr.Error()
+		}
+	}
+	branch := BranchName(key, title)
 	if !worktree && a.Repo.HasUncommitted(ctx) {
 		worktree = true
 	}
-	plan, planErr := a.PlanTransition(ctx, key, flowmap.BranchCreated)
-	if planErr != nil {
-		// Starting without a flow map still creates and assigns the branch.
-		plan.To = ""
-		plan.Note = planErr.Error()
-	}
 	col, _ := a.Collisions(ctx, key)
-	summary := map[string]any{"key": key, "site": a.jiraSettings().Site, "repo": a.Repo.Dir, "branch": branch, "worktree": worktree, "assign_to_me": true, "transition": plan}
+	summary := map[string]any{"key": key, "site": site, "repo": a.Repo.Dir, "branch": branch, "worktree": worktree, "assign_to_me": true, "transition": plan}
+	if writes != nil {
+		summary["native"] = writes
+	}
 	res := StartResult{Key: key, Branch: branch, Collisions: col}
 	if worktree {
 		res.Worktree = filepath.Join(filepath.Dir(a.Repo.Dir), filepath.Base(a.Repo.Dir)+"-"+key)
@@ -299,9 +310,28 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	if err != nil {
 		return nil, err
 	}
-	_, assignErr := j.AssignToMe(ctx, ref, provider.WriteOptions{})
+	var assignErr error
+	if writes != nil {
+		assignErr = writes.assign(ctx, site, ref)
+	} else {
+		_, assignErr = j.AssignToMe(ctx, ref, provider.WriteOptions{})
+	}
 	res.Assigned = assignErr == nil
 	a.audit(policy.Remote, "assign_to_me", summary, assignErr)
+	if writes != nil {
+		if assignErr != nil {
+			return res, assignErr
+		}
+		if writes.Transition == nil {
+			if plan.To != "" {
+				res.Transition = &plan
+			}
+			return res, nil
+		}
+		tr, err := a.runJiraTransition(ctx, site, ref, plan, writes.Transition)
+		res.Transition = &tr
+		return res, err
+	}
 	if plan.To != "" {
 		tr, err := a.ApplyTransition(ctx, plan)
 		res.Transition = &tr
@@ -468,9 +498,25 @@ func (a *App) CreateTicketWithTemplate(ctx context.Context, project, issueType, 
 		}
 		draft.Links = []provider.Link{{Ref: &link}}
 	}
-	s := map[string]string{"site": site, "project": project, "type": issueType, "summary": summary, "description": description, "link_to": linkTo}
+	write, err := a.prepareJiraCreate(ctx, site, draft)
+	if err != nil {
+		return nil, err
+	}
+	s := jiraRemoteSummary(map[string]string{"site": site, "project": project, "type": issueType, "summary": summary, "description": description, "link_to": linkTo}, write)
 	if p, err := a.gate(policy.Remote, "ticket_create", s, token, true, nil); p != nil || err != nil {
 		return p, err
+	}
+	if write != nil {
+		payload, err := write.run(ctx)
+		var created provider.Ref
+		if err == nil {
+			created, err = nativemap.DecodeJiraCreated(payload, "jira", project)
+			if err != nil {
+				err = errors.Join(native.ErrWriteUncertain, err)
+			}
+		}
+		a.audit(policy.Remote, "ticket_create", s, err)
+		return map[string]string{"key": created.ID}, err
 	}
 	j, err := a.jiraTasks(nil)
 	if err != nil {

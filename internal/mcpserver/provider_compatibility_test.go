@@ -28,13 +28,14 @@ func TestLegacyProviderToolFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := map[string][]string{
-		"devflow_context":       {"key"},
-		"devflow_start":         {"key", "worktree", "confirm_token"},
-		"devflow_transition":    {"key", "event", "dry_run", "confirm_token"},
-		"devflow_ticket_create": {"project", "type", "summary", "description", "link_to", "confirm_token"},
-		"devflow_ac_update":     {"key", "item", "done", "evidence", "post", "confirm_token"},
-		"devflow_docs_search":   {"query", "space"},
-		"devflow_pr_open":       {"title", "body", "draft", "reviewers", "labels", "confirm_token"},
+		"devflow_context":          {"key"},
+		"devflow_start":            {"key", "worktree", "confirm_token"},
+		"devflow_transition":       {"key", "event", "dry_run", "confirm_token"},
+		"devflow_ticket_create":    {"project", "type", "summary", "description", "link_to", "confirm_token"},
+		"devflow_jira_remote_link": {"key", "url", "title", "confirm_token"},
+		"devflow_ac_update":        {"key", "item", "done", "evidence", "post", "confirm_token"},
+		"devflow_docs_search":      {"query", "space"},
+		"devflow_pr_open":          {"title", "body", "draft", "reviewers", "labels", "confirm_token"},
 	}
 	for _, tool := range result.Tools {
 		fields, ok := expected[tool.Name]

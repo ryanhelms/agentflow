@@ -14,10 +14,9 @@ the principal's access to the selected resource.
 | Slack | `notification.deliver` | `slack_send_message` | One top-level message to a configured conversation, after policy and receipt preconditions |
 | GitHub | `task.get` | `issue_read`, method `get` | One issue number in a known github.com repository |
 
-`CapabilityFor` returns `provider.ErrUnsupported` for other provider and
-operation pairs. In particular, native task search, creation, assignment,
-comments and transitions, document search and publication, and GitHub PR,
-release, deployment and security operations are outside this mapping.
+`CapabilityFor` returns `provider.ErrUnsupported` for provider and operation
+pairs outside the table. Jira's targeted App operations use the explicit Rovo
+call constructors below.
 
 ## Caller contract
 
@@ -49,6 +48,28 @@ and labels when supplied. The browse URL uses the configured site.
 [Atlassian Rovo MCP catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#read_jira) ·
 [Official Jira field selection example](https://atlassian.github.io/atlassian-mcp-server/skills/assess-release/SKILL.html) ·
 [Atlassian Jira issue field schema](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-get)
+
+## Jira web links and targeted writes
+
+Jira context reads `listJiraIssueRemoteIssueLinks` for the issue and its parent
+with the Jira site in `cloudId` and the target key in `issueIdOrKey`. Rovo's
+standard catalog exposes the operation through `executeRead`. The decoder
+projects each Jira remote link's `object.title` and `object.url` from the list.
+TWG uses `jira workitem get <KEY> --remote-links` with the same site and login
+used to load issue fields.
+
+Direct write calls use `createJiraIssueRemoteIssueLink` for an external URL,
+`addOrEditJiraIssueComment` for a new comment, `editJiraIssue` with the current
+Jira account ID for self-assignment, `transitionJiraIssue` with an exact
+workflow transition ID, and `createJiraIssue` for unlinked creation. Available
+transition IDs come from `listJiraIssueTransitions`. The App prepares exact
+write arguments before confirmation and revalidates scope and workflow state
+on the bound connection before dispatch. Deferred writes require the full
+Atlassian catalog where their named tools are listed directly.
+
+[Atlassian Rovo MCP catalog](https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/#jira) ·
+[Atlassian transition contract](https://www.atlassian.com/blog/how-we-build/jira-depth-on-demand) ·
+[TWG work item command reference](https://github.com/atlassian/twg-cli/blob/main/skills/twg-jira/references/workitems.md#reads)
 
 ## Confluence page → `provider.Document`
 

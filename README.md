@@ -186,6 +186,11 @@ Jira work and issue context, Confluence search, and individual Asana and
 GitHub issue reads can use the client’s connected provider MCP. Atlassian
 reads can fall back to Teamwork Graph CLI, and interactive GitHub API calls
 use the signed-in GitHub CLI.
+Jira context includes design links from the ticket and its parent. A supported
+authenticated Atlassian MCP session can apply Jira comments, forward workflow
+transitions, self-assignment, and unlinked ticket creation through Devflow's
+write policy. Use `devflow_jira_remote_link` to attach a web link to an existing
+Jira ticket.
 
 If Claude Code Desktop on macOS is missing the devflow tools, run
 `devflow setup apply --client claude-desktop` in the enrolled checkout.
