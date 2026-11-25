@@ -32,14 +32,14 @@ const (
 
 // WithBoundToken compares the grant generation and keeps the lock during dispatch.
 type Enrollment struct {
-	BoundToken                       func(context.Context) (accessToken, generation string, err error)
+	BoundIdentity                    func(context.Context) (slackoauth.GrantIdentity, error)
 	WithBoundToken                   func(context.Context, string, func(string) error) error
 	ErrNotEnrolled, ErrLoginRequired error
 }
 
 func NewWriter() *native.SessionWriter {
 	return newWriter(Enrollment{
-		BoundToken: slackoauth.BoundToken, WithBoundToken: slackoauth.WithBoundToken,
+		BoundIdentity: slackoauth.BoundIdentity, WithBoundToken: slackoauth.WithBoundToken,
 		ErrNotEnrolled: slackoauth.ErrNotEnrolled, ErrLoginRequired: slackoauth.ErrLoginRequired,
 	}, nativeoauth.NewTransport())
 }
@@ -57,20 +57,23 @@ func newWriter(enrollment Enrollment, transport http.RoundTripper) *native.Sessi
 		if len(call.Arguments) != 2 || !nativemap.ValidSlackSend(channel, message) {
 			return nil, native.ErrDenied
 		}
-		if enrollment.BoundToken == nil || enrollment.WithBoundToken == nil {
+		if enrollment.BoundIdentity == nil || enrollment.WithBoundToken == nil {
 			return nil, native.ErrDenied
 		}
-		token, generation, err := enrollment.BoundToken(ctx)
+		grant, err := enrollment.BoundIdentity(ctx)
 		if err != nil {
 			if errors.Is(err, enrollment.ErrNotEnrolled) {
 				return nil, native.ErrUnavailable
 			}
 			return nil, enrollment.failure(err)
 		}
-		if token == "" || generation == "" {
+		if grant.Generation == "" || grant.Team == "" || grant.User == "" {
 			return nil, native.ErrSignIn
 		}
-		wire := &boundTransport{enrollment: enrollment, generation: generation, transport: transport}
+		if call.Scope != grant.Team && call.Scope != grant.Team+"/"+grant.User {
+			return nil, fmt.Errorf("%w: slack enrollment differs from the configured workspace or actor", native.ErrDenied)
+		}
+		wire := &boundTransport{enrollment: enrollment, generation: grant.Generation, transport: transport}
 		client := mcp.NewClient(&mcp.Implementation{Name: "devflow", Version: "1"}, &mcp.ClientOptions{
 			Capabilities: &mcp.ClientCapabilities{}, Logger: slog.New(slog.DiscardHandler),
 			MultiRoundTrip: &mcp.MultiRoundTripOptions{Disabled: true},
@@ -83,7 +86,7 @@ func newWriter(enrollment Enrollment, transport http.RoundTripper) *native.Sessi
 		if err != nil {
 			return nil, safeError(err)
 		}
-		s := &session{conn: conn, channel: channel, message: message}
+		s := &session{conn: conn, channel: channel, message: message, scope: call.Scope, team: grant.Team}
 		caps := conn.InitializeResult().Capabilities
 		if caps == nil || caps.Tools == nil {
 			s.Close()
@@ -106,6 +109,7 @@ type toolSchema struct {
 type session struct {
 	conn             *mcp.ClientSession
 	channel, message string
+	scope, team      string
 	tools            map[string]toolSchema
 }
 

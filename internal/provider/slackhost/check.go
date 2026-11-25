@@ -9,13 +9,13 @@ import (
 	"github.com/nscaledev/devflow/internal/provider/nativemap"
 )
 
-var (
-	workspaceID = regexp.MustCompile(`^T[A-Z0-9]{8,31}$`)
-	timestamp   = regexp.MustCompile(`^[0-9]{1,16}\.[0-9]{6}$`)
-)
+var timestamp = regexp.MustCompile(`^[0-9]{1,16}\.[0-9]{6}$`)
 
 func (s *session) Check(call native.Call) error {
 	if call.Provider != "slack" || call.Server != "slack" || !s.permits(call.Tool, call.Arguments) {
+		return native.ErrDenied
+	}
+	if call.Tool == send && call.Scope != s.scope {
 		return native.ErrDenied
 	}
 	schema := s.tools[call.Tool].input
@@ -59,8 +59,7 @@ func (s *session) permits(tool string, args map[string]any) bool {
 	case profile:
 		return len(args) == 0 // Omitting user_id selects the authenticated user.
 	case channels:
-		team, _ := args["team_id"].(string)
-		if !workspaceID.MatchString(team) || args["types"] != nativemap.SlackChannelTypes(s.channel) ||
+		if args["team_id"] != s.team || args["types"] != nativemap.SlackChannelTypes(s.channel) ||
 			args["format"] != "names_only" || args["exclude_archived"] != true {
 			return false
 		}

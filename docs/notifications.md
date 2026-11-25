@@ -24,8 +24,13 @@ notifications:
       actor_id: U0123456789
 ```
 
-Devflow checks the channel against Slack's workspace-filtered conversation list
-through the same authenticated connection. It verifies a configured actor ID
+With a Devflow enrollment, the stored grant must match `workspace_id` and any
+configured `actor_id` before Devflow connects to Slack MCP. Slack can omit the
+team from a profile and ignore the channel list's `team_id` filter for a regular
+workspace token.
+
+Devflow checks the channel against the authenticated user's conversation list
+through the same connection. It verifies a configured actor ID
 and rejects a different workspace ID when Slack reports one. Confirmation binds
 the connection, the exact rendered Markdown, the scoped IDs and the verified
 actor when available. A successful Slack acknowledgement includes the message
