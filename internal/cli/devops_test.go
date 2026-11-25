@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -109,7 +110,8 @@ notifications: {provider: none}
 		Release    provider.Release `json:"release"`
 	}
 	capture(&preview, "release", "publish", "v1.2.4", "--revision", sha, "--title", "Next release", "--notes", "Notes", "--dry-run")
-	if preview.Repository != "github.com/example/releases" || preview.Release != (provider.Release{Tag: "v1.2.4", Revision: sha, Title: "Next release", Notes: "Notes"}) {
+	want := provider.Release{Tag: "v1.2.4", Revision: sha, Title: "Next release", Notes: "Notes"}
+	if preview.Repository != "github.com/example/releases" || !reflect.DeepEqual(preview.Release, want) {
 		t.Fatalf("publication preview = %+v", preview)
 	}
 }

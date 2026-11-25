@@ -96,6 +96,7 @@ against GitHub and requires confirmation. Use `--yes` to accept the prompt in
 an authorized run. A matching stable release returns `already_applied` on retry.
 A tag at a different commit or a release with different metadata is a conflict.
 The operation can create a tag when one is absent. GitHub tag protections apply.
+After a retry, use `devflow release get TAG` to inspect the existing assets.
 The reusable workflow builds and uploads artifacts for its release-please releases.
 
 ## Using versions in your own workflows

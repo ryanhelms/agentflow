@@ -245,6 +245,7 @@ merge. Use `publication: push` for direct writes to an unprotected branch.
 `devflow status` reads checks and deployments from their own `devops` providers.
 Deployments match the open PR's head commit or the local `HEAD` when there is no
 open PR. Use `devflow release get TAG` to inspect a release from `devops.releases`.
+GitHub lookup includes the tagged commit and any assets attached by the build pipeline.
 Deployments and release lookup also support local JSON fixtures.
 [DevOps provider configuration](docs/providers.md#deployment-and-release-providers)
 

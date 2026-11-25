@@ -19,12 +19,16 @@ type githubRelease struct {
 	URL        string `json:"html_url"`
 	Draft      bool   `json:"draft"`
 	Prerelease bool   `json:"prerelease"`
+	Assets     []struct {
+		Name        string `json:"name"`
+		DownloadURL string `json:"browser_download_url"`
+		Size        int64  `json:"size"`
+		Digest      string `json:"digest"`
+	} `json:"assets"`
 }
 
 // GetRelease reads a published release by tag. Revision is the commit the tag
-// points to, including for annotated tags. An asset extension can add typed
-// asset metadata (name, download URL, size and digest) to provider.Release and
-// map GitHub's release assets into it. Asset uploads belong to the build workflow.
+// points to, including for annotated tags.
 func (a *Adapter) GetRelease(ctx context.Context, repo provider.RepositoryRef, tag string) (provider.Release, error) {
 	base, ref, err := releaseLocation(repo, tag)
 	if err != nil {
@@ -41,7 +45,11 @@ func (a *Adapter) GetRelease(ctx context.Context, repo provider.RepositoryRef, t
 	if err != nil {
 		return provider.Release{}, err
 	}
-	return provider.Release{Tag: remote.Tag, Revision: sha, Title: remote.Title, Notes: remote.Notes, URL: remote.URL}, nil
+	release := provider.Release{Tag: remote.Tag, Revision: sha, Title: remote.Title, Notes: remote.Notes, URL: remote.URL}
+	for _, asset := range remote.Assets {
+		release.Assets = append(release.Assets, provider.ReleaseAsset(asset))
+	}
+	return release, nil
 }
 
 // PublishRelease creates a stable release. The repository and tag provide the
