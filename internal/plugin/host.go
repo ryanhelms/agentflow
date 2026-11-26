@@ -89,6 +89,30 @@ type Host struct {
 	installed map[string]manifest.Installed
 	disabled  map[bus.RepoID]map[string]bool
 	stopped   bool
+
+	// limits are each plugin ID's rate limits, kept across restarts so a
+	// crashing plugin cannot reset its budget.
+	limitsMu sync.Mutex
+	limits   map[string]*rateLimits
+}
+
+// rateLimits are one plugin's invoke and publish token buckets.
+type rateLimits struct{ invokes, publishes *bucket }
+
+// limitsFor returns plugin id's rate limits, made on first use.
+func (h *Host) limitsFor(id string) *rateLimits {
+	h.limitsMu.Lock()
+	defer h.limitsMu.Unlock()
+	if h.limits == nil {
+		h.limits = map[string]*rateLimits{}
+	}
+	l, ok := h.limits[id]
+	if !ok {
+		now := h.o.Now
+		l = &rateLimits{invokes: newBucket(InvokesPerMinute, InvokeBurst, now), publishes: newBucket(PublishesPerMinute, PublishBurst, now)}
+		h.limits[id] = l
+	}
+	return l
 }
 
 // NewHost returns a Host. Call Start, then Reload whenever the registry,

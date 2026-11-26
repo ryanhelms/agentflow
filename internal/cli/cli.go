@@ -166,6 +166,13 @@ func run(ctx context.Context, cmd string, args []string) error {
 	if dispatch, rest, ok := command.Default.Dispatch(append([]string{cmd}, args...)); ok {
 		return dispatch(ctx, cliEnv{}, invoker, rest)
 	}
+	// A registered operation whose command line still runs a handler
+	// below: run the registered stages (plugin permission rules) first.
+	if m, ok := command.Default.Legacy(append([]string{cmd}, args...)); ok {
+		if err := command.CheckStages(ctx, m, command.Origin{Source: "cli", Client: "cli"}, command.Detail{}); err != nil {
+			return err
+		}
+	}
 	switch cmd {
 	case "policy":
 		return runPolicy(ctx, args)

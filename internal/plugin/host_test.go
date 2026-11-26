@@ -39,6 +39,7 @@ type fixture struct {
 	ran     chan fakeIn
 
 	mu        sync.Mutex
+	commands  map[string]command.Command // more commands than notify
 	lifecycle []bus.PluginLifecycleChanged
 	failed    []bus.PluginDeliveryFailed
 	ops       []bus.Event
@@ -112,7 +113,10 @@ func newFixture(t *testing.T, child func() *plugintest.Child) *fixture {
 			if name == "notify" {
 				return notify, true
 			}
-			return nil, false
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			c, ok := f.commands[name]
+			return c, ok
 		},
 		OpenApp: func(_ context.Context, _ string, client string) (*app.App, error) {
 			g := *gate

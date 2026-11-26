@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -83,11 +84,38 @@ func (e *DeniedError) Error() string {
 // Code returns DeniedCode.
 func (e *DeniedError) Code() string { return DeniedCode }
 
-// oneLine cuts s to its first line and at most n bytes, on a rune boundary.
-func oneLine(s string, n int) string {
+// oneLine is SafeText: plugin text cut to one safe line.
+func oneLine(s string, n int) string { return SafeText(s, n) }
+
+// SafeText makes plugin text safe to display: its first line, without
+// control characters or bidirectional formatting characters (which can
+// reorder what a person reads), cut to at most n bytes of valid UTF-8.
+func SafeText(s string, n int) string {
 	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
 		s = s[:i]
 	}
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || bidiFormat(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return clip(s, n)
+}
+
+// bidiFormat reports whether r is a bidirectional formatting character.
+func bidiFormat(r rune) bool {
+	switch {
+	case r == 0x061C, r == 0x200E, r == 0x200F,
+		r >= 0x202A && r <= 0x202E,
+		r >= 0x2066 && r <= 0x2069:
+		return true
+	}
+	return false
+}
+
+// clip cuts s to at most n bytes without splitting a UTF-8 sequence.
+func clip(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}

@@ -41,10 +41,9 @@ type env struct {
 var _ Env = (*env)(nil)
 
 func newEnv(r *runner, log *pluginLog) *env {
-	now := r.h.o.Now
+	l := r.h.limitsFor(r.p.ID)
 	return &env{r: r, id: r.p.ID, perms: r.p.Manifest.Permissions, log: log, settings: r.settings(),
-		invokes: newBucket(InvokesPerMinute, InvokeBurst, now), publishes: newBucket(PublishesPerMinute, PublishBurst, now),
-		recent: map[string]bus.Event{}}
+		invokes: l.invokes, publishes: l.publishes, recent: map[string]bus.Event{}}
 }
 
 func (e *env) Plugin() string { return e.id }
@@ -187,8 +186,12 @@ func (e *env) where(cause string, repo bus.RepoID, worktree bus.WorktreeID) (Wor
 			return Worktree{}, nil, refuse(RefuseInvalid)
 		}
 		ce = &ev
-		if repo == "" {
+		switch {
+		case repo == "":
 			repo, worktree = ev.Repo, ev.Worktree
+		case repo != ev.Repo:
+			// A cause from another repository would link the two.
+			return Worktree{}, nil, refuse(RefuseInvalid)
 		}
 	}
 	if repo == "" {
@@ -221,6 +224,7 @@ func (e *env) Publish(ctx context.Context, r PublishRequest) (PublishResult, err
 		p.Level = bus.AnnotationInfo
 	}
 	p = p.Clamp()
+	p.Text = SafeText(p.Text, len(p.Text))
 	if !operationIDRe.MatchString(p.OperationID) || p.Text == "" || p.Level != bus.AnnotationInfo && p.Level != bus.AnnotationWarning ||
 		p.URL != "" && !httpsURL(p.URL) {
 		return PublishResult{}, refuse(RefuseInvalid)
