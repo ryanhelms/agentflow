@@ -9,15 +9,16 @@ import (
 	"github.com/ryanhelms/agentflow/internal/bus"
 )
 
-// Phase 2 sources (lane 2.1): the personal configuration layer, the
-// approval journal and client settings files. The contract is in the ADR,
-// section "Phase 2, Watch". This file holds the paths, the classification
-// tables and the pure state-transition rule; lane 2.1 adds the Translator
-// for them and the daemon wiring.
+// Phase 2 sources: the personal configuration layer, the approval journal
+// and client settings files. The contract is in the ADR, section "Phase 2
+// watch sources". This file holds the paths, the classification tables and
+// the pure state-transition rule. UserTranslator (translate_user.go)
+// translates them and FileWatcher.AddUser (watcher_user.go) watches them;
+// the daemon registers both from internal/webui/stream_runtime_user.go.
 
 // UserTarget is the one per-daemon set of user-level directories. The
-// daemon watches only directories its own OS user owns (lane 2.1 checks the
-// owner before Add and skips any other), so one user's events never come
+// daemon watches only directories its own OS user owns (FileWatcher.AddUser
+// checks the owner and skips any other), so one user's events never come
 // from another user's files.
 type UserTarget struct {
 	// Home is agentflow's user directory, config.HomeDir() in the daemon
@@ -83,9 +84,9 @@ var UserClientSettings = []ClientSettingsFile{
 }
 
 // RepoClientSettings are the per-worktree files, the ones `agentflow init`
-// and `agentflow setup` write (internal/setup). Lane 2.1 adds their
-// directories to WorktreePaths and their classification to Classify, which
-// yields client.settings.changed{scope: repo} for the worktree.
+// and `agentflow setup` write (internal/setup). WorktreePaths watches their
+// directories and Classify maps them to client.settings.changed{scope: repo}
+// for the worktree (ClientSettingsTranslator).
 var RepoClientSettings = []ClientSettingsFile{
 	{"claude", ".mcp.json"},
 	{"claude", ".claude/settings.json"},
@@ -180,8 +181,8 @@ func ApprovalTransition(previous, current bus.ApprovalState) (bus.Type, bool) {
 
 // ObservedExpiry reports whether a record that is still pending or
 // approved has passed expiresAt at now. The journal records an expiry only
-// when a process next touches the record, so lane 2.1 arms one timer per
-// open record and emits approval.expired with Observed set when it fires.
+// when a process next touches the record, so UserTranslator.Tick reports
+// approval.expired with Observed set at the earliest expiry of an open record.
 // A later "expired" write for the same record then produces nothing,
 // because the translator already moved it to StateExpired.
 func ObservedExpiry(state bus.ApprovalState, expiresAt, now time.Time) bool {

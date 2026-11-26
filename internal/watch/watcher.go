@@ -54,6 +54,7 @@ type FileWatcher struct {
 	mu      sync.Mutex
 	targets map[Key]*targetState
 	repos   map[bus.RepoID]*repoState
+	user    *userState // the user-level group, nil until AddUser
 	want    map[string]*wantDir
 	running bool
 	closed  bool
@@ -247,7 +248,11 @@ func (w *FileWatcher) Run(ctx context.Context, pub bus.Publisher) error {
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	for {
-		if next, ok := w.agg.Next(); ok {
+		next, ok := w.agg.Next()
+		if d, has := w.nextTimed(); has && (!ok || d.Before(next)) {
+			next, ok = d, true
+		}
+		if ok {
 			timer.Reset(time.Until(next))
 		} else {
 			timer.Stop()
@@ -315,22 +320,28 @@ func (w *FileWatcher) Rescan() {
 	for _, ts := range w.targets {
 		w.rescanTarget(ts)
 	}
+	w.rescanUser()
 	w.kick()
 }
 
-// flush translates and publishes every due Batch.
+// flush translates and publishes every due Batch, then the events the user
+// Translator has due by time.
 func (w *FileWatcher) flush(ctx context.Context, pub bus.Publisher) {
-	for _, b := range w.agg.Due(time.Now()) {
-		evs, err := w.tr.Translate(ctx, b)
+	now := time.Now()
+	for _, b := range w.agg.Due(now) {
+		tr := w.tr
+		if b.Target.Repo == bus.GlobalRepo {
+			if tr = w.userTranslator(); tr == nil {
+				continue
+			}
+		}
+		evs, err := tr.Translate(ctx, b)
 		if err != nil {
 			w.opts.OnError(fmt.Errorf("translate %s/%s: %w", b.Target.Repo, b.Target.Worktree, err))
 		}
-		for _, e := range evs {
-			if _, err := pub.Publish(ctx, e); err != nil && ctx.Err() == nil {
-				w.opts.OnError(fmt.Errorf("publish %s: %w", e.Type, err))
-			}
-		}
+		w.publish(ctx, pub, evs)
 	}
+	w.tick(ctx, pub, now)
 }
 
 func (w *FileWatcher) handleError(err error) {
@@ -393,6 +404,9 @@ func (w *FileWatcher) route(c Change, now time.Time) {
 			w.agg.Add(r.t, c, now)
 		}
 	}
+	if us := w.user; us != nil && us.concerns(c.Path) {
+		w.agg.Add(us.t, c, now)
+	}
 	for _, ts := range w.targets {
 		typ, ok := Classify(ts.t, c.Path)
 		if !ok {
@@ -425,6 +439,7 @@ func (w *FileWatcher) rescanTarget(ts *targetState) {
 		filepath.Join(ts.t.GitDir, "index"),
 		filepath.Join(ts.t.GitDir, "MERGE_HEAD"), // any operation marker makes the Translator check all
 		filepath.Join(ts.t.Root, ".agentflow", "config.yml"),
+		filepath.Join(ts.t.Root, ".mcp.json"), // any client settings file makes the Translator check all
 	} {
 		w.agg.Add(ts.t, Change{Path: p, Kind: Modified, Time: now}, now)
 	}
@@ -654,16 +669,22 @@ func (w *FileWatcher) fallbackGroup(g *group) {
 			w.rescanTarget(ts)
 		}
 	}
+	if w.user != nil && w.user.g == g {
+		w.rescanUser()
+	}
 	w.opts.OnError(errors.New("watch: notifications failed, polling instead"))
 }
 
 func (w *FileWatcher) groups() []*group {
-	out := make([]*group, 0, len(w.repos)+len(w.targets))
+	out := make([]*group, 0, len(w.repos)+len(w.targets)+1)
 	for _, r := range w.repos {
 		out = append(out, r.g)
 	}
 	for _, ts := range w.targets {
 		out = append(out, ts.g)
+	}
+	if w.user != nil {
+		out = append(out, w.user.g)
 	}
 	return out
 }

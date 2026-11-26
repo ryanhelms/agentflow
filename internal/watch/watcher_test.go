@@ -103,6 +103,19 @@ type harness struct {
 
 func start(t *testing.T, opts watch.Options, targets ...watch.Target) *harness {
 	t.Helper()
+	return startWith(t, opts, func(w *watch.FileWatcher) {
+		for _, tg := range targets {
+			if err := w.Add(tg); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+}
+
+// startWith starts a watcher, lets setup add its Targets, and returns a
+// harness subscribed to every event it publishes.
+func startWith(t *testing.T, opts watch.Options, setup func(*watch.FileWatcher)) *harness {
+	t.Helper()
 	if opts.PollInterval == 0 {
 		opts.PollInterval = 50 * time.Millisecond
 		opts.PollRefsInterval = 100 * time.Millisecond
@@ -114,11 +127,7 @@ func start(t *testing.T, opts watch.Options, targets ...watch.Target) *harness {
 		t.Fatal(err)
 	}
 	h.w = w
-	for _, tg := range targets {
-		if err := w.Add(tg); err != nil {
-			t.Fatal(err)
-		}
-	}
+	setup(w)
 	b := bustest.New(bus.Options{})
 	all, err := bus.ParseTopic("*/*/**")
 	if err != nil {

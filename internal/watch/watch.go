@@ -150,13 +150,27 @@ type Path struct {
 	Recursive bool
 }
 
-// WorktreePaths lists the directories phase 1 watches for one worktree.
+// WorktreePaths lists the directories watched for one worktree: the git
+// dir, the repository configuration (phase 1) and, for the client settings
+// files (RepoClientSettings, phase 2), the worktree root and each client's
+// directory. None is recursive; a directory that does not exist yet is
+// polled until it appears.
 func WorktreePaths(t Target) []Path {
-	return []Path{
+	out := []Path{
 		{Dir: t.GitDir}, // HEAD, index, rebase-*/, *_HEAD, BISECT_LOG
 		{Dir: filepath.Join(t.Root, ".agentflow")},              // config.yml, releases.yml
 		{Dir: filepath.Join(t.Root, ".agentflow", "providers")}, // providers/*.yml
+		{Dir: t.Root}, // .mcp.json
 	}
+	seen := map[string]bool{t.Root: true}
+	for _, f := range RepoClientSettings {
+		dir := filepath.Dir(filepath.Join(t.Root, filepath.FromSlash(f.Path)))
+		if !seen[dir] {
+			seen[dir] = true
+			out = append(out, Path{Dir: dir})
+		}
+	}
+	return out
 }
 
 // RepoPaths lists the directories phase 1 watches once per repository.
@@ -230,6 +244,14 @@ func Classify(t Target, path string) (bus.Type, bool) {
 		depthOK := !strings.Contains(rel, "/") || (strings.HasPrefix(rel, "providers/") && strings.Count(rel, "/") == 1)
 		if depthOK && (ext == ".yml" || ext == ".yaml") {
 			return bus.TypeConfigLayerChanged, true
+		}
+		return "", false
+	}
+	if rel, ok := under(t.Root, path); ok {
+		for _, f := range RepoClientSettings {
+			if rel == f.Path {
+				return bus.TypeClientSettingsChanged, true
+			}
 		}
 	}
 	return "", false
