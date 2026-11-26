@@ -71,21 +71,11 @@ jobs:
       - if: steps.version.outputs.release == 'true'
         run: go test -race -count=1 ./...
 
-      - name: Tag remote with the release deploy key
+      - name: Push release tags through origin
+        # No deploy key or tag ruleset on this repository (GitHub Free). The
+        # checkout's GITHUB_TOKEN credentials apply to the same URL.
         if: steps.version.outputs.release == 'true'
-        env:
-          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          [ -n "$RELEASE_DEPLOY_KEY" ] || { echo "::error::RELEASE_DEPLOY_KEY is not set"; exit 1; }
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$RELEASE_DEPLOY_KEY" > ~/.ssh/release_key
-          chmod 600 ~/.ssh/release_key
-          # GitHub's published host keys, not trust-on-first-use.
-          gh api meta --jq '.ssh_keys[] | "github.com " + .' > ~/.ssh/known_hosts
-          git remote add release "git@github.com:${GITHUB_REPOSITORY}.git"
-          git config core.sshCommand "ssh -i ~/.ssh/release_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+        run: git remote add release "$(git remote get-url origin)"
 
       - name: Commit the changelog and tag the release
         if: steps.version.outputs.release == 'true'
