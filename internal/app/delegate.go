@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nscaledev/agentflow/internal/boundary"
-	"github.com/nscaledev/agentflow/internal/delegate"
-	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/boundary"
+	"github.com/ryanhelms/agentflow/internal/delegate"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Delegate hands a task to an agent session in another repository: a running

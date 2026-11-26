@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Worktree states reported by Finish and Sweep.

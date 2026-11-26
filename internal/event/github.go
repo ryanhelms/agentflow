@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // GitHubActionsContext binds a payload to trusted Actions metadata and repo

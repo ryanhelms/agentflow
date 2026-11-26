@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 func TestEnsureInstallsAndReusesVerifiedCLI(t *testing.T) {

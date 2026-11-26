@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/nscaledev/agentflow/internal/cli"
+	"github.com/ryanhelms/agentflow/internal/cli"
 )
 
 func main() {

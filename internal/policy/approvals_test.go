@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 func gateFor(t *testing.T, home, client string) *Gate {

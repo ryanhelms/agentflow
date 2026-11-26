@@ -20,10 +20,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/filesystem"
-	"github.com/nscaledev/agentflow/internal/provider/okf"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/filesystem"
+	"github.com/ryanhelms/agentflow/internal/provider/okf"
 )
 
 // Config takes a resolved origin URL or absolute repository path. The caller

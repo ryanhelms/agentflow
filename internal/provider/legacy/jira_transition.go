@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // ErrNoTransition identifies the legacy workflow no-op when no transition is available.

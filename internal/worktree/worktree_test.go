@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 func userWith(checkouts map[string]string) *config.User {

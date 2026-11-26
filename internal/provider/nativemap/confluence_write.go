@@ -6,10 +6,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/confluence"
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/confluence"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 // ConfluencePublication maps a replacement on the configured Rovo v2 site.

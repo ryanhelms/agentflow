@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/gh"
 )
 
 func TestVersions(t *testing.T) {

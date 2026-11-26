@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}

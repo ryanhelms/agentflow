@@ -4,7 +4,7 @@ SHELL := /usr/bin/env bash
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-PKG     := github.com/nscaledev/agentflow/internal/version
+PKG     := github.com/ryanhelms/agentflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
 SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
@@ -37,6 +37,7 @@ agent-docs: ## CLAUDE.md files must only contain @AGENTS.md
 
 check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs locally
 	bash scripts/test-install-sh.sh
+	bash scripts/test-changelog.sh
 	bash scripts/test-workflow-trust.sh
 	@if command -v pwsh >/dev/null; then pwsh -NoProfile -File scripts/test-install-ps1.ps1; fi
 

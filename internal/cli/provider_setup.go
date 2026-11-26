@@ -11,10 +11,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/hooks"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/hooks"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 func runProviderSetup(ctx context.Context, args []string) error {

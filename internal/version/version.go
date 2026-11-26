@@ -3,7 +3,7 @@ package version
 
 // Set at build time:
 //
-//	-X github.com/nscaledev/agentflow/internal/version.Version={{.Version}}
+//	-X github.com/ryanhelms/agentflow/internal/version.Version={{.Version}}
 var (
 	Version = "dev"
 	Commit  = "none"

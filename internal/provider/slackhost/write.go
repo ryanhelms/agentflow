@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/nativemap"
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
-	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/nativemap"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/slackoauth"
 )
 
 const (

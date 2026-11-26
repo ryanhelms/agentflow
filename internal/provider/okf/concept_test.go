@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider/okf"
+	"github.com/ryanhelms/agentflow/internal/provider/okf"
 	"gopkg.in/yaml.v3"
 )
 

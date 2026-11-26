@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/mcpserver"
+	"github.com/ryanhelms/agentflow/internal/mcpserver"
 )
 
 func TestInitGuidanceFollowsConfiguredProviders(t *testing.T) {

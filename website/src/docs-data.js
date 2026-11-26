@@ -84,7 +84,7 @@ const conflict = [
   "Diagnose publication conflicts",
   "For a stale revision, reread the document and compare it with the draft. If replay returns an existing PR, check its head and review state. Check duplicate references for two files with the same x-agentflow-ref.",
 ];
-export const SOURCE_REPOSITORY = "https://github.com/nscaledev/agentflow";
+export const SOURCE_REPOSITORY = "https://github.com/ryanhelms/agentflow";
 
 // Release order determines the Latest alias and which guides existed at each tag.
 const releaseCommits = {

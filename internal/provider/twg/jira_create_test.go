@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 const createMetadata = `{"command":"jira.space.issue-types","request":{"site":"https://example.atlassian.net","idOrKey":"ENG"},"data":{"space":{"key":"ENG","id":"100"},"issueTypes":[{"name":"Task","id":"101","subtask":false}]}}`

@@ -72,7 +72,9 @@ while IFS=$'\x1f' read -r -d $'\x1e' sha subject body; do
   entry="- $prefix$summary ([${sha:0:7}](https://github.com/$repo/commit/$sha))"
 
   if [ -n "$bang" ] || [[ "$body" == *"BREAKING CHANGE:"* ]] || [[ "$body" == *"BREAKING-CHANGE:"* ]]; then
+    # A breaking change is listed once, under Breaking changes only.
     breaking+="$entry"$'\n'
+    continue
   fi
   case "$type" in
     feat) features+="$entry"$'\n' ;;

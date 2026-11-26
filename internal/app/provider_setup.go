@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nscaledev/agentflow/internal/managedgh"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provision"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 // ApplyProviderSetup gates one local action against a freshly inspected plan.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 // currentPublicationConfig picks up local edits in long-lived MCP sessions.

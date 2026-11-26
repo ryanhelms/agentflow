@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 	"golang.org/x/term"
 )
 

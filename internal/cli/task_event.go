@@ -7,8 +7,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/nscaledev/agentflow/internal/event"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/event"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 func runGitHubTaskEvent(ctx context.Context, dryRun bool) error {

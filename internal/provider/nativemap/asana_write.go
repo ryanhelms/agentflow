@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/asana"
 )
 
 func AsanaCreate(draft provider.TaskDraft) (TaskWrite, error) {

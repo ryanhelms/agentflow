@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/auth"
+	"github.com/ryanhelms/agentflow/internal/auth"
 )
 
 // Client talks to one Atlassian site with the developer's credential.

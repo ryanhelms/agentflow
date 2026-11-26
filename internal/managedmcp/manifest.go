@@ -15,10 +15,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/provision"
-	"github.com/nscaledev/agentflow/internal/provision/local"
-	"github.com/nscaledev/agentflow/internal/provision/user"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision/local"
+	"github.com/ryanhelms/agentflow/internal/provision/user"
 )
 
 const manifestName = "mcp-companions.yml"

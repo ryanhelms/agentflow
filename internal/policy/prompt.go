@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/nscaledev/agentflow/internal/filelock"
+	"github.com/ryanhelms/agentflow/internal/filelock"
 )
 
 // OpenPrompt holds a kernel lease while a foreground CLI waits for a human.

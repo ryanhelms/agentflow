@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/boundary"
-	"github.com/nscaledev/agentflow/internal/worktree"
+	"github.com/ryanhelms/agentflow/internal/boundary"
+	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
 // twoRepos makes a home repository (agent-commander, with a linked worktree)

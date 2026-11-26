@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/consolepublish"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/consolepublish"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 func hash(b []byte) string { sum := sha256.Sum256(b); return hex.EncodeToString(sum[:]) }

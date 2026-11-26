@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 // SessionEnv names the variable that carries the session's home repository (its

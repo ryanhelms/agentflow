@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 // Recovery is only for the configuration tools. Their write paths independently

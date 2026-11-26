@@ -121,7 +121,7 @@ workflow passes each reusable workflow only the secrets it uses (no `secrets: in
 
 ## Actions access
 
-`nscaledev/agentflow` is an internal repository. In its **Settings › Actions › General ›
+`ryanhelms/agentflow` is an internal repository. In its **Settings › Actions › General ›
 Access**, choose *Accessible from repositories in the nscaledev organization* so other repos
 can call its reusable workflows and actions.
 
@@ -136,7 +136,7 @@ closes and reopens each Release PR so its checks run. To remove those two gaps, 
 
 - Repository permissions: Contents read & write, Pull requests read & write,
   Dependabot alerts read, Metadata read.
-- Install it on `nscaledev/agentflow` and on repos that use `auto-issues`.
+- Install it on `ryanhelms/agentflow` and on repos that use `auto-issues`.
 - Store the app id in `AGENTFLOW_APP_ID` and a private key in `AGENTFLOW_APP_PRIVATE_KEY`.
 
 Consuming repos' `semver-release` workflow then opens their release-please Release PR
@@ -173,8 +173,8 @@ This is not implemented in the binary yet; `internal/auth` already supports bear
 
 Releases are automatic and published as stable (see CONTRIBUTING.md). Each release also
 moves the floating major tag that consuming repos use: `v0` while agentflow is 0.x, `v1`
-from 1.0.0 (`nscaledev/agentflow/...@v0` for reusable workflows and actions, and
-`nscaledev/agentflow@v0:flow-map.yml`).
+from 1.0.0 (`ryanhelms/agentflow/...@v0` for reusable workflows and actions, and
+`ryanhelms/agentflow@v0:flow-map.yml`).
 
 `v*` tags are protected by the repository ruleset **Protect release tags**: nobody can
 create, move or delete them except repository admins and the release workflow, which

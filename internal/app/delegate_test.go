@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/delegate"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/delegate"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 func TestDelegateStartsSessionAfterConfirmation(t *testing.T) {

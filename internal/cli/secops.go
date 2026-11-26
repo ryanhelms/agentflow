@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 func runSecOps(ctx context.Context, args []string) error {

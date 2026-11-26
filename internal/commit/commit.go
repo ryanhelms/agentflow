@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 // Verbs are the canonical flow-map verbs a commit may carry.

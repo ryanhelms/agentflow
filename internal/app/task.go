@@ -11,16 +11,16 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/contextx"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/legacy"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/twg"
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
-	"github.com/nscaledev/agentflow/internal/worktree"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/contextx"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/legacy"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/twg"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
 // Untrusted wraps text that came from Jira or Confluence.

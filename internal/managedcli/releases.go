@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/provision"
-	"github.com/nscaledev/agentflow/internal/provision/user"
-	"github.com/nscaledev/agentflow/internal/update"
+	"github.com/ryanhelms/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision/user"
+	"github.com/ryanhelms/agentflow/internal/update"
 )
 
 type pinnedRelease struct {

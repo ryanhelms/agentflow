@@ -6,7 +6,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/nscaledev/agentflow/internal/provider/asana"
+	"github.com/ryanhelms/agentflow/internal/provider/asana"
 )
 
 // Project is the default scope for work and bare task GIDs. Transitions are

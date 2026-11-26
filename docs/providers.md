@@ -1068,7 +1068,7 @@ and issue permissions. A draft review event, an unmerged close, or a PR with
 
 To enroll one issue, set the repository variable `AGENTFLOW_PROVIDER_PILOT_ISSUE`
 to its decimal number. Link it on its own line in the PR body, for example
-`Task-Ref: github-issues/nscaledev%2Fagentflow/25` for issue 25. Only a
+`Task-Ref: github-issues/ryanhelms%2Fagentflow/25` for issue 25. Only a
 default-branch merge whose preview resolves to that single issue can start
 the issue-write job. It builds agentflow from the reviewed merge commit, checks
 the configured knowledge provider for `repository/engineering/provider-architecture`,

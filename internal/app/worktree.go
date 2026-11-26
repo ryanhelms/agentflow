@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/worktree"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
 // WorktreeSettings resolves worktree.root, worktree.go_work and worktree.checkouts.

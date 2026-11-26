@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/contract"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/contract"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 	"gopkg.in/yaml.v3"
 )
 

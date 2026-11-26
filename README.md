@@ -11,8 +11,8 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Agentflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Agentflow PR validation on its default branch. |
-| **Current release** | <!-- agentflow:version -->`v0.55.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
+| **Status** | Private repository owned by Ryan Helms. It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. |
+| **Current release** | <!-- agentflow:version -->`v0.55.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -384,9 +384,10 @@ qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
 read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
 covers runner credentials, event replay, release outputs and pin rollback.
 
-The Agentflow repository rollout for [#88](https://github.com/nscaledev/agentflow/issues/88)
-adds read-only previews from the PR base configuration. Its merge writer requires
-one qualified issue matching `AGENTFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
+The Agentflow repository rollout, tracked before the move in
+[nscaledev/agentflow#88](https://github.com/nscaledev/agentflow/issues/88), adds
+read-only previews from the PR base configuration. Its merge writer requires one
+qualified issue matching `AGENTFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
 to pause writes, or set `AGENTFLOW_ENABLED=false` to pause both jobs. Activation
 awaits the signed compatible reader and the live OKF bundle cutover.
 [Repository pilot](docs/providers.md#agentflow-repository-pilot)
@@ -701,7 +702,8 @@ agentflow offers other repos.
   since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the
   [CHANGELOG.md](CHANGELOG.md) section from those commits, commits it as
   `chore(release): vX.Y.Z`, tags it and publishes the GitHub Release with the same notes.
-  No Release PR.
+  A breaking change (`!` or `BREAKING CHANGE:`) is listed once, under Breaking changes,
+  not again under its type. No Release PR.
 - **Same commit convention as agentflow-managed repos.** Enforced locally by
   `.githooks/commit-msg` and in CI on every PR title and commit. `CHANGELOG.md` is never
   edited by hand.
