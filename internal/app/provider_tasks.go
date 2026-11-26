@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/nscaledev/agentflow/internal/config"
 	"github.com/nscaledev/agentflow/internal/contextx"
@@ -270,20 +268,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	res := StartResult{Key: taskKey(ref), Branch: branch}
 	current := a.Repo.Branch(ctx)
 	if current != branch && (worktree || a.Repo.HasUncommitted(ctx)) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
-		name := filepath.Base(a.Repo.Dir)
-		if common := a.Repo.GitDir(ctx); filepath.Base(common) == ".git" {
-			name = filepath.Base(filepath.Dir(common))
-		}
-		if raw, err := a.Repo.Git(ctx, "remote", "get-url", "origin"); err == nil {
-			if remote, err := gitx.ParseRemoteURL(raw); err == nil && filepath.IsLocal(remote.Name) && filepath.Base(remote.Name) == remote.Name {
-				name = remote.Name
-			}
-		}
-		res.Worktree = filepath.Join(home, ".worktrees", name, branch)
+		res.Worktree = a.taskWorktreePath(ctx, branch)
 	}
 	s := map[string]any{"key": res.Key, "task_ref": ref.String(), "summary": task.Title, "branch": branch, "worktree": res.Worktree != "", "worktree_path": res.Worktree, "repo": a.Repo.Dir}
 	class := policy.Local
@@ -324,7 +309,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	if p, err := a.gate(class, "start", s, token, token != "", nil, preview.Binding.ExpiresAt); p != nil || err != nil {
 		return p, err
 	}
-	if err := a.ensureTaskBranch(ctx, ref, res); err != nil {
+	if err := a.ensureTaskBranch(ctx, ref, &res); err != nil {
 		a.audit(policy.Local, "branch", s, err)
 		return nil, err
 	}
@@ -347,7 +332,7 @@ func (a *App) startProviderTask(ctx context.Context, key string, worktree bool, 
 	return res, nil
 }
 
-func (a *App) ensureTaskBranch(ctx context.Context, ref provider.Ref, res StartResult) error {
+func (a *App) ensureTaskBranch(ctx context.Context, ref provider.Ref, res *StartResult) error {
 	bound, err := a.boundTask(ctx, res.Branch)
 	if err != nil {
 		return err
@@ -358,17 +343,26 @@ func (a *App) ensureTaskBranch(ctx context.Context, ref provider.Ref, res StartR
 			checkout = &gitx.Repo{Dir: res.Worktree}
 		}
 		if bound == ref && checkout.Branch(ctx) == res.Branch && checkout.GitDir(ctx) == a.Repo.GitDir(ctx) {
+			if res.Worktree != "" {
+				res.Next = worktreeNext(res.Worktree)
+			}
 			return nil
 		}
 		return fmt.Errorf("branch %s already bound; resume start from its worktree", res.Branch)
 	}
+	base := a.Repo.BaseRef(ctx)
 	if res.Worktree != "" {
-		err = a.Repo.AddWorktree(ctx, res.Worktree, res.Branch, a.Repo.BaseRef(ctx))
+		err = a.Repo.AddWorktree(ctx, res.Worktree, res.Branch, base)
 	} else {
-		err = a.Repo.CreateBranch(ctx, res.Branch, a.Repo.BaseRef(ctx))
+		err = a.Repo.CreateBranch(ctx, res.Branch, base)
 	}
 	if err != nil {
 		return err
+	}
+	if res.Worktree != "" {
+		if err := a.prepareWorktree(ctx, res, ref.String(), base); err != nil {
+			return err
+		}
 	}
 	_, err = a.Repo.Git(ctx, "config", "--local", "branch."+res.Branch+".agentflowTaskRef", ref.String())
 	if err != nil {

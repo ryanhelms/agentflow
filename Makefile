@@ -9,7 +9,7 @@ LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PK
 
 SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
 	templates/repo/.agentflow/bin/agentflow \
-	templates/repo/.githooks/commit-msg \
+	templates/repo/.githooks/commit-msg templates/repo/.githooks/pre-commit templates/repo/.githooks/pre-push \
 	adapters/claude-code/bin/launch adapters/claude-code/bin/agentflow
 
 .PHONY: agent-docs e2e build test vet lint shellcheck actionlint check snapshot install-hooks clean

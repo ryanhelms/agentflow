@@ -20,6 +20,7 @@ import (
 	"github.com/nscaledev/agentflow/internal/provider/native"
 	"github.com/nscaledev/agentflow/internal/provider/twg"
 	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/nscaledev/agentflow/internal/worktree"
 )
 
 // Untrusted wraps text that came from Jira or Confluence.
@@ -246,6 +247,10 @@ type StartResult struct {
 	Assigned   bool              `json:"assigned"`
 	Transition *TransitionResult `json:"transition,omitempty"`
 	Collisions *Collisions       `json:"collisions,omitempty"`
+	// GoWork is the go.work written into the worktree, when configured.
+	GoWork *worktree.GoWorkResult `json:"go_work,omitempty"`
+	// Next tells the developer where to start the agent.
+	Next string `json:"next,omitempty"`
 }
 
 // Start creates a branch (or worktree) for key, assigns it and moves it to the start status.
@@ -301,7 +306,7 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	}
 	res := StartResult{Key: key, Branch: branch, Collisions: col}
 	if worktree {
-		res.Worktree = filepath.Join(filepath.Dir(a.Repo.Dir), filepath.Base(a.Repo.Dir)+"-"+key)
+		res.Worktree = a.taskWorktreePath(ctx, branch)
 		summary["worktree_path"] = res.Worktree
 	}
 	if col != nil && len(col.OthersOnTicket) > 0 {
@@ -318,6 +323,9 @@ func (a *App) Start(ctx context.Context, key string, worktree bool, token string
 	}
 	if worktree {
 		err = a.Repo.AddWorktree(ctx, res.Worktree, branch, start)
+		if err == nil {
+			err = a.prepareWorktree(ctx, &res, ref.String(), start)
+		}
 	} else {
 		err = a.Repo.CreateBranch(ctx, branch, start)
 	}

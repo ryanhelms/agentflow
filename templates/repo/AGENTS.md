@@ -11,6 +11,19 @@ selected provider. An omitted provider or `none` disables the role.
   inspect the current values and preview the requested edit. Apply the reviewed
   personal save or repository publication with `agentflow_config_apply` or the
   corresponding CLI operation.
+- Work on one task per GitHub issue, in its own worktree, with one PR:
+  1. Find or create the issue. Run `agentflow start <issue> --worktree`
+     (`agentflow_start` with `worktree: true`) from the primary checkout.
+  2. Work, test and commit only in the worktree it prints. The pre-commit hook
+     refuses commits in the primary checkout.
+  3. Open the PR into the integration branch with `agentflow pr` (`agentflow_pr_open`).
+     Never push to a protected branch.
+  4. The coordinator merges the PR. Only a coordinator with `policy.coordinator_merge`
+     may run `gh pr merge`, and never into `main`.
+  5. After the merge, run `agentflow finish` (`agentflow_finish`) to remove the
+     worktree and its branches. `agentflow sweep` (`agentflow_sweep`) finishes every
+     merged worktree and reports dirty, unpushed, stale and orphaned ones.
+  6. `agentflow promote` opens the release PR into `main`. Only the user runs it.
 - Use `agentflow_context` or `agentflow context` to find the current task. Reuse a
   matching task from `agentflow_my_work` or `agentflow work`. For authorized new work,
   use `agentflow_ticket_create` or `agentflow task create` with the configured task

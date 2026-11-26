@@ -84,7 +84,11 @@ type Repo struct {
 		ProtectedBranches      []string       `yaml:"protected_branches"`
 		TestCmd                string         `yaml:"test_cmd"`
 		LintCmd                string         `yaml:"lint_cmd"`
+		// CoordinatorMerge lets an agent run `gh pr merge` for a PR whose base is not
+		// main or master. The rest of the never-list still applies.
+		CoordinatorMerge bool `yaml:"coordinator_merge,omitempty"`
 	} `yaml:"policy"`
+	Worktree Worktree `yaml:"worktree,omitempty"`
 
 	legacyJiraSite, legacyConfluenceSite bool
 }
@@ -119,6 +123,39 @@ type User struct {
 		Auto string   `yaml:"auto"`
 		Orgs []string `yaml:"orgs"`
 	} `yaml:"init"`
+	Worktree UserWorktree `yaml:"worktree,omitempty"`
+}
+
+// Worktree is the repository's worktree section: where `agentflow start --worktree`
+// creates checkouts and which go.work it writes into them.
+type Worktree struct {
+	// Root holds <root>/<repo>/<branch>. Default ~/.worktrees.
+	Root   string  `yaml:"root,omitempty"`
+	GoWork *GoWork `yaml:"go_work,omitempty"`
+}
+
+// GoWork describes the go.work written into each task worktree.
+type GoWork struct {
+	// Use lists module directories relative to the worktree root.
+	Use []string `yaml:"use"`
+	// Siblings maps a module path to a directory in another repository. The
+	// go.work replaces the module with that repository's matching worktree, or
+	// its primary checkout.
+	Siblings map[string]GoWorkSibling `yaml:"siblings,omitempty"`
+}
+
+// GoWorkSibling names a module directory inside another repository.
+type GoWorkSibling struct {
+	Repo string `yaml:"repo"`
+	Path string `yaml:"path"`
+}
+
+// UserWorktree is the personal worktree section in ~/.agentflow/config.yml.
+type UserWorktree struct {
+	// Root is used when the repository sets no worktree.root.
+	Root string `yaml:"root,omitempty"`
+	// Checkouts maps a repository name to its primary checkout. Default ~/GitHub/<repo>.
+	Checkouts map[string]string `yaml:"checkouts,omitempty"`
 }
 
 // Defaults applied when fields are missing.

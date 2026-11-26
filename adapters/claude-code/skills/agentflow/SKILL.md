@@ -20,6 +20,9 @@ you use their tools.
 2. Reuse a matching task from `agentflow_my_work`. For authorized new work, use
    `agentflow_ticket_create` with the repository's configured task template.
 3. Call `agentflow_collisions` before binding the task with `agentflow_start`.
+4. In a primary checkout, start with `worktree: true` and do all work in the worktree it
+   returns. After the PR is merged, call `agentflow_finish`; `agentflow_sweep` cleans up
+   every merged worktree. Never run `agentflow promote`; only the user does.
 
 ## Commits
 

@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -190,13 +191,33 @@ var (
 
 // Forbidden returns a reason if a shell command is on the never list.
 func Forbidden(cmd string, protected []string, currentBranch string) string {
+	return ForbiddenWith(cmd, protected, currentBranch, NeverOptions{})
+}
+
+// NeverOptions relax the never-list for configured roles.
+type NeverOptions struct {
+	// CoordinatorMerge (policy.coordinator_merge) allows `gh pr merge` when
+	// MergeBase reports a base other than main or master.
+	CoordinatorMerge bool
+	// MergeBase returns the base branch of the PR a `gh pr merge` command names.
+	MergeBase func(cmd string) (string, error)
+}
+
+// ReleaseBranches are the bases a coordinator may never merge into.
+var ReleaseBranches = []string{"main", "master"}
+
+// ForbiddenWith is Forbidden with the configured relaxations.
+func ForbiddenWith(cmd string, protected []string, currentBranch string, opt NeverOptions) string {
 	switch {
 	case forcePushRe.MatchString(cmd):
 		return "force-push is never allowed through agentflow-managed agents"
 	case deleteRefRe.MatchString(cmd):
 		return "deleting remote branches is never allowed through agentflow-managed agents"
 	case ghMergeRe.MatchString(cmd):
-		return "merging PRs is a human decision; ask the user to merge"
+		if reason := coordinatorMerge(cmd, opt); reason != "" {
+			return reason
+		}
+		return ""
 	}
 	target := ""
 	if m := pushTargetRe.FindStringSubmatch(cmd); m != nil {
@@ -219,4 +240,22 @@ func IsProtected(branch string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+func coordinatorMerge(cmd string, opt NeverOptions) string {
+	const human = "merging PRs is a human decision; ask the user to merge"
+	if !opt.CoordinatorMerge || opt.MergeBase == nil {
+		return human
+	}
+	if strings.ContainsAny(cmd, ";&|`$") {
+		return human + " (policy.coordinator_merge allows only a single gh pr merge command)"
+	}
+	base, err := opt.MergeBase(cmd)
+	if err != nil || base == "" {
+		return human + " (policy.coordinator_merge could not determine the PR base)"
+	}
+	if slices.Contains(ReleaseBranches, base) {
+		return fmt.Sprintf("merging into %s is a release decision; ask the user (agentflow promote opens that PR)", base)
+	}
+	return ""
 }

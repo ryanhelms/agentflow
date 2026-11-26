@@ -15,3 +15,25 @@ func TestDefaultsPointAtRyanhelmsRepository(t *testing.T) {
 		}
 	}
 }
+
+func TestParseWorktreeAndCoordinatorMerge(t *testing.T) {
+	raw := []byte(`policy:
+  coordinator_merge: true
+worktree:
+  root: ~/wt
+  go_work:
+    use: [".", "multiplayer"]
+    siblings:
+      agent-acp.local/sdks/go: { repo: agent-acp, path: sdks/go }
+      agent-acp.local/transport: { repo: agent-acp-transport, path: . }
+`)
+	c, _, err := ParseRepoCore(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gw := c.Worktree.GoWork
+	if !c.Policy.CoordinatorMerge || c.Worktree.Root != "~/wt" || gw == nil || len(gw.Use) != 2 ||
+		gw.Siblings["agent-acp.local/transport"] != (GoWorkSibling{Repo: "agent-acp-transport", Path: "."}) {
+		t.Fatalf("parsed %+v %+v", c.Policy, c.Worktree)
+	}
+}
