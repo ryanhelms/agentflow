@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,8 +25,15 @@ import (
 var realDeliver = deliverEvents
 
 // Hook tests never reach the user's real daemon or write event stores
-// unless a test asks for it.
+// unless a test asks for it. They also never inherit the repository boundary
+// of an agent session that runs them (AGENTFLOW_SESSION_REPO), which would
+// make the hooks refuse work in the tests' temporary repositories; a test
+// that needs a boundary sets it on the hook it runs.
 func TestMain(m *testing.M) {
+	if err := os.Unsetenv("AGENTFLOW_SESSION_REPO"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	deliverEvents = func(context.Context, string, ...notifyEvent) {}
 	notifyLocator = func(context.Context) (notifysock.Endpoint, error) {
 		return notifysock.Endpoint{}, notifysock.ErrNoDaemon
