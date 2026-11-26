@@ -10,7 +10,8 @@ Phase gates:
 | --- | --- | --- | --- | --- |
 | 1 | #31 | `develop-p1` at `5cf3e6d` | the live event pipeline end to end | done |
 | 2 | #51 | `develop-p2` at `a5648e3` | approvals, the commit hook, config, client settings and tabs live; MCP reload | done |
-| 3 | #59 (contract, issue #52) | | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | in integration |
+| 3 | #59 (contract, issue #52) | `develop-p3` at `c555ac4` | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | done; promoted to `main` by auto-promote, released as v0.57.0 on 2026-11-26 |
+| 4 | contract issue #68 | | the Settings page: edit fields of both layers, preview, save with one Save bar, undo; an outside edit shows live with a conflict warning | contract in progress |
 
 Lanes:
 
@@ -30,14 +31,15 @@ Lanes:
 | 2.4 | Activity, approvals and tabs projections; `tabHub` moved onto the stream; old tab stream retired | O | | #51 | done |
 | 2.5 | UI: activity, approvals and handoff panels driven by events; resync control; live "changed" highlights | F | | #51 | done |
 | 2.6 | MCP server reloads config on `config.changed` | S | | #51 | done |
-| 3.1 | Command registry and Invoker; CLI dispatch, MCP tools, usage and parity derived from it; 3 operations moved as examples | O | #53 | #61 (in #59) | in integration |
-| 3.2 | Move commit, PR, push and review (after 3.1) | S | #54 | #63 (in #59) | in integration |
-| 3.3 | Move task, transition, comment, ticket, AC and scope (after 3.1) | S | #55 | #62 (in #59) | in integration |
-| 3.4 | Move docs, release, notify, setup, worktree and secops (after 3.1) | S | #56 | #64 (in #59) | in integration |
-| 3.5 | Timeline UI: live operation feed, filters, links to issue, PR and audit entry | F | #57 | #60 (in #59) | in integration |
-| 4.1 | `Field` metadata (label, description, group, widget, applies, sensitive, source) and `TestEveryConfigFieldHasControl` | S | | | pending |
-| 4.2 | Settings backend as Commands: change set, live checks, preview, atomic save, personal layer applied at once, repo layer written to the worktree and published as a PR, undo last save; `agentflow config set A=1 B=2` | O | | | pending |
-| 4.3 | Settings UI: controls for every field type, Save bar, preview, conflict warnings, undo, search, "modified" filter | F | | | pending |
+| 3.1 | Command registry and Invoker; CLI dispatch, MCP tools, usage and parity derived from it; 3 operations moved as examples | O | #53 | #61 (in #59) | done |
+| 3.2 | Move commit, PR, push and review (after 3.1) | S | #54 | #63 (in #59) | done |
+| 3.3 | Move task, transition, comment, ticket, AC and scope (after 3.1) | S | #55 | #62 (in #59) | done |
+| 3.4 | Move docs, release, notify, setup, worktree and secops (after 3.1) | S | #56 | #64 (in #59) | done |
+| 3.5 | Timeline UI: live operation feed, filters, links to issue, PR and audit entry | F | #57 | #60 (in #59) | done |
+| 4.0 | Phase 4 contract ADR: change set, diagnostics, preview, save, undo journal, field metadata, settings projection, commands, ownership | O | #68 | | in progress |
+| 4.1 | `Field` metadata (label, description, group, widget, applies, sensitive, source) and `TestEveryConfigFieldHasControl` | S | #69 | | pending |
+| 4.2 | Settings backend as Commands: change set, live checks, preview, atomic save, personal layer applied at once, repo layer written to the worktree and published as a PR, undo last save; `agentflow config set A=1 B=2` | O | #70 | | pending |
+| 4.3 | Settings UI: controls for every field type, Save bar, preview, conflict warnings, undo, search, "modified" filter | F | #71 | | pending |
 | 5.1 | Shared stdio JSON-RPC framing (from `codexhost/stdio.go`, which stays as it is) and scrubbed-environment launcher | O | | | pending |
 | 5.2 | Plugin host: three tiers, registry (Abstract Factory), lifecycle, crash isolation into Dead Letter | O | | | pending |
 | 5.3 | Plugin commands, the two sample plugins, docs (`docs/plugins.md`) | S | | | pending |
