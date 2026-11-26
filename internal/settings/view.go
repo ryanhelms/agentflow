@@ -17,7 +17,7 @@ func (s *Service) Fields(ctx context.Context, req FieldsRequest) (View, error) {
 	}
 	ev := s.evaluate(ctx, f.personal.Content, f.repo.Content)
 	vals := s.values(ev)
-	v := View{CatalogRevision: s.Catalog.Revision(), Revisions: f.revisions(), Groups: consolecfg.Groups(),
+	v := View{CatalogRevision: s.Catalog.Revision(), Revisions: f.revisions(), Groups: s.groups(),
 		Fields: []config.CatalogField{}, Values: []FieldValue{}, Problems: f.problems(ev.problems)}
 	query := strings.ToLower(strings.TrimSpace(req.Query))
 	keep := map[valueKey]bool{}
@@ -43,6 +43,16 @@ func (s *Service) Fields(ctx context.Context, req FieldsRequest) (View, error) {
 		}
 	}
 	return v, nil
+}
+
+// groups lists the sections of the page: the catalog's own, which include a
+// group for each installed plugin, or the compiled ones for a catalog that
+// has none.
+func (s *Service) groups() []config.Group {
+	if c, ok := s.Catalog.(interface{ Groups() []config.Group }); ok {
+		return c.Groups()
+	}
+	return consolecfg.Groups()
 }
 
 func contains(list []string, s string) bool {

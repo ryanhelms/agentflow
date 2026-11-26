@@ -29,13 +29,22 @@ type UserTarget struct {
 	UserHome string
 }
 
+// PluginRegistryPath is the plugin registry, relative to the agentflow home
+// and slash-separated. A plugin added or removed changes it, and the plugin
+// host reloads on the config.layer.changed event that names it (ADR, "Phase 5
+// install"). Only the registry file counts: the lock, the temporary files of
+// an atomic replace, the installed copies and the plugins' data directories
+// signal nothing.
+const PluginRegistryPath = "plugins/installed.json"
+
 // UserSignal is what a user-level path signals.
 type UserSignal int
 
 // User-level signals.
 const (
-	// SignalPersonalConfig: ~/.agentflow/config.yml or providers/*.y{a,}ml.
-	// Translates to config.layer.changed{layer: personal} in GlobalRepo.
+	// SignalPersonalConfig: ~/.agentflow/config.yml, providers/*.y{a,}ml or
+	// the plugin registry plugins/installed.json. Translates to
+	// config.layer.changed{layer: personal} in GlobalRepo.
 	SignalPersonalConfig UserSignal = iota + 1
 	// SignalApproval: an approval record. Translates to approval.* in the
 	// record's repository (ApprovalRouter), or nothing.
@@ -52,6 +61,7 @@ func UserPaths(u UserTarget) []Path {
 		{Dir: u.Home},
 		{Dir: filepath.Join(u.Home, "providers")},
 		{Dir: filepath.Join(u.Home, "approvals")},
+		{Dir: filepath.Join(u.Home, "plugins")},
 	}
 	seen := map[string]bool{}
 	for _, f := range UserClientSettings {
@@ -108,7 +118,7 @@ func ClassifyUser(u UserTarget, path string) (UserSignal, string, bool) {
 	}
 	if rel, ok := under(u.Home, path); ok {
 		switch {
-		case rel == "config.yml":
+		case rel == "config.yml", rel == PluginRegistryPath:
 			return SignalPersonalConfig, "", true
 		case strings.HasPrefix(rel, "providers/") && strings.Count(rel, "/") == 1 && yamlName(rel):
 			return SignalPersonalConfig, "", true

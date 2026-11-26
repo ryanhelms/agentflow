@@ -41,6 +41,7 @@ var loosening = map[string]Loosening{
 	"repo:policy.allow_auto_pr_publication": LoosensEnable,
 	"repo:policy.coordinator_merge":         LoosensEnable,
 	"repo:policy.protected_branches":        LoosensShrink,
+	"repo:plugins.disabled":                 LoosensShrink,
 }
 
 // approvalWindows are the duration fields whose limits the code checks
