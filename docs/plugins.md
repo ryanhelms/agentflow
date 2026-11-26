@@ -53,13 +53,27 @@ operations. Agentflow therefore does three things:
   other than `CODEX_HOME`.
 - Both commands refuse a non-interactive shell, with no terminal on standard
   input, such as a script, a pipe or a CI job.
-- The Claude Code pre-bash hook blocks an agent from running them, however the
-  binary is invoked. It also blocks `agentflow plugin approve`, the name kept for
-  approving a plugin's writes. The hook's never-list is off in
+- The Claude Code pre-bash hook blocks an agent from running them. It also blocks
+  `agentflow plugin approve`, the name kept for approving a plugin's writes. See
+  [What the hook catches](#what-the-hook-catches). The hook's never-list is off in
   `--convention-only` mode, and Codex has no such hook.
 
 The refusals say `run this in your own terminal`. There is no override flag or
 variable. `--yes` is accepted and ignored: the question is always asked.
+
+### What the hook catches
+
+The hook reads the command line before it runs. It catches:
+
+- `agentflow` by name, by the path of a repository launcher or a cached build, the
+  plugin's `bin/launch` launcher, and `go run ./cmd/agentflow`;
+- the same inside `sh -c` and similar shells, `eval`, `script`, `expect`, `cmd /c`
+  and PowerShell, and behind prefixes such as `env`, `sudo`, `nohup` and `timeout`.
+
+It does not catch a command that is built while it runs, such as a program named
+through a variable, a command line piped into a shell, or one written to a file
+and run from there. A command that only mentions the words, such as a search or a
+commit message, runs as usual.
 
 These checks stop mistakes and ordinary automation. They are not a security
 boundary: a process that runs as you can still get around them on purpose, for

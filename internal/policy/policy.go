@@ -245,11 +245,13 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 var pluginDecisions = []string{"add", "remove", "approve"}
 
 // changesPlugins reports whether cmd runs one of agentflow's plugin
-// decisions, however the program is invoked: by name, by the path of a
-// launcher or of a cached build, through go run, or inside a shell, script or
-// another wrapper (boundary.SimpleCommands). Unlike the patterns above, a
-// command that only mentions the words in an argument of another program does
-// not match.
+// decisions. It finds the program by name, by the path of a launcher or of a
+// cached build, or through go run, also inside a shell, script or another
+// wrapper (boundary.SimpleCommands). It does not see a command built while it
+// runs, piped into a shell or written to a file first: this stops ordinary
+// agent use, not a deliberate way around. Unlike the patterns above, a command
+// that only mentions the words in an argument of another program does not
+// match.
 func changesPlugins(cmd string) bool {
 	for _, words := range boundary.SimpleCommands(cmd) {
 		program, args := words[0], words[1:]
