@@ -61,6 +61,7 @@ var mcpToCLI = map[string]string{
 	"agentflow_review_reply":          "review reply",
 	"agentflow_ship_status":           "status",
 	"agentflow_standup":               "standup",
+	"agentflow_events":                "events",
 	"agentflow_eod_post":              "eod post",
 	"agentflow_docs_get":              "docs get",
 	"agentflow_docs_search":           "docs search",
