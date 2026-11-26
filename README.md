@@ -432,6 +432,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Regenerate the worktree's `go.work` | `agentflow worktree go-work` | `agentflow_worktree_go_work` |
 | Clean up after the PR merges | `agentflow finish [BRANCH]` | `/agentflow:finish` |
 | Finish merged worktrees, report the rest | `agentflow sweep [--all-repos]` | `/agentflow:sweep` |
+| Hand work to a session in another repository | `agentflow delegate --repo NAME TASK` | `agentflow_delegate` or `/agentflow:delegate` |
 | Open the develop → main release PR (you, not an agent) | `agentflow promote` | – |
 | See the ticket context | `agentflow context` | loaded automatically at session start |
 | Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA` | `/agentflow:ac` |
@@ -628,7 +629,7 @@ CI.
 The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `remove`,
 `install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
-`eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `worktree` and `promote`
+`eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `delegate`, `worktree` and `promote`
 (which only explains that you run `agentflow promote` yourself). The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos agentflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
@@ -663,6 +664,14 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
   checkout. [Task worktrees](docs/worktrees.md)
+- **Repository boundary.** A session changes only the repository it runs in. The pre-bash
+  hook refuses `gh -R`/`--repo`, `GH_REPO`, PR URLs, `gh api repos/...` writes, `git -C`,
+  `--git-dir` and `cd DIR && git ...` that change another repository, in every mode; reads
+  stay allowed. The session-start hook exports `AGENTFLOW_SESSION_REPO`, and the
+  `pre-commit` and `pre-push` hooks refuse commits and pushes from another repository's
+  session. `policy.coordinator_merge` looks up the base in the PR's own repository.
+  `agentflow delegate` hands the work to a session in the other repository.
+  [Repository boundary](docs/repo-boundary.md)
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
@@ -749,6 +758,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/blueprint.html](docs/blueprint.html) | Architecture, automations, plugin, rollout and decisions |
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/worktrees.md](docs/worktrees.md) | Task worktrees, `go.work`, `finish`, `sweep`, `promote` and the hooks |
+| [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
 | [CHANGELOG.md](CHANGELOG.md) | Generated release history of agentflow |

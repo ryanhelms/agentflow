@@ -40,6 +40,7 @@ var mcpToCLI = map[string]string{
 	"agentflow_start":                 "start",
 	"agentflow_finish":                "finish",
 	"agentflow_sweep":                 "sweep",
+	"agentflow_delegate":              "delegate",
 	"agentflow_worktree_go_work":      "worktree go-work",
 	"agentflow_ac_checklist":          "ac",
 	"agentflow_ac_update":             "ac done",

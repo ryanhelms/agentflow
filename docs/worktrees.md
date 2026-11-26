@@ -90,8 +90,10 @@ writes (`finish` action, remote class).
 
 `agentflow sweep [--all-repos] [--dry-run] [--stale-days N] [--json] [--yes]` inspects every
 linked worktree of the repository, including Claude Code's `<repo>/.claude/worktrees/`.
-`--all-repos` also covers every repository with a worktree under `<root>` and every entry in
-`worktree.checkouts`.
+`--all-repos` also reports every repository with a worktree under `<root>` and every entry in
+`worktree.checkouts`, but finishes only this repository's worktrees: a session changes only
+its own repository ([repo-boundary.md](repo-boundary.md)). Merged worktrees elsewhere show as
+`other_repo`, with the `agentflow delegate` command that finishes them from a session there.
 
 | State | Meaning | Sweep does |
 | --- | --- | --- |
@@ -100,6 +102,7 @@ linked worktree of the repository, including Claude Code's `<repo>/.claude/workt
 | `unpushed` | commits on no `origin` branch | reports |
 | `stale` | no commits for more than N days (default 7) | reports |
 | `orphaned` | the directory is gone | reports; `git worktree prune` clears the entry |
+| `other_repo` | merged, in another repository (`--all-repos`) | reports; finish it from a session there |
 | `detached`, `protected`, `active` | nothing to do | reports |
 
 It then runs `git worktree prune` and `git remote set-head origin -a`. Sweep never deletes a

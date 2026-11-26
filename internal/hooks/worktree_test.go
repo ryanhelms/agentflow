@@ -201,6 +201,22 @@ func TestTemplateHooksWithoutAgentflow(t *testing.T) {
 	if got := run(linked, "pre-commit", ""); got != 0 {
 		t.Fatalf("pre-commit in a linked worktree: %d", got)
 	}
+	// A session that belongs to another repository may not commit or push here.
+	other := filepath.Join(root, "other")
+	runGit(t, root, "init", "-q", "-b", "main", other)
+	for _, session := range []string{other, filepath.Join(other, ".git")} {
+		if got := run(linked, "pre-commit", "", "AGENTFLOW_SESSION_REPO="+session); got != 1 {
+			t.Errorf("pre-commit from a session of another repository (%s): %d", session, got)
+		}
+		if got := run(linked, "pre-push", "refs/heads/feature abc refs/heads/feature def\n", "AGENTFLOW_SESSION_REPO="+session); got != 1 {
+			t.Errorf("pre-push from a session of another repository (%s): %d", session, got)
+		}
+	}
+	for _, session := range []string{primary, filepath.Join(primary, ".git"), linked} {
+		if got := run(linked, "pre-commit", "", "AGENTFLOW_SESSION_REPO="+session); got != 0 {
+			t.Errorf("pre-commit from this repository's session (%s): %d", session, got)
+		}
+	}
 	push := func(ref string) string { return "refs/heads/feature abc " + ref + " def\n" }
 	for ref, want := range map[string]int{"refs/heads/feature": 0, "refs/heads/main": 1, "refs/heads/release/2.0": 1, "refs/heads/develop": 0} {
 		if got := run(primary, "pre-push", push(ref)); got != want {

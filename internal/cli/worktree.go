@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/delegate"
 	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
@@ -94,6 +96,54 @@ func printSweep(w io.Writer, res *worktree.SweepResult) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", o.Repo, o.Branch, o.State, o.Detail, o.Path)
 	}
 	_ = tw.Flush()
+}
+
+func runDelegate(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("delegate", flag.ContinueOnError)
+	repo := fs.String("repo", "", "repository the work belongs to: NAME or OWNER/NAME")
+	agent := fs.String("agent", "", "client for a new session: claude or codex")
+	start := fs.Bool("start", false, "start a new tmux session even when one is running there")
+	dryRun := fs.Bool("dry-run", false, "show what would be sent or started")
+	asJSON := fs.Bool("json", false, "print JSON")
+	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	var words []string
+	for rest := args; ; {
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		words, rest = append(words, fs.Arg(0)), fs.Args()[1:]
+	}
+	task := strings.Join(words, " ")
+	if *repo == "" || strings.TrimSpace(task) == "" {
+		return errors.New("usage: agentflow delegate --repo NAME [--agent claude|codex] [--start] [--dry-run] [--json] [--yes] TASK")
+	}
+	a, err := open(ctx)
+	if err != nil {
+		return err
+	}
+	req := delegate.Request{Repo: *repo, Task: task, Agent: *agent, Start: *start, DryRun: *dryRun}
+	out, done, err := confirmed(*yes, func(token string) (any, error) { return a.Delegate(ctx, req, token) })
+	if done || err != nil {
+		return err
+	}
+	p, ok := out.(*delegate.Plan)
+	if *asJSON || !ok {
+		return printJSON(out)
+	}
+	fmt.Printf("%s: %s\n", p.Status, p.Repo)
+	for _, c := range p.Commands {
+		fmt.Println("  " + c)
+	}
+	if p.Status == delegate.StatusNative {
+		fmt.Println("Message: " + p.Message)
+	}
+	if p.Next != "" {
+		fmt.Println(p.Next)
+	}
+	return nil
 }
 
 func runPromote(ctx context.Context, args []string) error {

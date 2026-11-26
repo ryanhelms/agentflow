@@ -14,7 +14,18 @@ elif command -v agentflow >/dev/null 2>&1; then
   exec agentflow hook pre-push "$@"
 fi
 
-# Fallback without agentflow: read protected_branches from the config.
+# Fallback without agentflow. Refuse a push from an agent session that belongs to
+# another repository (AGENTFLOW_SESSION_REPO; see docs/repo-boundary.md).
+if [ -n "${AGENTFLOW_SESSION_REPO:-}" ] && [ -d "$AGENTFLOW_SESSION_REPO" ]; then
+  here=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
+  session=$(cd "$(git -C "$AGENTFLOW_SESSION_REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$AGENTFLOW_SESSION_REPO")" && pwd -P)
+  if [ "$here" != "$session" ]; then
+    echo "✖ agentflow: this session belongs to the repository at $session, not this one; hand the work to a session here with agentflow delegate" >&2
+    exit 1
+  fi
+fi
+
+# Read protected_branches from the config.
 config="$(git rev-parse --show-toplevel)/.agentflow/config.yml"
 protected=()
 if [ -f "$config" ]; then

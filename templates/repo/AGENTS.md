@@ -24,6 +24,12 @@ selected provider. An omitted provider or `none` disables the role.
      worktree and its branches. `agentflow sweep` (`agentflow_sweep`) finishes every
      merged worktree and reports dirty, unpushed, stale and orphaned ones.
   6. `agentflow promote` opens the release PR into `main`. Only the user runs it.
+- Work only in this repository. Never close, create, merge, push or otherwise change
+  another repository, with `gh -R`, `git -C`, `cd` or any other route; reading it is
+  fine. The pre-bash, pre-commit and pre-push hooks refuse such commands. Hand the work
+  to a session in that repository with `agentflow delegate --repo NAME "<task>"`
+  (`agentflow_delegate`): it messages a session already working there or starts one.
+  You can also message such a session through your client's own session tools.
 - Use `agentflow_context` or `agentflow context` to find the current task. Reuse a
   matching task from `agentflow_my_work` or `agentflow work`. For authorized new work,
   use `agentflow_ticket_create` or `agentflow task create` with the configured task

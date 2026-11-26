@@ -30,8 +30,11 @@ const (
 	StateStale           = "stale"
 	StateOrphaned        = "orphaned"
 	StateActive          = "active"
-	StateDetached        = "detached"
-	StateProtected       = "protected"
+	// StateOtherRepo is a merged worktree of another repository, which a sweep
+	// reports but leaves to a session in that repository.
+	StateOtherRepo = "other_repo"
+	StateDetached  = "detached"
+	StateProtected = "protected"
 )
 
 // GH runs the GitHub CLI in dir and returns stdout.
@@ -453,6 +456,29 @@ func (c *checker) idleDays(ctx context.Context, branch string) int {
 		return 0
 	}
 	return int(c.opt.now().Sub(time.Unix(sec, 0)).Hours() / 24)
+}
+
+// KeepRepo limits a sweep to the repository whose primary checkout is primary.
+// Merged worktrees of other repositories become StateOtherRepo, with the
+// command to run there: a session changes only its own repository.
+func (r *SweepResult) KeepRepo(primary string) {
+	keep := r.plans[:0]
+	for _, p := range r.plans {
+		if p.Primary == primary {
+			keep = append(keep, p)
+			continue
+		}
+		for i := range r.Worktrees {
+			o := &r.Worktrees[i]
+			if o.Primary == p.Primary && o.Branch == p.Branch {
+				o.State = StateOtherRepo
+				o.Detail = "merged; another repository, so finish it from a session there (agentflow delegate --repo " + o.Repo + " \"agentflow sweep\")"
+				o.Actions = nil
+			}
+		}
+	}
+	r.plans = keep
+	r.Repos = slices.DeleteFunc(r.Repos, func(dir string) bool { return dir != primary })
 }
 
 // ApplySweep finishes every planned worktree, then prunes and refreshes origin/HEAD.

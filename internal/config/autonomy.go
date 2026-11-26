@@ -35,6 +35,7 @@ var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"console.autonomy":      {"local", "Agent changes to personal approval settings require confirmation."},
 	"console.publish":       {"remote", "Repository console publication requires confirmation."},
 	"console.reply":         {"local", "Repository console replies require confirmation."},
+	"delegate":              {"local", "Sends a task to, or starts, an agent session in another repository."},
 	"docs_publish":          {"local remote", "Publication can require confirmation for the selected provider route."},
 	"eod":                   {"remote", ""},
 	"finish":                {"remote", "Removes the worktree and deletes the local and remote branch."},

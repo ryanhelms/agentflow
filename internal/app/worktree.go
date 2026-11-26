@@ -119,6 +119,10 @@ func (a *App) Sweep(ctx context.Context, req SweepRequest, token string) (*workt
 	if err != nil || req.DryRun {
 		return res, nil, err
 	}
+	// --all-repos reports every repository but finishes only this one's worktrees.
+	if req.AllRepos && len(res.Repos) > 0 {
+		res.KeepRepo(res.Repos[0])
+	}
 	if plans := res.Plans(); len(plans) > 0 {
 		summary := make([]worktree.Outcome, 0, len(plans))
 		var commands []string

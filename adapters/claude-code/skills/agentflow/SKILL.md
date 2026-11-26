@@ -23,6 +23,10 @@ you use their tools.
 4. In a primary checkout, start with `worktree: true` and do all work in the worktree it
    returns. After the PR is merged, call `agentflow_finish`; `agentflow_sweep` cleans up
    every merged worktree. Never run `agentflow promote`; only the user does.
+5. Work only in this repository. For work in another repository, call
+   `agentflow_delegate` with `repo` and `task`; never use `gh -R`, `git -C` or `cd` to
+   change it. When it returns `status: native`, message or start a session in the
+   returned checkout with your client's session tools.
 
 ## Commits
 

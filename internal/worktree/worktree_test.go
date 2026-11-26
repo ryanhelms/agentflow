@@ -390,3 +390,23 @@ func TestReposForAllRepos(t *testing.T) {
 		t.Fatalf("repos %v", repos)
 	}
 }
+
+func TestSweepKeepRepoLeavesOtherRepositories(t *testing.T) {
+	mine := Outcome{Repo: "agent-commander", Branch: "a", State: StateWouldFinish, Primary: "/h/agent-commander", Actions: []string{"git worktree remove a"}}
+	theirs := Outcome{Repo: "agentflow", Branch: "b", State: StateWouldFinish, Primary: "/h/agentflow", Actions: []string{"git worktree remove b"}}
+	res := &SweepResult{
+		Worktrees: []Outcome{mine, theirs},
+		Repos:     []string{"/h/agent-commander", "/h/agentflow"},
+		plans:     []*Plan{{Outcome: mine}, {Outcome: theirs}},
+	}
+	res.KeepRepo("/h/agent-commander")
+	if len(res.Plans()) != 1 || res.Plans()[0].Branch != "a" {
+		t.Fatalf("plans %+v", res.Plans())
+	}
+	if got := res.Worktrees[1]; got.State != StateOtherRepo || got.Actions != nil || !strings.Contains(got.Detail, "agentflow delegate --repo agentflow") {
+		t.Fatalf("other repository outcome %+v", got)
+	}
+	if res.Worktrees[0].State != StateWouldFinish || len(res.Repos) != 1 || res.Repos[0] != "/h/agent-commander" {
+		t.Fatalf("home %+v repos %v", res.Worktrees[0], res.Repos)
+	}
+}
