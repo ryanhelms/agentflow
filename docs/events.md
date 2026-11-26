@@ -58,7 +58,9 @@ records only `blocked` and `failed` outcomes.
 A hook hands its event to the store as follows. It spends at most 300 ms on this and
 prints nothing about it, because git and agents read hook output.
 
-1. With no daemon running, the hook appends the event to the store itself.
+1. With no daemon running, the hook appends the event to the repository's store
+   itself, but only when that store already exists. A hook never creates one, so a
+   repository where the console has never run gets no `agentflow/events/` directory.
 2. While the daemon owns the store, the hook sends the event to the daemon over its
    local notify socket, and the daemon stores and publishes it.
 3. If the daemon is starting, stopping or refuses the event, the event is dropped.

@@ -40,7 +40,8 @@ type notifyEvent struct {
 }
 
 // deliverEvents hands events to the event store of the worktree containing
-// dir through notifysock.Deliver, without a warning function: git and
+// dir through notifysock.Deliver, only when that store already exists,
+// without a warning function: git and
 // agents read hook output, so a dropped hook event is silent. Tests
 // replace it.
 var deliverEvents = func(ctx context.Context, dir string, events ...notifyEvent) {
@@ -48,6 +49,12 @@ var deliverEvents = func(ctx context.Context, dir string, events ...notifyEvent)
 	defer cancel()
 	id, err := webui.IdentifyWorktree(ctx, dir)
 	if err != nil {
+		return
+	}
+	// Hooks run in every repository the plugin reaches. They never create
+	// an event store: without one, no daemon has owned this repository
+	// (the owner creates it), so the socket would refuse the event too.
+	if _, err := os.Stat(filepath.Join(store.Path(id.CommonDir), store.RepoIDFile)); err != nil {
 		return
 	}
 	s, err := app.OpenEventStore(ctx, id.CommonDir, store.RoleAppender)

@@ -190,10 +190,25 @@ func TestPostCommitPublishesCommitCreated(t *testing.T) {
 	}
 }
 
-// With no daemon the hook appends to the store itself.
+// A hook never creates an event store in a repository that has none.
+func TestDeliverNeverCreatesStore(t *testing.T) {
+	dir := gitRepo(t)
+	run(t, dir, "commit", "-q", "--allow-empty", "-m", "chore: init")
+	realDeliver(context.Background(), dir, hookRanEvent("stop", "claude", time.Now(), bus.HookPassed, ""))
+	id, err := webui.IdentifyWorktree(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(id.CommonDir, "agentflow")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("hook created an event store:", err)
+	}
+}
+
+// With an existing store and no daemon the hook appends to it itself.
 func TestDeliverWithoutDaemonStores(t *testing.T) {
 	dir := gitRepo(t)
 	run(t, dir, "commit", "-q", "--allow-empty", "-m", "chore: init")
+	createStore(t, dir)
 	realDeliver(context.Background(), dir, hookRanEvent("stop", "claude", time.Now(), bus.HookPassed, ""))
 	events := stored(t, dir)
 	if len(events) != 1 || events[0].Type != bus.TypeHookRan || events[0].Source != "hook:stop" || events[0].Worktree != "main" {
@@ -257,6 +272,20 @@ func TestDeliverToOwningDaemon(t *testing.T) {
 	if len(events) != 1 || events[0].Source != "hook:pre-bash" {
 		t.Fatalf("owner stored %+v", events)
 	}
+}
+
+// createStore creates dir's event store, as the daemon does on first use.
+func createStore(t *testing.T, dir string) {
+	t.Helper()
+	id, err := webui.IdentifyWorktree(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.Open(context.Background(), id.CommonDir, store.RoleAppender)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
 }
 
 func stored(t *testing.T, dir string) []bus.Event {
