@@ -692,7 +692,8 @@ agentflow offers other repos.
   since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the
   [CHANGELOG.md](CHANGELOG.md) section from those commits, commits it as
   `chore(release): vX.Y.Z`, tags it and publishes the GitHub Release with the same notes.
-  No Release PR.
+  A breaking change (`!` or `BREAKING CHANGE:`) is listed once, under Breaking changes,
+  not again under its type. No Release PR.
 - **Same commit convention as agentflow-managed repos.** Enforced locally by
   `.githooks/commit-msg` and in CI on every PR title and commit. `CHANGELOG.md` is never
   edited by hand.
