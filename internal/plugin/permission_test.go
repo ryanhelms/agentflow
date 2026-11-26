@@ -3,6 +3,7 @@ package plugin_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -22,7 +23,9 @@ func TestPermissionRulesOnlyDeny(t *testing.T) {
 	src.Set(rule("guard", manifest.RuleMatch{Operation: []string{"push", "config.*", "approval.*", "policy.*", "plugin.*"}, Origin: []string{"mcp:*"}}),
 		rule("off", manifest.RuleMatch{Operation: []string{"*"}}))
 	layers.SetPersonal("guard", plugin.PersonalPlugin{Enabled: true})
-	st := &plugin.PermissionStage{Source: func() manifest.Source { return src }, Layers: func() plugin.Layers { return layers }}
+	st := &plugin.PermissionStage{Source: func() manifest.Source { return src }, Layers: func() plugin.Layers { return layers },
+		RegistryPath: func() string { return "/home/me/.agentflow/plugins/installed.json" },
+		ConfigPath:   func() string { return "/home/me/.agentflow/config.yml" }}
 	var ran []string
 	spec := func(name string) command.Spec[fakeIn, any] {
 		return command.Spec[fakeIn, any]{Name: name, Policy: command.Policy{Class: policy.Local, Action: name},
@@ -61,10 +64,19 @@ func TestPermissionRulesOnlyDeny(t *testing.T) {
 	ps, _ := src.Installed(context.Background())
 	src.Err = errors.New("unreadable")
 	src.Set(ps...)
-	if err := run("status", "cli"); !errors.As(err, &denied) {
-		t.Fatalf("unreadable rules: %v", err)
+	if err := run("status", "cli"); !errors.As(err, &denied) ||
+		!strings.Contains(denied.Message, "/home/me/.agentflow/plugins/installed.json") || !strings.Contains(denied.Message, "agentflow plugin list") {
+		t.Fatalf("unreadable registry: %v", err)
 	}
 	if err := run("config.set", "cli"); err != nil {
 		t.Fatalf("config.set with unreadable rules: %v", err)
+	}
+	// An unreadable personal layer names config.yml.
+	src.Err = nil
+	src.Set(ps...)
+	layers.Err = errors.New("yaml: bad")
+	if err := run("status", "cli"); !errors.As(err, &denied) ||
+		!strings.Contains(denied.Message, "/home/me/.agentflow/config.yml") || strings.Contains(denied.Message, "yaml: bad") {
+		t.Fatalf("unreadable config: %v", err)
 	}
 }
