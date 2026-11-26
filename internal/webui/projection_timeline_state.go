@@ -22,10 +22,14 @@ const (
 	MaxTimelineSteps = 12
 	// TimelineAge drops an operation whose last step is older.
 	TimelineAge = 7 * 24 * time.Hour
+	// MaxTimelineAnnotations caps TimelineOperation.Annotations (phase 5);
+	// the oldest are dropped first.
+	MaxTimelineAnnotations = 5
 )
 
 // TimelineState is the "timeline" state. Key: the repository (Worktree
-// empty). Topics: op.**, approval.**. It is rebuilt from the repository's
+// empty). Topics: op.**, approval.**, and from phase 5
+// plugin.annotation.added. It is rebuilt from the repository's
 // store (at most store.MaxReplay events back), then kept up to date from
 // the live events. Operations are newest first by Updated.
 type TimelineState struct {
@@ -64,6 +68,22 @@ type TimelineOperation struct {
 	// Steps are the operation's events, oldest first.
 	Steps     []TimelineStep `json:"steps"`
 	Truncated bool           `json:"truncated,omitempty"`
+	// Annotations are plugin notes on the operation (phase 5), oldest
+	// first, at most MaxTimelineAnnotations. An annotation whose
+	// operation is not in the state is not shown.
+	Annotations []TimelineAnnotation `json:"annotations,omitempty"`
+}
+
+// TimelineAnnotation is one plugin.annotation.added event. Text and URL
+// come from a plugin: the console shows them as plain text and a plain
+// link, labelled with the plugin's ID, never as HTML.
+type TimelineAnnotation struct {
+	EventID string    `json:"event_id"`
+	Plugin  string    `json:"plugin"`
+	Text    string    `json:"text"`
+	URL     string    `json:"url,omitempty"`
+	Level   string    `json:"level"`
+	Time    time.Time `json:"time"`
 }
 
 // TimelineApproval is the approval part of a timeline operation.

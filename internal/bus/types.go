@@ -71,9 +71,9 @@ const (
 // Reserved families. Their concrete types are added by the ADR amendment of
 // the phase that introduces them; until then Publish rejects them. The
 // phase 2 families (approval, hook, commit, gh, client, ui) are registered
-// in types_phase2.go, the phase 3 family (op) in types_phase3.go.
+// in types_phase2.go, the phase 3 family (op) in types_phase3.go and the
+// phase 5 family (plugin) in types_phase5.go.
 var ReservedFamilies = []string{
-	"plugin",  // phase 5: plugin lifecycle and health
 	"harness", // phase 6: harness detected, changed, removed
 	"ai",      // phase 7: ai.session.*
 }
@@ -93,6 +93,9 @@ func init() {
 		registry[info.Type] = info
 	}
 	for _, info := range phase3Types {
+		registry[info.Type] = info
+	}
+	for _, info := range phase5Types {
 		registry[info.Type] = info
 	}
 }
