@@ -97,7 +97,7 @@ func TestPublishNormalizesValidatesAndDelivers(t *testing.T) {
 	if _, err := b.Publish(ctx, Event{Type: TypeGitIndexChanged, Source: "t", Repo: repoA, Worktree: "main", Seq: 1}); !errors.Is(err, ErrSequenced) {
 		t.Fatalf("caller Seq: %v", err)
 	}
-	if _, err := b.Publish(ctx, Event{Type: "op.applied", Source: "t", Repo: repoA}); !errors.Is(err, ErrUnknownType) {
+	if _, err := b.Publish(ctx, Event{Type: "plugin.loaded", Source: "t", Repo: repoA}); !errors.Is(err, ErrUnknownType) {
 		t.Fatalf("unknown type: %v", err)
 	}
 	if _, err := b.Publish(ctx, Event{Type: TypeGitRefsChanged, Source: "t", Repo: repoA, Worktree: "main"}); !errors.Is(err, ErrInvalidEnvelope) {

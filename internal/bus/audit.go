@@ -9,9 +9,12 @@ import (
 // actions; every other family (git.*, config.*, stream.*) is an observation
 // and is not audited. approval.* is not audited either: the gate's own
 // approval journal already records every transition (ADR, phase 2
-// decision 6). No type of these families exists before phase 3, so until
-// then the tap is wired but records nothing.
-var AuditedFamilies = []string{"op"}
+// decision 6). op.* is not audited by the tap either: the command
+// Invoker's audit stage writes one line per operation in the calling
+// process, with its client, and the tap would add a second line per event
+// in the daemon (ADR, phase 3 decision 4). So the tap is wired but records
+// nothing until a later phase adds an audited family.
+var AuditedFamilies []string
 
 // Audited reports whether the audit tap records events of type t.
 func Audited(t Type) bool {

@@ -13,12 +13,15 @@ x-agentflow-links:
     - title: "Phase 2 contract: approvals, hooks, GitHub and reload events"
       url: https://github.com/ryanhelms/agentflow/issues/32
       ref: null
+    - title: "Phase 3 contract: command registry, Invoker and op events"
+      url: https://github.com/ryanhelms/agentflow/issues/52
+      ref: null
 ---
 # Event bus, message store and event stream
 
 ## Status
 
-Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2" at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
+Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2") and phase 3 (section "Phase 3", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
 
 ## Context
 
@@ -87,7 +90,7 @@ Phase 1 types:
 | `config.layer.changed` | any | `ConfigLayerChanged{layer, paths}`; phase 1 uses layer `repo` | `.agentflow/*.yml`, `.agentflow/*.yaml` or `.agentflow/providers/*.y{a,}ml` changes |
 | `stream.overflow` | any, transient | `StreamOverflow{subscription, dropped}` | a subscription dropped events (see Overflow) |
 
-Reserved families, each added by its phase's amendment: `approval.*` and `hook.*`, `commit.created`, `gh.*` (phase 2, now registered: see "Phase 2, Event types"); `op.*` (phase 3); `plugin.*` (phase 5); `harness.*` (phase 6); `ai.session.*` (phase 7).
+Reserved families, each added by its phase's amendment: `approval.*` and `hook.*`, `commit.created`, `gh.*` (phase 2, now registered: see "Phase 2, Event types"); `op.*` (phase 3, now registered: see "Phase 3 event types"); `plugin.*` (phase 5); `harness.*` (phase 6); `ai.session.*` (phase 7).
 
 ### Bus
 
@@ -140,7 +143,7 @@ func Handle(ctx context.Context, sub Subscription, consumer string, h Handler, d
 
 **Point-to-Point Channel.** `Bus.Queue(name)` carries work items, for example "recompute the overview of worktree W". Each item goes to exactly one receiver. Queue items skip Interceptors, Taps and the store. `Send` waits while the queue (64 items) is full, until its context ends: back-pressure, not dropping.
 
-**Wire Tap to audit.** Lane 1.1 provides an audit tap over `policy.Gate.Audit`. It records `op.*` events, which are actions (*amended in phase 2: `approval.*` is no longer audited, see "Phase 2 decisions", item 6*). Observation families such as `git.*` and `config.*` are not audited. In phase 1 no audited type exists yet, so the tap is wired but records nothing.
+**Wire Tap to audit.** Lane 1.1 provides an audit tap over `policy.Gate.Audit`. It records `op.*` events, which are actions (*amended in phase 2: `approval.*` is no longer audited, see "Phase 2 decisions", item 6; amended in phase 3: `op.*` is not audited by the tap either, the Invoker audits operations, see "Phase 3 decisions", item 4*). Observation families such as `git.*` and `config.*` are not audited. In phase 1 no audited type exists yet, so the tap is wired but records nothing.
 
 **Dead Letter Channel.** `bus.Handle` runs a handler per event; an error or a panic becomes a `bus.Letter{event, consumer, reason, time}` and the consumer carries on. The default channel keeps the last 256 letters in memory. Plugins (phase 5) add a persistent one. Overflow drops are not dead letters; `Subscription.Dropped` counts them.
 
@@ -694,3 +697,308 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - GitHub is polled only for repositories the daemon serves, mostly with free conditional requests, and never faster than GitHub allows.
 - A running MCP server follows configuration edits without a restart, except for its instructions, its tool list and recovery mode.
 - Consuming repositories see no change in phase 2: the `post-commit` hook stays in this repository.
+
+## Phase 3
+
+*Amendment for phase 3 (issue #52), lanes 3.1 to 3.5.* Phase 3 turns every operation into a registered Command and adds a live Timeline: run `agentflow commit`, `agentflow pr` or an MCP tool from any agent, and each step (requested, waiting for approval, applied or failed) appears in the console, linked to its task, branch and PR.
+
+Everything in the phase 1 and phase 2 sections still holds unless a paragraph here says it changes. The code form of this section:
+
+| Contract | Go |
+| --- | --- |
+| Operation description | `command.Spec[In, Out]`, `command.CLI[In]`, `command.MCP`, `command.Policy`, `command.Scope`, `command.Detail`, `command.Plan` in `internal/command/spec.go` |
+| Type-free view, CLI and MCP derivation | `command.Meta`, `command.Command`, `command.MCPWrap`, `command.CLIEnv`, `(Spec).AddMCP`, `(Spec).RunCLI` in `internal/command/command.go` |
+| Registry | `command.Registry`, `command.Default`, `command.Register`, `command.Verb`, `RegisterVerb`, `Dispatch`, `ParityRows`, `Usage` in `internal/command/registry.go` |
+| Invoker | `command.Invocation`, `Origin`, `Call`, `Bind`, `Invoke`, `Stage`, `Handler`, `Invoker`, `Options`, `Emitter`, `EmitterSource`, `Auditor`, `Outcome`, `Classify`, `ErrorCode` in `internal/command/invoke.go` |
+| Fakes | `internal/command/commandtest`: recording `Emitter` and `Auditor`, a reference `Invoker` for `GateInRun` operations, a buffer `Env` |
+| Event types and payload | `internal/bus/types_phase3.go` (`TypeOp*`, `OpPayload`, `OpLink`) |
+| Correlation from a token | `policy.OperationIDOf` |
+| Timeline state | `internal/webui/projection_timeline_state.go` |
+
+### Phase 3 patterns
+
+| Piece | GoF / EIP pattern | Go |
+| --- | --- | --- |
+| One operation | Command (GoF); Command Message (EIP) | `command.Spec`, `command.Invocation` |
+| Run order | Template Method | the Invoker's fixed skeleton |
+| Validate, gate, extra checks | Chain of Responsibility; Pipes and Filters | `command.Stage` |
+| Who runs an Invocation | Invoker (GoF); Point-to-Point (EIP) | `command.Invoker` |
+| What happened | Event Message | `op.*` |
+| Linking the steps of one operation | Correlation Identifier | `CorrelationID` = operation ID |
+| Linking an operation to its trigger | Message History (causation) | `CausationID` |
+| Timeline | Event-sourced read model | the `timeline` projection |
+
+### Command Message and Event Message
+
+They are different messages and never take each other's place.
+
+| | Command Message: `command.Invocation` | Event Message: `op.*` |
+| --- | --- | --- |
+| Says | "run commit with this input" | "commit was requested", "commit was applied" |
+| Addressed to | one handler, the Invoker | every subscriber |
+| May be refused | yes: validation, the gate, the operation itself | no: it states a fact |
+| Carries | the full input, the confirm token | the subject, task, branch, codes and links only (see payload rules) |
+| Stored | never | in the repository's message store |
+| Sent over the bus or socket | never | yes |
+
+Later phases send Commands to the Invoker, never through the bus. A plugin's `command.invoke` (phase 5) and an AI session's tool call (phase 7) build an `Invocation` with their `Origin` and the triggering event as `Cause`. A subscriber that reacts to an event and wants to change something sends a Command; it never publishes an `op.*` event itself.
+
+### `command.Spec`
+
+```go
+type Spec[In, Out any] struct {
+    Name     string        // "commit", "commit.prepare", "pr.open": unique, never renamed
+    CLIPath  []string      // {"commit"}, {"pr", "mark-ready"}; required with MCP
+    CLI      *CLI[In]      // own binding, or nil when a Verb owns CLIPath
+    MCP      *MCP          // Tool, Description, Annotations, WriteHost
+    Policy   Policy        // Class, Action, Related, Gate, PrepareOnly
+    Events   Scope         // ScopeDefault, ScopeWorktree, ScopeRepo, ScopeNone
+    Token    func(*In) *string
+    DryRun   func(In) bool
+    Validate func(In) error
+    Describe func(In) Detail // Subject, Task, Branch for the timeline
+    Plan     func(ctx context.Context, a *app.App, in In) (Plan, error) // GateByInvoker only
+    Run      func(ctx context.Context, a *app.App, in In) (any, error)  // calls one internal/app method
+    Links    func(Out) []bus.OpLink
+}
+```
+
+- **In** is the MCP tool's input struct. Its `json` and `jsonschema` tags are the tool's input schema, inferred by the MCP SDK exactly as today. The CLI fills the same struct from flags (`CLI.Flags`, `CLI.Args`). Tool names and input fields stay a compatibility contract.
+- **Out** is the applied result type. `Classify` uses it to tell an applied result from a refusal. `Out = any` treats every non-Pending value as applied, which suits read-only operations.
+- **Run** returns `(any, error)`, exactly what the `internal/app` method returns today: a `*app.Pending`, a result, a refusal map such as `{"status": "invalid"}`, or an error. Nothing wraps it.
+- **Policy.Gate** decides who calls the gate:
+
+| Mode | Who gates | Used by |
+| --- | --- | --- |
+| `GateInRun` | the `internal/app` method calls `a.gate` itself, as today; the Invoker reads the decision from Run's result | every migrated operation in phase 3, so its Pending stays byte-identical |
+| `GateByInvoker` | the Invoker calls `Spec.Plan`, then `(*app.App).GateOperation` (lane 3.1), which wraps the same `a.gate` and `prepareWithActions`, and calls Run only on proceed | new operations from phase 4 on |
+| `GateNone` | nobody | read-only operations (`Class: policy.Read`) |
+
+- **Prepare-only.** `Policy.PrepareOnly` marks an operation that only prepares an exact candidate (`commit.prepare`, `push.prepare`, `pr.prepare`). Its outcome is `op.prepared`, `op.awaiting_approval` or `op.suggested`, never `op.applied`. The CLI runner prints its result once, without the confirmation flow.
+- **Read-only commands register too**, with `Class: policy.Read`. They are never gated and publish no events, but the registry derives their CLI, tool and usage like any other.
+
+### Registry and per-file registration
+
+Each operation family has one file in `internal/command/ops/` (lane 3.1 creates the package), which registers its Specs from `init`:
+
+```go
+func init() {
+    command.Register(command.Spec[eodIn, any]{Name: "eod.post", ...})
+}
+```
+
+- `command.Register` adds to `command.Default` and panics on an invalid or duplicate Spec, so a mistake fails every test of every package that links it.
+- `Registry.Add` checks: a valid unique name; an MCP tool needs a CLI path (CLI and MCP parity is enforced at registration, not only by a test); a unique `agentflow_*` tool name; a write names its policy action; a Spec with its own CLI has a usage block; a CLI path that a Spec binds belongs to that Spec alone.
+- Several Specs share one CLI command through a **Verb** (`command.RegisterVerb`): `commit` runs `commit`, `commit.prepare`, `commit.plan` or `commit.context` by its flags; `pr` runs `pr.ready`, `pr.prepare` or `pr.open`. A Verb parses its own arguments and reaches each operation through the Invoker, never through the app method directly.
+- `internal/cli` and `internal/mcpserver` import `internal/command/ops` for its registrations. `internal/app` never imports `internal/command`.
+
+### Derived surfaces
+
+Lane 3.1 derives these from the registry. After lane 3.1, a new operation touches only its own `ops` file (plus its `internal/app` method, skill and README section):
+
+| Surface | Derived how |
+| --- | --- |
+| CLI dispatch | `cli.run` first calls `command.Default.Dispatch(args)`, the longest registered path, then falls back to today's switch for commands not migrated yet. `CLIEnv` is implemented by `internal/cli` over `open`, `confirmLoop` and `writeResult`, so output is unchanged. |
+| CLI flags and `--yes` | `CLI.Flags` binds flags to In; the runner adds `--yes` when `CLI.Confirm` is set; `CLI.Interspersed` replaces `reorder`. Commands with their own output (interactive commit, text tables, the stderr lines of `start`) use `CLI.Run` or a Verb, and still call the Invoker. |
+| MCP tools | `mcpserver.register` calls `AddMCP` for every registered command, with an `MCPWrap` made from today's `addTool` body (current App, write host, notices, `errResult`, `ContextText`). A legacy `add` for a tool name the registry has is skipped, so a lane that migrates a tool does not edit `server.go`. `MCP.WriteHost` replaces the `writerForTool` switch for registered tools. |
+| Usage text | Rendered from blocks sorted by section (`Setup`, `Work`, `Runtime`), `Order`, then path. Lane 3.1 moves today's text into a legacy block table in `internal/cli/usage_legacy.go`; a legacy block whose path is registered is skipped. At the switch-over the rendered text must equal today's `usage` byte for byte (a test checks it once). |
+| Parity test | `mcpToCLI` becomes the legacy map. `TestEveryMCPToolHasCLICommand` checks the union of `command.Default.ParityRows()` and the legacy map, registry rows winning, so a migrating lane never edits `parity_test.go`. |
+| Tool schemas | Before any migration, lane 3.1 adds a golden file of every tool's name, description, annotations and input schema (`internal/mcpserver/testdata/golden/tools.json`). A migration that changes any of them fails. |
+
+The legacy switch cases, `add` calls, input types, legacy usage blocks and legacy parity rows become dead as lanes migrate. One cleanup PR at the end of the phase (lane 3.1, after 3.2 to 3.4 merge) deletes them. Runtime plumbing that is not an operation stays in `cli.go`'s fixed switch: `mcp`, `hook`, `lint-msg`, `keys`, `update`, `version`, `help` and `--native-client`.
+
+### Invoker
+
+`command.Invoke(ctx, inv, a, spec, in, origin)` binds the Spec to its input (`command.Bind`) and runs the resulting `Call`. Lane 3.1 adds `command.NewInvoker(Options) Invoker`, a Template Method with this fixed skeleton. `commandtest.Invoker` is the reference for `GateInRun` operations.
+
+1. **Validate.** `Spec.Validate`. An error returns at once, as is, with no event: the request never became an operation.
+2. **Extra stages** (`Options.Stages`, Chain of Responsibility), empty in phase 3. Phase 5 plugins add permission rules here.
+3. **Publish `op.requested`.**
+4. **Gate.** `GateByInvoker`: `Spec.Plan`, then `a.GateOperation`; a non-nil Pending ends the run. `GateInRun`: nothing here.
+5. **Run.** `Spec.Run`.
+6. **Audit.** `Auditor.AuditOperation` with the Outcome.
+7. **Publish the outcome event.**
+
+Rules:
+
+- **The result is never changed.** The Invoker returns Run's value and error unchanged, so `Pending` JSON, CLI output and MCP tool output stay byte for byte what they are; the phase 0 golden tests (`internal/cli/testdata/golden`, `internal/app` golden tests) must pass unchanged after every migration.
+- **Events never change the result.** An Emitter or Auditor error is dropped (the Emitter warns once on stderr, as in phase 2). Events are notifications.
+- **No events** for a read (`ScopeNone`), a dry run (`Spec.DryRun`), or a validation error.
+- **Outcome** (`command.Classify[Out]`):
+
+| Run returned | Outcome | Event |
+| --- | --- | --- |
+| an error | failed, `code` = `command.ErrorCode(err)` | `op.failed` |
+| `*app.Pending` `suggest` | suggested | `op.suggested` |
+| `*app.Pending` `needs_confirmation` or `awaiting_approval` | awaiting approval, with the approval's ID and expiry | `op.awaiting_approval` |
+| `*app.Pending` `prepared` | prepared | `op.prepared` |
+| an `Out`, `*Out` or nil | applied, with `Spec.Links` | `op.applied` |
+| any other value | failed, `code` = its `status` field (`invalid`, `blocked`), else `unexpected_result` | `op.failed` |
+
+- **Error codes, never error text.** `ErrorCode` gives a `policy.ErrorCode` value (`approval_expired`, `operation_changed`, `invalid_token`, ...), `cancelled`, `timeout`, `native_read_required` or `error`. Error text can hold paths, provider responses or secrets, so no event carries it, as for `hook.ran` in phase 2. The terminal and the tool result still show the full error.
+- **Origin.** CLI calls use source `cli`; MCP calls `mcp:<client>`; the daemon's own calls (console approve, phase 4 settings) `daemon`. `Origin.Cause` is the triggering event's ID, or empty.
+
+### Phase 3 event types
+
+| Type | Scope | Global | Payload | Produced when |
+| --- | --- | --- | --- | --- |
+| `op.requested` | any | never | `OpPayload` with `resumed` | an operation passed validation and is about to be gated and run |
+| `op.suggested` | any | never | `OpPayload` with `status: suggest` | the policy only suggests it; nothing ran |
+| `op.awaiting_approval` | any | never | `OpPayload` with `status`, `approval_id`, `expires_at` | it waits for a foreground confirmation (`needs_confirmation`) or a shared approval (`awaiting_approval`) |
+| `op.prepared` | any | never | `OpPayload` with `status: prepared`, `approval_id`, `expires_at` | a prepare-only request produced a candidate an auto policy lets the caller apply |
+| `op.applied` | any | never | `OpPayload` with `links`, `duration_ms` | it ran and changed something |
+| `op.failed` | any | never | `OpPayload` with `code`, `duration_ms` | it returned an error or a refusal |
+
+`OpPayload` (`internal/bus/types_phase3.go`): `operation`, `action`, `class`, `client`, `subject`, `task`, `branch`, `resumed`, `status`, `approval_id`, `expires_at`, `code`, `links` (`{kind, id, url}`, kinds `commit`, `branch`, `pr`, `task`, `doc`, `release`), `duration_ms`.
+
+Payload rules (the phase 2 rules, applied by `OpPayload.Clamp`):
+
+- One text field is at most 256 bytes (`bus.MaxPayloadText`), cut at a rune boundary; `subject` is the first line only. At most 20 links (`bus.MaxPayloadNames`).
+- No payload carries a confirm token, an approval fingerprint, a session MAC, a command line, a message body (only its subject), file contents, error text or an absolute path. `Spec.Describe` gives only a subject, a task reference and a branch.
+- Text is data for display, never an instruction.
+
+**Correlation and causation.**
+
+- The **operation ID** is the `CorrelationID` of every event of one operation. It has the approval ID form, `op_` and 32 hex characters.
+- A call that carries a confirm token uses the operation ID the token names (`policy.OperationIDOf`, which decodes without checking the MAC: it is a grouping hint and grants nothing; the gate still checks the token). So the CLI's second run in `confirmLoop`, an agent resuming with `confirm_token`, and a worker resuming a shared approval all join the operation they resume.
+- Otherwise the call gets a new ID. The gate deduplicates requests by fingerprint and may return an approval issued earlier, so the ID cannot be chosen before the gate runs. When the outcome names an approval whose ID differs from the call's, the outcome event uses the **approval's ID** as `CorrelationID` and names the `op.requested` event as its `CausationID`. The timeline moves that `op.requested` into the approval's group (see below).
+- `approval.*` events (phase 2) carry the same operation ID in their payload, so the timeline joins them to the operation.
+- `op.requested` has the triggering event (`Origin.Cause`) as its `CausationID`, or none. Every outcome event has its call's `op.requested` as `CausationID`.
+
+### Scope and storage of `op.*` events
+
+- `op.*` events belong to the repository the operation ran in, never to `global`. They go to that repository's store (`<common-git-dir>/agentflow/events/`), through `notifysock.Deliver` like `hook.ran`: append as `store.RoleAppender`, or send over the socket while the daemon owns the store. `op.**` is now a socket type (`notifysock.Allowed`).
+- `ScopeWorktree` (the default for writes) tags the event with the console worktree ID of the directory the call ran in (`webui.IdentifyWorktree`). If the daemon refuses it as `unknown_worktree`, the Emitter sends it once more without the worktree. `ScopeRepo` events are repository-wide.
+- `ScopeNone` publishes nothing: reads, and writes that belong to no repository (`install`, `login`, `logout`, the personal configuration layer).
+- Unlike hooks, CLI and MCP processes may create the store when it does not exist yet: a person ran an operation in this repository, so its history is worth keeping. Lane 3.1's production Emitter (`internal/command/deliver`, which may import `internal/webui`) does this; hooks keep their phase 2 rule.
+
+### Audit
+
+- The `internal/app` method's own `a.audit` line stays. It hashes the exact reviewed summary, which only the method has.
+- The Invoker's audit stage adds one line per finished call through `policy.Gate.AuditOperation` (lane 3.1): time, client, class, action, operation name, operation ID (`Outcome.OperationID`), outcome kind and code. That ID is how the timeline links to the audit log.
+- The bus Wire Tap no longer audits `op.*` (`bus.AuditedFamilies` is now empty; decision 4).
+
+### Phase 3 timeline projection (lane 3.5)
+
+| Projection | Key | Topics | Reads | State |
+| --- | --- | --- | --- | --- |
+| `timeline` | repository | `op.**`, `approval.**` | the repository's store, at most `store.MaxReplay` events back | `TimelineState` |
+
+`internal/webui/projection_timeline_state.go` holds the shapes:
+
+- `TimelineState{operations, truncated}`: at most 50 operations (`MaxTimelineOperations`), **newest first by `updated`**, none whose last step is older than 7 days (`TimelineAge`).
+- `TimelineOperation`: `id` (the operation ID), `operation`, `action`, `class`, `client`, `worktree`, `subject`, `task`, `branch`, `state` (the latest step: `requested`, `suggested`, `awaiting_approval`, `prepared`, `applied`, `failed`, or from an approval event `approved`, `cancelled`, `expired`), `code`, `approval{state, expires_at}`, `links`, `started`, `updated`, `steps` (oldest first, at most 12, `truncated` when cut).
+- `TimelineStep`: `event_id`, `seq`, `type`, `time`, `state`, `code`.
+
+**Grouping by correlation ID.**
+
+1. Group `op.*` events by `CorrelationID`, and `approval.*` events by their payload's operation ID.
+2. When an event's `CausationID` names an `op.requested` in another group, move that `op.requested` into the event's group, and drop the group it leaves if it is now empty. This joins a gated operation's first request to its approval's ID.
+3. An `approval.*` group without any `op.*` event (an operation run before phase 3, or by an older binary) is shown with `operation` set to the approval's action.
+4. The browser filters by worktree, client, state and operation itself; the state carries everything it needs. Links go to the task, the PR and the commit (`links`), and to the audit line by operation ID.
+
+The projection is keyed by repository, so one stream carries every worktree's operations. The client filters to the current worktree by default.
+
+### Migration recipe
+
+A migrated operation keeps its `internal/app` method unchanged (`GateInRun`), moves its MCP input type into its `ops` file, and registers one Spec. Before, `eod post` lived in three places:
+
+```go
+// internal/mcpserver/server.go
+add(s, "agentflow_eod_post", "Post end-of-day progress comments on tickets.", remote,
+    func(ctx context.Context, a *app.App, in eodIn) (any, error) {
+        return a.PostEOD(ctx, in.Notes, in.ConfirmToken)
+    })
+// internal/cli/parity.go: runEOD parses KEY=NOTE pairs and --yes, then
+//     confirmLoop(*yes, func(tok string) (any, error) { return a.PostEOD(ctx, notes, tok) })
+// internal/cli/cli.go: case "eod" in run, and the usage line
+// internal/cli/parity_test.go: "agentflow_eod_post": "eod post"
+```
+
+After, one file:
+
+```go
+// internal/command/ops/eod.go
+type eodIn struct {
+    Notes        map[string]string `json:"notes" jsonschema:"map of Jira key to a one-line progress note"`
+    ConfirmToken string            `json:"confirm_token,omitempty"`
+}
+
+func init() {
+    command.Register(command.Spec[eodIn, any]{
+        Name:    "eod.post",
+        CLIPath: []string{"eod", "post"},
+        CLI: &command.CLI[eodIn]{
+            Args:         parseNotes, // KEY=NOTE pairs, the same errors as runEOD
+            Interspersed: true,
+            Confirm:      true,
+            Usage:        "  eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments",
+            Section:      command.SectionWork,
+            Order:        2300,
+        },
+        MCP:      &command.MCP{Tool: "agentflow_eod_post", Description: "Post end-of-day progress comments on tickets.", Annotations: command.RemoteWrite},
+        Policy:   command.Policy{Class: policy.Remote, Action: "eod"},
+        Token:    func(in *eodIn) *string { return &in.ConfirmToken },
+        Describe: func(in eodIn) command.Detail { return command.Detail{Subject: fmt.Sprintf("end-of-day notes on %d tasks", len(in.Notes))} },
+        Run: func(ctx context.Context, a *app.App, in eodIn) (any, error) {
+            return a.PostEOD(ctx, in.Notes, in.ConfirmToken)
+        },
+    })
+}
+```
+
+The legacy `add`, `case` and parity row are skipped from then on and deleted by the cleanup PR. A migration PR must show: the tool-schema golden file and the phase 0 golden tests unchanged; the operation's events in a test with `commandtest` (requested, then the right outcome, for the confirm, apply and refusal paths); and no edit to `cli.go`, `mcpserver/server.go` or `parity_test.go`.
+
+### `TestEveryWriteOperationEmitsEvents` (lane 3.4, end of phase)
+
+In `internal/command/ops`. For every registered Spec:
+
+- A write (`Class` not `read`) has `Events` other than `ScopeNone`, unless it is on a short allow-list with a reason (`install`, `login`, `logout`, `config.save_personal`).
+- A gated write names a valid autonomy action (`config.ValidAutonomyAction`), and a write whose MCP input has `confirm_token` sets `Spec.Token`.
+- With Run replaced by stubs that return each outcome (applied `Out`, Pending of each status, a refusal map, an error), the reference Invoker publishes `op.requested` then the matching outcome event, every event passes `bus.Event.Validate` and `notifysock.Check`, and no payload contains the input's token or a newline in `subject`.
+- Every tool the MCP server registers comes from the registry, and every case left in `cli.run`'s switch is a runtime command (`mcp`, `hook`, `lint-msg`, `keys`, `update`, `version`, `help`).
+
+### File ownership for phase 3 lanes
+
+| Lane | Owns | Must not touch |
+| --- | --- | --- |
+| 3.1 Registry, Invoker, derivation | `internal/command/*.go` (`NewInvoker`, stages), `internal/command/deliver/**`, `internal/command/ops/doc.go`, `internal/command/ops/policy.go` and `ops/eod.go` (the examples: `policy.explain`, `approval.status`, `approval.approve`, `eod.post`); `(*app.App).GateOperation` in a new `internal/app/gate_operation.go`; `policy.Gate.AuditOperation` in a new `internal/policy/audit_operation.go`; **`internal/cli/cli.go`, `internal/cli/usage_legacy.go`, `internal/cli/parity_test.go`, `internal/mcpserver/server.go`** and the tool-schema golden test; the end-of-phase cleanup PR | other `ops` files, `internal/webui/**` |
+| 3.2 Commit, PR, push, review | `internal/command/ops/{commit,pr,push,review,status,collisions}*.go`; `internal/app/{commitops,pr,git_publication,review}*.go` only where a method must change | `cli.go`, `server.go`, `parity_test.go` |
+| 3.3 Task, transition, comment, ticket, AC, scope | `internal/command/ops/{task,transition,comment,ticket,ac,scope,context,work,standup}*.go`; `internal/app/{task,team,ac,scope}*.go` and `Transition`/`Comment` in `app.go` only where a method must change | same |
+| 3.4 Docs, release, notify, setup, worktree, secops | `internal/command/ops/{docs,adr,release,notify,setup,config,worktree,sweep,delegate,promote,secops,events,ui}*.go`, the matching `internal/app` files, and `internal/command/ops/emit_test.go` (`TestEveryWriteOperationEmitsEvents`) | same |
+| 3.5 Timeline | `internal/webui/projection_timeline*.go` (the projection, its registration through a `runtimeExtension` in its own file), `internal/webui/static/timeline.*`, the timeline's script tag in `static/index.html` and its rules in `style.css` | `internal/command/**`, other projections |
+
+- Lane 3.1 is the only phase 3 lane that may edit `cli.go`, `mcpserver/server.go` or `parity_test.go`. Lanes 3.2 to 3.4 start after lane 3.1 merges; lane 3.5 can start at once against `TimelineState` and the `commandtest` events.
+- Each migrating lane also updates its commands' plugin skills (`adapters/claude-code/skills/<command>/SKILL.md`) and README sections only if their behaviour changes; a pure migration changes neither.
+- Exported contract types change only through an amendment to this ADR: everything in the code-form table above.
+
+**Security review (lanes 3.1 and 3.5, before merge).**
+
+- [ ] No `op.*` payload carries a confirm token, a fingerprint, a command line, a message body, error text or an absolute path; `Clamp` is applied to every payload.
+- [ ] `policy.OperationIDOf` is used only for correlation, never to authorize; a forged token can at most mislabel the caller's own events.
+- [ ] Only `cli` and `mcp:*` sources send `op.*` over the socket; the daemon's own calls publish on its bus.
+- [ ] The timeline shows only the stream's own repository.
+
+### Phase 3 decisions
+
+*Made in this amendment; the coordinator confirms or changes them on the contract PR.*
+
+1. **Gate in Run for migrations.** Migrated operations keep calling `a.gate` inside their app method (`GateInRun`). Moving every summary computation into `Spec.Plan` would rewrite each operation and risk the byte-identical guarantee for no visible gain. `GateByInvoker` is for new operations.
+2. **The approval's ID is the operation ID once the gate issues one.** The gate deduplicates by fingerprint, so the ID cannot be fixed in advance; the timeline joins the first request through its causation link.
+3. **Codes, not error text.** `op.failed` carries a fixed code only.
+4. **The Invoker audits, the Wire Tap does not.** The Wire Tap runs in the daemon only, so it would miss operations run with no daemon and log them under the daemon's client; and it would add one line per event. `bus.AuditedFamilies` is now empty; the tap stays wired for later phases.
+5. **One cleanup PR.** Lanes leave legacy code dead rather than deleting it, so only lane 3.1 edits the shared files.
+6. **CLI and MCP processes may create the store for `op.*` events**, unlike hooks (see Scope).
+
+### Open questions for the coordinator
+
+1. **Native read round trips.** An MCP call that returns `native_read_required` publishes `op.failed` with that code, and the resumed call starts a new operation. Should it instead publish nothing until the call that runs, or carry the native request ID as the correlation?
+2. **CLI decline.** When a person answers "no" at the prompt, the timeline shows the cancellation only through `approval.resolved{state: cancelled}`. Is that enough, or should the CLI send an `op.failed{code: cancelled}` too (it has no Invoker call at that point)?
+3. **Commands outside a repository** (`install`, `login`, `logout`, the personal layer) publish nothing. Should they publish to `global` instead, which would add `op.*` to the global rule?
+
+### Phase 3 consequences
+
+- Every operation is one Spec in one file. The CLI, the MCP tool list, the usage text and the parity check follow from the registry, so phases 4 to 11 add operations in parallel lanes without touching shared files.
+- Every write, from any client, leaves `op.*` events in its repository's store, so the console shows a live timeline and `agentflow events` shows the history.
+- Output is unchanged: the golden tests and the tool-schema golden file pin it.
+- `audit.log` gets one more line per operation, with the operation ID.
