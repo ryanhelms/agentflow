@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,14 +17,17 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/mcpserver"
 	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
-// mcpToCLI maps every statically registered MCP tool to the CLI command that
-// runs the same internal/app operation. A new static tool must add a CLI
-// command and a row here.
-var mcpToCLI = map[string]string{
+// legacyMCPToCLI maps every MCP tool not yet in the command registry to the
+// CLI command that runs the same internal/app operation. Registered
+// operations get their row from command.Default.ParityRows (see mcpToCLI),
+// so a migration never edits this map; the phase 3 cleanup deletes the dead
+// rows.
+var legacyMCPToCLI = map[string]string{
 	"agentflow_ui_open":               "ui",
 	"agentflow_config":                "config",
 	"agentflow_config_apply":          "config publish",
@@ -75,6 +79,15 @@ var mcpToCLI = map[string]string{
 	"agentflow_setup_plan":            "setup",
 	"agentflow_setup_apply":           "setup apply",
 }
+
+// mcpToCLI maps every statically registered MCP tool to its CLI command: the
+// registry's rows, then the legacy rows for tools the registry does not
+// have. Registry rows win.
+var mcpToCLI = func() map[string]string {
+	rows := maps.Clone(legacyMCPToCLI)
+	maps.Copy(rows, command.Default.ParityRows())
+	return rows
+}()
 
 // definitionTool reports whether a tool was generated at runtime from a
 // provider definition rather than registered statically. Such tools get their

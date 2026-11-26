@@ -13,9 +13,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/command/deliver"
+	_ "github.com/ryanhelms/agentflow/internal/command/ops" // registers the operations
 	"github.com/ryanhelms/agentflow/internal/configconsole"
 	"github.com/ryanhelms/agentflow/internal/delegate"
 	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/notifysock"
 	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/provider"
 	"github.com/ryanhelms/agentflow/internal/provider/codexhost"
@@ -45,6 +49,9 @@ type Server struct {
 	notices     notices
 	writer      *native.SessionWriter
 	slackWriter *native.SessionWriter
+	// registered names the tools registerCommands added from the command
+	// registry; nil on servers that add none (recovery mode, UI only).
+	registered map[string]bool
 }
 
 // instructionsFor is what the MCP server tells its client at session start.
@@ -160,6 +167,16 @@ func (s *Server) writerForTool(a *app.App, name string) *native.SessionWriter {
 	if a.Client != "claude" && a.Client != "claude-desktop" {
 		return s.writer
 	}
+	if c, ok := command.Default.Tool(name); ok {
+		switch c.Meta().WriteHost {
+		case command.WriteHostTasks:
+			return s.writer
+		case command.WriteHostSlack:
+			return s.slackWriter
+		default:
+			return nil
+		}
+	}
 	switch name {
 	case "agentflow_comment", "agentflow_docs_publish", "agentflow_jira_remote_link", "agentflow_ticket_create", "agentflow_start", "agentflow_transition":
 		return s.writer
@@ -178,36 +195,84 @@ func add[In any](s *Server, name, desc string, ann *mcp.ToolAnnotations, fn func
 	addTool(s, &mcp.Tool{Name: name, Description: desc, Annotations: ann}, fn)
 }
 
+// addTool registers a legacy tool. A tool the command registry provides on
+// this server (registerCommands) is skipped, so a lane that migrates a tool
+// does not edit this file; the phase 3 cleanup deletes the dead calls.
 func addTool[In any](s *Server, tool *mcp.Tool, fn func(context.Context, *app.App, In) (any, error)) {
+	if s.registered[tool.Name] {
+		return
+	}
 	mcp.AddTool(s.mcp, tool,
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
-			if s.blocked != nil {
-				return errResult(s.blocked), nil, nil
-			}
-			// A changed configuration is picked up here, before the call; the
-			// call then keeps this App even if the configuration changes again.
-			a := s.current(ctx)
-			if writer := s.writerForTool(a, tool.Name); writer != nil {
-				ctx = native.WithWriteHost(ctx, writer)
-			}
-			out, err := fn(ctx, a, in)
-			var providerRequest *native.Request
-			switch {
-			case errors.As(err, &providerRequest):
-				out = newNativeReadResponse(a, providerRequest)
-			case err != nil:
-				return s.withNotices(errResult(err)), nil, nil
-			}
-			b, err := json.MarshalIndent(out, "", "  ")
-			if err != nil {
-				return s.withNotices(errResult(err)), nil, nil
-			}
-			text := string(b)
-			if t, ok := out.(interface{ ContextText() string }); ok {
-				text = t.ContextText()
-			}
-			return s.withNotices(&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}), nil, nil
+			return s.callTool(ctx, tool.Name, func(ctx context.Context, a *app.App) (any, error) { return fn(ctx, a, in) }), nil, nil
 		})
+}
+
+// callTool runs one tool call: it loads the App the call runs on, applies the
+// tool's native write host, runs fn and turns its result or error into the
+// tool result, appending the pending notices. Legacy tools and registered
+// commands share it, so their output is the same byte for byte.
+func (s *Server) callTool(ctx context.Context, name string, fn func(context.Context, *app.App) (any, error)) *mcp.CallToolResult {
+	if s.blocked != nil {
+		return errResult(s.blocked)
+	}
+	// A changed configuration is picked up here, before the call; the
+	// call then keeps this App even if the configuration changes again.
+	a := s.current(ctx)
+	if writer := s.writerForTool(a, name); writer != nil {
+		ctx = native.WithWriteHost(ctx, writer)
+	}
+	out, err := fn(ctx, a)
+	var providerRequest *native.Request
+	switch {
+	case errors.As(err, &providerRequest):
+		out = newNativeReadResponse(a, providerRequest)
+	case err != nil:
+		return s.withNotices(errResult(err))
+	}
+	b, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return s.withNotices(errResult(err))
+	}
+	text := string(b)
+	if t, ok := out.(interface{ ContextText() string }); ok {
+		text = t.ContextText()
+	}
+	return s.withNotices(&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}})
+}
+
+// invoker runs the registered operations of MCP tool calls.
+var invoker = command.NewInvoker(command.Options{Emitters: deliver.Source(deliver.Options{}), Auditor: command.AuditLog{}})
+
+// registerCommands adds the tool of every operation in the command
+// registry, run through the Invoker with the MCP Origin. Legacy add calls
+// for the same names are skipped from then on.
+func (s *Server) registerCommands() {
+	s.registered = map[string]bool{}
+	wrap := func(ctx context.Context, m command.Meta, call func(context.Context, *app.App, command.Origin) (any, error)) *mcp.CallToolResult {
+		return s.callTool(ctx, m.Tool, func(ctx context.Context, a *app.App) (any, error) { return call(ctx, a, mcpOrigin(a)) })
+	}
+	for _, c := range command.Default.Commands() {
+		if tool := c.Meta().Tool; tool != "" {
+			c.AddMCP(s.mcp, wrap, invoker)
+			s.registered[tool] = true
+		}
+	}
+}
+
+// mcpOrigin is the Origin of a tool call on a: source "mcp:<client>". A
+// client name the socket would refuse as a source is sent as
+// "mcp:unknown"; the payload keeps the client as given.
+func mcpOrigin(a *app.App) command.Origin {
+	client := ""
+	if a != nil {
+		client = a.Client
+	}
+	source := "mcp:" + client
+	if !notifysock.ValidSource(source) {
+		source = "mcp:unknown"
+	}
+	return command.Origin{Source: source, Client: client}
 }
 
 func errResult(err error) *mcp.CallToolResult {
@@ -362,6 +427,7 @@ type contextOut struct{ *app.TicketContext }
 func (c contextOut) ContextText() string { return c.Text }
 
 func (s *Server) register(a *app.App) {
+	s.registerCommands()
 	s.registerProviderSetup()
 	s.registerNotifications()
 	s.registerUI(a.Repo.Dir)

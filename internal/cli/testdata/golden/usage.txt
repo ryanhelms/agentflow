@@ -1,0 +1,114 @@
+agentflow links git work to your configured task, knowledge and code providers.
+
+Usage: agentflow <command> [flags]
+
+Setup
+  ui [--screen NAME] [--role ROLE] [--no-open] [--port N] [--foreground] [directory]
+                                 open or reuse the local repository console
+  ui --status | --stop           inspect or stop the shared local UI daemon
+  init [--force]                 write .agentflow/, hooks, workflow, client configs and release setup
+  init --detect-providers        show local selection evidence and supported choices as JSON
+  init [--guided|--non-interactive] [--provider ROLE=ID ...]
+                                 review and persist provider choices; the terminal guides by default
+  init --guidance-only           refresh the managed AGENTS.md block
+  remove [--dry-run] [--force] [--keep-releases]
+                                 undo init: delete agentflow's files, strip its entries from
+                                 AGENTS.md and client configs, stop automatic init here
+  pin [--check]                  pin .github/workflows/agentflow.yml to this agentflow release
+                                 (review the change in a PR, like any dependency bump)
+  install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
+  setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
+  setup providers [--explain] [--json]   list every provider each role accepts and which one is selected;
+                                 --explain shows effective settings and the layer that set each
+  setup apply [--install-gh | --client NAME] [--yes]   install pinned gh or register a project adapter
+  setup apply --companion ID [--install | --client NAME] [--yes]
+                                 install or register one declared MCP companion
+  setup login --provider NAME [--client NAME] [--server NAME] [--register [--client-id ID] | --public-client-id ID --team-id TEAM]
+                                 start sign-in through a provider CLI or MCP client
+                                 use --client agentflow for Jira, Confluence, Asana or an approved Slack app
+  setup logout --provider NAME --client agentflow
+                                 disconnect the selected local Agentflow enrollment
+  doctor --providers [--client NAME]   verify provider and client readiness
+  login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
+  logout                         remove the legacy Atlassian API-token login
+  doctor [--fix]                 check binary, hooks, auth, client config and API access
+
+Work
+  work                           list work from the selected task provider
+  task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
+              [--template NAME --template-revision REV] [--dry-run] [--yes]
+  task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
+  start KEY [--worktree]         branch or worktree for KEY; apply supported start effects.
+                                 Worktrees go to <worktree.root>/<repo>/<branch> (default ~/.worktrees)
+                                 with a git-excluded .agentflow/worktree.yml and, if configured, go.work
+  worktree go-work               regenerate go.work in this worktree from worktree.go_work
+  finish [BRANCH] [--dry-run] [--yes]
+                                 after the PR merges: remove the worktree, the local and the remote branch
+  sweep [--all-repos] [--dry-run] [--stale-days N] [--json] [--yes]
+  delegate --repo NAME [--agent claude|codex] [--start] [--dry-run] [--json] [--yes] TASK
+                                 hand TASK to a session in another repository: a running tmux
+                                 session there, or a new one in its checkout
+                                 finish merged worktrees; report dirty, unpushed, stale and orphaned ones
+  promote [--from develop] [--to main] [--dry-run] [--yes]
+                                 open the develop -> main release PR (merge commit); people only, not agents
+  context [KEY]                  ticket bundle for the current branch
+  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state
+  ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]
+                                 tick or untick a criterion; --post comments progress
+  scope [--json]                 changes and new TODOs that look outside the ticket
+  comment [KEY] TEXT [--yes]     comment on the task
+  collisions [KEY] [--json]      other PRs on this task or touching your files
+  config OP [--input FILE|-]     inspect or prepare repository console settings from JSON
+  config publish [--input FILE|-]   publish the exact approved repository change
+  config save_personal [--input FILE|-]   save the exact approved preferences
+  policy explain [ACTION]          show autonomy, repository ceilings and review windows
+  policy status ID                inspect a shared approval
+  policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker
+  push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
+  pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
+  commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
+  preview [MSG]                  configured task effects of a message or of unpushed commits
+  transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
+  secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
+                                 preview or create tasks from configured security events
+  pr [--check] [--run] [--title T] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR
+  review [threads] [--json]      unresolved review threads on this branch's PR
+  review reply THREAD_ID BODY [--yes]   reply on a review thread
+  status                         PR, checks, deployments and ticket in one view
+  standup [--since 24h] [--json] activity to draft a standup
+  events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--all-repos] [--follow] [--json]
+                                 git, configuration and user-level events recorded by the console
+                                 daemon, for this repository and global; --all-repos reads every
+                                 repository the daemon serves; --follow starts the daemon and
+                                 prints new events until interrupted
+  eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
+  notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
+  docs get REF [--json]          read one document by qualified reference
+  docs search QUERY [--space S]  search the selected knowledge base
+  docs publish REF --title T --body TEXT --operation-id ID
+               [--expected-revision REV] [--links JSON] [--type TYPE] [--description TEXT] [--tags JSON] [--yes]   publish a knowledge document
+  adr new TITLE                  draft docs/adr/NNNN-title.md
+  release init [--strategy trunk|gitflow] [--force]   detect deployable units, write
+                                 .agentflow/releases.yml and the release-please files
+  release sync                   regenerate release-please files from releases.yml
+  release plan [--unit U] [--json]   next version of each unit on this branch
+  release version --unit U       print the version a build of this branch gets
+  release preview [--since TAG]  unreleased commits by type
+  release get TAG                inspect a published release from the selected provider
+  release publish TAG --revision SHA [--title T] [--notes TEXT] [--dry-run] [--yes]
+                                 explicitly publish a stable release at a commit
+  keys --range A..B              Jira keys in a commit range
+  lint-msg FILE | --github-event validate a commit file or runner PR and its task references
+
+Runtime
+  --native-client codex COMMAND  reuse the configured Codex MCP for supported writes
+  --native-client claude-desktop COMMAND
+                                 use Jira for comment, start, transition or task create
+                                 use Asana for comment, completion via transition or task create
+                                 Jira comments and unlinked creates can fall back to the signed-in Teamwork Graph CLI
+  --native-client claude-desktop notify SIGNAL --operation-id ID
+                                 use the separately enrolled Slack MCP connection
+  mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
+  hook commit-msg FILE | pre-push [REMOTE URL] | post-commit | session-start | pre-bash | stop   [--client NAME]
+  update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
+  version                        build, channel and update status

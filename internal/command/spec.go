@@ -106,7 +106,7 @@ const (
 	// Migrated operations use it, so their Pending stays byte-identical.
 	GateInRun GateMode = iota
 	// GateByInvoker: the Invoker calls Spec.Plan, then gates through
-	// (*app.App).GateOperation (lane 3.1), which wraps the same a.gate
+	// (*app.App).GateOperation, which wraps the same a.gate
 	// and prepareWithActions, and calls Run only on proceed. New
 	// operations use it.
 	GateByInvoker
@@ -174,7 +174,9 @@ type Plan struct {
 // writeResult do today.
 type CLI[In any] struct {
 	// Flags declares flags on fs that fill in. --yes is added by the runner
-	// when Confirm is set; Flags must not declare it.
+	// when Confirm is set and Flags did not declare it; a Flags that keeps a
+	// legacy command's help text may declare it as a bool flag, which the
+	// runner then reads.
 	Flags func(fs *flag.FlagSet, in *In)
 	// Args fills in from the positional arguments. Nil means none are
 	// allowed.

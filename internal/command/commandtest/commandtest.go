@@ -1,8 +1,9 @@
 // Package commandtest has fakes for the command contract: a recording
 // Emitter and Auditor, a reference Invoker that follows the ADR's skeleton
-// for GateInRun operations, and a CLIEnv that writes to a buffer. Lanes code
-// and test against them until lane 3.1's NewInvoker and production Emitter
-// land; TestEveryWriteOperationEmitsEvents (lane 3.4) uses them too.
+// for GateInRun operations, and a CLIEnv that writes to a buffer. Operation
+// tests use them with command.NewInvoker or the reference Invoker below
+// (TestNewInvokerMatchesReference keeps the two in step);
+// TestEveryWriteOperationEmitsEvents (lane 3.4) uses them too.
 package commandtest
 
 import (
@@ -104,8 +105,8 @@ func (a *Auditor) Lines() []Audit {
 }
 
 // ErrGateByInvoker is returned by Invoker for GateByInvoker operations,
-// which need (*app.App).GateOperation from lane 3.1.
-var ErrGateByInvoker = errors.New("commandtest: GateByInvoker needs lane 3.1's NewInvoker")
+// which need (*app.App).GateOperation: test them with command.NewInvoker.
+var ErrGateByInvoker = errors.New("commandtest: GateByInvoker needs command.NewInvoker")
 
 // Invoker is a reference implementation of the ADR's Invoker skeleton for
 // GateInRun and read-only operations: validate, op.requested, run, audit

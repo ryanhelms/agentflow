@@ -161,7 +161,40 @@ prints nothing about it, because git and agents read hook output.
    local notify socket, and the daemon stores and publishes it.
 3. If the daemon is starting, stopping or refuses the event, the event is dropped.
 
-The notify socket accepts only `hook.ran` and `commit.created`, only from a process that
+## Events from operations
+
+Operations that run through agentflow's command registry record `op.*` events, from the
+CLI and from MCP tools alike. So far these are `policy explain`, `policy status`,
+`policy approve` (`agentflow_policy_explain`, `agentflow_approval_status`,
+`agentflow_approval_approve`) and `eod post` (`agentflow_eod_post`); the other commands
+follow during phase 3. A read, such as `policy explain`, records nothing. A write records:
+
+| Event | When |
+| --- | --- |
+| `op.requested` | the request passed validation and is about to be gated and run |
+| `op.awaiting_approval` | it waits for a confirmation or a shared approval |
+| `op.suggested` | the policy only suggests it; nothing ran |
+| `op.prepared` | a prepare-only request produced a candidate |
+| `op.applied` | it ran |
+| `op.failed` | it returned an error or a refusal, with a fixed code such as `invalid_token` |
+
+Every event of one operation has the operation ID (`op_` and 32 hex characters, the
+approval ID once the gate issues one) as its correlation ID, so a request, its
+confirmation and the resumed call group together. The payload names the operation, its
+policy action and class, the client, and a one-line subject. It never carries a confirm
+token, a message body, error text or a path.
+
+A command hands its events to the store like a hook: it appends them when the store
+exists and no daemon owns it, sends them over the notify socket while the daemon owns it,
+and otherwise drops them with one warning on standard error. It never creates a store.
+When the daemon has not registered the worktree yet, the event is sent again as a
+repository-wide event.
+
+`policy approve` also writes one line to `audit.log` with its operation and operation ID.
+Commands whose own code already writes an audit line, such as `eod post`, write no extra
+one.
+
+The notify socket accepts only `hook.ran`, `commit.created` and `op.*`, only from a process that
 proves it can read the daemon's private registry file (`~/.agentflow-ui/`), and only for
 repositories and worktrees the daemon serves. On Unix it is a socket file with mode
 0600 in that private directory, and the daemon also checks the connecting process's

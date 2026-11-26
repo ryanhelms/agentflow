@@ -220,9 +220,9 @@ type UsageBlock struct {
 }
 
 // Usage lists the usage blocks of every Spec with its own CLI and every
-// Verb, sorted by section (SectionOrder), then Order, then path. Lane 3.1
-// renders the usage text from these plus the legacy blocks of commands not
-// migrated yet.
+// Verb, sorted by section (SectionOrder), then Order, then path.
+// internal/cli renders the usage text from these plus the legacy blocks of
+// commands not migrated yet.
 func (r *Registry) Usage() []UsageBlock {
 	r.mu.RLock()
 	var out []UsageBlock

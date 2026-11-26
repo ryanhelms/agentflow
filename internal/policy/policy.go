@@ -171,6 +171,12 @@ func (g *Gate) Audit(class Class, action string, payload any, result string) {
 		"time": time.Now().UTC().Format(time.RFC3339), "client": g.Client, "class": class,
 		"action": action, "payload_sha256": fmt.Sprintf("%x", sum[:8]), "result": result,
 	}
+	g.appendAudit(entry)
+}
+
+// appendAudit writes one JSON line to audit.log. Audit lines are best
+// effort: a write error never changes the operation's result.
+func (g *Gate) appendAudit(entry map[string]any) {
 	line, _ := json.Marshal(entry)
 	f, err := os.OpenFile(filepath.Join(g.auditDir, "audit.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

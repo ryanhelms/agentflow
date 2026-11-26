@@ -61,6 +61,11 @@ type Call struct {
 	Run      func(ctx context.Context) (any, error)
 	// Classify turns Run's result into an Outcome (Classify[Out]).
 	Classify func(v any, err error) Outcome
+	// token is the input's confirm token and related the Spec's
+	// Policy.Related, for the GateByInvoker gate. The token is unexported so
+	// stages never see it.
+	token   string
+	related []string
 }
 
 // Handler runs a Call and returns Run's result unchanged.
@@ -82,25 +87,26 @@ func (f StageFunc) Handle(ctx context.Context, c *Call, next Handler) (any, erro
 	return f(ctx, c, next)
 }
 
-// Invoker runs Calls. Lane 3.1 adds NewInvoker(Options), a Template Method
-// with this fixed skeleton:
+// Invoker runs Calls. NewInvoker(Options) is a Template Method with this
+// fixed skeleton:
 //
 //  1. validate: c.Validate; an error returns at once, without events.
-//  2. publish op.requested (unless the call is a dry run or the scope is
-//     ScopeNone). With Meta.NativeReads it is published after step 4,
+//  2. stages: Options.Stages, in order (empty in phase 3; plugins'
+//     permission rules in phase 5). A stage that stops the chain returns
+//     its result as is, without events, like a validation error.
+//  3. publish op.requested (unless the call is a dry run or the scope is
+//     ScopeNone). With Meta.NativeReads it is published after step 5,
 //     with the call's start time, and not at all for a native read step.
-//  3. gate: with GateByInvoker, c.Plan then (*app.App).GateOperation; a
+//  4. gate: with GateByInvoker, c.Plan then (*app.App).GateOperation; a
 //     non-nil Pending stops here. With GateInRun, nothing.
-//  4. run: c.Run.
-//  5. audit: Auditor.AuditOperation with the Outcome, only with
+//  5. run: c.Run.
+//  6. audit: Auditor.AuditOperation with the Outcome, only with
 //     Meta.AuditByInvoker, and never for a dry run, a read or a deferred
 //     outcome. The audit.log line count of a call stays what it is today.
-//  6. publish the outcome event (OutcomeEvent), unless the outcome is
+//  7. publish the outcome event (OutcomeEvent), unless the outcome is
 //     deferred.
 //
-// Options.Stages adds stages between 1 and 2, for later phases (plugins'
-// permission rules, phase 5). An Emitter error never changes the result:
-// events are notifications.
+// An Emitter error never changes the result: events are notifications.
 type Invoker interface {
 	Invoke(ctx context.Context, c *Call) (any, error)
 }
@@ -111,7 +117,7 @@ type InvokerFunc func(ctx context.Context, c *Call) (any, error)
 // Invoke calls f.
 func (f InvokerFunc) Invoke(ctx context.Context, c *Call) (any, error) { return f(ctx, c) }
 
-// Options configure the Invoker (lane 3.1: NewInvoker).
+// Options configure the Invoker (NewInvoker).
 type Options struct {
 	// Emitters gives the Emitter for an App's repository. Nil, or a nil
 	// Emitter, publishes nothing.
@@ -125,8 +131,8 @@ type Options struct {
 	NewID func() string
 }
 
-// Emitter publishes op.* events of one repository. Lane 3.1 adds the
-// production one in internal/command/deliver: notifysock.Deliver to the
+// Emitter publishes op.* events of one repository. The production one is in
+// internal/command/deliver: notifysock.Deliver to the
 // repository's store as store.RoleAppender, then the daemon's socket, with
 // one stderr warning on a drop. The daemon's own calls use its bus.
 type Emitter interface {
@@ -143,7 +149,7 @@ type EmitterSource func(ctx context.Context, a *app.App) (Emitter, error)
 
 // Auditor writes one audit line per finished call: time, client, class,
 // action, operation name, operation ID (Outcome.OperationID), outcome kind
-// and code. Lane 3.1 adds it over a new policy.Gate.AuditOperation. The app
+// and code. AuditLog writes it through policy.Gate.AuditOperation. The app
 // method's own a.audit line, which hashes the exact reviewed summary, stays.
 type Auditor interface {
 	AuditOperation(a *app.App, inv Invocation, out Outcome)
@@ -341,13 +347,13 @@ func NewOperationID() string {
 // Bind builds the Call for s and in. id is the operation ID to use when in
 // carries no confirm token (NewOperationID when empty).
 func Bind[In, Out any](a *app.App, s Spec[In, Out], in In, o Origin, id string, now time.Time) *Call {
-	c := &Call{App: a}
+	c := &Call{App: a, related: s.Policy.Related}
 	c.Meta = s.Meta()
 	c.Origin = o
 	c.Started = now
 	if s.Token != nil {
 		if tok := *s.Token(&in); tok != "" {
-			c.Resumed = true
+			c.Resumed, c.token = true, tok
 			if resumed, ok := policy.OperationIDOf(tok); ok {
 				id = resumed
 			}

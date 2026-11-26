@@ -119,22 +119,19 @@ func (s Spec[In, Out]) RunCLI(ctx context.Context, env CLIEnv, inv Invoker, args
 	if s.CLI.Flags != nil {
 		s.CLI.Flags(fs, &in)
 	}
-	var yes *bool
-	if s.CLI.Confirm {
-		yes = fs.Bool("yes", false, "skip the confirmation prompt")
+	if s.CLI.Confirm && fs.Lookup("yes") == nil {
+		fs.Bool("yes", false, "skip the confirmation prompt")
 	}
-	if s.CLI.Interspersed {
-		args = interspersed(args)
-	}
-	if err := fs.Parse(args); err != nil {
+	pos, err := parseArgs(fs, args, s.CLI.Interspersed)
+	if err != nil {
 		return err
 	}
 	switch {
 	case s.CLI.Args != nil:
-		if err := s.CLI.Args(&in, fs.Args()); err != nil {
+		if err := s.CLI.Args(&in, pos); err != nil {
 			return err
 		}
-	case fs.NArg() > 0:
+	case len(pos) > 0:
 		return fmt.Errorf("%s takes no arguments", strings.Join(s.CLIPath, " "))
 	}
 	a, err := env.Open(ctx)
@@ -150,7 +147,7 @@ func (s Spec[In, Out]) RunCLI(ctx context.Context, env CLIEnv, inv Invoker, args
 	if !s.CLI.Confirm || given || s.Policy.PrepareOnly {
 		return env.Print(call(ctx, in))
 	}
-	return env.Confirm(*yes, func(token string) (any, error) {
+	return env.Confirm(boolFlag(fs, "yes"), func(token string) (any, error) {
 		next := in
 		if s.Token != nil {
 			*s.Token(&next) = token
@@ -159,16 +156,54 @@ func (s Spec[In, Out]) RunCLI(ctx context.Context, env CLIEnv, inv Invoker, args
 	})
 }
 
-// interspersed moves flags before positional arguments, like reorder in
-// internal/cli: "start KEY --worktree" parses as "start --worktree KEY".
-func interspersed(args []string) []string {
-	var flags, pos []string
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
-			flags = append(flags, a)
-		} else {
-			pos = append(pos, a)
+// parseArgs parses args into fs and returns the positional arguments.
+// Without interspersed, flags end at the first positional argument, as
+// flag.Parse does. With interspersed, flags may follow positional arguments
+// ("start KEY --worktree"), a flag that takes a value consumes the next
+// argument, and "--" ends the flags: the same rule as parseInterleaved in
+// internal/cli, so derived commands parse exactly like the legacy ones.
+func parseArgs(fs *flag.FlagSet, args []string, interspersed bool) ([]string, error) {
+	if !interspersed {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		return fs.Args(), nil
+	}
+	var options, positional []string
+	for len(args) > 0 {
+		arg := args[0]
+		args = args[1:]
+		if arg == "--" {
+			positional = append(positional, args...)
+			break
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			positional = append(positional, arg)
+			continue
+		}
+		options = append(options, arg)
+		name, _, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if f := fs.Lookup(name); f != nil && !inline && len(args) > 0 {
+			if b, ok := f.Value.(interface{ IsBoolFlag() bool }); !ok || !b.IsBoolFlag() {
+				options = append(options, args[0])
+				args = args[1:]
+			}
 		}
 	}
-	return append(flags, pos...)
+	return positional, fs.Parse(options)
+}
+
+// boolFlag returns the value of the boolean flag name, false when fs has no
+// such flag.
+func boolFlag(fs *flag.FlagSet, name string) bool {
+	f := fs.Lookup(name)
+	if f == nil {
+		return false
+	}
+	g, ok := f.Value.(flag.Getter)
+	if !ok {
+		return false
+	}
+	v, _ := g.Get().(bool)
+	return v
 }
