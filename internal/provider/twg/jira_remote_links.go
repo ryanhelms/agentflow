@@ -3,8 +3,8 @@ package twg
 import (
 	"context"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // RemoteLinks lists the issue's web links, excluding its Jira parent.

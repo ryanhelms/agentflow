@@ -9,12 +9,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/internal/filelock"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/filelock"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 var ErrUserRevision = errors.New("personal settings changed; reload them before saving")

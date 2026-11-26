@@ -15,13 +15,13 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/commit"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/commit"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 type Result struct {

@@ -8,8 +8,8 @@ import (
 	"maps"
 	"regexp"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 // TWG converts these tokens into Jira mentions even in plain text mode.

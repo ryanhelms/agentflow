@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
 )
 
 func TestConcurrentPersonalAutonomySave(t *testing.T) {

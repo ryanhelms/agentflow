@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/mcpserver"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/mcpserver"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // A reviewer checks out the feature branch without the author's local binding.

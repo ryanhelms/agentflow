@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/confluence"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/confluence"
 )
 
 // Confluence reads pages and replaces published pages on one Atlassian site. References use

@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/provision"
-	"github.com/nscaledev/agentflow/internal/provision/local"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision/local"
 )
 
 // Compare directory identities as well as following aliases. On case-insensitive

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 )
 
 const issueCatalog = `[

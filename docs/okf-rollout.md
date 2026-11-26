@@ -62,11 +62,11 @@ compatibility requirements.
 
 ## Evidence and rollback
 
-The attested [v0.38.0 reader](https://github.com/nscaledev/agentflow/releases/tag/v0.38.0)
+The attested [v0.38.0 reader](https://github.com/ryanhelms/agentflow/releases/tag/v0.38.0)
 was installed and verified against mixed FileSystem and Git-backed Repository
 fixtures and the live legacy ADR. [Issue #84](https://github.com/nscaledev/agentflow/issues/84)
 records the original reference and revision.
-The attested [v0.39.0 writer](https://github.com/nscaledev/agentflow/releases/tag/v0.39.0)
+The attested [v0.39.0 writer](https://github.com/ryanhelms/agentflow/releases/tag/v0.39.0)
 passed OKF publication, legacy override, exact lookup, and replay checks before
 the Agentflow bundle moved.
 

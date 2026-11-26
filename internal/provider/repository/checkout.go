@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/filesystem"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/filesystem"
 )
 
 // The object database and index are private to one operation. Using blobs

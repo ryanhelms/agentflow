@@ -8,10 +8,10 @@ passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollo
 Kyle Redelinghuys and Vishal Srini approved [the architecture and rollout plan](blueprint.html). Each rollout phase still has its own exit check.
 
 Foundations and verification:
-- [x] `nscaledev/agentflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
+- [x] `ryanhelms/agentflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
 - [x] CI green (tests with race detector, golangci-lint, shellcheck, actionlint, GoReleaser check)
 - [x] Claude Code plugin tested end to end with `scripts/e2e-claude.sh` (12/12) and installed
-      from the `nscaledev/agentflow` marketplace
+      from the `ryanhelms/agentflow` marketplace
 - [ ] Test with a real Jira ticket once a pilot developer runs `agentflow login` (read-only tools first)
 
 ## Provider migration rehearsal
@@ -82,11 +82,11 @@ links the hosted canary, rollback, and release verification.
 ## P4 · Releases & deployment tracking
 - [ ] `agentflow release init` on pilot repos; review `.agentflow/releases.yml` units and strategy ([releases](releases.md))
 - [ ] First fully automatic SemVer GitHub Release published per pilot deployable (artifacts + attestations attached)
-- [ ] `nscaledev/agentflow/actions/release-guard@v0` first in every production deploy job
+- [ ] `ryanhelms/agentflow/actions/release-guard@v0` first in every production deploy job
 - [ ] `production-hotfix` environment with required reviewers
-- [ ] Staging builds tagged with `nscaledev/agentflow/actions/version@v0`
+- [ ] Staging builds tagged with `ryanhelms/agentflow/actions/version@v0`
 - [ ] `.jira/config.yml` committed; deploy jobs use GitHub Environments
-- [ ] `nscaledev/agentflow/actions/ship@v0` added after production deploys (with `fix-version`)
+- [ ] `ryanhelms/agentflow/actions/ship@v0` added after production deploys (with `fix-version`)
 - [ ] agentflow ship status
 - **Exit:** every pilot deployable has published a release; production deploys only
   releases or approved hotfixes; every production deploy shows on its tickets and moves them

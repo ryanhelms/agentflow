@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 func TestRepositoryDocsTools(t *testing.T) {

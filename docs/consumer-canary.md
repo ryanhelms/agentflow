@@ -85,5 +85,5 @@ Both hosted runs passed the native Windows companion install and client
 registration fixtures. Release Please 17.3.0 used a read-only token and
 proposed one `0.2.0` release PR in dry-run mode. `mcp-gateway`'s image workflow
 continues to own its production versions. Agentflow's separate GoReleaser
-workflow published v0.20.0. [GoReleaser run](https://github.com/nscaledev/agentflow/actions/runs/44981124315),
+workflow published v0.20.0. [GoReleaser run](https://github.com/ryanhelms/agentflow/actions/runs/44981124315),
 [verification work item](https://github.com/nscaledev/agentflow/issues/29).

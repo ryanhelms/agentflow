@@ -9,12 +9,12 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/managedcli"
-	"github.com/nscaledev/agentflow/internal/managedgh"
-	"github.com/nscaledev/agentflow/internal/provider/asanaoauth"
-	"github.com/nscaledev/agentflow/internal/provider/rovooauth"
-	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/managedcli"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/provider/asanaoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/rovooauth"
+	"github.com/ryanhelms/agentflow/internal/provider/slackoauth"
 )
 
 type MCPTool struct {

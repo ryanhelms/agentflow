@@ -16,9 +16,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/slackoauth"
 )
 
 const (

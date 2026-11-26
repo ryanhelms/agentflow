@@ -12,10 +12,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/managedgh"
-	"github.com/nscaledev/agentflow/internal/provision/user"
-	"github.com/nscaledev/agentflow/internal/update"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/provision/user"
+	"github.com/ryanhelms/agentflow/internal/update"
 )
 
 const (

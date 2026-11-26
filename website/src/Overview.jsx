@@ -75,7 +75,7 @@ function Installer() {
                   placeholder={platform === "windows" ? "C:\\projects\\my-service" : "/path/to/repository"} />
               </FormField>
             </div>
-            <Text as="p" tone="muted">Sign in to GitHub CLI with access to <strong>nscaledev/agentflow</strong>.</Text>
+            <Text as="p" tone="muted">Sign in to GitHub CLI with access to <strong>ryanhelms/agentflow</strong>.</Text>
             <CommandBlock key={terminal} command={terminal} label="Copy command"
               hint="Run inside the target checkout or supply its path. An invalid checkout prompts for a replacement. Repeating setup preserves saved choices." />
             <details className="install-details">

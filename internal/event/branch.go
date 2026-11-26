@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/commit"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/commit"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 func (a GitHubActionsContext) refs(body, legacyText string) ([]provider.Ref, error) {

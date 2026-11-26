@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 	"golang.org/x/term"

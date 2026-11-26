@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 func jiraCall(site, tool string, args map[string]any) (native.Call, error) {

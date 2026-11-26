@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/commit"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/legacy"
+	"github.com/ryanhelms/agentflow/internal/commit"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/legacy"
 )
 
 // Check is one readiness check.

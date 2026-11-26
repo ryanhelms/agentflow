@@ -12,17 +12,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/contextx"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/managedcli"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/legacy"
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/contextx"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/managedcli"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/legacy"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 // App is an opened repository plus the developer's configuration.

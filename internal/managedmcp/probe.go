@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 // Apply credentials only to requests to the declared HTTPS endpoint. Disable

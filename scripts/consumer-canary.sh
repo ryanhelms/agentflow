@@ -9,7 +9,7 @@ export AGENTFLOW_HOME="$temp/profile" AGENTFLOW_NO_UPDATE=1 GOPROXY=off
 export GIT_ALLOW_PROTOCOL=file GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1
 unset GH_TOKEN GITHUB_TOKEN GITHUB_SERVER_URL JIRA_BASE JIRA_USER JIRA_TOKEN AGENTFLOW_APPROVED_ISSUE
 mkdir -p "$temp/bin" "$temp/consumer"
-pkg=github.com/nscaledev/agentflow/internal/version
+pkg=github.com/ryanhelms/agentflow/internal/version
 pin=2222222222222222222222222222222222222222
 go build -o "$temp/bin/agentflow" -ldflags "-X $pkg.Commit=$pin -X $pkg.Version=0.2.0" ./cmd/agentflow
 export PATH="$temp/bin:$PATH"

@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/templates"
+	"github.com/ryanhelms/agentflow/templates"
 	"gopkg.in/yaml.v3"
 )
 

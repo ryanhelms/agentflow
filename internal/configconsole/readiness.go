@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 type ConnectionCheck struct {

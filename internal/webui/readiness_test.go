@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/configconsole"
 )
 
 func TestReadinessUsesOnlyCurrentCheckoutAndReturnsMeasuredResults(t *testing.T) {

@@ -7,7 +7,7 @@ x-agentflow-ref: {scope: engineering, id: project-installation}
 ---
 # Install and manage Agentflow in a project
 
-Sign in to the GitHub CLI with access to the internal `nscaledev/agentflow` repository.
+Sign in to the GitHub CLI with access to the internal `ryanhelms/agentflow` repository.
 The installer reads from GitHub Releases and verifies the downloaded binary.
 Run the command in a checkout or pass a path. A subdirectory selects its worktree
 root. Outside a worktree, the installer asks for a path and retries until it
@@ -16,7 +16,7 @@ finds one or you cancel.
 ## macOS or Linux
 
 ```bash
-s=$(gh release download -R nscaledev/agentflow -p install.sh -O -) && bash -c "$s" agentflow
+s=$(gh release download -R ryanhelms/agentflow -p install.sh -O -) && bash -c "$s" agentflow
 ```
 
 Append `--repo '/path/to/my project'` to select a different checkout.
@@ -24,7 +24,7 @@ Append `--repo '/path/to/my project'` to select a different checkout.
 ## Windows PowerShell
 
 ```powershell
-$s = gh release download -R nscaledev/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
+$s = gh release download -R ryanhelms/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
 ```
 
 To target another checkout, add `-Repo 'C:\src\my project'` immediately before
@@ -33,7 +33,7 @@ and standard input is available for setup.
 
 ## Ask an agent
 
-> Install Agentflow from https://github.com/nscaledev/agentflow and initialize it in my payments checkout.
+> Install Agentflow from https://github.com/ryanhelms/agentflow and initialize it in my payments checkout.
 
 The agent resolves the target to a single local Git worktree. If the project name
 is ambiguous, it asks for the intended path. The manager reads local provider

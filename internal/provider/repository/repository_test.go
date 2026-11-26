@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 func git(t *testing.T, dir string, args ...string) string {

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/provider/slackoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/slackoauth"
 )
 
 // LoginPublicSlack enrolls the Agentflow-owned desktop registration through browser consent.

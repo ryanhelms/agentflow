@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
 )
 
 // NewTransport provides the shared native OAuth transport to the Rovo wire client.

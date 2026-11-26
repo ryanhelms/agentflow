@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 // newRepo makes a repo with no origin: main has api/, the branch PLAT-1-x adds to it.

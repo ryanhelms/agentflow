@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/managedmcp"
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/managedmcp"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 // RegisterCompanion changes just the reserved key reviewed by the user.

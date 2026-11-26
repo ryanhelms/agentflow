@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // Deployments lists deployments and their latest status in GitHub's order.

@@ -3,8 +3,8 @@ package mcpserver
 import (
 	"context"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 type setupPlanIn struct {

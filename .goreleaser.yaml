@@ -23,9 +23,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/nscaledev/agentflow/internal/version.Version={{ .Version }}
-      - -X github.com/nscaledev/agentflow/internal/version.Commit={{ .FullCommit }}
-      - -X github.com/nscaledev/agentflow/internal/version.Date={{ .Date }}
+      - -X github.com/ryanhelms/agentflow/internal/version.Version={{ .Version }}
+      - -X github.com/ryanhelms/agentflow/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/ryanhelms/agentflow/internal/version.Date={{ .Date }}
 
 archives:
   - id: agentflow

@@ -15,9 +15,9 @@ Use the first verified Agentflow release supplied by the cutover owner. Existing
 
 ```bash
 tag=vX.Y.Z # use the verified cutover tag
-gh release download "$tag" --repo nscaledev/agentflow --pattern install.sh
-gh attestation verify install.sh --repo nscaledev/agentflow \
-  --signer-workflow nscaledev/agentflow/.github/workflows/release.yml
+gh release download "$tag" --repo ryanhelms/agentflow --pattern install.sh
+gh attestation verify install.sh --repo ryanhelms/agentflow \
+  --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml
 bash install.sh /absolute/path/to/checkout
 ```
 

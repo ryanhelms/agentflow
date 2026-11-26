@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/secops"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/secops"
 )
 
 var _ secops.GitHubClient = (*gh.Client)(nil)

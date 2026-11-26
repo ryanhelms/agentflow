@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/app"
 )
 
 func TestNotifyCLIPlansAndReportsConfigurationFailure(t *testing.T) {

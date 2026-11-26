@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 func TestProjectEnrollmentRoundTrip(t *testing.T) {

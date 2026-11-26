@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 // Destination is a screen in the current worktree's console.

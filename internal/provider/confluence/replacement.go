@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 // ReplacementVersion checks the options supported by every publish backend.

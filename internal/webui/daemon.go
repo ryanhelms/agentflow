@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 type registeredWorktree struct {

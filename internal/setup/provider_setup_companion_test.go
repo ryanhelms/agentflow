@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/managedmcp"
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/managedmcp"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 func TestRegisterReviewedCompanion(t *testing.T) {

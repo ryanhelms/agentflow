@@ -3,7 +3,7 @@ package mcpserver
 import (
 	"context"
 
-	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/app"
 )
 
 type notifyIn struct {

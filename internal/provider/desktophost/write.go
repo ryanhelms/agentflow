@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nscaledev/agentflow/internal/provider/asanahost"
-	"github.com/nscaledev/agentflow/internal/provider/asanaoauth"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/rovohost"
+	"github.com/ryanhelms/agentflow/internal/provider/asanahost"
+	"github.com/ryanhelms/agentflow/internal/provider/asanaoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/rovohost"
 )
 
 func NewWriter() *native.SessionWriter {

@@ -9,9 +9,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 const jiraSite = "https://agentflow.example"

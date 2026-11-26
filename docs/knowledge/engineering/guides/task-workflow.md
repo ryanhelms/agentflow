@@ -24,7 +24,7 @@ if the signed-in CLI needs authentication.
    `repository/engineering/knowledge-publication`. Read the full document with
    `agentflow docs get repository/engineering/knowledge-publication`.
 4. Include the qualified reference in the PR body on its own line, for example
-   `Task-Ref: github-issues/nscaledev%2Fagentflow/123`. Share verification evidence
+   `Task-Ref: github-issues/ryanhelms%2Fagentflow/123`. Share verification evidence
    in the issue's acceptance checklist and PR description.
 5. Review the merge preview. If the issue is explicitly enrolled in the scoped
    workflow, the approved merge can close it. Close other issues after reviewing

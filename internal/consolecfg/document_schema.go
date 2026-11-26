@@ -3,12 +3,12 @@ package consolecfg
 import (
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/commit"
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/contract"
-	"github.com/nscaledev/agentflow/internal/flowmap"
-	"github.com/nscaledev/agentflow/internal/release"
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/commit"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/contract"
+	"github.com/ryanhelms/agentflow/internal/flowmap"
+	"github.com/ryanhelms/agentflow/internal/release"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 )
 
 type fieldSpec = config.Field

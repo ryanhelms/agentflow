@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/app"
 )
 
 func runPolicy(ctx context.Context, args []string) error {

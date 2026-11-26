@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 // twg 1.4.6 emits the create request alongside Jira's REST v3 comment object.

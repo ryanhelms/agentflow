@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/mcpserver"
-	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/mcpserver"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Exercise both public clients against one real Git index and one approval

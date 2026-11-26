@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )

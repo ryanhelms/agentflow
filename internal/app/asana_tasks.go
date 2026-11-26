@@ -8,13 +8,13 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/asana"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/nativemap"
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/asana"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/nativemap"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 )
 
 func (a *App) usesAsana() bool { return a.Cfg.Providers.TaskManagement.Provider == "asana" }

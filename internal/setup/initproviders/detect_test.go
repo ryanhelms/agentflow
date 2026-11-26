@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 func TestRepositoryEvidenceAndSavedChoices(t *testing.T) {

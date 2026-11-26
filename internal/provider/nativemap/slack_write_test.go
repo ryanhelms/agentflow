@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/notifications"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/notifications"
 )
 
 var fixtureDestination = SlackDestination{

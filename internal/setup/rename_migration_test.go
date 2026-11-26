@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/version"
+	"github.com/ryanhelms/agentflow/internal/version"
 )
 
 func TestRepinLegacyCaller(t *testing.T) {
