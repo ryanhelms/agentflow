@@ -1,7 +1,7 @@
 # agentflow
 
-[![ci](https://github.com/nscaledev/agentflow/actions/workflows/ci.yml/badge.svg)](https://github.com/nscaledev/agentflow/actions/workflows/ci.yml)
-[![release](https://github.com/nscaledev/agentflow/actions/workflows/release.yml/badge.svg)](https://github.com/nscaledev/agentflow/actions/workflows/release.yml)
+[![ci](https://github.com/ryanhelms/agentflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanhelms/agentflow/actions/workflows/ci.yml)
+[![release](https://github.com/ryanhelms/agentflow/actions/workflows/release.yml/badge.svg)](https://github.com/ryanhelms/agentflow/actions/workflows/release.yml)
 
 **agentflow connects GitHub, Jira and Confluence into one delivery loop for Nscale
 engineering.** Engineers state intent once, in the commit message, and agentflow moves the
@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Agentflow uses a Git-backed OKF knowledge bundle. The provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed. Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. `nscaledev/mcp-gateway` uses GitHub Issues for tasks and requires Agentflow PR validation on its default branch. |
-| **Current release** | <!-- agentflow:version -->`v0.53.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/nscaledev/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.53.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
@@ -100,7 +100,7 @@ everything that starts in Jira. See [the blueprint](docs/blueprint.html#architec
 
 ### Enable agentflow in a repository (repo owners)
 
-Sign in to the GitHub CLI with access to `nscaledev/agentflow`. Run the command for
+Sign in to the GitHub CLI with access to `ryanhelms/agentflow`. Run the command for
 your OS from the project or one of its subdirectories. If you start outside a
 Git worktree, the installer keeps asking for a checkout path until you supply
 one or cancel.
@@ -108,7 +108,7 @@ one or cancel.
 **macOS or Linux**
 
 ```bash
-s=$(gh release download -R nscaledev/agentflow -p install.sh -O -) && bash -c "$s" agentflow
+s=$(gh release download -R ryanhelms/agentflow -p install.sh -O -) && bash -c "$s" agentflow
 ```
 
 Append `--repo '/path/to/my project'` to target a checkout.
@@ -116,7 +116,7 @@ Append `--repo '/path/to/my project'` to target a checkout.
 **Windows PowerShell**
 
 ```powershell
-$s = gh release download -R nscaledev/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
+$s = gh release download -R ryanhelms/agentflow -p install.ps1 -O -; if ($LASTEXITCODE -eq 0) { & ([scriptblock]::Create($s -join "`n")) }
 ```
 
 Add `-Repo 'C:\src\my project'` before the closing brace to supply the path.
@@ -157,18 +157,18 @@ every job in the caller workflow checks it.
 
 **Automatic setup with the Claude Code plugin.** When a Claude Code session starts in a
 repo with no `.agentflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
-(default `nscaledev`), the plugin runs `agentflow init` for you. It writes the files above
+(default `nscaledev` and `ryanhelms`), the plugin runs `agentflow init` for you. It writes the files above
 and commits nothing; Claude tells you what was written and offers a branch and PR. Choose
 the behaviour in `~/.agentflow/config.yml`:
 
 ```yaml
 init:
   auto: auto        # auto (default) | ask (only suggest /agentflow:init) | off
-  orgs: [nscaledev]
+  orgs: [nscaledev, ryanhelms]
 ```
 
 **Updating the pinned workflows.** `agentflow pin` (or `/agentflow:pin`) moves every
-`nscaledev/agentflow` reference in `.github/workflows/agentflow.yml` to the release you have
+`ryanhelms/agentflow` reference in `.github/workflows/agentflow.yml` to the release you have
 installed; commit it in a PR. `agentflow pin --check` and `agentflow doctor` report a pin
 that is behind, and the Claude Code session hook offers `/agentflow:pin` when it is. No
 Dependabot or GitHub App access is needed.
@@ -627,7 +627,7 @@ change the repo or your credentials (`init`, `remove`, `install`, `login`, `logo
 Agentflow repository:
 
 ```sh
-claude plugin marketplace add nscaledev/agentflow
+claude plugin marketplace add ryanhelms/agentflow
 claude plugin install agentflow@nscale
 ```
 
@@ -644,7 +644,7 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   Wiki uses Git's configured credentials. CI uses a scoped service account.
 - **Release integrity.** agentflow installs only builds whose SHA-256 and GitHub build
   attestation both verify, and the attestation must come from agentflow's release workflow
-  (`gh attestation verify --repo nscaledev/agentflow --signer-workflow nscaledev/agentflow/.github/workflows/release.yml`).
+  (`gh attestation verify --repo ryanhelms/agentflow --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml`).
   The caller workflow gives each job only the secrets and permissions it uses.
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.

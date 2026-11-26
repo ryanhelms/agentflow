@@ -16,7 +16,7 @@
 #
 # Releases are published as normal, stable releases. The floating major tag (v0 while
 # agentflow is 0.x, v1 from 1.0.0) then moves to the release so consuming repos that use
-# nscaledev/agentflow/...@v0 get it. A bad release is stopped with policy/versions.json
+# ryanhelms/agentflow/...@v0 get it. A bad release is stopped with policy/versions.json
 # (blocked/min_version) and agentflow update --rollback.
 name: release
 
@@ -35,7 +35,7 @@ concurrency:
 jobs:
   release:
     # The rename can merge ahead of cutover without publishing under the old signer.
-    if: github.repository == 'nscaledev/agentflow'
+    if: github.repository == 'ryanhelms/agentflow'
     runs-on: ubuntu-latest
     permissions:
       contents: write

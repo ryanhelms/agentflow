@@ -4,7 +4,7 @@ agentflow: 1
 task_management:
   provider: github-issues
   settings:
-    repository: nscaledev/agentflow
+    repository: ryanhelms/agentflow
     transitions:
       pr.merged: closed
       "#done": none

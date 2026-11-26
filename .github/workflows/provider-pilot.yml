@@ -11,7 +11,7 @@ jobs:
   preview:
     if: >-
       vars.AGENTFLOW_ENABLED != 'false' &&
-      github.repository == 'nscaledev/agentflow' &&
+      github.repository == 'ryanhelms/agentflow' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
@@ -22,7 +22,7 @@ jobs:
     needs: preview
     if: >-
       vars.AGENTFLOW_ENABLED != 'false' &&
-      github.repository == 'nscaledev/agentflow' &&
+      github.repository == 'ryanhelms/agentflow' &&
       github.event.action == 'closed' &&
       github.event.pull_request.merged &&
       github.event.pull_request.base.ref == github.event.repository.default_branch &&

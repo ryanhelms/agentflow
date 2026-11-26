@@ -45,10 +45,10 @@ $ErrorActionPreference = 'Stop'
 $stage = $env:DF_TEST_TEMP
 $mode = [IO.File]::ReadAllText((Join-Path $stage 'mode'))
 [IO.File]::AppendAllText((Join-Path $stage 'gh.log'), ($args -join ' ') + [Environment]::NewLine)
-if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/releases/latest --jq .tag_name') {
+if ($args -join ' ' -ceq 'api --hostname github.com repos/ryanhelms/agentflow/releases/latest --jq .tag_name') {
     if ($mode -eq 'no-release') { exit 19 }
     'v1.2.3'
-} elseif ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=v1.2.3') {
+} elseif ($args -join ' ' -ceq 'api --hostname github.com repos/ryanhelms/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=v1.2.3') {
     $source = if ($mode -like 'stale-*') { 'release-launcher.ps1' } else { 'mock-launcher.ps1' }
     $bytes = [IO.File]::ReadAllBytes((Join-Path $stage $source))
     $size = $bytes.Length
@@ -57,7 +57,7 @@ if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/re
     if ($mode -eq 'download-failure') { exit 21 }
 } elseif ($args[0] -eq 'release' -and $args[1] -eq 'download') {
     $zip = 'agentflow_1.2.3_windows_amd64.zip'
-    if ($args.Count -ne 11 -or ($args[2..5] -join ' ') -cne 'v1.2.3 --repo nscaledev/agentflow --dir' -or
+    if ($args.Count -ne 11 -or ($args[2..5] -join ' ') -cne 'v1.2.3 --repo ryanhelms/agentflow --dir' -or
         ($args[7..10] -join ' ') -cne "--pattern $zip --pattern checksums.txt") { throw "Unexpected archive arguments: $args" }
     $pkg = Join-Path $args[6] $zip
     [IO.File]::Copy((Join-Path $stage 'release.zip'), $pkg)
@@ -67,7 +67,7 @@ if ($args -join ' ' -ceq 'api --hostname github.com repos/nscaledev/agentflow/re
     if ($mode -eq 'stale-download') { exit 23 }
 } elseif ($args[0] -eq 'attestation' -and $args[1] -eq 'verify') {
     if ($args.Count -ne 7 -or (Split-Path -Leaf $args[2]) -cne 'agentflow_1.2.3_windows_amd64.zip' -or
-        ($args[3..6] -join ' ') -cne '--repo nscaledev/agentflow --signer-workflow nscaledev/agentflow/.github/workflows/release.yml') {
+        ($args[3..6] -join ' ') -cne '--repo ryanhelms/agentflow --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml') {
         throw "Unexpected verification arguments: $args"
     }
     if ($mode -eq 'stale-signer') { exit 24 }

@@ -264,7 +264,7 @@ func discover(ctx context.Context, repo *gitx.Repo, root *os.Root, fields map[st
 				for _, action := range uses {
 					a, _, _ := strings.Cut(strings.ToLower(action), "@")
 					switch a {
-					case "googleapis/release-please-action", "goreleaser/goreleaser-action", "softprops/action-gh-release", "nscaledev/agentflow/.github/workflows/semver-release.yml":
+					case "googleapis/release-please-action", "goreleaser/goreleaser-action", "softprops/action-gh-release", "nscaledev/agentflow/.github/workflows/semver-release.yml", "ryanhelms/agentflow/.github/workflows/semver-release.yml":
 						add("devops.releases", "github", name+" release action")
 					case "github/codeql-action/analyze":
 						add("secops", "github", name+" CodeQL action")

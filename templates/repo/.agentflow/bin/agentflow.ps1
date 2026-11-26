@@ -24,7 +24,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 
 $arch = if ([Environment]::Is64BitOperatingSystem) { 'amd64' } else { throw 'agentflow: unsupported architecture' }
 if (!$tag) {
-  $tag = gh release view --repo nscaledev/agentflow --json tagName -q .tagName
+  $tag = gh release view --repo ryanhelms/agentflow --json tagName -q .tagName
   if ($LASTEXITCODE -ne 0 -or @($tag).Count -ne 1 -or $tag -cnotmatch '^v\d+\.\d+\.\d+$') { throw 'agentflow: could not resolve the latest stable release' }
 }
 $ver = $tag.TrimStart('v')
@@ -33,14 +33,14 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   [Console]::Error.WriteLine("agentflow: first run, installing $tag")
-  gh release download $tag --repo nscaledev/agentflow --dir $tmp --pattern $pkg --pattern checksums.txt 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+  gh release download $tag --repo ryanhelms/agentflow --dir $tmp --pattern $pkg --pattern checksums.txt 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
   if ($LASTEXITCODE -ne 0) { throw "agentflow: download of $tag failed" }
 
   $want = (Select-String -LiteralPath (Join-Path $tmp 'checksums.txt') -Pattern " $([regex]::Escape($pkg))$").Line.Split(' ')[0]
   $got = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $tmp $pkg)).Hash.ToLower()
   if ($want -ne $got) { throw "agentflow: checksum mismatch for $pkg, not installing" }
 
-  gh attestation verify (Join-Path $tmp $pkg) --repo nscaledev/agentflow --signer-workflow nscaledev/agentflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+  gh attestation verify (Join-Path $tmp $pkg) --repo ryanhelms/agentflow --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
   if ($LASTEXITCODE -ne 0) { throw 'agentflow: build attestation did not verify, not installing' }
 
   # Install atomically: extract into a private staging dir and move it into place, then

@@ -31,5 +31,5 @@ Set this repository up for agentflow. The `agentflow` command is on your Bash PA
 7. Offer to commit the setup on a branch and open a PR using the configured commit
    convention. Ask for a task key only when that convention requires one.
 
-Repos owned by the orgs in `init.orgs` (default `nscaledev`) are set up automatically when
+Repos owned by the orgs in `init.orgs` (default `nscaledev` and `ryanhelms`) are set up automatically when
 a session starts; set `init.auto: ask` or `off` in `~/.agentflow/config.yml` to change that.

@@ -41,7 +41,7 @@ case "$1 $2" in
     printf '%s\n' "${TEST_TAG:-v1.2.3}"
     ;;
   'api --hostname')
-    [[ "$*" == *'repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow?ref=v1.2.3' ]]
+    [[ "$*" == *'repos/ryanhelms/agentflow/contents/templates/repo/.agentflow/bin/agentflow?ref=v1.2.3' ]]
     if [ "${TEST_FAILURE:-}" = source ]; then cat "$TEST_BINARY"; exit 42; fi
     cat "$TEST_LAUNCHER"
     ;;
@@ -52,7 +52,7 @@ case "$1 $2" in
       case "$1" in
         --dir) dest=$2 ;;
         --pattern) if [ "$2" != checksums.txt ]; then archive=$2; fi ;;
-        --repo) [ "$2" = nscaledev/agentflow ] ;;
+        --repo) [ "$2" = ryanhelms/agentflow ] ;;
         *) exit 2 ;;
       esac
       shift 2
@@ -69,7 +69,7 @@ case "$1 $2" in
     fi
     ;;
   'attestation verify')
-    [[ "$*" == *'--signer-workflow nscaledev/agentflow/.github/workflows/release.yml' ]]
+    [[ "$*" == *'--signer-workflow ryanhelms/agentflow/.github/workflows/release.yml' ]]
     [ "${TEST_FAILURE:-}" != signer ]
     ;;
   *) exit 97 ;;

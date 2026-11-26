@@ -17,7 +17,7 @@ A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 To install it for yourself (Claude Code 2.1.275 or later):
 
 ```
-/plugin install agentflow --marketplace nscaledev/agentflow
+/plugin install agentflow --marketplace ryanhelms/agentflow
 ```
 
 Repos turn it on for everyone in `.claude/settings.json` (written by `agentflow init`):
@@ -25,7 +25,7 @@ Repos turn it on for everyone in `.claude/settings.json` (written by `agentflow 
 ```json
 {
   "extraKnownMarketplaces": {
-    "nscale": { "source": { "source": "github", "repo": "nscaledev/agentflow" } }
+    "nscale": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
   },
   "enabledPlugins": { "agentflow@nscale": true },
   "includeCoAuthoredBy": false

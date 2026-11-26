@@ -134,7 +134,7 @@ notifications: {provider: none}
 	http.DefaultTransport = companionTransport(func(req *http.Request) (*http.Response, error) {
 		// Remove still checks the release policy when background updates are off.
 		if req.Method == http.MethodGet && req.URL.Host == "api.github.com" &&
-			req.URL.Path == "/repos/nscaledev/agentflow/contents/policy/versions.json" &&
+			req.URL.Path == "/repos/ryanhelms/agentflow/contents/policy/versions.json" &&
 			req.Header.Get("Authorization") == "Bearer "+updateToken {
 			rec := httptest.NewRecorder()
 			rec.WriteHeader(http.StatusNotFound)

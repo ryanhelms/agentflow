@@ -3,7 +3,7 @@
 # Used by .github/workflows/release.yml; CHANGELOG.md is never edited by hand.
 #
 #   scripts/changelog.sh --version 0.2.0 [--from v0.1.0] [--to HEAD] \
-#                        [--repo nscaledev/agentflow] [--date 2026-11-20] \
+#                        [--repo ryanhelms/agentflow] [--date 2026-11-20] \
 #                        [--notes notes.md] [--update CHANGELOG.md]
 #
 # Prints the section to stdout. --notes also writes it (without the version heading)
@@ -14,7 +14,7 @@ set -euo pipefail
 version=""
 from=""
 to=HEAD
-repo=${GITHUB_REPOSITORY:-nscaledev/agentflow}
+repo=${GITHUB_REPOSITORY:-ryanhelms/agentflow}
 date=$(date -u +%Y-%m-%d)
 notes=""
 update=""

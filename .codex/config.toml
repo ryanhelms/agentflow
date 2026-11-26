@@ -1,5 +1,5 @@
 # Codex CLI: project config (.codex/config.toml) for trusted projects. Where Codex only
-# reads ~/.codex/config.toml, `devflow install --client codex` writes this block there.
+# reads ~/.codex/config.toml, `agentflow install --client codex` writes this block there.
 [mcp_servers.agentflow]
 command = "sh"
 args = ["-c", "exec \"$(git rev-parse --show-toplevel)/.agentflow/bin/agentflow\" mcp --client codex"]

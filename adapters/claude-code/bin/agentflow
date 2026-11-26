@@ -31,14 +31,14 @@ case "$(uname -m)" in
   *) echo "agentflow: unsupported architecture $(uname -m)" >&2; exit 1 ;;
 esac
 
-if [ -z "$tag" ]; then tag=$(gh release view --repo nscaledev/agentflow --json tagName -q .tagName); fi
+if [ -z "$tag" ]; then tag=$(gh release view --repo ryanhelms/agentflow --json tagName -q .tagName); fi
 ver=${tag#v}
 pkg="agentflow_${ver}_${os}_${arch}.tar.gz"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 echo "agentflow: first run, installing $tag" >&2
-gh release download "$tag" --repo nscaledev/agentflow --dir "$tmp" \
+gh release download "$tag" --repo ryanhelms/agentflow --dir "$tmp" \
   --pattern "$pkg" --pattern checksums.txt >&2
 
 if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
@@ -46,8 +46,8 @@ if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum 
   echo "agentflow: checksum mismatch for $pkg, not installing" >&2
   exit 1
 }
-gh attestation verify "$tmp/$pkg" --repo nscaledev/agentflow \
-  --signer-workflow nscaledev/agentflow/.github/workflows/release.yml >&2 || {
+gh attestation verify "$tmp/$pkg" --repo ryanhelms/agentflow \
+  --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml >&2 || {
   echo "agentflow: build attestation did not verify, not installing" >&2
   exit 1
 }

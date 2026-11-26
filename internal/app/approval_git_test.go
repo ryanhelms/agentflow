@@ -141,6 +141,8 @@ func TestPushBindsFeatureBranchAndDestination(t *testing.T) {
 }
 
 func TestPreparedPushPublishesOnlyApprovedSHA(t *testing.T) {
+	// A developer's url.*.insteadOf rules would rewrite the fixture's SSH remote.
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	ctx := t.Context()
 	opened := 0
 	approvedSHA := ""

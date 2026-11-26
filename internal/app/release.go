@@ -142,7 +142,7 @@ func (a *App) releaseInit(ctx context.Context, strategy string, force, preserveE
 	res.Strategy, res.Units = cfg.Strategy, cfg.Units
 	res.Notes = append(res.Notes,
 		"stable releases are created automatically on "+a.Repo.DefaultBranch(ctx)+" from feat/fix/! commits",
-		"commit these files; the agentflow caller workflow runs nscaledev/agentflow/.github/workflows/semver-release.yml")
+		"commit these files; the agentflow caller workflow runs ryanhelms/agentflow/.github/workflows/semver-release.yml")
 	return res, err
 }
 
