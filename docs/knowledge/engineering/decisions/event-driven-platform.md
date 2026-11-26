@@ -16,12 +16,15 @@ x-agentflow-links:
     - title: "Phase 3 contract: command registry, Invoker and op events"
       url: https://github.com/ryanhelms/agentflow/issues/52
       ref: null
+    - title: "Phase 4 contract: settings change sets, preview, save and undo"
+      url: https://github.com/ryanhelms/agentflow/issues/68
+      ref: null
 ---
 # Event bus, message store and event stream
 
 ## Status
 
-Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2") and phase 3 (section "Phase 3", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
+Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3") and phase 4 (section "Phase 4", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
 
 ## Context
 
@@ -1024,3 +1027,400 @@ In `internal/command/ops`. For every registered Spec:
 - Output is unchanged: the golden tests and the tool-schema golden file pin it.
 - `audit.log` keeps one line per write, as today. Operations without an audit of their own today get one, with the operation ID.
 - Consuming repositories get no new files under `.git` from agentflow commands; only a running daemon creates an event store.
+
+## Phase 4
+
+*Amendment for phase 4 (issue #68), lanes 4.1 to 4.3 (issues #69, #70 and #71).* Phase 4 adds a Settings page where every configuration option has a structured control. Edits collect in one draft. The page checks the draft live and previews its effect and diff. One Save bar saves everything together, and Undo reverses the last save. Edits made outside the page (a terminal, an agent, `git pull`) show up live, with a warning on each field they conflict with.
+
+Everything in the phase 1 to 3 sections still holds unless a paragraph here says it changes. Phase 4 adds **no event type**: it uses `config.layer.changed` (phases 1 and 2) and `op.*` (phase 3). The code form of this section:
+
+| Contract | Go |
+| --- | --- |
+| Field metadata, layers, widgets, catalog entries | `internal/config/field_meta.go` (`FieldLayer`, `Widget`, `Applies`, `Loosening`, `Picker`, `FieldMeta`, `CatalogField`, `Group`) |
+| Field IDs and paths | `internal/config/field_path.go` (`FieldID`, `ParseFieldID`, `FormatFieldPath`, `ParseFieldPath`, `MatchFieldPath`) |
+| Change set, diagnostics, preview, save, undo, journal, field values, `Catalog` | `internal/settings/types.go` |
+| Settings projection state | `internal/webui/projection_settings_state.go` (`SettingsState`) |
+| Custom tool input schema (added by lane 4.2) | `command.MCP.InputSchema` in `internal/command/spec.go` |
+| Confirmation that `auto` cannot skip (added by lane 4.2) | `app.OperationGate.RequireConfirmation` in `internal/app/gate_operation.go` |
+
+### Phase 4 patterns
+
+| Piece | GoF / EIP pattern | Go |
+| --- | --- | --- |
+| One save across two layers | Unit of Work | `settings.ChangeSet` |
+| Save, undo, preview, fields | Command (GoF); Command Message (EIP) | the `config.*` Specs |
+| Live checks | Chain of Responsibility (Pipes and Filters) | the check chain (below) |
+| How each layer is written | Strategy | one writer per target: personal file, repository worktree, repository publication |
+| Undo | Memento | `settings.JournalRecord` |
+| Outside edits | Optimistic Offline Lock, per field | `Edit.Expect`, `ChangeSet.Base` |
+| Live values | Event Notification with a server-side projection | `config.layer.changed` → the `settings` projection |
+| Controls | Factory Method (in the browser): metadata to control | `FieldMeta.Widget` |
+| `KEY=VALUE` to an edit | Message Translator | the `config set` Verb |
+| Linking a save, its events and its journal record | Correlation Identifier | the operation ID |
+
+### Phase 4 field IDs
+
+A field is the unit the page draws one control for, a ChangeSet edits and the projection reports. Its ID is `<layer>:<path>`.
+
+- **Layer** is `personal` (`~/.agentflow/config.yml`, `config.User`) or `repo` (`<worktree>/.agentflow/config.yml`, `config.Repo` plus the provider role sections). These are `bus.ConfigLayer` values. Provider definition files (`.agentflow/providers/*.yml`, `~/.agentflow/providers/*.yml`) and the other registered files (`releases.yml`, `flow-map.yml`, task templates and so on) are not settings fields. They keep the document editor on the Configuration page.
+- **Path** is the YAML keys from the layer file's root, joined by `.`. Inside a key, `\.` is a dot and `\\` a backslash: the `setting` grammar `agentflow_config` already uses. In a catalog pattern a segment `*` matches any map key or list index. A key that is a literal `*` cannot be addressed.
+- Examples: `repo:policy.max_autonomy.local`, `personal:autonomy.actions.console\.publish`, `repo:task_management.provider`, `repo:task_management.settings.repository`.
+- A provider's settings field also has a `provider`. ID and provider together are unique in a catalog. Only the role's selected provider's fields are active.
+- The CLI accepts a path without its layer when exactly one layer has that path. Otherwise it fails and names both IDs (for example `worktree.root`).
+
+### Phase 4 Field metadata (lane 4.1)
+
+`config.CatalogField` is one field: `id`, `layer`, `path`, `provider`, `schema` (the `config.Field` node, unchanged), `meta` (`config.FieldMeta`) and `columns` (a `FieldMeta` per property, for a `list` item or a `kv-table` value that is an object). `config.Field` itself does not change, so the `agentflow_config` list output and its golden files stay the same.
+
+`FieldMeta` (JSON):
+
+```json
+{
+  "label": "Local actions",
+  "description": "Highest autonomy for local actions such as commit, in every repository.",
+  "group": "autonomy",
+  "order": 100,
+  "widget": "select",
+  "applies": "live",
+  "sensitive": false,
+  "loosens": "level",
+  "advanced": false,
+  "min": null, "max": null, "step": 0,
+  "min_duration": "", "max_duration": "",
+  "picker": {"role": "", "multiple": false, "kind": "", "base": "", "glob": ""},
+  "placeholder": ""
+}
+```
+
+- **Label, description, group** are display text. A description says what the setting does, never a value.
+- **Widget** must suit the schema:
+
+| Schema node | Widgets allowed |
+| --- | --- |
+| `boolean` | `toggle` |
+| `string` with `enum` | `select`, `provider-picker` |
+| `string` | `text`, `duration`, `branch-picker`, `file-picker`, `credential-ref` |
+| `integer` | `stepper` |
+| `array` of `string` | `chips`, `branch-picker` with `picker.multiple` |
+| `array` of `object` | `list` (with `columns`) |
+| `object` with `additional_properties` | `kv-table` (with `columns` when the value is an object) |
+
+A nullable node takes the same widgets. The control then also offers "inherit", which is an `unset` edit.
+
+- **Applies:** `live` (running daemons and MCP servers reload on `config.layer.changed`), `next-run` (read when a command starts), `restart` (running MCP sessions keep the old value: provider selections, because they change the tool list and instructions), `new-worktrees` (`worktree.*`).
+- **Sensitive:** the value never reaches the browser, an event, an audit line or a log. A preview shows only that it changed (`Value.redacted`, `Value.digest`). No field in today's schema needs it: credentials are environment variable names (`credential-ref`). It exists for provider definitions.
+- **Loosens** marks fields where a change loosens policy (next section).
+- **Picker:** `provider-picker` names its `role`; `branch-picker` may be `multiple`; `file-picker` has `kind` (`file`, `dir`), `base` (`repo`: relative to the worktree root, or `home`) and an optional `glob`.
+
+**Catalog (lane 4.1).** `config.Catalog() []config.CatalogField` and `config.Groups() []config.Group`, built from compiled types only:
+
+1. Walk `SchemaFor(config.User{}, "yaml")` as `personal` and `SchemaFor(config.Repo{}, "yaml")` as `repo`. An object with fixed properties is not a field: its properties are. A scalar, an array or a map is one field, and the walk stops there.
+2. For each role in `ProviderCatalog()`: `repo:<role path>.provider` (a `provider-picker`), and each compiled provider's settings from `ProviderFieldSchemas()` under `repo:<role path>.settings`, with `provider` set. A nested role such as `devops.<x>` has the path `devops.<x>`. `task_management` also has `repo:task_management.templates.*` from `TaskTemplateSettings`.
+3. Leave out format markers, with a reason in the table: the top-level `agentflow` version and each role's `version`.
+4. Take each field's `FieldMeta` from one table, `internal/config/field_meta_table.go`, keyed by layer, path pattern and provider.
+
+Initial groups, in order: `providers`, `autonomy`, `policy`, `commit`, `worktrees`, `integrations` (Jira, Confluence, Atlassian e-mail), `updates`, `init`. Each provider role's settings form a group `providers.<role>`. Lane 4.1 may add groups; the browser draws whatever `Groups()` returns.
+
+**Repository catalog (lane 4.2).** A provider defined in a provider definition file has no compiled schema. `consolecfg` builds the worktree's `settings.Catalog` from `config.Catalog()` plus the definitions' settings, with derived metadata: the key as label, the schema type's first widget, group `providers.<role>`, `applies: restart`. `Catalog.Revision()` changes whenever its fields would.
+
+**`TestEveryConfigFieldHasControl`** (lane 4.1, `internal/config/schema_coverage_test.go`) fails, naming the ID, when:
+
+- a compiled field has no table entry, or a table entry matches no field;
+- a label, description, group or `applies` is empty, or the group is not in `Groups()`;
+- the widget does not suit the schema node (table above), a `stepper` has no `min`, a `duration` has no limits where the code checks some (`approval_window`, `policy.max_approval_window`: 1m to 1h), a `provider-picker` names no role, or a `list` or object `kv-table` lacks a `columns` entry for a property;
+- a field the policy treats as loosening (next section) has no `loosens`.
+
+### Phase 4 change set
+
+`settings.ChangeSet` (JSON) is an ordered list of edits across both layers, saved together or not at all:
+
+```json
+{
+  "edits": [
+    {"id": "repo:task_management.provider", "op": "set", "value": "github-issues", "expect": "jira"},
+    {"id": "repo:task_management.settings.repository", "op": "set", "value": "acme/widgets", "expect": null},
+    {"id": "personal:autonomy.local", "op": "set", "value": "auto", "expect": "confirm"},
+    {"id": "personal:approval_window", "op": "unset"}
+  ],
+  "base": {"personal": "sha256:9f…", "repo": "sha256:41…"},
+  "repo": {"mode": "draft", "title": "chore: use GitHub issues for tasks", "task_ref": ""}
+}
+```
+
+- **`op`:** `set` writes `value` at the path. `unset` removes the path, so the default or the other layer applies.
+- **Order:** edits apply in order, so a provider selection comes before its settings. Two edits of one ID, or of an ID and a path inside it, are a `syntax` error.
+- **Paths inside a field:** an edit may address a map key or list index inside a `kv-table`, `chips` or `list` field (`repo:policy.max_autonomy.actions.commit`). The field is still the unit of metadata and of the projection.
+- **`expect`:** the layer value the client last saw. Absent: no check (the CLI). JSON `null`: "was not set". When the current layer value differs, the edit gets a `conflict` diagnostic.
+- **`base`:** the layer revisions the client last saw (`sha256:<hex>` of the file bytes, or `absent`). A stale base alone is not an error: only the edits whose `expect` no longer holds conflict, and the rest merge with the outside edit.
+- **`repo.mode`:** how repository edits are saved: `draft` (default) or `direct` through the existing console publication (`consolepublish`, the same flow and rules as `agentflow_config_apply`), or `worktree`. `title` is the conventional title for `draft` and `direct`; an empty title takes the preview's suggestion.
+- **Limits:** at most 200 edits (`MaxEdits`), 64 KiB per value (`MaxValueBytes`), 1 MiB per request (`MaxBytes`).
+- A ChangeSet is a Command Message: it is never published or stored.
+
+### Phase 4 diagnostics and the check chain
+
+`settings.Diagnostic`: `{severity, id, edit, code, message}`. `severity` is `error`, `warning` or `info`; only an `error` blocks a save. `id` is the field, or empty for the ChangeSet or a whole file. `edit` is the index in `edits`, or -1. `message` is text for display: it never holds a secret value, a file's contents or an absolute path.
+
+Lane 4.2 runs the checks as a chain. Each link adds diagnostics; a link after an `error` on the same edit skips that edit:
+
+| Order | Link | Codes |
+| --- | --- | --- |
+| 1 | ChangeSet syntax and limits | `syntax` |
+| 2 | Catalog lookup under the provider selected so far | `unknown`, `layer`, `inactive` (warning) |
+| 3 | Schema: type, enum, `nonnegative`, required | `type`, `enum`, `range`, `required` |
+| 4 | Field rules: `min`/`max`, duration limits, autonomy action names, release-layer constraints | `range`, `reference`, `locked` |
+| 5 | References: provider IDs, branches, files, environment variables | `reference` (warning), `credential` (warning when a referenced variable is unset) |
+| 6 | Secrets: a value that looks like a credential (`consolecfg`'s credential patterns) outside a `credential-ref` field | `credential` (error) |
+| 7 | Whole files: the edited layer files load (`config.InspectRepo`, the `config.User` parser) | `config` |
+| 8 | Policy: a personal level above the repository ceiling; a loosening edit | `capped` (warning), `loosens` (info) |
+| 9 | Concurrency: `expect` against the current file | `conflict` |
+| 10 | Effect: restart or new worktrees needed; a no-op edit | `applies` (info), `unchanged` (info) |
+
+The repository target adds `protected` (error: `worktree` mode on a protected branch). Undo adds `published` (below).
+
+### Phase 4 preview
+
+`config.preview` writes nothing and returns `settings.Preview`:
+
+```json
+{
+  "status": "ok",
+  "base": {"personal": "sha256:9f…", "repo": "sha256:41…"},
+  "changes": [
+    {"id": "personal:autonomy.local", "edit": 2, "applies": "live", "loosens": true,
+     "before": {"json": "confirm", "set": true}, "after": {"json": "auto", "set": true},
+     "effective": {"id": "personal:autonomy.local", "before": {"json": "confirm", "set": true},
+                   "after": {"json": "confirm", "set": true}, "source_before": "personal", "source_after": "personal"}}
+  ],
+  "effects": [],
+  "files": [
+    {"layer": "repo", "path": ".agentflow/config.yml", "before_revision": "sha256:41…", "after_revision": "sha256:7c…", "diff": "--- a/.agentflow/config.yml\n+++ b/…"},
+    {"layer": "personal", "path": "~/.agentflow/config.yml", "before_revision": "sha256:9f…", "after_revision": "sha256:e2…"}
+  ],
+  "diagnostics": [
+    {"severity": "warning", "id": "personal:autonomy.local", "edit": 2, "code": "capped", "message": "The repository ceiling for local actions is confirm, so auto has no effect here."},
+    {"severity": "info", "id": "personal:autonomy.local", "edit": 2, "code": "loosens", "message": "Allows local actions without confirmation."}
+  ],
+  "confirm": [{"id": "personal:autonomy.local", "reason": "loosens", "message": "Allows local actions without confirmation."}],
+  "repo": {"mode": "draft", "title": "chore: use GitHub issues for tasks", "destination": "acme/widgets@main", "ci": "none"},
+  "restart": true
+}
+```
+
+- **`status`:** `ok`; `invalid` (an error other than `conflict`); `conflict` (only conflicts); `unchanged` (nothing would change).
+- **`changes`:** one entry per edited field: the layer value before and after, its `applies`, `loosens`, and `effective` when its effective value changes.
+- **`effects`:** other fields whose effective value changes: a personal level capped by a new ceiling, provider settings that become active or inactive.
+- **`files`:** the layer files the save writes, with revisions. Only the repository file has a `diff`. **Personal YAML never leaves the disk**, on any surface: the personal layer is shown as field changes only.
+- **`confirm`:** the edits that need an explicit confirmation, and why.
+- **`base`:** the revisions the preview used. The save binds them.
+
+**Loosening.** An edit loosens policy when it raises an effective autonomy level (`suggest` < `confirm` < `auto`), lengthens an approval window, turns on `policy.allow_auto_pr_publication` or `policy.coordinator_merge`, or removes a protected branch. The comparison uses effective values, so an `unset` can loosen too. The fields: `personal:autonomy.local`, `.remote`, `.actions`, `personal:approval_window`, `repo:policy.max_autonomy.local`, `.remote`, `.actions`, `repo:policy.max_approval_window`, `repo:policy.allow_auto_pr_publication`, `repo:policy.coordinator_merge`, `repo:policy.protected_branches`.
+
+### Phase 4 save
+
+`config.set` saves a ChangeSet. It is gated once for the whole change and writes all of it or none of it.
+
+**Gate.** The Spec uses `GateInRun` (decision 1). Its Run computes the preview, then gates through `a.GateOperation` with the resolved class and action:
+
+| Edits | Class | Action | Related |
+| --- | --- | --- | --- |
+| personal only | `local` | `console.settings` | |
+| repository, `worktree` mode (with or without personal) | `local` | `console.settings` | |
+| repository, `draft` or `direct` | `remote` | `console.publish` | `console.settings` when personal edits are included |
+
+- `console.settings` is a new autonomy action (`local remote`, "Settings saves require confirmation."). Adding a key is backwards compatible; lane 4.2 adds it to `autonomyCatalog`.
+- **A save always needs a confirmation**, whatever the policy level: `OperationGate.RequireConfirmation` (lane 4.2) turns a `proceed` without a token into `needs_confirmation`. The CLI asks (or takes `--yes`), an MCP prompt owner shows the summary, and the browser shows the Save review. This keeps today's rule that `console.*` writes are always reviewed.
+- **The summary** bound into the approval is: the operation, the `base` revisions, every change (ID, layer value before and after; sensitive values as digests), the `confirm` list, the repository plan (mode, title, destination, head, the source baseline `consolepublish` uses today) and the file revisions after. Any change to these between preview and save makes the token fail with `operation_changed`, and the caller previews again.
+- A refusal is a result, not an error: Run returns the `Preview` with `status` `invalid`, `conflict` or `unchanged`. `Classify` reports it as `op.failed` with that status as `code`. An applied save returns `settings.SaveResult` (`op.applied`).
+- `Policy.AuditByInvoker` is set: the app layer writes no audit line of its own for `config.set`, so the Invoker writes one, with the operation ID.
+
+**Writing (Strategy per target).**
+
+1. Under the personal file lock (the lock `replacePersonal` uses today, `config.yml.autonomy.lock` in the agentflow home), check every layer file's revision against the bound `base`. Any difference fails the save with `operation_changed`: nothing is written.
+2. Compute every new file from the current bytes with comment-preserving YAML node edits (`consolecfg`), and check them once more with the whole-file link of the chain.
+3. **Repository, `draft` or `direct`:** publish through `consolepublish.PublishTo`, with the same destination, baseline, title and CI rules as `agentflow_config_apply` today. The worktree is not touched; the change takes effect where the pull request merges. If it fails, nothing is written and the save fails.
+4. **Repository, `worktree`:** write `.agentflow/config.yml` in the current worktree: temporary file in the same directory, `fsync`, rename. Refused with `protected` when the worktree's branch is protected (`policy.protected_branches`, default `main` and `master`). The developer commits the change with their task.
+5. **Personal:** write `~/.agentflow/config.yml` the same way, mode 0600. Running daemons and MCP servers pick it up from `config.layer.changed` (phase 2): it applies at once, with no restart, except fields with `applies: restart`.
+6. Write the journal record (next section).
+
+Steps 3 and 4 run before step 5, so a repository failure leaves nothing changed. The one partial case is a personal write that fails after a publication succeeded: the result has `status: partial`, the publication, and the error, and the journal records only the repository part.
+
+**Who saves from where.** CLI calls have origin `cli`, MCP calls `mcp:<client>`. The console calls the same Spec through the daemon's Invoker with origin `daemon`, so a browser save is an `op.*` operation on the timeline like any other. A save outside any repository changes only the personal layer and publishes no events (phase 3 decision 9).
+
+### Phase 4 undo journal
+
+The journal is a Memento of the last save, one per scope.
+
+- **Where:** `<agentflow home>/settings/<policy.ScopeKey(scope)>.json`, where scope is the gate's repository scope (the key approvals use), or `<agentflow home>/settings/personal.json` outside a repository. The directory has mode 0700 and the file 0600. The watcher does not watch this directory.
+- **What:** `settings.JournalRecord`: `version` (1), `operation_id`, `time`, `client`, `edits` (`{id, before, after}`, layer values; JSON `null` means not set), `before` and `after` revisions, `publication` (mode, URL, number, branch, state) and `undo_of`. A save replaces the record. Values are stored as in the layer files, so the journal holds nothing a layer file does not.
+- **What undo does:** `config.undo` builds the inverse ChangeSet (each edit back to `before`, or `unset`), with `expect` set to each edit's `after`, and saves it through the same preview, gate and writers as `config.set`. The repository part uses the mode in the request, or the record's mode.
+- **Conflicts:** a field whose current value is no longer the saved `after` conflicts. Undo refuses (`status: conflict`) unless the request sets `skip_conflicts`; then it reverts the other fields only.
+- **Published repository changes:** while the record's pull request is open, its fields cannot be undone: they get `published` (error) and the projection links the PR ("close it to discard the change"). The projection learns the PR's state from `gh.pr.updated` and `watch.GitHubCache`; `config.undo` asks GitHub itself. After the PR merges and the worktree has the merged values, undo opens an inverse pull request.
+- **Redo:** the undo writes its own record, with `undo_of` set to the save's operation ID. A second undo therefore redoes the save. The console labels the button "Redo" for such a record.
+- There is no expiry: undo always means the last save in this scope.
+
+### Phase 4 outside edits and conflicts
+
+- **Detection, no polling.** A change to either layer file reaches the console as `config.layer.changed` (repository layer in the worktree; personal layer in `global`). The `settings` projection recomputes the worktree's state, with new `revisions` and `values`.
+- **In the browser** (lane 4.3): when a new state arrives, the client compares each draft edit's `expect` with the field's new layer value. A difference marks the field "changed outside this page", with the new value and two choices: keep my edit (its `expect` becomes the new value) or take theirs (drop the edit). Fields changed outside and not in the draft just update, with the live "changed" highlight from phase 2.
+- **On the server:** the preview and the save check `expect` again, so a client that missed an event still cannot overwrite a newer value without seeing a `conflict`.
+- A change of the field catalog (a new provider definition, a new binary) shows as a new `catalog_revision`; the client reads the catalog again with `config.fields`.
+
+### Phase 4 settings projection (lane 4.2)
+
+| Projection | Key | Topics | Reads | State |
+| --- | --- | --- | --- | --- |
+| `settings` | worktree | `config.layer.changed` (own repository), `global/*/config.layer.changed`, `git.head.changed`, `gh.pr.updated`, `op.applied` and `op.failed` whose `operation` starts with `config.` | the worktree's layer files, its `settings.Catalog`, the scope's journal, `watch.GitHubCache` for the journal's pull request | `SettingsState` |
+
+`SettingsState` (`internal/webui/projection_settings_state.go`):
+
+```json
+{
+  "revisions": {"personal": "sha256:9f…", "repo": "sha256:41…"},
+  "catalog_revision": "sha256:0d…",
+  "values": [
+    {"id": "personal:autonomy.local", "layer": {"json": "confirm", "set": true},
+     "effective": {"json": "confirm", "set": true}, "source": "personal", "active": true},
+    {"id": "repo:task_management.settings.repository", "provider": "github-issues",
+     "layer": {"json": "acme/widgets", "set": true}, "effective": {"json": "acme/widgets", "set": true},
+     "source": "repo", "active": true}
+  ],
+  "problems": [],
+  "last_save": {"operation_id": "op_…", "time": "2026-11-26T10:00:00Z", "client": "repository-console",
+                "ids": ["personal:autonomy.local"], "undoable": true},
+  "branch": "issue-12-ab12cd34",
+  "protected": false
+}
+```
+
+- `values` holds every field that is set in its layer or active, sorted by ID, then provider. A value larger than 4 KiB (`MaxStateValue`) is sent with `too_large: true` and no JSON; the client reads it with `config.fields`.
+- `source` is `default`, `personal`, `repo` or `definition`. `capped_by` names the repository ceiling that lowers a personal level.
+- `last_save` has IDs only, no values. `undoable` is false while the repository part waits in an open pull request, or when every field changed since.
+- The projection is computed from files, never from event payloads, so a missed event is repaired by the next one or by a snapshot (as the timeline).
+- It registers through `projectionExtensions` from its own file's `init` (phase 3 decision 12).
+- Sensitive values are redacted here as everywhere.
+
+**Requests and the stream.** Every change of state the page shows arrives over the stream: values, revisions, problems, the journal, the branch. The page sends requests only for the user's own actions, and their answers concern only that request: read the catalog (once, and again when `catalog_revision` changes), preview the draft (live checks, debounced by 250 ms), save, undo. Nothing polls.
+
+### Phase 4 commands
+
+Lane 4.2 adds these Specs in `internal/command/ops/config_settings.go`:
+
+| Spec | CLI | MCP tool | Class, action | Gate | Events | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| `config.fields` | `config fields [--group G] [--search Q] [--modified] [--json]` | `agentflow_config_fields` (read-only) | `read` | none | none | `settings.View` |
+| `config.preview` | `config set --dry-run ...` (the `config set` Verb) | `agentflow_config_preview` (read-only) | `read` | none | none | `settings.Preview` |
+| `config.set` | `config set ...` (the `config set` Verb) | `agentflow_config_set` | `remote`, `console.settings` (resolved per save, see "Gate") | in Run, always confirmed | worktree | `settings.SaveResult` |
+| `config.undo` | `config undo [--skip-conflicts] [--mode M] [--title T] [--yes] [--json]` | `agentflow_config_undo` | as `config.set` | in Run, always confirmed | worktree | `settings.SaveResult` |
+
+- `config.set` and `config.undo` link their publication (`links` kind `pr`) on `op.applied`.
+- The static class of `config.set` and `config.undo` is `remote`, the strictest a save can be, so `TestEveryWriteOperationEmitsEvents` and the timeline see a valid write. The class and action the gate uses are the resolved ones in the table under "Gate".
+- **Tool inputs.** `agentflow_config_fields`: `settings.FieldsRequest` (`group`, `ids`, `query`, `modified`). `agentflow_config_preview`: `settings.ChangeSet`. `agentflow_config_set`: `settings.ChangeSet` plus `confirm_token`. `agentflow_config_undo`: `settings.UndoRequest` plus `confirm_token`. `Edit.value` and `expect` accept any JSON type, so these tools set `command.MCP.InputSchema` (below).
+
+**`agentflow config set A=1 B=2`.**
+
+```text
+agentflow config set [--dry-run] [--unset KEY]... [--mode draft|direct|worktree]
+                     [--title T] [--task REF] [--yes] [--json] KEY=VALUE...
+```
+
+- `KEY` is an ID, or a path when exactly one layer has it. `VALUE` is taken literally for a `string` field (no quotes needed), as a comma-separated list for a `chips` field unless it starts with `[`, and as JSON otherwise (`true`, `3`, `{"a": "b"}`).
+- Edits apply in argument order; `--unset` edits follow the `KEY=VALUE` edits, in their own order.
+- No `expect` is sent, so the CLI never conflicts per field. The bound revisions still stop a write over a file that changed between the confirmation and the save.
+- `--dry-run` runs `config.preview` and prints it. Without it the confirmation flow runs as for every write: the summary lists the loosening edits first.
+- Text output is one line per change (`ID: before → after`), then the diagnostics. `--json` prints the result.
+
+**Old subcommands keep working.** `agentflow config OP --input FILE` keeps its operations. `fields`, `set` and `undo` are new words: none of them is an old operation, so the registry's longest-path dispatch sends them to the new Specs and everything else to the legacy command.
+
+**`agentflow_config` and `agentflow_config_apply` stay as they are.** Their names, input fields, enums and output are a compatibility contract. Phase 4 resolves what blocked their migration in phase 3:
+
+- Lane 4.2 adds `InputSchema func() (*jsonschema.Schema, error)` to `command.MCP`. When it is set, `AddMCP` puts its result in `mcp.Tool.InputSchema`, and the SDK still decodes the call into `In`. Registration fails when it returns an error.
+- Lane 4.2 then moves both tools into Specs (`config.inspect`, `config.apply`) in `internal/command/ops/config.go`. Their schemas are built by today's code, moved verbatim from `internal/mcpserver/configuration.go`. **`internal/mcpserver/testdata/golden/tools.json` must not change for these two tools**, and the CLI golden files for `config` must not change. The CLI stays `config OP --input FILE` through a `config` Verb; parity rows stay `config` and `config publish`.
+- This migration is the last step of lane 4.2, and may be its own PR. If it would change either schema or any golden output, the lane stops and reports instead.
+
+### Phase 4 amendments to the phase 3 contract
+
+All additive. Lane 4.2 makes them.
+
+| Contract | Change |
+| --- | --- |
+| `command.MCP` | `InputSchema func() (*jsonschema.Schema, error)`; nil keeps the inferred schema |
+| `app.OperationGate` | `RequireConfirmation bool`: a `proceed` decision without a token becomes `needs_confirmation`, with the same token flow |
+| `config` autonomy catalog | new action `console.settings` (`local remote`) |
+| `TestEveryWriteOperationEmitsEvents` allow-list | `config publish` and `config save_personal` leave the legacy list when `config.apply` is registered |
+
+### Phase 4 console endpoints (lane 4.2)
+
+In `internal/webui/settings.go`, under the console's existing session, origin and request-header checks. Each calls the Spec through the daemon's Invoker; the handlers only decode and encode.
+
+| Route | Body | Answer |
+| --- | --- | --- |
+| `GET /api/settings/catalog` | | `settings.View` with every field and no values (`values` come from the stream) |
+| `POST /api/settings/preview` | `settings.ChangeSet` | `settings.Preview` |
+| `POST /api/settings/save` | `{"change_set": ChangeSet, "approval": "<token>"}` | a `needs_confirmation` Pending with its token as `approval`, or `settings.SaveResult` |
+| `POST /api/settings/undo` | `{"undo": UndoRequest, "approval": "<token>"}` | as save |
+
+The Save review is the confirmation: the browser saves without `approval`, shows the summary it gets back next to the preview, and saves again with `approval` when the user confirms. A loosening edit needs its own tick in the review before Confirm is enabled.
+
+### Phase 4 Settings page (lane 4.3)
+
+- One page, `#settings`, with the groups from the catalog in order, a search box (label, description, ID) and a "modified" filter (fields in the draft, or set in a layer).
+- One control per field from `meta.widget`, through a widget registry (Factory Method) in `static/settings-widgets.js`. `typed-editor.js` stays the fallback for the document editor on the Configuration page and must keep working there.
+- Each control shows the field's source (default, personal, repository, definition), "inherit" for an `unset`, the repository ceiling when it caps a personal level, and the field's diagnostics from the last preview.
+- **The Save bar** appears with the first edit and stays until the draft is saved or discarded: number of changes, errors and warnings, Discard, Review and save. The review shows the preview's changes, effects, the repository diff, the repository mode and title, and the loosening ticks.
+- After a save, the bar offers Undo (or Redo) from `last_save`, and the publication link.
+- Conflict warnings come from the stream, as "Phase 4 outside edits and conflicts" says.
+- The Providers and Autonomy pages become links into the Settings page's `providers` and `autonomy` groups (decision 5). The Configuration page stays for the other registered files.
+- The draft is kept per worktree in the browser's storage, as the document editor keeps staged edits, so a reload does not lose it.
+
+### File ownership for phase 4 lanes
+
+A lane changes only the files it owns. A lane that needs another lane's file, or a contract change, stops and reports.
+
+| Lane | Issue | Owns | Must not touch |
+| --- | --- | --- | --- |
+| 4.1 Field metadata | #69 | `internal/config/schema.go`, `internal/config/catalog.go` (`Catalog`, `Groups`, the walk), `internal/config/field_meta_table.go`, their tests, `internal/config/schema_coverage_test.go` (`TestEveryConfigFieldHasControl`) | `internal/config/field_meta.go` and `field_path.go` (contract), `config.go`, `providers.go`, `autonomy.go`, everything outside `internal/config` |
+| 4.2 Settings backend | #70 | `internal/settings/**` except `types.go` and `doc.go`; `internal/configconsole/**`; `internal/consolecfg/**` (Go files); `internal/consolepublish/**` where publication needs it; `internal/command/ops/config*.go`; `command.MCP.InputSchema` in `internal/command/spec.go` and `command.go`; `internal/app/gate_operation.go` and the policy code `RequireConfirmation` needs; `console.settings` in `internal/config/autonomy.go`; `internal/webui/settings.go`, `internal/webui/projection_settings.go` and their tests, and the four route lines in `internal/webui/server.go`; `adapters/claude-code/skills/config/SKILL.md`; README and `docs/repository-console.md` sections on settings commands and tools; golden files through `-update` only | `internal/webui/static/**`, the lane 4.1 files, `internal/cli/cli.go`, `internal/mcpserver/server.go`, `internal/cli/parity_test.go` |
+| 4.3 Settings UI | #71 | `internal/webui/static/settings*.js`, `static/settings.css`, `static/typed-editor.*`, the Settings nav entry, page section and script tags in `static/index.html`, the Providers and Autonomy page retirement in `static/app.js`, settings rules in `static/style.css`, `internal/webui/settings_browser_test.go`, `internal/webui/testdata/settings/**`, `docs/design/ui/settings.md`, the README section on the Settings page | any other Go file |
+
+- Before lane 4.1 merges, lane 4.2 codes against the `settings.Catalog` interface with a fake catalog. After it merges, production wires `config.Catalog()`.
+- Lane 4.3 builds against the shapes in `internal/settings/types.go` and `SettingsState`, with a scripted stream fixture and fake endpoints in its browser test, until 4.2 merges.
+- No phase 4 lane edits `cli.go`, `mcpserver/server.go` or `parity_test.go`: the new commands come from the registry.
+- Exported contract types change only through an amendment: everything in the code-form table at the top of this section.
+
+**Security review (lanes 4.2 and 4.3, before merge).**
+
+- [ ] Personal YAML never leaves the disk: no preview, projection, event, audit line or log carries it. Personal changes are shown as field values only.
+- [ ] Sensitive values are redacted in previews, the projection, the journal summary and every error message.
+- [ ] Every save and undo needs a confirmation bound to the exact changes and revisions, under every autonomy level. A loosening edit is listed in the confirmation and ticked in the Save review.
+- [ ] A secret pasted into a field that is not a `credential-ref` is refused (`credential` error).
+- [ ] The console endpoints keep the session, origin and request-header checks; the stream shows only its own repository's and the user's own personal values.
+- [ ] Journal files and the personal file stay mode 0600 in a directory owned by the user.
+- [ ] Repository publication keeps every rule of `agentflow_config_apply`: conventional title, destination, baseline, CI impact.
+
+### Phase 4 decisions
+
+*Decided by the architect in the contract PR. The coordinator confirms or changes them before the lanes start.*
+
+1. **`GateInRun` for `config.set` and `config.undo`.** Their class and action depend on the ChangeSet (personal, worktree or pull request), and a refusal must return the preview with its diagnostics. Run gates through `a.GateOperation` with the resolved class and action, and returns a refusal as a result that `Classify` already reports as `op.failed`. `GateByInvoker` would need three more fields on `command.Plan`. The static class is `remote`, the strictest case.
+2. **No new event types.** `config.layer.changed` already reports every layer file change, and `op.*` reports every save and undo. The projection reads files, so it needs no new payload.
+3. **Repository edits: a pull request by default, the worktree on request.** Writing the file into the worktree *and* opening a pull request would leave the same change twice: once uncommitted in the checkout, once in the PR, and a later pull would refuse to overwrite it. So `draft` (default) and `direct` publish through the existing flow without touching the worktree, and `worktree` writes the file for the developer to commit with their task.
+4. **Settings fields are the two `config.yml` layers only.** Provider definitions, release units, the flow map, task templates and the other registered files keep the Configuration page's document editor. Phase 5 plugin settings join the catalog as a new source.
+5. **The Providers and Autonomy pages are retired into Settings.** Their nav entries open the matching Settings groups. Their HTTP routes stay until the phase 11 cleanup, because nothing else changes in phase 4.
+6. **Field metadata lives in a table, not in struct tags,** so lane 4.1 changes no configuration type, and `config.Field` (the schema node in `agentflow_config` output and its golden files) does not change.
+7. **Every save is confirmed.** Today's console writes are always reviewed (`console.*`); the Save review keeps that, and `RequireConfirmation` makes it hold under `auto`.
+8. **Undo is a save.** It goes through the same checks, gate and writers, so it cannot bypass anything a save checks, and undoing an undo redoes.
+9. **The CLI sends no `expect`.** A terminal user sees the current values in the confirmation summary; the bound revisions still stop a lost update.
+
+**Open questions for the coordinator.**
+
+- Decision 3 reads "written to the worktree and published as a PR" in the plan as two targets rather than one save doing both. Confirm, or ask for both at once (and accept the duplicate change).
+- Decision 5 removes two pages from the navigation. Confirm, or keep them next to Settings until phase 11.
+- Lane 4.2 is large. If its diff passes about 1,500 lines, split the `agentflow_config` migration (the last step) into its own PR.
+
+### Phase 4 consequences
+
+- Every option in both `config.yml` layers has a control, a label and a description, and `TestEveryConfigFieldHasControl` keeps it so.
+- One save changes both layers together, under one confirmation, and can be undone.
+- The console, the CLI (`agentflow config set A=1 B=2`) and agents (`agentflow_config_set`) save through the same Spec, so every save is on the timeline.
+- `agentflow_config` and `agentflow_config_apply` keep their inputs and outputs; they move onto the registry once `command.MCP.InputSchema` exists.
+- Outside edits reach the page within the phase 1 latency, and no client polls.
