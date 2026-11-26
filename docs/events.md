@@ -47,6 +47,55 @@ The MCP tool `agentflow_events` takes `since`, `types`, `topics` and `limit` and
 | `git.operation.changed` | a rebase, merge, cherry-pick, revert or bisect starts or ends |
 | `config.layer.changed` | a file in `.agentflow/` or `.agentflow/providers/` changes |
 
+## GitHub polling
+
+While the daemon runs, it polls GitHub for every repository it serves that has a GitHub
+remote, and records what changed. It signs in like every other GitHub call: the `gh` login,
+or `GH_TOKEN` or `GITHUB_TOKEN`. It only reads. A repository without a GitHub remote is
+not polled.
+
+| Type | When |
+| --- | --- |
+| `gh.pr.updated` | an open pull request changed, or one left the open list because it was merged or closed |
+| `gh.ci.updated` | the checks of a pull request head changed. Only heads of branches that a served worktree has checked out are watched. |
+| `gh.issue.updated` | an issue bound to a served worktree (`agentflow start --worktree` records it) changed |
+
+An event is published only when a value changed. The first poll after the daemon starts, and
+the first poll of a repository, record the current state and publish nothing. An event
+belongs to the worktree whose branch is the pull request head, or that is bound to the
+issue; it is repository-wide when no served worktree matches. Titles, labels and check
+names are cut at 256 bytes, and lists at 20 entries.
+
+**Requests.** Each poll cycle of a repository sends conditional requests (`If-None-Match`),
+and GitHub does not count a `304 Not Modified` against the rate limit. A quiet repository
+costs these requests per cycle, all answered with 304:
+
+| Request | Count |
+| --- | --- |
+| open pull requests (50 most recently updated) | 1 |
+| check runs and commit status of a tracked head | 2 for each head |
+| bound issue | 1 for each issue |
+
+Two more kinds of request happen only when something changed. One GraphQL query asks for the
+review decision and merge state of the pull requests that changed in this cycle, never of
+the others. One lookup asks how a pull request that left the open list ended.
+
+**Interval.**
+
+| Situation | Time to the next poll |
+| --- | --- |
+| A tracked check is queued or running, or a tracked pull request changed in the last 10 minutes | 15 seconds |
+| Otherwise | 1 minute |
+| No console stream is open for the repository | 5 minutes |
+| `X-Poll-Interval` from GitHub | a floor for all of these |
+| Less than 20% of the rate limit remains | stretched so the rest lasts until it resets |
+| `Retry-After`, or no requests left | until GitHub allows, for every repository |
+| Failures in a row | 1, 2, 4, ... minutes, at most 15 |
+
+`agentflow events --follow` does not count as a stream here, because it reads the store
+files and the daemon cannot see it. Only the console's event streams keep the faster
+intervals.
+
 ## The console's event stream
 
 Each worktree's console serves `GET /w/<id>/api/events` as Server-Sent Events. The
