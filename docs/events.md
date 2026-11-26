@@ -9,8 +9,9 @@ changes as events in the repository's event store, under
 Events are recorded only while the daemon runs. Events that belong to no repository,
 such as a change to `~/.agentflow/config.yml`, go to one more store, `global`, in the
 console's private registry (`~/.agentflow-ui/`). `agentflow events` and the
-`agentflow_events` tool read this repository and `global`. `agentflow events --all-repos`
-reads every repository the daemon serves as well.
+`agentflow_events` tool read this repository and `global`; where the daemon has not created
+the `global` store, they read the repository alone. `agentflow events --all-repos` reads
+every repository the daemon serves as well.
 
 ## Read events from a terminal
 
@@ -183,6 +184,13 @@ and user-level client settings. Every stream receives the repository states such
 alters (a personal-layer edit updates `overview.config`); only a stream with a
 `global/*/config.**` or `global/*/client.**` topic also receives the `global` events
 themselves and a `global=<seq>` entry in its cursor. `Last-Event-ID` may carry that entry.
+The daemon stores `global` events, so a reconnecting stream replays them like repository
+events. The store is `~/.agentflow-ui/<host-hash>.events/`, from the OS user's profile
+(never `AGENTFLOW_HOME` or `$HOME`), one per host, with the same segments and retention as a
+repository store. The daemon refuses it unless it is a directory owned by this OS user that
+no one else can read: mode `0700` on Unix, an owner-only DACL inherited from
+`~/.agentflow-ui` on Windows. Without it, `global` events still reach the console live
+but are not replayed.
 
 Frames: `snapshot` (replace all state), `delta` (one event and the states it changed;
 `null` removes a key), `resync` (discard state; a `snapshot` follows) and a `: ping`

@@ -35,17 +35,16 @@ var (
 		return app.OpenEventStore(ctx, commonDir, role)
 	}
 	// openGlobalStore opens the daemon's bus.GlobalRepo store as
-	// store.RoleOwner (ADR, "Phase 2 scoping": <registry>/<host-hash>.events/).
-	// internal/bus/store cannot open a store for bus.GlobalRepo yet, so the
-	// runtime starts without one: global events still reach projectors over
-	// the bus, but they are not stored and cannot be replayed.
-	openGlobalStore = func(context.Context) (store.Store, error) {
-		return nil, errNoGlobalStore
-	}
+	// store.RoleOwner (ADR, "Phase 2 scoping": <registry>/<host-hash>.events/;
+	// lane 2.7, stream_global.go). When it fails the runtime starts without
+	// one: global events still reach projectors over the bus, but they are
+	// not stored and cannot be replayed.
+	openGlobalStore = openDaemonGlobalStore
 )
 
-// errNoGlobalStore: internal/bus/store has no way to open the global store.
-var errNoGlobalStore = errors.New("the global event store is not available yet")
+// errNoGlobalStore: an openGlobalStore that has no global store to offer.
+// The runtime starts without one and prints nothing.
+var errNoGlobalStore = errors.New("the global event store is not available")
 
 // globalTopics are the bus.GlobalRepo events every repository's projector
 // follows (ADR, "Phase 2 scoping", rule 1). A stream may name GlobalRepo
