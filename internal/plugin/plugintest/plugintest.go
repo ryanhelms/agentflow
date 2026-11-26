@@ -70,6 +70,9 @@ func (s *Source) Revision() string {
 
 // Layers is a plugin.Layers over maps.
 type Layers struct {
+	// Err, when set, fails Personal, as an unreadable config.yml does.
+	Err error
+
 	mu       sync.Mutex
 	personal map[string]plugin.PersonalPlugin
 	disabled map[string][]string // by worktree root
@@ -99,6 +102,9 @@ func (l *Layers) SetDisabled(root string, ids ...string) {
 func (l *Layers) Personal(context.Context) (map[string]plugin.PersonalPlugin, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.Err != nil {
+		return nil, l.Err
+	}
 	out := map[string]plugin.PersonalPlugin{}
 	for k, v := range l.personal {
 		out[k] = v
