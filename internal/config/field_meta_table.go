@@ -41,6 +41,15 @@ const (
 
 func roleGroup(role string) string { return groupProviders + "." + role }
 
+// minSubjectMax is the smallest commit.subject_max that commit.ValidatePRTitle
+// can work with. A pull request title is checked against subject_max minus
+// commit.SquashSuffixReserve (8), and the shortest conventional title under
+// the default types is "ci: a" (5 characters). A smaller value leaves no
+// title that can pass, so a control never needs to offer it. config cannot
+// import commit (commit imports config), so the value is written out;
+// TestStepperMinimumsAreAcceptedByTheCode checks it against both.
+const minSubjectMax = 13
+
 // levelChoices are the autonomy levels, loosest last. The compiled Level type
 // has no `allowed` tag, so the catalog adds them to the schema.
 var levelChoices = []string{string(Suggest), string(Confirm), string(Auto)}
@@ -271,7 +280,8 @@ func (b *tableBuilder) repository() {
 	b.add(l, "commit.types", "", ctl(groupCommit, WidgetChips, "Commit types",
 		"Conventional commit types that the commit message check accepts."), optItems(DefaultTypes...))
 	b.add(l, "commit.subject_max", "", ctl(groupCommit, WidgetStepper, "Subject length",
-		"Longest commit subject, in characters. Pull request titles stay a little shorter so the squash commit fits.", withStepper(20, 1)))
+		"Longest commit subject, in characters. Pull request titles stay a little shorter so the squash commit fits.",
+		withStepper(minSubjectMax, 1)))
 	b.add(l, "commit.require_key", "", ctl(groupCommit, WidgetToggle, "Require a task key",
 		"Commit subjects must carry a task key, such as a Jira key, that links the commit to its task."))
 	b.add(l, "commit.ai_trailer", "", ctl(groupCommit, WidgetToggle, "Keep AI trailers",
@@ -310,6 +320,8 @@ func (b *tableBuilder) repository() {
 	b.add(l, "update.check_every", "", ctl(groupUpdates, WidgetDuration, "Check interval",
 		"How often agentflow checks for a new release. An invalid or non-positive value uses the default.",
 		withApplies(AppliesNextRun), withAdvanced(), withPlaceholder("6h")))
+	// Min 0: update.ParseVersion cannot read a negative major version, so no
+	// release has one.
 	b.add(l, "update.track", "", ctl(groupUpdates, WidgetStepper, "Major version",
 		"Major version of agentflow to follow. Without one, agentflow stays on the installed major version.",
 		withApplies(AppliesNextRun), withAdvanced(), withStepper(0, 1)))
@@ -367,8 +379,9 @@ func (b *tableBuilder) taskManagement() {
 	b.add(FieldRepo, s("labels"), "github-issues", ctl(g, WidgetChips, "Labels", "Labels that agentflow adds to the issues it creates."))
 	b.add(FieldRepo, s("search.open_only"), "github-issues", ctl(g, WidgetToggle, "Open issues only",
 		"Task search lists open issues only."))
+	// Min 0: the field is nonnegative (mergeSetting); zero means the default.
 	b.add(FieldRepo, s("search.limit"), "github-issues", ctl(g, WidgetStepper, "Search limit",
-		"Most issues one search returns. Zero uses the default.", withStepper(0, 5)))
+		"Most issues one search returns. Zero uses the default.", withStepper(0, 1)))
 
 	b.add(FieldRepo, s("root"), "filesystem", ctl(g, WidgetFilePicker, "Task directory",
 		"Directory in the repository that holds the task files.", dir("repo")))
