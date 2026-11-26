@@ -18,10 +18,7 @@ func (s *Service) Fields(ctx context.Context, req FieldsRequest) (View, error) {
 	ev := s.evaluate(ctx, f.personal.Content, f.repo.Content)
 	vals := s.values(ev)
 	v := View{CatalogRevision: s.Catalog.Revision(), Revisions: f.revisions(), Groups: consolecfg.Groups(),
-		Fields: []config.CatalogField{}, Values: []FieldValue{}, Problems: ev.problems}
-	if v.Problems == nil {
-		v.Problems = []Diagnostic{}
-	}
+		Fields: []config.CatalogField{}, Values: []FieldValue{}, Problems: f.problems(ev.problems)}
 	query := strings.ToLower(strings.TrimSpace(req.Query))
 	keep := map[valueKey]bool{}
 	for _, fd := range s.Catalog.Fields() {
@@ -77,10 +74,7 @@ func (s *Service) State(ctx context.Context) (State, error) {
 		return State{}, err
 	}
 	ev := s.evaluate(ctx, f.personal.Content, f.repo.Content)
-	st := State{Revisions: f.revisions(), CatalogRevision: s.Catalog.Revision(), Values: sortedValues(s.values(ev)), Problems: ev.problems}
-	if st.Problems == nil {
-		st.Problems = []Diagnostic{}
-	}
+	st := State{Revisions: f.revisions(), CatalogRevision: s.Catalog.Revision(), Values: sortedValues(s.values(ev)), Problems: f.problems(ev.problems)}
 	for i := range st.Values {
 		v := &st.Values[i]
 		if len(v.Layer.JSON) > MaxStateValue || len(v.Effective.JSON) > MaxStateValue {
@@ -98,4 +92,14 @@ func (s *Service) State(ctx context.Context) (State, error) {
 		st.Protected = protectedBranch(st.Branch, f.repo.Content)
 	}
 	return st, nil
+}
+
+// problems adds the personal layer's problem, if any, to the evaluation's.
+func (f files) problems(ev []Diagnostic) []Diagnostic {
+	out := append([]Diagnostic{}, ev...)
+	if f.personalErr != nil {
+		out = append(out, Diagnostic{Severity: SeverityWarning, Edit: -1, Code: CodeConfig,
+			Message: "Personal settings are not available: " + f.personalErr.Error() + "."})
+	}
+	return out
 }

@@ -580,3 +580,56 @@ func TestPartialSaveIsAFailure(t *testing.T) {
 		t.Errorf("journal %+v", rec)
 	}
 }
+
+// A symlinked personal file is followed to a regular file the user owns,
+// and saves write through the link. A link the editor cannot use refuses
+// personal edits only: repository edits and the page still work.
+func TestPersonalSymlink(t *testing.T) {
+	f := newFixture(t, "task-1")
+	dotfiles := filepath.Join(t.TempDir(), "agentflow.yml")
+	if err := os.WriteFile(dotfiles, []byte("approval_window: 5m\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.home, "config.yml")
+	if err := os.Symlink(dotfiles, link); err != nil {
+		t.Fatal(err)
+	}
+	st, err := f.svc.State(t.Context())
+	if err != nil || st.Revisions.Personal == settings.RevisionAbsent {
+		t.Fatalf("state through a link: %+v %v", st.Revisions, err)
+	}
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "suggest")}})
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the save replaced the link: %v", err)
+	}
+	if b, _ := os.ReadFile(dotfiles); !strings.Contains(string(b), "suggest") || !strings.Contains(string(b), "5m") {
+		t.Errorf("target file %q", b)
+	}
+
+	// A dangling link: personal edits fail, everything else works.
+	if err := os.Remove(dotfiles); err != nil {
+		t.Fatal(err)
+	}
+	st, err = f.svc.State(t.Context())
+	if err != nil || len(st.Problems) == 0 || st.Revisions.Repo == "" {
+		t.Fatalf("state with a dangling link: %+v %v", st, err)
+	}
+	if _, err := f.svc.Fields(t.Context(), settings.FieldsRequest{}); err != nil {
+		t.Fatalf("fields: %v", err)
+	}
+	pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "auto")}})
+	if err != nil || pv.Status != settings.StatusInvalid || !has(codes(pv), "error:config") {
+		t.Fatalf("personal edit through a dangling link: %s %v %v", pv.Status, codes(pv), err)
+	}
+	res := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}})
+	if res.Status != settings.StatusSaved {
+		t.Errorf("repository save: %+v", res)
+	}
+	// A link to a directory is refused the same way.
+	if err := os.Mkdir(dotfiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if pv, _ := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "auto")}}); pv.Status != settings.StatusInvalid {
+		t.Errorf("link to a directory: %s", pv.Status)
+	}
+}

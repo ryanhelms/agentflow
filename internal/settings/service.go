@@ -90,6 +90,9 @@ type layer struct {
 // files is both layer files.
 type files struct {
 	personal, repo layer
+	// personalErr says why the personal layer cannot be used: its edits
+	// are refused, and the repository layer still works.
+	personalErr error
 }
 
 func (f files) of(l config.FieldLayer) *layer {
@@ -121,16 +124,39 @@ func (s *Service) personalPath() string { return filepath.Join(s.Home, "config.y
 func (s *Service) read() (files, error) {
 	var f files
 	var err error
-	f.personal, err = readLayer(config.FieldPersonal, PersonalFile, s.personalPath())
-	if err != nil {
-		return f, err
-	}
+	f.personal, f.personalErr = readPersonal(s.personalPath())
 	if s.Root != "" {
 		f.repo, err = readLayer(config.FieldRepo, RepoFile, filepath.Join(s.Root, filepath.FromSlash(RepoFile)))
 	} else {
 		f.repo = layer{Layer: config.FieldRepo, Path: RepoFile, Revision: RevisionAbsent}
 	}
 	return f, err
+}
+
+// readPersonal reads the personal layer. Like config.LoadUser, it follows
+// a symbolic link (a dotfiles checkout), but only to a regular file owned by
+// the current user; saves then write through the link to that file. A file
+// it cannot use reads as absent, with the reason as the error.
+func readPersonal(path string) (layer, error) {
+	info, err := os.Lstat(path)
+	if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		target, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return layer{Layer: config.FieldPersonal, Path: PersonalFile, abs: path, Revision: RevisionAbsent},
+				fmt.Errorf("%s is a link to a file that does not exist", PersonalFile)
+		}
+		ti, err := os.Stat(target)
+		if err != nil || !ti.Mode().IsRegular() || !ownedByCurrentUser(ti) {
+			return layer{Layer: config.FieldPersonal, Path: PersonalFile, abs: path, Revision: RevisionAbsent},
+				fmt.Errorf("%s links to a file that is not a regular file owned by you", PersonalFile)
+		}
+		path = target
+	}
+	l, err := readLayer(config.FieldPersonal, PersonalFile, path)
+	if err != nil {
+		l = layer{Layer: config.FieldPersonal, Path: PersonalFile, abs: path, Revision: RevisionAbsent}
+	}
+	return l, err
 }
 
 // readLayer reads a layer file: a regular file, not a link, at most
