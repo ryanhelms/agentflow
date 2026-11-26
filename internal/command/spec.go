@@ -5,6 +5,7 @@ import (
 	"flag"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -224,7 +225,7 @@ type CLICall[In any] struct {
 }
 
 // MCP describes an operation's tool. The input schema is inferred from In by
-// the MCP SDK, as today.
+// the MCP SDK, as today, unless InputSchema gives it.
 type MCP struct {
 	// Tool is the tool name, "agentflow_" and lowercase words joined by
 	// underscores. A compatibility contract: never renamed.
@@ -234,6 +235,11 @@ type MCP struct {
 	// WriteHost names the native write host the tool's calls get, replacing
 	// the switch in mcpserver.writerForTool.
 	WriteHost WriteHost
+	// InputSchema builds the tool's input schema when the inferred one
+	// cannot say what the tool accepts (an enum, a raw JSON value). Nil
+	// keeps the schema the SDK infers from In. The SDK still decodes a call
+	// into In. Registration fails when it returns an error.
+	InputSchema func() (*jsonschema.Schema, error)
 }
 
 // WriteHost names a native provider write host (internal/provider/native).

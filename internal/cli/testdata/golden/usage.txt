@@ -61,6 +61,12 @@ Work
   config OP [--input FILE|-]     inspect or prepare repository console settings from JSON
   config publish [--input FILE|-]   publish the exact approved repository change
   config save_personal [--input FILE|-]   save the exact approved preferences
+  config fields [--group G] [--search Q] [--modified] [--json]
+                                 list settings with their values and sources
+  config set [--dry-run] [--unset KEY]... [--mode draft|direct|worktree] [--title T] [--task REF] [--yes] [--json] KEY=VALUE...
+                                 change settings in both layers as one confirmed save
+  config undo [--skip-conflicts] [--mode M] [--title T] [--yes] [--json]
+                                 reverse the last settings save; a second undo redoes it
   policy explain [ACTION]          show autonomy, repository ceilings and review windows
   policy status ID                inspect a shared approval
   policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker

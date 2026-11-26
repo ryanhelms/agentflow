@@ -1,0 +1,6 @@
+$ agentflow config fields --modified
+--- stdout
+personal:approval_window = "10m0s" (personal)
+personal:autonomy.remote = "suggest" (personal)
+repo:commit.require_key = false (repo)
+repo:task_management.provider = "github-issues" (repo)

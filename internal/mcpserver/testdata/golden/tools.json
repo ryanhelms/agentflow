@@ -579,6 +579,271 @@
       "openWorldHint": true,
       "readOnlyHint": true
     },
+    "description": "List Agentflow settings fields of both configuration layers (personal and repo) with their metadata, current layer value, effective value and source. Filter by group, IDs, text or modified fields. Use the IDs with agentflow_config_preview and agentflow_config_set.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "description": "only fields of this group (and its subgroups), such as autonomy or providers.task_management",
+          "type": "string"
+        },
+        "ids": {
+          "description": "only these field IDs, such as personal:autonomy.local",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "modified": {
+          "description": "only fields set in a layer file",
+          "type": "boolean"
+        },
+        "query": {
+          "description": "only fields whose ID, label or description contains this text",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "agentflow_config_fields"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
+    "description": "Check and preview a change set of settings edits across the personal and repository layers without writing anything: diagnostics, field changes, effects, the repository diff, loosening edits that need confirmation and the repository plan.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "additionalProperties": false,
+          "description": "the layer revisions you last read (informational)",
+          "properties": {
+            "personal": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "edits": {
+          "description": "edits in order, saved together or not at all; select a provider before its settings",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "expect": {
+                "description": "the layer value you last read: the edit conflicts when the file now differs; null means not set; omit for no check"
+              },
+              "id": {
+                "description": "field ID \u003clayer\u003e:\u003cpath\u003e, layer personal or repo, e.g. personal:autonomy.local; see agentflow_config_fields",
+                "type": "string"
+              },
+              "op": {
+                "description": "set writes value; unset removes the path so the default or the other layer applies",
+                "enum": [
+                  "set",
+                  "unset"
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "the new value as JSON, for set"
+              }
+            },
+            "required": [
+              "id",
+              "op"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "repo": {
+          "additionalProperties": false,
+          "description": "how repository edits are saved: draft pull request (default), direct, or the worktree file",
+          "properties": {
+            "mode": {
+              "enum": [
+                "draft",
+                "direct",
+                "worktree"
+              ],
+              "type": "string"
+            },
+            "task_ref": {
+              "description": "optional task reference for the publication",
+              "type": "string"
+            },
+            "title": {
+              "description": "conventional title for draft and direct; empty takes the preview's suggestion",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "edits"
+      ],
+      "type": "object"
+    },
+    "name": "agentflow_config_preview"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Save a change set of settings edits as one change: all layers or none. Every save needs an explicit confirmation, even under auto: the first call returns needs_confirmation with a summary that lists loosening edits first; after the user agrees, call again with the same edits and confirm_token. Personal edits apply at once; repository edits open a draft pull request by default, or apply directly, or write the worktree file (mode worktree, refused on a protected branch).",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "additionalProperties": false,
+          "description": "the layer revisions you last read (informational)",
+          "properties": {
+            "personal": {
+              "type": "string"
+            },
+            "repo": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "confirm_token": {
+          "description": "token from a needs_confirmation response, after the user agreed to the exact summary",
+          "type": "string"
+        },
+        "edits": {
+          "description": "edits in order, saved together or not at all; select a provider before its settings",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "expect": {
+                "description": "the layer value you last read: the edit conflicts when the file now differs; null means not set; omit for no check"
+              },
+              "id": {
+                "description": "field ID \u003clayer\u003e:\u003cpath\u003e, layer personal or repo, e.g. personal:autonomy.local; see agentflow_config_fields",
+                "type": "string"
+              },
+              "op": {
+                "description": "set writes value; unset removes the path so the default or the other layer applies",
+                "enum": [
+                  "set",
+                  "unset"
+                ],
+                "type": "string"
+              },
+              "value": {
+                "description": "the new value as JSON, for set"
+              }
+            },
+            "required": [
+              "id",
+              "op"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "repo": {
+          "additionalProperties": false,
+          "description": "how repository edits are saved: draft pull request (default), direct, or the worktree file",
+          "properties": {
+            "mode": {
+              "enum": [
+                "draft",
+                "direct",
+                "worktree"
+              ],
+              "type": "string"
+            },
+            "task_ref": {
+              "description": "optional task reference for the publication",
+              "type": "string"
+            },
+            "title": {
+              "description": "conventional title for draft and direct; empty takes the preview's suggestion",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "edits"
+      ],
+      "type": "object"
+    },
+    "name": "agentflow_config_set"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false
+    },
+    "description": "Reverse the last settings save in this repository through the same checks and confirmation as agentflow_config_set; a second undo redoes it. Fields changed since the save conflict unless skip_conflicts. Fields whose pull request is still open cannot be undone: close the pull request instead.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirm_token": {
+          "description": "token from a needs_confirmation response, after the user agreed to the exact summary",
+          "type": "string"
+        },
+        "repo": {
+          "additionalProperties": false,
+          "description": "how an inverse repository change is saved; default: the save's own mode",
+          "properties": {
+            "mode": {
+              "enum": [
+                "draft",
+                "direct",
+                "worktree"
+              ],
+              "type": "string"
+            },
+            "task_ref": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "skip_conflicts": {
+          "description": "revert the fields that did not change since the save and leave the others",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "name": "agentflow_config_undo"
+  },
+  {
+    "annotations": {
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": true
+    },
     "description": "Current ticket bundle: summary, status, acceptance criteria, epic, design docs, flow-map next statuses and other work on the ticket.",
     "inputSchema": {
       "additionalProperties": false,

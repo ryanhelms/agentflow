@@ -97,6 +97,15 @@ func (s Spec[In, Out]) AddMCP(srv *mcp.Server, wrap MCPWrap, inv Invoker) {
 	}
 	m := s.Meta()
 	tool := &mcp.Tool{Name: s.MCP.Tool, Description: s.MCP.Description, Annotations: s.MCP.Annotations}
+	if s.MCP.InputSchema != nil {
+		// A Spec whose schema cannot be built fails the server's
+		// registration at start, before any client sees the tool list.
+		schema, err := s.MCP.InputSchema()
+		if err != nil {
+			panic(fmt.Sprintf("command %q: input schema: %v", s.Name, err))
+		}
+		tool.InputSchema = schema
+	}
 	mcp.AddTool(srv, tool, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		return wrap(ctx, m, func(ctx context.Context, a *app.App, o Origin) (any, error) {
 			return Invoke(ctx, inv, a, s, in, o)
