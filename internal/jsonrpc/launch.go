@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,7 +58,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 		closeAll(stdinR, stdinW)
 		return nil, fmt.Errorf("jsonrpc: launch: stdout pipe: %w", err)
 	}
-	tail := &tailBuffer{limit: limit}
+	stderr := newStderrStream(s.Stderr, limit)
 	cmd := &exec.Cmd{
 		Path:   exe,
 		Args:   append([]string{exe}, s.Args...),
@@ -67,7 +66,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 		Env:    append([]string{}, s.Env...), // never nil: nil would inherit the parent's
 		Stdin:  stdinR,
 		Stdout: stdoutW,
-		Stderr: tail,
+		Stderr: stderr,
 		// Bounds the stderr copy when a grandchild keeps stderr open.
 		WaitDelay: drainDelay,
 	}
@@ -82,8 +81,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 		cmd:    cmd,
 		stdin:  stdinW,
 		grace:  grace,
-		stderr: s.Stderr,
-		tail:   tail,
+		stderr: stderr,
 		exited: make(chan struct{}),
 		code:   -1,
 	}
@@ -202,8 +200,7 @@ type process struct {
 	conn   Conn
 	stdin  *os.File
 	grace  time.Duration
-	stderr io.Writer
-	tail   *tailBuffer
+	stderr *stderrStream
 
 	exited  chan struct{}
 	code    int
@@ -258,7 +255,7 @@ func (p *process) Kill() error {
 }
 
 // wait reaps the child, lets the connection read what it left in the pipe,
-// hands the kept stderr to the spec's writer and then closes exited.
+// ends the stderr stream and then closes exited.
 func (p *process) wait() {
 	err := p.cmd.Wait()
 	code := -1
@@ -272,11 +269,19 @@ func (p *process) wait() {
 	}
 	timer.Stop()
 	_ = p.conn.Close()
-	if p.stderr != nil {
-		_, _ = p.stderr.Write(p.tail.Bytes())
-	}
+	p.stderr.finish()
 	p.code, p.waitErr = code, err
 	close(p.exited)
+}
+
+// StderrTail returns the newest bytes (at most the spec's StderrLimit) the
+// child wrote to stderr, unsplit and untruncated by line, for an exit or
+// crash report. It returns nil for a Process that Launch did not start.
+func StderrTail(p Process) []byte {
+	if lp, ok := p.(*process); ok {
+		return lp.stderr.tail.Bytes()
+	}
+	return nil
 }
 
 // tailBuffer keeps the newest limit bytes written to it.

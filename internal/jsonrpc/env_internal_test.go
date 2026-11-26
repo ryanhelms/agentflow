@@ -52,3 +52,16 @@ func TestTailBufferKeepsNewest(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestStderrStreamSplitWrites(t *testing.T) {
+	var out strings.Builder
+	s := newStderrStream(&out, 1<<20)
+	for _, w := range []string{"ab", "c\nd", "", "\n\n", strings.Repeat("x", 3000), strings.Repeat("y", 3000), "z\nok"} {
+		_, _ = s.Write([]byte(w))
+	}
+	s.finish()
+	want := "abc\nd\n\n" + strings.Repeat("x", 3000) + strings.Repeat("y", 1096) + " [line truncated]\nok\n"
+	if out.String() != want {
+		t.Fatalf("got %q", out.String())
+	}
+}

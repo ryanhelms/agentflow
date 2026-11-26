@@ -58,7 +58,7 @@ func RegisterChild(name string, fn func(args []string) int) {
 // pid, spawn (starts a "sleep" grandchild, returns its PID), hang (never
 // answers), notify (sends the notification "note" with its params back),
 // call {method, params} (calls the parent and returns its result), stderr
-// {n} (writes n bytes to stderr), exit {code}.
+// {text, n} (writes text, then n "e" bytes, to stderr), exit {code}.
 func RunChild() {
 	if len(os.Args) < 3 || os.Args[1] != ChildArg {
 		return
@@ -149,10 +149,11 @@ func serve(args []string) int {
 			return out, nil
 		case "stderr":
 			var p struct {
-				N int `json:"n"`
+				N    int    `json:"n"`
+				Text string `json:"text"`
 			}
 			_ = json.Unmarshal(r.Params, &p)
-			_, _ = os.Stderr.WriteString(strings.Repeat("e", p.N))
+			_, _ = os.Stderr.WriteString(p.Text + strings.Repeat("e", p.N))
 			return struct{}{}, nil
 		case "exit":
 			var p struct {

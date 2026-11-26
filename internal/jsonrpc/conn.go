@@ -25,9 +25,10 @@ var errWriteTimeout = fmt.Errorf("%w: write timed out", ErrClosed)
 //
 // Requests from the peer run on their own goroutine, at most
 // Limits.MaxInFlight at once; one more is answered CodeBusy. Notifications
-// run in arrival order on one goroutine; when notifyQueue of them wait, the
-// reader stops reading until the Handler catches up. A notification Handler
-// must therefore not wait on a Call over the same Conn.
+// are not counted in MaxInFlight: they run in arrival order on one
+// goroutine, and when notifyQueue of them wait the reader stops reading
+// until the Handler catches up. A notification Handler must therefore not
+// Call on the same Conn.
 //
 // If r is also an io.Closer, Close and every fatal error close it, so a
 // blocked read ends.

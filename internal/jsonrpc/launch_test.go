@@ -376,20 +376,99 @@ func (s *syncBuffer) Len() int {
 	return s.b.Len()
 }
 
-func TestStderrIsCapped(t *testing.T) {
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func stderrChild(t *testing.T, limit int) (jsonrpc.Process, *syncBuffer) {
+	t.Helper()
 	var stderr syncBuffer
 	s := jsonrpctest.ChildSpec(t, "serve")
 	s.Stderr = &stderr
-	s.StderrLimit = 1000
-	p := launch(t, s)
-	if err := p.Conn().Call(context.Background(), "stderr", map[string]int{"n": 300 << 10}, nil); err != nil {
+	s.StderrLimit = limit
+	return launch(t, s), &stderr
+}
+
+func writeStderr(t *testing.T, p jsonrpc.Process, text string, n int) {
+	t.Helper()
+	if err := p.Conn().Call(context.Background(), "stderr", map[string]any{"text": text, "n": n}, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestStderrArrivesWhileChildRuns(t *testing.T) {
+	p, stderr := stderrChild(t, 0)
+	writeStderr(t, p, "first line\npartial", 0)
+	waitFor(t, "the first line", func() bool { return stderr.String() == "first line\n" })
+	select {
+	case <-p.Exited():
+		t.Fatal("child exited")
+	default:
+	}
+	// A partial line waits for its newline, or for the exit.
+	writeStderr(t, p, " done\nlast without newline", 0)
+	waitFor(t, "the second line", func() bool { return stderr.String() == "first line\npartial done\n" })
+	if err := p.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if got := stderr.String(); got != "first line\npartial done\nlast without newline\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestStderrLinesAreCapped(t *testing.T) {
+	p, stderr := stderrChild(t, 0)
+	writeStderr(t, p, strings.Repeat("a", 10000)+"\nnext\n", 0)
+	want := strings.Repeat("a", 4096) + " [line truncated]\nnext\n"
+	waitFor(t, "both lines", func() bool { return stderr.String() == want })
+}
+
+func TestStderrBudgetIsExhausted(t *testing.T) {
+	p, stderr := stderrChild(t, 1000)
+	line := strings.Repeat("b", 99) + "\n"
+	for range 30 {
+		writeStderr(t, p, line, 0)
 	}
 	if err := p.Stop(); err != nil {
 		t.Fatal(err)
 	}
-	if n := stderr.Len(); n != 1000 {
-		t.Fatalf("kept %d bytes of stderr, want 1000", n)
+	want := strings.Repeat(line, 10) + "[stderr truncated]\n"
+	if got := stderr.String(); got != want {
+		t.Fatalf("stderr has %d bytes, %d markers; want 10 lines and one marker",
+			len(got), strings.Count(got, "truncated"))
+	}
+	tail := jsonrpc.StderrTail(p)
+	if len(tail) != 1000 || !bytes.HasSuffix(tail, []byte(line)) {
+		t.Fatalf("tail = %d bytes", len(tail))
+	}
+}
+
+func TestStderrWithoutNewlines(t *testing.T) {
+	p, stderr := stderrChild(t, 8000)
+	writeStderr(t, p, "", 300<<10)
+	want := strings.Repeat("e", 4096) + " [line truncated]\n"
+	waitFor(t, "the cut line", func() bool { return stderr.String() == want })
+	if err := p.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	if got := stderr.String(); got != want {
+		t.Fatalf("stderr grew to %d bytes after the cut", len(got))
+	}
+	if tail := jsonrpc.StderrTail(p); len(tail) != 8000 {
+		t.Fatalf("tail = %d bytes, want 8000", len(tail))
 	}
 }
 
