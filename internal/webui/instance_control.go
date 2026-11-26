@@ -70,6 +70,7 @@ func (i instance) control(ctx context.Context, op daemonRequest) (daemonReply, e
 	}
 	//nolint:gosec // NewGCMWithRandomNonce generates and prepends the nonce; its nonce argument must be nil.
 	data := aead.Seal(nil, nil, plain, []byte("agentflow-control/v1"))
+	//nolint:gosec // G704: origin() is always http://127.0.0.1:<port>, and the port was range-checked when read from the private registry.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.origin()+"/_agentflow/control", bytes.NewReader(data))
 	if err != nil {
 		return daemonReply{}, err

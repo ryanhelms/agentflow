@@ -47,6 +47,29 @@ The MCP tool `agentflow_events` takes `since`, `types`, `topics` and `limit` and
 | `git.operation.changed` | a rebase, merge, cherry-pick, revert or bisect starts or ends |
 | `config.layer.changed` | a file in `.agentflow/` or `.agentflow/providers/` changes |
 
+## Events from hooks
+
+Every `agentflow hook ...` invocation records a `hook.ran` event when it ends: the hook,
+the client, the outcome (`passed`, `blocked` or `failed`), a fixed reason code such as
+`convention` or `repo_boundary`, and the duration. It never records the command, the
+commit message or the hook's output. `pre-bash` runs before every shell command, so it
+records only `blocked` and `failed` outcomes.
+
+A hook hands its event to the store as follows. It spends at most 300 ms on this and
+prints nothing about it, because git and agents read hook output.
+
+1. With no daemon running, the hook appends the event to the store itself.
+2. While the daemon owns the store, the hook sends the event to the daemon over its
+   local notify socket, and the daemon stores and publishes it.
+3. If the daemon is starting, stopping or refuses the event, the event is dropped.
+
+The notify socket accepts only `hook.ran` and `commit.created`, only from a process that
+proves it can read the daemon's private registry file (`~/.agentflow-ui/`), and only for
+repositories and worktrees the daemon serves. On Unix it is a socket file with mode
+0600 in that private directory, and the daemon also checks the connecting process's
+user ID. On Windows, and when the socket path would be too long, it is a loopback TCP
+port on 127.0.0.1 with the same key check.
+
 ## The console's event stream
 
 Each worktree's console serves `GET /w/<id>/api/events` as Server-Sent Events. The
