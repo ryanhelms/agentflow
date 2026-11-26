@@ -5,6 +5,14 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.57.0](https://github.com/ryanhelms/agentflow/compare/v0.56.1...v0.57.0) - 2026-11-26
+
+### Features
+
+- wire the live event pipeline end to end (#31) ([5cf3e6d](https://github.com/ryanhelms/agentflow/commit/5cf3e6d5b04559afa8b5a72c1a627ab53352a5d7))
+- make the console fully live (#51) ([a5648e3](https://github.com/ryanhelms/agentflow/commit/a5648e3cb07278bc74733942dd2ad650d5b97285))
+- run every operation through commands with a live timeline (#59) ([c555ac4](https://github.com/ryanhelms/agentflow/commit/c555ac4a6215957a7900968cbd6b668cafdc4f0c))
+
 ## [0.56.1](https://github.com/ryanhelms/agentflow/compare/v0.56.0...v0.56.1) - 2026-11-26
 
 ### Fixes
