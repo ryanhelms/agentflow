@@ -305,7 +305,7 @@ func (c *checker) merged(ctx context.Context, branch string, local bool, pr *pul
 // follow-up work pushed after the merge, or a PR found by name that belongs to
 // another branch. Both the local and the remote tip must be the PR head or behind it.
 func (c *checker) beyondPR(ctx context.Context, branch string, local bool, pr *pullRequest) string {
-	if pr == nil || pr.HeadRefOid == "" || !(strings.EqualFold(pr.State, "MERGED") || pr.MergedAt != "") {
+	if pr == nil || pr.HeadRefOid == "" || (!strings.EqualFold(pr.State, "MERGED") && pr.MergedAt == "") {
 		return ""
 	}
 	tips := map[string]string{}
