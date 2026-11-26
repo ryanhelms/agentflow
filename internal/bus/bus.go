@@ -92,8 +92,8 @@ type Queue interface {
 	Receive(ctx context.Context) (Event, error)
 }
 
-// Bus is the in-process message bus. One daemon or standalone process
-// owns one Bus for every repository it serves.
+// Bus is the in-process message bus. The webui daemon owns one Bus for
+// every repository it serves.
 type Bus interface {
 	Publisher
 	Subscriber

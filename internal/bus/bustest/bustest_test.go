@@ -116,6 +116,10 @@ func TestOverflowDropsOldestAndMarksOnce(t *testing.T) {
 	for i, id := range ids {
 		index[id] = i
 	}
+	// One marker waits at a time, but a drop that races a marker's hand-off
+	// is reported by the next one, so a burst can produce more than one
+	// marker. Only scheduling-independent facts are checked: at least one
+	// marker, counts adding up to Dropped, order kept, last event delivered.
 	var markers, delivered int
 	var reported uint64
 	last := -1
@@ -136,8 +140,6 @@ func TestOverflowDropsOldestAndMarksOnce(t *testing.T) {
 		last = index[e.ID]
 		delivered++
 	}
-	// One marker waits at a time; a drop that races a marker's hand-off is
-	// reported by the next one, so the counts add up to Dropped.
 	if markers == 0 || reported != dropped || last != len(ids)-1 {
 		t.Fatalf("markers=%d reported=%d dropped=%d last=%d want %d", markers, reported, dropped, last, len(ids)-1)
 	}
