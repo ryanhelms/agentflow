@@ -108,8 +108,9 @@ func (a *Auditor) Lines() []Audit {
 var ErrGateByInvoker = errors.New("commandtest: GateByInvoker needs lane 3.1's NewInvoker")
 
 // Invoker is a reference implementation of the ADR's Invoker skeleton for
-// GateInRun and read-only operations: validate, op.requested, run, audit,
-// outcome event. It returns Run's result unchanged.
+// GateInRun and read-only operations: validate, op.requested, run, audit
+// (only with AuditByInvoker), outcome event; a native read step publishes
+// nothing. It returns Run's result unchanged.
 type Invoker struct {
 	Options command.Options
 }
@@ -132,10 +133,16 @@ func (inv Invoker) Invoke(ctx context.Context, c *command.Call) (any, error) {
 	}
 	worktree := c.Meta.Events == command.ScopeWorktree
 	var requested string
-	if em != nil {
-		if ev, err := c.RequestedEvent(now()); err == nil && em.Emit(ctx, ev, worktree) == nil {
+	publishRequested := func(at time.Time) {
+		if em == nil {
+			return
+		}
+		if ev, err := c.RequestedEvent(at); err == nil && em.Emit(ctx, ev, worktree) == nil {
 			requested = ev.ID
 		}
+	}
+	if !c.Meta.NativeReads {
+		publishRequested(now())
 	}
 	next := func(ctx context.Context, c *command.Call) (any, error) { return c.Run(ctx) }
 	for i := len(inv.Options.Stages) - 1; i >= 0; i-- {
@@ -147,7 +154,13 @@ func (inv Invoker) Invoke(ctx context.Context, c *command.Call) (any, error) {
 		return v, err
 	}
 	out := c.Classify(v, err)
-	if inv.Options.Auditor != nil {
+	if !out.Kind.Publishes() {
+		return v, err
+	}
+	if c.Meta.NativeReads {
+		publishRequested(c.Started)
+	}
+	if c.Meta.AuditByInvoker && inv.Options.Auditor != nil {
 		inv.Options.Auditor.AuditOperation(c.App, c.Invocation, out)
 	}
 	if em != nil {

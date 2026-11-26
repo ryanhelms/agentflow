@@ -54,7 +54,7 @@ var deliverEvents = func(ctx context.Context, dir string, events ...notifyEvent)
 	// Hooks run in every repository the plugin reaches. They never create
 	// an event store: without one, no daemon has owned this repository
 	// (the owner creates it), so the socket would refuse the event too.
-	if _, err := os.Stat(filepath.Join(store.Path(id.CommonDir), store.RepoIDFile)); err != nil {
+	if !store.Exists(id.CommonDir) {
 		return
 	}
 	s, err := app.OpenEventStore(ctx, id.CommonDir, store.RoleAppender)

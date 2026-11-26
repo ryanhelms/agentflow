@@ -52,8 +52,8 @@ func Register[In, Out any](s Spec[In, Out]) {
 	if s.Run == nil {
 		panic(fmt.Sprintf("command %q: Run is required", s.Name))
 	}
-	if s.Policy.Gate == GateByInvoker && s.Plan == nil {
-		panic(fmt.Sprintf("command %q: GateByInvoker needs Plan", s.Name))
+	if s.Policy.Gate == GateByInvoker && (s.Plan == nil || !s.Policy.AuditByInvoker) {
+		panic(fmt.Sprintf("command %q: GateByInvoker needs Plan and AuditByInvoker", s.Name))
 	}
 	if err := Default.Add(s); err != nil {
 		panic(err)

@@ -87,13 +87,16 @@ func (f StageFunc) Handle(ctx context.Context, c *Call, next Handler) (any, erro
 //
 //  1. validate: c.Validate; an error returns at once, without events.
 //  2. publish op.requested (unless the call is a dry run or the scope is
-//     ScopeNone).
+//     ScopeNone). With Meta.NativeReads it is published after step 4,
+//     with the call's start time, and not at all for a native read step.
 //  3. gate: with GateByInvoker, c.Plan then (*app.App).GateOperation; a
 //     non-nil Pending stops here. With GateInRun, nothing.
 //  4. run: c.Run.
-//  5. audit: Auditor.AuditOperation with the Outcome, for every outcome
-//     except a dry run or a read.
-//  6. publish the outcome event (OutcomeEvent).
+//  5. audit: Auditor.AuditOperation with the Outcome, only with
+//     Meta.AuditByInvoker, and never for a dry run, a read or a deferred
+//     outcome. The audit.log line count of a call stays what it is today.
+//  6. publish the outcome event (OutcomeEvent), unless the outcome is
+//     deferred.
 //
 // Options.Stages adds stages between 1 and 2, for later phases (plugins'
 // permission rules, phase 5). An Emitter error never changes the result:
@@ -156,11 +159,20 @@ const (
 	OutcomeSuggested        OutcomeKind = "suggested"         // op.suggested
 	OutcomeAwaitingApproval OutcomeKind = "awaiting_approval" // op.awaiting_approval
 	OutcomePrepared         OutcomeKind = "prepared"          // op.prepared
+	// OutcomeDeferred: Run returned a native read request. The step
+	// publishes no event and writes no audit line; the client's next call,
+	// with the read results, is the one that publishes.
+	OutcomeDeferred OutcomeKind = "deferred"
 )
 
-// EventType returns the op.* type of k.
+// Publishes reports whether k publishes an outcome event.
+func (k OutcomeKind) Publishes() bool { return k != OutcomeDeferred }
+
+// EventType returns the op.* type of k; "" for OutcomeDeferred.
 func (k OutcomeKind) EventType() bus.Type {
 	switch k {
+	case OutcomeDeferred:
+		return ""
 	case OutcomeApplied:
 		return bus.TypeOpApplied
 	case OutcomeSuggested:
@@ -200,19 +212,17 @@ func (o Outcome) OperationID(c *Call) string {
 
 // Failure codes besides policy.ErrorCode values and refusal statuses.
 const (
-	CodeError              = "error"
-	CodeCancelled          = "cancelled"
-	CodeTimeout            = "timeout"
-	CodeNativeReadRequired = "native_read_required"
-	CodeUnexpectedResult   = "unexpected_result"
-	CodeUnknownStatus      = "unknown_status"
+	CodeError            = "error"
+	CodeCancelled        = "cancelled"
+	CodeTimeout          = "timeout"
+	CodeUnexpectedResult = "unexpected_result"
+	CodeUnknownStatus    = "unknown_status"
 )
 
 // ErrorCode is the fixed code of err: a policy.ErrorCode value, cancelled,
-// timeout, native_read_required, or error. Never the error's text, which can
-// hold paths, provider responses or secrets.
+// timeout, or error. Never the error's text, which can hold paths, provider
+// responses or secrets.
 func ErrorCode(err error) string {
-	var nr *native.Request
 	switch {
 	case policy.ErrorCode(err) != "":
 		return policy.ErrorCode(err)
@@ -220,8 +230,6 @@ func ErrorCode(err error) string {
 		return CodeCancelled
 	case errors.Is(err, context.DeadlineExceeded):
 		return CodeTimeout
-	case errors.As(err, &nr):
-		return CodeNativeReadRequired
 	default:
 		return CodeError
 	}
@@ -229,7 +237,8 @@ func ErrorCode(err error) string {
 
 // Classify turns a Run result into an Outcome:
 //
-//   - an error: failed, with ErrorCode;
+//   - a *native.Request error: deferred, which publishes nothing;
+//   - any other error: failed, with ErrorCode;
 //   - a *app.Pending: suggested, awaiting_approval or prepared by its
 //     status, with its approval's ID and expiry;
 //   - an Out or *Out (or nil): applied, with links;
@@ -239,6 +248,10 @@ func ErrorCode(err error) string {
 //
 // With Out = any every non-Pending value is applied.
 func Classify[Out any](v any, err error, links func(Out) []bus.OpLink) Outcome {
+	var nr *native.Request
+	if errors.As(err, &nr) {
+		return Outcome{Kind: OutcomeDeferred}
+	}
 	if err != nil {
 		return Outcome{Kind: OutcomeFailed, Code: ErrorCode(err)}
 	}
@@ -377,7 +390,8 @@ func (c *Call) Publishes() bool {
 
 // RequestedEvent returns c's op.requested event, without Repo and Worktree
 // (the Emitter fills them). Its ID is new; pass it to OutcomeEvent as the
-// outcome's cause.
+// outcome's cause. A NativeReads call passes c.Started as now, because the
+// event is built after Run.
 func (c *Call) RequestedEvent(now time.Time) (bus.Event, error) {
 	p := c.payload()
 	p.Resumed = c.Resumed

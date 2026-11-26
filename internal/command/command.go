@@ -23,8 +23,12 @@ type Meta struct {
 	Action      string
 	Gate        GateMode
 	PrepareOnly bool
-	Events      Scope // resolved: never ScopeDefault
-	WriteHost   WriteHost
+	// AuditByInvoker and NativeReads are Policy.AuditByInvoker and
+	// Spec.NativeReads.
+	AuditByInvoker bool
+	NativeReads    bool
+	Events         Scope // resolved: never ScopeDefault
+	WriteHost      WriteHost
 	// OwnCLI is true when the Spec binds its own CLI (Spec.CLI != nil).
 	OwnCLI bool
 	// Usage, Section and Order come from Spec.CLI.
@@ -70,7 +74,8 @@ type CLIEnv interface {
 // Meta returns s's metadata.
 func (s Spec[In, Out]) Meta() Meta {
 	m := Meta{Name: s.Name, CLIPath: append([]string(nil), s.CLIPath...), Class: s.Policy.Class, Action: s.Policy.Action,
-		Gate: s.Policy.Gate, PrepareOnly: s.Policy.PrepareOnly, Events: s.Events.Resolve(s.Policy.Class), OwnCLI: s.CLI != nil}
+		Gate: s.Policy.Gate, PrepareOnly: s.Policy.PrepareOnly, AuditByInvoker: s.Policy.AuditByInvoker, NativeReads: s.NativeReads,
+		Events: s.Events.Resolve(s.Policy.Class), OwnCLI: s.CLI != nil}
 	if s.Policy.Class == policy.Read && m.Gate == GateInRun {
 		m.Gate = GateNone
 	}

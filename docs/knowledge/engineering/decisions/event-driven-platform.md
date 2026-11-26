@@ -713,6 +713,7 @@ Everything in the phase 1 and phase 2 sections still holds unless a paragraph he
 | Fakes | `internal/command/commandtest`: recording `Emitter` and `Auditor`, a reference `Invoker` for `GateInRun` operations, a buffer `Env` |
 | Event types and payload | `internal/bus/types_phase3.go` (`TypeOp*`, `OpPayload`, `OpLink`) |
 | Correlation from a token | `policy.OperationIDOf` |
+| "Never create a store" check | `store.Exists`, used by hooks and the Emitter |
 | Timeline state | `internal/webui/projection_timeline_state.go` |
 
 ### Phase 3 patterns
@@ -760,6 +761,7 @@ type Spec[In, Out any] struct {
     Plan     func(ctx context.Context, a *app.App, in In) (Plan, error) // GateByInvoker only
     Run      func(ctx context.Context, a *app.App, in In) (any, error)  // calls one internal/app method
     Links    func(Out) []bus.OpLink
+    NativeReads bool         // the app method may return a *native.Request
 }
 ```
 
@@ -774,6 +776,8 @@ type Spec[In, Out any] struct {
 | `GateByInvoker` | the Invoker calls `Spec.Plan`, then `(*app.App).GateOperation` (lane 3.1), which wraps the same `a.gate` and `prepareWithActions`, and calls Run only on proceed | new operations from phase 4 on |
 | `GateNone` | nobody | read-only operations (`Class: policy.Read`) |
 
+- **Audit.** `Policy.AuditByInvoker` makes the Invoker write the operation's audit line. It is set only for operations whose app method writes no `a.audit` line today, and it is required with `GateByInvoker`. A `GateInRun` method that audits itself keeps doing so and the Invoker adds nothing (decision 4).
+- **Native reads.** `Spec.NativeReads` marks an operation whose app method may return a `*native.Request` (the client must read through its own provider connection and call again with `native_results`). Such a step publishes nothing (decision 7).
 - **Prepare-only.** `Policy.PrepareOnly` marks an operation that only prepares an exact candidate (`commit.prepare`, `push.prepare`, `pr.prepare`). Its outcome is `op.prepared`, `op.awaiting_approval` or `op.suggested`, never `op.applied`. The CLI runner prints its result once, without the confirmation flow.
 - **Read-only commands register too**, with `Class: policy.Read`. They are never gated and publish no events, but the registry derives their CLI, tool and usage like any other.
 
@@ -813,29 +817,30 @@ The legacy switch cases, `add` calls, input types, legacy usage blocks and legac
 
 1. **Validate.** `Spec.Validate`. An error returns at once, as is, with no event: the request never became an operation.
 2. **Extra stages** (`Options.Stages`, Chain of Responsibility), empty in phase 3. Phase 5 plugins add permission rules here.
-3. **Publish `op.requested`.**
+3. **Publish `op.requested`.** For a `NativeReads` operation it is published after step 5 instead, with the call's start time, and not at all when the outcome is deferred.
 4. **Gate.** `GateByInvoker`: `Spec.Plan`, then `a.GateOperation`; a non-nil Pending ends the run. `GateInRun`: nothing here.
 5. **Run.** `Spec.Run`.
-6. **Audit.** `Auditor.AuditOperation` with the Outcome.
-7. **Publish the outcome event.**
+6. **Audit.** `Auditor.AuditOperation` with the Outcome, only when `Policy.AuditByInvoker` is set, and never for a dry run, a read or a deferred outcome.
+7. **Publish the outcome event**, unless the outcome is deferred.
 
 Rules:
 
 - **The result is never changed.** The Invoker returns Run's value and error unchanged, so `Pending` JSON, CLI output and MCP tool output stay byte for byte what they are; the phase 0 golden tests (`internal/cli/testdata/golden`, `internal/app` golden tests) must pass unchanged after every migration.
 - **Events never change the result.** An Emitter or Auditor error is dropped (the Emitter warns once on stderr, as in phase 2). Events are notifications.
-- **No events** for a read (`ScopeNone`), a dry run (`Spec.DryRun`), or a validation error.
+- **No events** for a read (`ScopeNone`), a dry run (`Spec.DryRun`), a validation error, or a native read step.
 - **Outcome** (`command.Classify[Out]`):
 
 | Run returned | Outcome | Event |
 | --- | --- | --- |
-| an error | failed, `code` = `command.ErrorCode(err)` | `op.failed` |
+| a `*native.Request` error | deferred | none, and no audit line |
+| any other error | failed, `code` = `command.ErrorCode(err)` | `op.failed` |
 | `*app.Pending` `suggest` | suggested | `op.suggested` |
 | `*app.Pending` `needs_confirmation` or `awaiting_approval` | awaiting approval, with the approval's ID and expiry | `op.awaiting_approval` |
 | `*app.Pending` `prepared` | prepared | `op.prepared` |
 | an `Out`, `*Out` or nil | applied, with `Spec.Links` | `op.applied` |
 | any other value | failed, `code` = its `status` field (`invalid`, `blocked`), else `unexpected_result` | `op.failed` |
 
-- **Error codes, never error text.** `ErrorCode` gives a `policy.ErrorCode` value (`approval_expired`, `operation_changed`, `invalid_token`, ...), `cancelled`, `timeout`, `native_read_required` or `error`. Error text can hold paths, provider responses or secrets, so no event carries it, as for `hook.ran` in phase 2. The terminal and the tool result still show the full error.
+- **Error codes, never error text.** `ErrorCode` gives a `policy.ErrorCode` value (`approval_expired`, `operation_changed`, `invalid_token`, ...), `cancelled`, `timeout` or `error`. Error text can hold paths, provider responses or secrets, so no event carries it, as for `hook.ran` in phase 2. The terminal and the tool result still show the full error.
 - **Origin.** CLI calls use source `cli`; MCP calls `mcp:<client>`; the daemon's own calls (console approve, phase 4 settings) `daemon`. `Origin.Cause` is the triggering event's ID, or empty.
 
 ### Phase 3 event types
@@ -870,12 +875,14 @@ Payload rules (the phase 2 rules, applied by `OpPayload.Clamp`):
 - `op.*` events belong to the repository the operation ran in, never to `global`. They go to that repository's store (`<common-git-dir>/agentflow/events/`), through `notifysock.Deliver` like `hook.ran`: append as `store.RoleAppender`, or send over the socket while the daemon owns the store. `op.**` is now a socket type (`notifysock.Allowed`).
 - `ScopeWorktree` (the default for writes) tags the event with the console worktree ID of the directory the call ran in (`webui.IdentifyWorktree`). If the daemon refuses it as `unknown_worktree`, the Emitter sends it once more without the worktree. `ScopeRepo` events are repository-wide.
 - `ScopeNone` publishes nothing: reads, and writes that belong to no repository (`install`, `login`, `logout`, the personal configuration layer).
-- Unlike hooks, CLI and MCP processes may create the store when it does not exist yet: a person ran an operation in this repository, so its history is worth keeping. Lane 3.1's production Emitter (`internal/command/deliver`, which may import `internal/webui`) does this; hooks keep their phase 2 rule.
+- CLI and MCP processes follow the hooks' rule (decision 6): they **never create an event store**. Lane 3.1's production Emitter (`internal/command/deliver`, which may import `internal/webui`) calls `notifysock.Deliver` only when `store.Exists(commonDir)` is true, that is when a daemon has created the store. Then it appends as `store.RoleAppender`, or sends over the socket while the daemon owns the store, or drops the event with one stderr warning. Without a store it drops the event at once, without dialing: the socket would refuse it as `unknown_repo`. So agentflow commands add no files under a consuming repository's `.git`. `store.Exists` is the shared check; `internal/hooks` uses it too. Lane 3.1 adds a test that an operation in a repository without a store leaves `<common-git-dir>/agentflow/` absent.
 
 ### Audit
 
-- The `internal/app` method's own `a.audit` line stays. It hashes the exact reviewed summary, which only the method has.
-- The Invoker's audit stage adds one line per finished call through `policy.Gate.AuditOperation` (lane 3.1): time, client, class, action, operation name, operation ID (`Outcome.OperationID`), outcome kind and code. That ID is how the timeline links to the audit log.
+- **No duplicate lines: the number of `audit.log` lines per call stays what it is today.** The `internal/app` method's own `a.audit` line stays. It hashes the exact reviewed summary, which only the method has.
+- The Invoker's audit stage writes a line only for operations with `Policy.AuditByInvoker`, which have no audit of their own today (and every `GateByInvoker` operation). The line goes through `policy.Gate.AuditOperation` (lane 3.1): time, client, class, action, operation name, operation ID (`Outcome.OperationID`), outcome kind and code.
+- The timeline links to audit lines by operation ID only where the line carries one, that is, for `AuditByInvoker` operations. Adding the operation ID to the app methods' own `a.audit` lines is a later change, not part of the migration.
+- Lane 3.1 adds a test that counts `audit.log` lines for one migrated self-auditing operation and one `AuditByInvoker` operation, before and after migration: one line per write each. `internal/command` already checks the rule with the reference Invoker (`TestAuditLineCountUnchanged`).
 - The bus Wire Tap no longer audits `op.*` (`bus.AuditedFamilies` is now empty; decision 4).
 
 ### Phase 3 timeline projection (lane 3.5)
@@ -955,6 +962,7 @@ In `internal/command/ops`. For every registered Spec:
 
 - A write (`Class` not `read`) has `Events` other than `ScopeNone`, unless it is on a short allow-list with a reason (`install`, `login`, `logout`, `config.save_personal`).
 - A gated write names a valid autonomy action (`config.ValidAutonomyAction`), and a write whose MCP input has `confirm_token` sets `Spec.Token`.
+- A write whose app method writes no `a.audit` line sets `Policy.AuditByInvoker`, and one that does leaves it unset. A Spec whose MCP input embeds `native_results` sets `NativeReads`.
 - With Run replaced by stubs that return each outcome (applied `Out`, Pending of each status, a refusal map, an error), the reference Invoker publishes `op.requested` then the matching outcome event, every event passes `bus.Event.Validate` and `notifysock.Check`, and no payload contains the input's token or a newline in `subject`.
 - Every tool the MCP server registers comes from the registry, and every case left in `cli.run`'s switch is a runtime command (`mcp`, `hook`, `lint-msg`, `keys`, `update`, `version`, `help`).
 
@@ -977,28 +985,27 @@ In `internal/command/ops`. For every registered Spec:
 - [ ] No `op.*` payload carries a confirm token, a fingerprint, a command line, a message body, error text or an absolute path; `Clamp` is applied to every payload.
 - [ ] `policy.OperationIDOf` is used only for correlation, never to authorize; a forged token can at most mislabel the caller's own events.
 - [ ] Only `cli` and `mcp:*` sources send `op.*` over the socket; the daemon's own calls publish on its bus.
+- [ ] No CLI or MCP process creates `<common-git-dir>/agentflow/`: the Emitter checks `store.Exists` first.
 - [ ] The timeline shows only the stream's own repository.
 
 ### Phase 3 decisions
 
-*Made in this amendment; the coordinator confirms or changes them on the contract PR.*
+*Decided by the coordinator on PR #59.*
 
 1. **Gate in Run for migrations.** Migrated operations keep calling `a.gate` inside their app method (`GateInRun`). Moving every summary computation into `Spec.Plan` would rewrite each operation and risk the byte-identical guarantee for no visible gain. `GateByInvoker` is for new operations.
 2. **The approval's ID is the operation ID once the gate issues one.** The gate deduplicates by fingerprint, so the ID cannot be fixed in advance; the timeline joins the first request through its causation link.
 3. **Codes, not error text.** `op.failed` carries a fixed code only.
-4. **The Invoker audits, the Wire Tap does not.** The Wire Tap runs in the daemon only, so it would miss operations run with no daemon and log them under the daemon's client; and it would add one line per event. `bus.AuditedFamilies` is now empty; the tap stays wired for later phases.
+4. **No duplicate audit lines.** `GateInRun` operations already call `a.audit` themselves, so the Invoker does not audit them. It audits only operations marked `Policy.AuditByInvoker`, which have no audit of their own today. The `audit.log` line count per call stays the same. The bus Wire Tap does not audit `op.*` either (`bus.AuditedFamilies` is empty): it runs only in the daemon and would add one line per event.
 5. **One cleanup PR.** Lanes leave legacy code dead rather than deleting it, so only lane 3.1 edits the shared files.
-6. **CLI and MCP processes may create the store for `op.*` events**, unlike hooks (see Scope).
-
-### Open questions for the coordinator
-
-1. **Native read round trips.** An MCP call that returns `native_read_required` publishes `op.failed` with that code, and the resumed call starts a new operation. Should it instead publish nothing until the call that runs, or carry the native request ID as the correlation?
-2. **CLI decline.** When a person answers "no" at the prompt, the timeline shows the cancellation only through `approval.resolved{state: cancelled}`. Is that enough, or should the CLI send an `op.failed{code: cancelled}` too (it has no Invoker call at that point)?
-3. **Commands outside a repository** (`install`, `login`, `logout`, the personal layer) publish nothing. Should they publish to `global` instead, which would add `op.*` to the global rule?
+6. **CLI and MCP processes never create an event store**, the same rule as hooks. They append only when the store already exists (the daemon created it), otherwise send over the socket, otherwise drop. Agentflow commands add no files under a consuming repository's `.git`.
+7. **A native read step publishes nothing.** When Run returns `native_read_required`, no `op.requested`, outcome event or audit line is written. The client's resumed call, with `native_results`, is the one that publishes `op.requested` and its outcome, under that call's operation ID. Limitation: the native read request ID is chosen inside `internal/provider/native` from the read itself, not from the operation, so it cannot carry an operation ID across the round trip. Nothing needs to be joined, because the earlier steps publish nothing; the timeline simply does not show the read round trips. A round trip that ends in a confirm token still joins its later steps through the token (Correlation, above).
+8. **A CLI "no" at the prompt** shows on the timeline only through `approval.resolved{state: cancelled}`. The CLI sends no `op.failed` for it.
+9. **Commands outside a repository publish nothing.** `global` stays limited to the configuration and client-settings families, as the phase 2 scoping rule says; `op.*` is never global.
 
 ### Phase 3 consequences
 
 - Every operation is one Spec in one file. The CLI, the MCP tool list, the usage text and the parity check follow from the registry, so phases 4 to 11 add operations in parallel lanes without touching shared files.
 - Every write, from any client, leaves `op.*` events in its repository's store, so the console shows a live timeline and `agentflow events` shows the history.
 - Output is unchanged: the golden tests and the tool-schema golden file pin it.
-- `audit.log` gets one more line per operation, with the operation ID.
+- `audit.log` keeps one line per write, as today. Operations without an audit of their own today get one, with the operation ID.
+- Consuming repositories get no new files under `.git` from agentflow commands; only a running daemon creates an event store.

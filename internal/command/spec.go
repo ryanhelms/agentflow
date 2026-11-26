@@ -65,6 +65,12 @@ type Spec[In, Out any] struct {
 	// Links lists what an applied result touched (commit, PR, task). Nil
 	// gives none.
 	Links func(Out) []bus.OpLink
+	// NativeReads marks an operation whose app method may return a
+	// *native.Request error: the client must read through its provider
+	// connection and call again with the results. Such a step publishes
+	// nothing, so the Invoker publishes op.requested only after Run, and
+	// only when Run did not return a native read request.
+	NativeReads bool
 }
 
 // Policy is the gate an operation runs under.
@@ -83,6 +89,12 @@ type Policy struct {
 	// (commit.prepare, push.prepare): it never applies, and its outcome is
 	// op.prepared, op.awaiting_approval or op.suggested.
 	PrepareOnly bool
+	// AuditByInvoker makes the Invoker write the operation's audit line.
+	// Set it only for an operation whose app method writes none itself:
+	// every GateInRun method that calls a.audit today keeps doing so, and
+	// the Invoker must not add a second line. GateByInvoker operations
+	// must set it.
+	AuditByInvoker bool
 }
 
 // GateMode says who calls the gate.

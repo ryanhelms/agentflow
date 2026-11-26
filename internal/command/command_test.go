@@ -17,6 +17,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/command/commandtest"
 	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 // fakeIn and fakeOut stand for an operation's MCP input and applied result.
@@ -135,8 +136,9 @@ func TestCLIConfirmFlowPublishesOneOperation(t *testing.T) {
 	if p, _ := commandtest.Payload(evs[3]); len(p.Links) != 1 || p.Links[0].ID != "abc123" {
 		t.Errorf("applied payload %+v", p)
 	}
-	if lines := au.Lines(); len(lines) != 2 || lines[0].Outcome.Kind != command.OutcomeAwaitingApproval || lines[1].Outcome.Kind != command.OutcomeApplied {
-		t.Errorf("audit %+v", lines)
+	// GateInRun: the app method writes its own audit line; the Invoker adds none.
+	if lines := au.Lines(); len(lines) != 0 {
+		t.Errorf("invoker audited a GateInRun operation: %+v", lines)
 	}
 }
 
@@ -200,6 +202,7 @@ func TestClassify(t *testing.T) {
 		{"policy error", nil, policy.ErrExpired, command.OutcomeFailed, "approval_expired"},
 		{"cancelled", nil, context.Canceled, command.OutcomeFailed, command.CodeCancelled},
 		{"plain error", nil, errors.New("/home/me/secret path"), command.OutcomeFailed, command.CodeError},
+		{"native read", nil, &native.Request{Status: "native_read_required", ID: "r1"}, command.OutcomeDeferred, ""},
 	}
 	for _, c := range cases {
 		out := command.Classify[fakeOut](c.v, c.err, nil)
@@ -364,5 +367,73 @@ func TestAddMCPRunsThroughTheInvoker(t *testing.T) {
 	}
 	if p, _ := commandtest.Payload(evs[0]); p.Client != "claude" || !p.Resumed {
 		t.Errorf("requested payload %+v", p)
+	}
+}
+
+// auditCount runs a write once through the reference Invoker and returns
+// how many audit lines the app method and the Invoker wrote together.
+func auditCount(t *testing.T, invokerAudits, methodAudits bool) int {
+	t.Helper()
+	au := &commandtest.Auditor{}
+	method := 0
+	s := command.Spec[fakeIn, fakeOut]{
+		Name: "op", Policy: command.Policy{Class: policy.Local, Action: "commit", AuditByInvoker: invokerAudits},
+		Run: func(context.Context, *app.App, fakeIn) (any, error) {
+			if methodAudits {
+				method++ // stands for the method's own a.audit call
+			}
+			return fakeOut{Status: "ok"}, nil
+		},
+	}
+	if _, err := command.Invoke(context.Background(), newInvoker(&commandtest.Emitter{}, au), nil, s, fakeIn{Message: "m"}, command.Origin{Source: "cli", Client: "cli"}); err != nil {
+		t.Fatal(err)
+	}
+	return method + len(au.Lines())
+}
+
+func TestAuditLineCountUnchanged(t *testing.T) {
+	// An operation that audits itself today keeps exactly one line.
+	if n := auditCount(t, false, true); n != 1 {
+		t.Errorf("self-auditing operation: %d lines", n)
+	}
+	// One that has no audit of its own gets exactly one, from the Invoker.
+	if n := auditCount(t, true, false); n != 1 {
+		t.Errorf("invoker-audited operation: %d lines", n)
+	}
+}
+
+func TestNativeReadStepPublishesNothing(t *testing.T) {
+	em, au := &commandtest.Emitter{}, &commandtest.Auditor{}
+	s := command.Spec[fakeIn, fakeOut]{
+		Name: "transition", NativeReads: true,
+		Policy: command.Policy{Class: policy.Remote, Action: "transition", AuditByInvoker: true},
+		Run: func(_ context.Context, _ *app.App, in fakeIn) (any, error) {
+			if in.Message == "" {
+				return nil, &native.Request{Status: "native_read_required", ID: "r1"}
+			}
+			return fakeOut{Status: "moved"}, nil
+		},
+	}
+	inv := newInvoker(em, au)
+	origin := command.Origin{Source: "mcp:claude", Client: "claude"}
+	_, err := command.Invoke(context.Background(), inv, nil, s, fakeIn{}, origin)
+	var nr *native.Request
+	if !errors.As(err, &nr) {
+		t.Fatalf("native request not returned unchanged: %v", err)
+	}
+	if len(em.Events()) != 0 || len(au.Lines()) != 0 {
+		t.Fatalf("native read step published %v, audited %d", em.Types(), len(au.Lines()))
+	}
+	// The resumed call, with the read results, publishes the operation.
+	if _, err := command.Invoke(context.Background(), inv, nil, s, fakeIn{Message: "results"}, origin); err != nil {
+		t.Fatal(err)
+	}
+	evs := em.Events()
+	if len(evs) != 2 || evs[0].Type != bus.TypeOpRequested || evs[1].Type != bus.TypeOpApplied ||
+		evs[0].CorrelationID != evs[1].CorrelationID || evs[1].CausationID != evs[0].ID {
+		t.Fatalf("resumed call events %+v", evs)
+	}
+	if len(au.Lines()) != 1 {
+		t.Errorf("audit lines %d", len(au.Lines()))
 	}
 }
