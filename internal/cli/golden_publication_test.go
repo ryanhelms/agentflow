@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/ryanhelms/agentflow/internal/goldentest"
 )
 
 // goldenPublicationRepo is a repository on branch feature/pr with a GitHub
@@ -14,9 +16,8 @@ import (
 // the repository.
 func goldenPublicationRepo(t *testing.T, user string) *goldenCLI {
 	t.Helper()
+	goldentest.Isolate(t)
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
-	t.Setenv("AGENTFLOW_OPERATION_ID", "")
 	publicationRepository(t, publicationPolicy, publicationPolicy, user)
 	return newGoldenCLI(t)
 }
@@ -151,8 +152,8 @@ func TestGoldenPolicyExplainCommand(t *testing.T) {
 		g.check("policy_explain/push.txt", g.run("", "policy", "explain", "push"))
 	})
 	t.Run("PR publication opt-in", func(t *testing.T) {
+		goldentest.Isolate(t)
 		t.Setenv("HOME", t.TempDir())
-		t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 		publicationRepository(t, optedIn, optedIn, publicationUser)
 		g := newGoldenCLI(t)
 		g.check("policy_explain/pr_open_opt_in.txt", g.run("", "policy", "explain", "pr_open"))

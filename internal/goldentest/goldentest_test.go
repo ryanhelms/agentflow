@@ -147,3 +147,24 @@ func TestCheck(t *testing.T) {
 		t.Fatalf("a mismatch should show a diff: %+v", r)
 	}
 }
+
+func TestIsolateRemovesAmbientSettings(t *testing.T) {
+	t.Setenv("GITHUB_RUN_ID", "123")
+	t.Setenv("CI", "true")
+	t.Setenv("AGENTFLOW_OPERATION_ID", "abc")
+	t.Run("inside", func(t *testing.T) {
+		Isolate(t)
+		for _, name := range ambient {
+			if value, set := os.LookupEnv(name); set {
+				t.Errorf("%s is still set to %q", name, value)
+			}
+		}
+		if os.Getenv("GIT_CONFIG_GLOBAL") != os.DevNull || os.Getenv("CODEX_THREAD_ID") == "" {
+			t.Error("Isolate did not keep git and the agent session fixed")
+		}
+	})
+	// The variables come back when the test that isolated them ends.
+	if os.Getenv("GITHUB_RUN_ID") != "123" || os.Getenv("CI") != "true" || os.Getenv("AGENTFLOW_OPERATION_ID") != "abc" {
+		t.Error("Isolate did not restore the environment")
+	}
+}

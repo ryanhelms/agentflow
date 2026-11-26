@@ -31,15 +31,6 @@ type goldenFixture struct {
 	norm *goldentest.Normalizer
 }
 
-// isolateGit keeps git and the approval files independent of the developer's
-// machine. Call it before building the repository.
-func isolateGit(t *testing.T) {
-	t.Helper()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("AGENTFLOW_OPERATION_ID", "")
-}
-
 func newGoldenFixture(t *testing.T, a *App) *goldenFixture {
 	t.Helper()
 	norm := goldentest.New()
@@ -117,7 +108,7 @@ func (j *goldenJira) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // goldenJiraApp is a Jira-backed app whose personal autonomy comes from user.
 func goldenJiraApp(t *testing.T, user string) (*App, *goldenJira, *goldenFixture) {
 	t.Helper()
-	isolateGit(t)
+	goldentest.Isolate(t)
 	jira := &goldenJira{t: t}
 	a := reopen(t, legacyApp(t, jira.ServeHTTP), user)
 	return a, jira, newGoldenFixture(t, a)
@@ -126,7 +117,7 @@ func goldenJiraApp(t *testing.T, user string) (*App, *goldenJira, *goldenFixture
 // goldenIssueApp is a GitHub Issues app (task 42 of org/repo) whose personal autonomy comes from user.
 func goldenIssueApp(t *testing.T, user string) (*App, *fakeIssues, *goldenFixture) {
 	t.Helper()
-	isolateGit(t)
+	goldentest.Isolate(t)
 	a, issues := issueApp(t)
 	a = reopen(t, a, user)
 	return a, issues, newGoldenFixture(t, a)
@@ -138,7 +129,7 @@ func TestGoldenCommit(t *testing.T) {
 	// fixture returns an app on a branch with one untracked file to commit.
 	fixture := func(t *testing.T, user string) (*App, *goldenFixture) {
 		t.Helper()
-		isolateGit(t)
+		goldentest.Isolate(t)
 		a, err := Open(t.Context(), newRepo(t), "test")
 		if err != nil {
 			t.Fatal(err)
@@ -526,7 +517,7 @@ func TestGoldenFinish(t *testing.T) {
 }
 
 func TestGoldenPolicyExplain(t *testing.T) {
-	isolateGit(t)
+	goldentest.Isolate(t)
 	a, err := Open(t.Context(), newRepo(t), "test")
 	if err != nil {
 		t.Fatal(err)

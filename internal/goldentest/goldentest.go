@@ -64,6 +64,42 @@ func Check(t testing.TB, name, got string) {
 	}
 }
 
+// ambient lists the settings from the environment that change what an
+// operation prints or does: CI and GitHub Actions variables (which select the
+// operation ID of a write), tokens and credentials, and the agent session.
+var ambient = []string{
+	"CI", "GITHUB_ACTIONS", "GITHUB_REPOSITORY", "GITHUB_REPOSITORY_ID", "GITHUB_SERVER_URL",
+	"GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_JOB", "GITHUB_EVENT_NAME", "GITHUB_EVENT_PATH",
+	"GITHUB_TOKEN", "GH_TOKEN", "GH_REPO",
+	"AGENTFLOW_OPERATION_ID", "AGENTFLOW_DEFAULT_BRANCH", "AGENTFLOW_ALLOW_PROMOTE",
+	"AGENTFLOW_SECOPS_TOKEN", "AGENTFLOW_APPROVED_ISSUE",
+	"AGENT_COMMANDER_HOME", "AGENT_COMMANDER_ROLE", "AGENT_COMMANDER_RUN_ID",
+	"AGENT_COMMANDER_SOCKET", "AGENT_COMMANDER_TOKEN", "AGENT_COMMANDER_WORKER_ID",
+	"CLAUDE_PROJECT_DIR", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDECODE",
+	"CODEX_HOME", "TMUX_PANE", "FLOW_MAP", "GIT_AUTHOR_NAME",
+	"JIRA_USER", "JIRA_TOKEN", "JIRA_BASE", "CONFLUENCE_USER", "CONFLUENCE_TOKEN", "ASANA_ACCESS_TOKEN",
+}
+
+// Isolate makes the test independent of the machine it runs on. Call it first,
+// before the test sets the few variables it needs: it unsets every variable in
+// ambient, gives the agent a fixed session so the prompt owner is stable, and
+// keeps git and the update check from reading the developer's configuration.
+func Isolate(t testing.TB) {
+	t.Helper()
+	for _, name := range ambient {
+		// Setenv registers the restore; the unset then leaves the variable absent,
+		// which differs from empty for code that tests presence.
+		t.Setenv(name, "")
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("CODEX_THREAD_ID", "golden-session")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
+}
+
 // Normalizer replaces the volatile parts of an output with stable placeholders.
 // One Normalizer serves one test, so object IDs are numbered from the first one
 // it sees and repeated IDs keep their number.

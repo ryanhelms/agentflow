@@ -113,20 +113,17 @@ func goldenGit(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// goldenEnvironment gives the test its own home directories and keeps git and
-// the update check independent of the developer's machine.
+// goldenEnvironment gives the test its own home directories and isolates it
+// from the machine's environment (see goldentest.Isolate).
 func goldenEnvironment(t *testing.T, user string) {
 	t.Helper()
+	goldentest.Isolate(t)
 	agentflowHome := t.TempDir()
 	if err := os.WriteFile(filepath.Join(agentflowHome, "config.yml"), []byte(user), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENTFLOW_HOME", agentflowHome)
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
-	t.Setenv("AGENTFLOW_OPERATION_ID", "")
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GH_TOKEN", "fixture")
 	t.Setenv("JIRA_USER", "jira-user")
 	t.Setenv("JIRA_TOKEN", "jira-fixture")
