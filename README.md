@@ -426,6 +426,9 @@ Deployments and release lookup also support local JSON fixtures.
 | --- | --- | --- |
 | Open the local repository console | `agentflow ui` | `agentflow_ui_open` or `/agentflow:ui` |
 | Inspect, edit and review configuration | `agentflow config OP` | `agentflow_config`, `agentflow_config_apply` |
+| List settings with values and sources | `agentflow config fields [--group G] [--search Q] [--modified]` | `agentflow_config_fields` |
+| Change settings in both layers as one confirmed save | `agentflow config set [--dry-run] [--unset KEY] KEY=VALUE...` | `agentflow_config_preview`, `agentflow_config_set` |
+| Undo (or redo) the last settings save | `agentflow config undo [--skip-conflicts]` | `agentflow_config_undo` |
 | Create a task | `agentflow task create` | `agentflow_ticket_create` |
 | Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
 | Work in a task worktree | `agentflow start KEY --worktree` | `agentflow_start` with `worktree: true` |
@@ -548,6 +551,25 @@ autonomy:
     commit: auto
 approval_window: 15m
 ```
+
+Or set the same values from the terminal, previewing first:
+
+```sh
+agentflow config set --dry-run autonomy.actions.commit=auto approval_window=15m
+agentflow config set autonomy.actions.commit=auto approval_window=15m
+```
+
+`config set` saves every edit together or none of them, and always asks for
+confirmation, even under `auto` (action `console.settings`). A save that
+changes `autonomy.*` or `approval_window`, or loosens policy, also answers to
+`console.autonomy`, so `console.autonomy: suggest` still holds. The summary lists
+edits that loosen policy first. Personal edits apply at once. Repository edits
+(`repo:` IDs, such as `repo:policy.max_autonomy.local`) open a draft pull request
+by default; `--mode direct` applies them to the default branch through the same
+publication flow, and `--mode worktree` writes `.agentflow/config.yml` in this
+worktree for you to commit (refused on a protected branch). `agentflow config
+undo` reverses the last save, and a second undo redoes it. See
+[Change settings as one save](docs/repository-console.md#change-settings-as-one-save).
 
 The two classes default to `confirm`. A named action overrides your class
 preference for that operation. The repository's `.agentflow/config.yml` sets

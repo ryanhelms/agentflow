@@ -1,0 +1,107 @@
+$ agentflow config undo --yes --json
+--- stdout
+{
+  "operation": "config.undo",
+  "confirm": [
+    {
+      "id": "personal:autonomy.remote",
+      "reason": "loosens",
+      "message": "Raises remote actions from suggest to confirm."
+    }
+  ],
+  "changes": [
+    {
+      "id": "personal:approval_window",
+      "before": {
+        "json": "10m",
+        "set": true
+      },
+      "after": {
+        "set": false
+      }
+    },
+    {
+      "id": "personal:autonomy.remote",
+      "before": {
+        "json": "suggest",
+        "set": true
+      },
+      "after": {
+        "json": "confirm",
+        "set": true
+      }
+    }
+  ],
+  "base": {
+    "personal": "sha256:<digest-3>",
+    "repo": "sha256:<digest-2>"
+  },
+  "after": {
+    "personal": "sha256:<digest-4>"
+  }
+}
+{
+  "status": "saved",
+  "operation_id": "<operation-id>",
+  "changes": [
+    {
+      "id": "personal:approval_window",
+      "edit": 0,
+      "before": {
+        "json": "10m",
+        "set": true
+      },
+      "after": {
+        "set": false
+      },
+      "applies": "live",
+      "effective": {
+        "id": "personal:approval_window",
+        "before": {
+          "json": "10m0s",
+          "set": true
+        },
+        "after": {
+          "set": false
+        },
+        "source_before": "personal",
+        "source_after": "default"
+      }
+    },
+    {
+      "id": "personal:autonomy.remote",
+      "edit": 1,
+      "before": {
+        "json": "suggest",
+        "set": true
+      },
+      "after": {
+        "json": "confirm",
+        "set": true
+      },
+      "applies": "live",
+      "loosens": true,
+      "effective": {
+        "id": "personal:autonomy.remote",
+        "before": {
+          "json": "suggest",
+          "set": true
+        },
+        "after": {
+          "json": "confirm",
+          "set": true
+        },
+        "source_before": "personal",
+        "source_after": "personal"
+      }
+    }
+  ],
+  "revisions": {
+    "personal": "sha256:<digest-4>",
+    "repo": "sha256:<digest-2>"
+  },
+  "undo": true
+}
+--- stderr
+Agentflow console.settings: confirm (default); request <operation-id>, owner cli/<owner>, expires <time>
+default sets console.settings (local) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it

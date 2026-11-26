@@ -108,6 +108,67 @@ agentflow config list
 printf '%s\n' '{"path":".agentflow/config.yml"}' | agentflow config read
 ```
 
+### Change settings as one save
+
+Every option in the personal (`~/.agentflow/config.yml`) and repository
+(`.agentflow/config.yml`) layers is a field with an ID `<layer>:<path>`, for
+example `personal:autonomy.local` or `repo:task_management.settings.repository`.
+List them, with each value and where it comes from:
+
+```sh
+agentflow config fields --modified
+agentflow config fields --group autonomy --json
+```
+
+Change several fields as one save. A path without its layer works when only one
+layer has it.
+
+```sh
+agentflow config set --dry-run autonomy.local=auto repo:commit.subject_max=60
+agentflow config set --unset approval_window autonomy.local=auto
+agentflow config undo
+```
+
+- A value is literal text for a text field, a comma-separated list for a list of
+  text (unless it starts with `[`), and JSON otherwise (`true`, `3`, `{"a": "b"}`).
+- `--dry-run` runs the live checks and shows each change, its diagnostics and
+  the repository diff. Nothing is written.
+- A save is checked again, gated once and always confirmed, also under `auto`.
+  Loosening edits (a higher autonomy level, a longer approval window, automatic
+  PR publication, coordinator merges, fewer protected branches) are listed first.
+- A save that changes `autonomy.*` or `approval_window`, or loosens policy, is
+  gated by `console.autonomy` as well as `console.settings`; the stricter rule
+  wins.
+- The repository diff is left out while any sensitive field is set in the
+  file, before or after the save.
+- All layers are written or none. If a layer file changes between the
+  confirmation and the save, the save fails with `operation_changed`; preview
+  again.
+- Personal edits apply at once: running consoles and MCP servers reload on the
+  `config.layer.changed` event. Provider selections apply after agent sessions
+  restart.
+- Repository edits go to a draft pull request (default) or `--mode direct`,
+  through the same publication rules as `agentflow_config_apply`, without touching
+  the worktree. `--mode worktree` writes the file in this worktree instead, and is
+  refused on a protected branch.
+- `agentflow config undo` reverses the last save in this repository; fields
+  changed since conflict unless you pass `--skip-conflicts`. A field whose pull
+  request is still open cannot be undone: close the pull request. A second undo
+  redoes the save. A `--mode worktree` save is undone only from the worktree
+  that wrote it. When GitHub cannot be reached to check the pull request, the
+  undo reverts the personal part alone and says so.
+- Personal YAML never leaves your machine: previews and the console show field
+  values only.
+
+Agents use `agentflow_config_fields`, `agentflow_config_preview`,
+`agentflow_config_set` and `agentflow_config_undo` with the same rules. The
+console's Settings page calls the same commands through
+`GET /api/settings/catalog`, `POST /api/settings/preview`, `POST /api/settings/save`
+and `POST /api/settings/undo`, and gets live values from the `settings` stream
+projection. Request bodies are JSON of at most 1 MiB. A policy refusal answers
+409 with its `code`; any other failure answers 422 with code `settings_failed`
+and a fixed message, and the detail goes to the console's log.
+
 ### Change a personal preference
 
 Call `agentflow_config` with `{"operation":"autonomy"}` to read the effective
