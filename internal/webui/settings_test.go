@@ -13,6 +13,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/settings"
+	"github.com/ryanhelms/agentflow/internal/watch"
 )
 
 // fakeSettings records what the endpoints hand the backend.
@@ -97,7 +98,7 @@ func TestSettingsProjection(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("# private\nautonomy:\n  local: auto\natlassian:\n  email: me@example.com\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	st, err := settingsStateOf(t.Context(), s.repo.Dir)
+	st, err := settingsStateOf(t.Context(), s.repo.Dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,6 +124,18 @@ func TestSettingsProjection(t *testing.T) {
 	op := func(name string) bus.Event {
 		payload, _ := json.Marshal(bus.OpPayload{Operation: name})
 		return bus.Event{Type: bus.TypeOpApplied, Repo: r.id, Worktree: "main", Payload: payload}
+	}
+	// The pull request state comes from the GitHub poller's cache.
+	if got, ok := p.pullState(7); ok || got != "" {
+		t.Errorf("no poller: %q %v", got, ok)
+	}
+	gh := &fakeGitHub{states: map[bus.RepoID]watch.GitHubState{r.id: {Pulls: []bus.GHPullUpdated{{Number: 7, State: bus.PullMerged}}}}}
+	r.github = func() watch.GitHubCache { return gh }
+	if got, ok := p.pullState(7); !ok || got != "merged" {
+		t.Errorf("pull 7: %q %v", got, ok)
+	}
+	if _, ok := p.pullState(8); ok {
+		t.Errorf("pull 8 is not in the cache")
 	}
 	for _, tc := range []struct {
 		e    bus.Event

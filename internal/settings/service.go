@@ -42,6 +42,11 @@ type Service struct {
 	// "repository-console").
 	Client string
 	Now    func() time.Time
+	// PullState, when set, returns the known state ("open", "merged" or
+	// "closed") of the pull request numbered n, without calling GitHub: the
+	// console sets it from the GitHub poller's cache, so the projection's
+	// undoable follows a merge. ok is false when the state is unknown.
+	PullState func(n int) (state string, ok bool)
 }
 
 // New returns the Service of a's worktree.

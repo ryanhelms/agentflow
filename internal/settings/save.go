@@ -237,23 +237,22 @@ func (p *plan) summary(operation string) gateSummary {
 // by the review must still hold; the repository half publishes or writes the
 // worktree file first, then the personal file, then the journal.
 func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, error) {
-	if err := os.MkdirAll(s.Home, 0o700); err != nil {
-		return nil, errors.New("cannot open the agentflow settings directory")
-	}
-	lock, err := os.OpenFile(filepath.Join(s.Home, "config.yml.autonomy.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	unlock, err := s.lock()
 	if err != nil {
-		return nil, errors.New("cannot lock the personal settings")
+		return nil, err
 	}
-	defer lock.Close()
-	if err := filelock.Exclusive(lock); err != nil {
-		return nil, errors.New("cannot lock the personal settings")
-	}
+	defer unlock()
 	now, err := s.read()
 	if err != nil {
 		return nil, err
 	}
 	if now.revisions() != p.files.revisions() {
 		return nil, fmt.Errorf("a settings file changed after the review: %w", policy.ErrChanged)
+	}
+	// A save that cannot be journaled would leave the previous record to
+	// be undone over it: refuse before writing anything.
+	if err := s.journalWritable(); err != nil {
+		return nil, errors.New("cannot write the settings journal, so nothing was saved")
 	}
 	res := SaveResult{Status: StatusSaved, Operation: id, Changes: p.preview.Changes, Restart: p.preview.Restart}
 	var pub *Publication
@@ -309,9 +308,32 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 		rec.Edits = append(rec.Edits, JournalEdit{ID: e.ID, Before: orNull(e.before, e.beforeSet), After: orNull(e.after, e.afterSet)})
 	}
 	if len(rec.Edits) > 0 {
-		res.Undo = s.writeJournal(ctx, rec) == nil
+		if err := s.writeJournal(ctx, rec); err != nil {
+			// Never leave the previous save's record: undo would revert it
+			// over this one.
+			_ = os.Remove(s.JournalPath(ctx))
+		} else {
+			res.Undo = true
+		}
 	}
 	return res, nil
+}
+
+// lock takes the personal settings lock, the one agentflow_config_apply
+// holds for personal approval saves. The journal is written under it too.
+func (s *Service) lock() (func(), error) {
+	if err := os.MkdirAll(s.Home, 0o700); err != nil {
+		return nil, errors.New("cannot open the agentflow settings directory")
+	}
+	f, err := os.OpenFile(filepath.Join(s.Home, "config.yml.autonomy.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, errors.New("cannot lock the personal settings")
+	}
+	if err := filelock.Exclusive(f); err != nil {
+		_ = f.Close()
+		return nil, errors.New("cannot lock the personal settings")
+	}
+	return func() { _ = f.Close() }, nil
 }
 
 func orNull(raw json.RawMessage, set bool) json.RawMessage {

@@ -482,3 +482,66 @@ func TestApprovalChangesAnswerToConsoleAutonomy(t *testing.T) {
 		})
 	}
 }
+
+// last_save.undoable follows the pull request: false while it is open, true
+// once the cache says it merged, and the journal keeps the newer state.
+func TestUndoableAfterMerge(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}})
+	rec, _ := f.svc.Journal(t.Context())
+	if f.svc.Summary(t.Context(), rec).Undoable {
+		t.Fatal("undoable while the pull request is open")
+	}
+	// The merge reaches the worktree.
+	b, _ := os.ReadFile(filepath.Join(f.dir, ".agentflow", "config.yml"))
+	if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte(strings.Replace(string(b), "commit:\n", "commit:\n  subject_max: 60\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.PullState = func(n int) (string, bool) { return "merged", n == 7 }
+	sum := f.svc.Summary(t.Context(), rec)
+	if !sum.Undoable || sum.Publication.State != "merged" {
+		t.Fatalf("summary after merge %+v", sum)
+	}
+	if rec, _ := f.svc.Journal(t.Context()); rec.Publication.State != "merged" {
+		t.Errorf("journal state %q, want merged", rec.Publication.State)
+	}
+	f.svc.PullState = nil
+	f.pub.state = "merged"
+	if pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{}); err != nil || pv.Status != settings.StatusOK {
+		t.Fatalf("undo preview %s %v %v", pv.Status, codes(pv), err)
+	}
+}
+
+// A save whose journal cannot be written must not leave the previous
+// record to be undone over it.
+func TestJournalFailureDropsTheStaleRecord(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "suggest")}})
+	restore := settings.FailJournalWrites(errors.New("disk full"))
+	second := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:approval_window", "10m")}})
+	restore()
+	if second.Status != settings.StatusSaved || second.Undo {
+		t.Fatalf("second save %+v", second)
+	}
+	if rec, err := f.svc.Journal(t.Context()); err != nil || rec != nil {
+		t.Fatalf("journal %+v %v, want none", rec, err)
+	}
+	if _, err := f.svc.Undo(t.Context(), settings.UndoRequest{}, "", f.app.GateOperation); !errors.Is(err, settings.ErrNothingToUndo) {
+		t.Errorf("undo: %v", err)
+	}
+	// A journal directory that cannot be written refuses the save up front.
+	dir := filepath.Dir(f.svc.JournalPath(t.Context()))
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	before := f.personal(t)
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("personal:approval_window", "20m")}}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Save(t.Context(), cs, out.(*app.Pending).ConfirmToken, f.app.GateOperation); err == nil || f.personal(t) != before {
+		t.Errorf("save with an unwritable journal: %v, file %q", err, f.personal(t))
+	}
+}

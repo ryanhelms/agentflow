@@ -118,5 +118,8 @@ func (s *Service) publishedOpen(ctx context.Context, rec *JournalRecord) (bool, 
 	if err != nil {
 		return false, errors.New("cannot read the state of the saved pull request: " + safeMessage(err))
 	}
+	if state == "merged" || state == "closed" {
+		s.refreshPublication(ctx, rec, state)
+	}
 	return state == "open", nil
 }
