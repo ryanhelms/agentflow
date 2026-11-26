@@ -85,6 +85,9 @@ Work
   finish [BRANCH] [--dry-run] [--yes]
                                  after the PR merges: remove the worktree, the local and the remote branch
   sweep [--all-repos] [--dry-run] [--stale-days N] [--json] [--yes]
+  delegate --repo NAME [--agent claude|codex] [--start] [--dry-run] [--json] [--yes] TASK
+                                 hand TASK to a session in another repository: a running tmux
+                                 session there, or a new one in its checkout
                                  finish merged worktrees; report dirty, unpushed, stale and orphaned ones
   promote [--from develop] [--to main] [--dry-run] [--yes]
                                  open the develop -> main release PR (merge commit); people only, not agents
@@ -302,6 +305,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return runFinish(ctx, args)
 	case "sweep":
 		return runSweep(ctx, args)
+	case "delegate":
+		return runDelegate(ctx, args)
 	case "promote":
 		return runPromote(ctx, args)
 	case "worktree":
@@ -454,7 +459,7 @@ func runHook(ctx context.Context, args []string) error {
 	case "pre-bash":
 		return hooks.PreBash(ctx, os.Stdin, os.Stderr, *conventionOnly)
 	case "pre-push":
-		return hooks.PrePush(ctx, os.Stdin, os.Stderr)
+		return hooks.PrePush(ctx, os.Stdin, os.Stderr, positional...)
 	case "stop":
 		return hooks.Stop(ctx, *client, os.Stdin, os.Stdout)
 	}

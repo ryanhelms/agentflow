@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/nscaledev/agentflow/internal/boundary"
 	"github.com/nscaledev/agentflow/internal/commit"
 	"github.com/nscaledev/agentflow/internal/config"
 	"github.com/nscaledev/agentflow/internal/gitx"
@@ -97,10 +98,38 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 		}
 		worktreeNotes(ctx, a, stdout)
 	}
+	exportSessionRepo(ctx, a.Repo.Dir)
 	if notice != "" {
 		fmt.Fprintln(stdout, notice)
 	}
 	return nil
+}
+
+// exportSessionRepo appends AGENTFLOW_SESSION_REPO to CLAUDE_ENV_FILE, which
+// Claude Code sources before every Bash command, so the git hooks know the
+// session's home repository. It does nothing for clients without that file.
+func exportSessionRepo(ctx context.Context, dir string) {
+	file := os.Getenv("CLAUDE_ENV_FILE")
+	if file == "" {
+		return
+	}
+	if project := os.Getenv("CLAUDE_PROJECT_DIR"); project != "" {
+		dir = project
+	}
+	home, err := boundary.ResolveDir(ctx, dir)
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "export %s=%s\n", boundary.SessionEnv, shellQuote(home.CommonDir))
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // SweepSummaryTimeout bounds the session-start worktree summary.
@@ -172,6 +201,7 @@ func autoInit(ctx context.Context, a *app.App, client string, stdout io.Writer) 
 }
 
 type claudeHookInput struct {
+	Cwd       string `json:"cwd"`
 	ToolName  string `json:"tool_name"`
 	ToolInput struct {
 		Command string `json:"command"`
@@ -188,9 +218,37 @@ var (
 	msgFlagRe   = regexp.MustCompile(`(?s)(?:-m|--message)(?:\s+|=)("(?:[^"\\]|\\.)*"|'[^']*'|\$\(cat <<'?EOF'?\n.*?\nEOF\n?\s*\))`)
 )
 
-// PreBash blocks never-list commands and invalid commit messages, PR titles and squash
+// SessionHome returns the session's home repository: CLAUDE_PROJECT_DIR, then
+// AGENTFLOW_SESSION_REPO, then fallback. ok is false outside a repository.
+func SessionHome(ctx context.Context, fallback string) (boundary.Repo, bool) {
+	for _, dir := range []string{os.Getenv("CLAUDE_PROJECT_DIR"), os.Getenv(boundary.SessionEnv), fallback} {
+		if dir == "" {
+			continue
+		}
+		if r, err := boundary.ResolveDir(ctx, dir); err == nil {
+			return r, true
+		}
+	}
+	return boundary.Repo{}, false
+}
+
+// RepoBoundary refuses a command that changes a repository other than the
+// session's home. cwd is the folder the command runs in ("" for this process's).
+func RepoBoundary(ctx context.Context, cmd, cwd string) *boundary.Refusal {
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+	home, ok := SessionHome(ctx, cwd)
+	if !ok {
+		return nil
+	}
+	c := &boundary.Checker{Home: home, Cwd: cwd, Resolve: boundary.GitResolver(ctx)}
+	return c.Check(cmd)
+}
+
+// PreBash blocks commands that change another repository, never-list commands and invalid commit messages, PR titles and squash
 // subjects. Claude Code treats exit code 2 as "block" and shows stderr to the model.
-// conventionOnly skips the never-list: agentflow's own repo uses it, because maintainers
+// The repository boundary applies in every mode. conventionOnly skips the never-list: agentflow's own repo uses it, because maintainers
 // there ask agents to merge PRs explicitly.
 func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) error {
 	var in claudeHookInput
@@ -202,6 +260,11 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 		return nil
 	}
 	dir, _ := os.Getwd()
+	if refusal := RepoBoundary(ctx, cmd, in.Cwd); refusal != nil {
+		msg := refusal.Message()
+		fmt.Fprintln(stderr, "agentflow blocked this command: "+msg)
+		return &ExitError{Code: 2, Msg: msg}
+	}
 	protected := config.DefaultProtected
 	branch := ""
 	var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
@@ -313,6 +376,46 @@ func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer)
 	return json.NewEncoder(stdout).Encode(map[string]string{"systemMessage": "agentflow: " + strings.Join(notes, "; ")})
 }
 
+// SessionMismatch returns a refusal when AGENTFLOW_SESSION_REPO names a
+// repository other than the one containing dir, or "".
+func SessionMismatch(ctx context.Context, dir string) string {
+	session := os.Getenv(boundary.SessionEnv)
+	if session == "" {
+		return ""
+	}
+	home, err := boundary.ResolveDir(ctx, session)
+	if err != nil {
+		return ""
+	}
+	here, err := boundary.ResolveDir(ctx, dir)
+	if err != nil || boundary.Same(home, here) {
+		return ""
+	}
+	r := boundary.Refusal{Command: "git push", Home: home, Target: here}
+	return r.Message() + " (If you are a person in a shell that inherited it, run `unset " + boundary.SessionEnv + "`.)"
+}
+
+// foreignPushURL refuses a push to a URL that is none of the repository's
+// configured remotes, such as `git push https://github.com/other/repo.git`.
+func foreignPushURL(ctx context.Context, dir, remote, url string) string {
+	repo, err := gitx.Open(ctx, dir)
+	if err != nil {
+		return ""
+	}
+	if _, err := repo.Git(ctx, "remote", "get-url", remote); err == nil {
+		return "" // a configured remote
+	}
+	remotes, _ := repo.Remotes(ctx)
+	slug := strings.ToLower(gitx.ParseGitHubRemote(url))
+	for _, u := range remotes {
+		if u == url || (slug != "" && strings.ToLower(gitx.ParseGitHubRemote(u)) == slug) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s is not a remote of this repository. A session pushes only to its own repository; "+
+		"hand work for another repository to a session there with `agentflow delegate --repo NAME \"<task>\"`.", url)
+}
+
 // MergeGH runs gh for MergeBase; tests replace it.
 var MergeGH worktree.GH = worktree.ExecGH
 
@@ -320,8 +423,14 @@ var MergeGH worktree.GH = worktree.ExecGH
 // or of the current branch's PR when it names none.
 func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
 	args := []string{"pr", "view"}
-	if pr := mergeTarget(cmd); pr != "" {
+	pr := mergeTarget(cmd)
+	if pr != "" {
 		args = append(args, pr)
+	}
+	// Look the PR up in its own repository, not the current folder's: a URL names
+	// it, otherwise -R/--repo or GH_REPO does.
+	if repo := mergeRepo(cmd); repo != "" && !strings.Contains(pr, "://") {
+		args = append(args, "--repo", repo)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -348,6 +457,32 @@ func mergeTarget(cmd string) string {
 		return w
 	}
 	return ""
+}
+
+// mergeRepo returns the repository a merge command names with -R, --repo or a
+// GH_REPO prefix, then GH_REPO from the environment, or "".
+func mergeRepo(cmd string) string {
+	loc := ghMergeRe.FindStringIndex(cmd)
+	if loc == nil {
+		return ""
+	}
+	words := shellWords(cmd[loc[1]:])
+	for i, w := range words {
+		switch {
+		case (w == "-R" || w == "--repo") && i+1 < len(words):
+			return words[i+1]
+		case strings.HasPrefix(w, "--repo="):
+			return strings.TrimPrefix(w, "--repo=")
+		case strings.HasPrefix(w, "-R") && len(w) > 2:
+			return w[2:]
+		}
+	}
+	for _, w := range shellWords(cmd[:loc[0]]) {
+		if v, ok := strings.CutPrefix(w, "GH_REPO="); ok {
+			return v
+		}
+	}
+	return os.Getenv("GH_REPO")
 }
 
 // shellWords splits a command into words, honouring single and double quotes.
@@ -388,8 +523,21 @@ func shellWords(s string) []string {
 // PrePush is the git pre-push hook. It reads "<local ref> <local sha> <remote ref>
 // <remote sha>" lines and blocks any update of a branch in policy.protected_branches.
 // AGENTFLOW_ALLOW_PROMOTE=1 allows main and master, for a release promotion only.
-func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
+// args are git's REMOTE and URL. It also refuses a push from a repository other
+// than the session's (AGENTFLOW_SESSION_REPO) and a push to a URL that is none of
+// the repository's remotes.
+func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer, args ...string) error {
 	dir, _ := os.Getwd()
+	if msg := SessionMismatch(ctx, dir); msg != "" {
+		fmt.Fprintln(stderr, "✖ agentflow: "+msg)
+		return &ExitError{Code: 1, Msg: "push from another repository"}
+	}
+	if len(args) == 2 {
+		if msg := foreignPushURL(ctx, dir, args[0], args[1]); msg != "" {
+			fmt.Fprintln(stderr, "✖ agentflow: "+msg)
+			return &ExitError{Code: 1, Msg: "push to another repository"}
+		}
+	}
 	protected := config.DefaultProtected
 	if repo, err := gitx.Open(ctx, dir); err == nil {
 		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {

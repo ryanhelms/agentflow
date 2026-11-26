@@ -13,6 +13,7 @@ import (
 
 	"github.com/nscaledev/agentflow/internal/app"
 	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/nscaledev/agentflow/internal/delegate"
 	"github.com/nscaledev/agentflow/internal/gitx"
 	"github.com/nscaledev/agentflow/internal/policy"
 	"github.com/nscaledev/agentflow/internal/provider"
@@ -221,6 +222,14 @@ type sweepIn struct {
 	StaleDays    int    `json:"stale_days,omitempty" jsonschema:"report worktrees with no commits for longer than this many days (default 7)"`
 	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
 }
+type delegateIn struct {
+	Repo         string `json:"repo" jsonschema:"repository the work belongs to: NAME or OWNER/NAME"`
+	Task         string `json:"task" jsonschema:"the work, in words the receiving session can act on"`
+	Agent        string `json:"agent,omitempty" jsonschema:"client for a new session: claude or codex (default: this client)"`
+	Start        bool   `json:"start,omitempty" jsonschema:"start a new tmux session even when one is running there"`
+	DryRun       bool   `json:"dry_run,omitempty" jsonschema:"show what would be sent or started"`
+	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
+}
 type pathsIn struct {
 	Paths []string `json:"paths,omitempty" jsonschema:"files to stage for this commit; empty uses what is already staged"`
 }
@@ -346,6 +355,12 @@ func (s *Server) register() {
 				return pending, err
 			}
 			return res, err
+		})
+	add(s, "agentflow_delegate", "Hand a task to an agent session in another repository. A session never changes another repository itself. "+
+		"Sends the task to a running tmux session there, returns status native when your client should message or start a session itself, "+
+		"or starts a new tmux session in that repository's checkout.", local,
+		func(ctx context.Context, in delegateIn) (any, error) {
+			return a.Delegate(ctx, delegate.Request{Repo: in.Repo, Task: in.Task, Agent: in.Agent, Start: in.Start, DryRun: in.DryRun}, in.ConfirmToken)
 		})
 	add(s, "agentflow_worktree_go_work", "Regenerate go.work in the current task worktree from worktree.go_work in .agentflow/config.yml.", local,
 		func(ctx context.Context, _ noIn) (any, error) { return a.WorktreeGoWork(ctx) })
