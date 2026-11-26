@@ -16,7 +16,9 @@
 //	  00000000000000004711.jsonl  the active segment has the highest name
 //
 // Events that belong to no repository (bus.GlobalRepo) use the same layout
-// under ~/.agentflow/events/ (phase 2).
+// in a directory the caller names, opened with OpenGlobal: the daemon's
+// private, per-host <registry>/<host-hash>.events/ (ADR, "Phase 2 scoping").
+// Its repo-id holds "global".
 package store
 
 import (

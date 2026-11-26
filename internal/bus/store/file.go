@@ -78,19 +78,69 @@ func Open(ctx context.Context, commonDir string, role Role) (Store, error) {
 }
 
 func open(ctx context.Context, commonDir string, role Role, opt options) (*fileStore, error) {
+	return openDir(ctx, Path(commonDir), role, opt, false)
+}
+
+// OpenGlobal opens the store of bus.GlobalRepo in dir, the store directory
+// itself (the daemon passes <registry>/<host-hash>.events). It has the same
+// layout, segments, rotation, retention and roles as a repository store;
+// its repo-id file holds "global", and its events must belong to
+// bus.GlobalRepo.
+//
+// RoleOwner and RoleAppender create dir with mode 0700 when it is missing
+// (its parent must exist). Every role then refuses dir unless it is a real
+// directory, not a symbolic link, and, on Unix, owned by the effective user
+// with no group or other permission bits. On Windows OpenGlobal checks only
+// that dir is a directory and not a reparse point: the daemon creates dir
+// inside its private registry, whose owner-only DACL it inherits, and checks
+// that DACL before it calls OpenGlobal.
+//
+// A repository store's directory is never accepted here, nor the global
+// directory by Open: repo-id tells them apart.
+func OpenGlobal(ctx context.Context, dir string, role Role) (Store, error) {
+	return openGlobal(ctx, dir, role, defaultOptions())
+}
+
+func openGlobal(ctx context.Context, dir string, role Role, opt options) (*fileStore, error) {
+	if !filepath.IsAbs(dir) {
+		return nil, fmt.Errorf("open global event store: %q is not an absolute path", dir)
+	}
+	return openDir(ctx, filepath.Clean(dir), role, opt, true)
+}
+
+// ErrNotPrivate: the global store's directory is not a private directory
+// owned by the current user.
+var ErrNotPrivate = errors.New("global event store requires a private directory owned by the current user")
+
+func openDir(ctx context.Context, dir string, role Role, opt options, global bool) (*fileStore, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if role != RoleOwner && role != RoleAppender && role != RoleReader {
 		return nil, fmt.Errorf("open event store: unknown role %d", role)
 	}
-	s := &fileStore{dir: Path(commonDir), role: role, opt: opt, changed: make(chan struct{})}
+	s := &fileStore{dir: dir, role: role, opt: opt, changed: make(chan struct{})}
 	if role != RoleReader {
-		if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		mkdir := os.MkdirAll
+		if global {
+			// The parent is the private registry; never create it here.
+			mkdir = func(path string, perm os.FileMode) error {
+				if err := os.Mkdir(path, perm); err != nil && !errors.Is(err, os.ErrExist) {
+					return err
+				}
+				return nil
+			}
+		}
+		if err := mkdir(s.dir, 0o700); err != nil {
 			return nil, fmt.Errorf("create event store: %w", err)
 		}
 	}
-	repo, err := readRepoID(ctx, s.dir, role != RoleReader)
+	if global {
+		if err := checkPrivateDir(s.dir); err != nil {
+			return nil, err
+		}
+	}
+	repo, err := readRepoID(ctx, s.dir, role != RoleReader, global)
 	if err != nil {
 		return nil, err
 	}
@@ -115,16 +165,21 @@ func open(ctx context.Context, commonDir string, role Role, opt options) (*fileS
 	return s, nil
 }
 
-// readRepoID reads repo-id, creating it first when create is set.
-func readRepoID(ctx context.Context, dir string, create bool) (bus.RepoID, error) {
+// readRepoID reads repo-id, creating it first when create is set. A global
+// store's repo-id is bus.GlobalRepo; any other store's is 16 hex characters.
+func readRepoID(ctx context.Context, dir string, create, global bool) (bus.RepoID, error) {
 	path := filepath.Join(dir, RepoIDFile)
 	if create {
-		var b [8]byte
-		_, _ = rand.Read(b[:]) // Since Go 1.24, crypto/rand.Read never returns an error.
+		id := string(bus.GlobalRepo)
+		if !global {
+			var b [8]byte
+			_, _ = rand.Read(b[:]) // Since Go 1.24, crypto/rand.Read never returns an error.
+			id = hex.EncodeToString(b[:])
+		}
 		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		switch {
 		case err == nil:
-			_, werr := f.WriteString(hex.EncodeToString(b[:]))
+			_, werr := f.WriteString(id)
 			serr := f.Sync()
 			if err := errors.Join(werr, serr, f.Close()); err != nil {
 				return "", fmt.Errorf("write event store repo-id: %w", err)
@@ -141,10 +196,13 @@ func readRepoID(ctx context.Context, dir string, create bool) (bus.RepoID, error
 			return "", fmt.Errorf("read event store repo-id: %w", err)
 		}
 		repo := bus.RepoID(strings.TrimSpace(string(data)))
-		if repo.Valid() && repo != bus.GlobalRepo {
+		if repo.Valid() && (repo == bus.GlobalRepo) == global {
 			return repo, nil
 		}
 		if len(data) != 0 || time.Now().After(deadline) {
+			if global {
+				return "", fmt.Errorf("event store repo-id %q is not %q", data, bus.GlobalRepo)
+			}
 			return "", fmt.Errorf("event store repo-id %q is not 16 hex characters", data)
 		}
 		select {
