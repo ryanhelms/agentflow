@@ -56,6 +56,8 @@ type Gate struct {
 	repo        *config.Repo
 	initial     config.Autonomy
 	now         func() time.Time
+	// ceiling caps every level Explain resolves (WithCeiling); "" for none.
+	ceiling config.Level
 }
 
 // Configure scopes operations to the repository and enables action-specific policy.
@@ -107,7 +109,7 @@ func (g *Gate) Explain(class Class, action string, related []string, force bool)
 			result = candidate
 		}
 	}
-	return result
+	return g.clamp(result)
 }
 
 func (g *Gate) Check(class Class, action string, payload any, token string, force bool) (Decision, error) {
