@@ -1,21 +1,68 @@
 package plugin
 
 import (
+	"context"
 	"os"
 
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 )
 
 // The production readers and launcher, used by the daemon's host and by
-// the permission_rule Stage in every process. The readers are nil until
-// the registry reader (manifest.NewFileSource) and the settings reader are
-// wired; nil means no plugin is installed.
+// the permission_rule Stage in every process.
 var (
-	productionSource func() manifest.Source
-	productionLayers func() Layers
+	productionSource = fileSource
+	productionLayers = func() Layers { return configLayers{} }
 	productionLaunch = jsonrpc.Launch
 )
+
+// fileSource is the registry of the agentflow home plus the builtins, or
+// nil when the home cannot be found.
+func fileSource() manifest.Source {
+	home, err := config.HomeDir()
+	if err != nil {
+		return nil
+	}
+	return manifest.NewFileSource(home).WithBuiltins(builtinInstalled)
+}
+
+// builtinInstalled lists the registered builtins as registry entries.
+func builtinInstalled() []manifest.Installed {
+	var out []manifest.Installed
+	for _, b := range Builtins() {
+		m := b.Manifest
+		out = append(out, manifest.Installed{ID: m.ID, Version: m.Version, Tier: manifest.TierBuiltin, Manifest: m})
+	}
+	return out
+}
+
+// configLayers reads the plugin sections of the personal and repository
+// configuration files on every call.
+type configLayers struct{}
+
+func (configLayers) Personal(context.Context) (map[string]PersonalPlugin, error) {
+	u, err := config.LoadUser()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]PersonalPlugin, len(u.Plugins))
+	for id, p := range u.Plugins {
+		out[id] = PersonalPlugin{Enabled: p.Enabled, Settings: p.Settings}
+	}
+	return out, nil
+}
+
+func (configLayers) RepoDisabled(_ context.Context, root string) ([]string, error) {
+	cfg, _, err := config.LoadRepoCore(root)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, nil
+	}
+	return cfg.Plugins.Disabled, nil
+}
 
 // productionEnviron is the scrubbed environment of a process plugin: the
 // daemon's own environment never passes except jsonrpc.EnvAllowlist.
