@@ -294,3 +294,38 @@ dialog::backdrop { background: var(--scrim); }
   .rail nav a[aria-current=page], .role-list button[aria-pressed=true] { outline: 2px solid Highlight; outline-offset: -2px; }
   .local-mark { border: 1px solid currentColor; }
 }
+
+/* Live updates: stream state, change highlight and stream notes (docs/design/ui/live-stream.md). */
+.nscale-ui { --live-flash: var(--info-bg); --live-mark: var(--accent); }
+.checkout { --live-flash: color-mix(in srgb, var(--brand-spearmint) 34%, transparent); --live-mark: var(--brand-spearmint); }
+.stream { display: inline-flex; align-items: center; gap: var(--s-2); }
+.stream-state { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-muted); font: 550 var(--fs-xs)/1.45 var(--font); white-space: nowrap; }
+.stream-mark { flex: none; width: .5rem; height: .5rem; border: 1.5px solid currentColor; border-radius: 50%; }
+/* Each state has its own mark shape, so it never depends on colour alone. */
+.stream-state[data-state=live] { color: var(--ok); }
+.stream-state[data-state=live] .stream-mark { background: currentColor; }
+.stream-state[data-state=connecting] .stream-mark,
+.stream-state[data-state=reconnecting] .stream-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.stream-state[data-state=reconnecting], .stream-state[data-state=resyncing] { color: var(--warn); }
+.stream-state[data-state=resyncing] .stream-mark { background: linear-gradient(to right, currentColor 50%, transparent 50%); animation: stream-turn 1s linear infinite; }
+.stream-state[data-state=offline] { color: var(--bad); }
+.stream-state[data-state=offline] .stream-mark { border-radius: 0; }
+@keyframes stream-pulse { from { opacity: 1; } to { opacity: .3; } }
+@keyframes stream-turn { to { transform: rotate(360deg); } }
+.checkout-pills { display: inline-flex; flex-wrap: wrap; justify-content: end; gap: var(--s-2); }
+.metadata { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr)); }
+.metadata dd { width: fit-content; max-width: 100%; }
+.live-changed { animation: live-flash 1.6s var(--ease-out); }
+@keyframes live-flash { from { background-color: var(--live-flash); box-shadow: 0 0 0 .3rem var(--live-flash); } }
+.live-note { margin-top: var(--s-4); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); color: var(--text); background: var(--warn-bg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+@media (max-width: 65rem) {
+  .metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stream-mark { animation: none !important; }
+  .live-changed { animation: none; outline: 1px solid var(--live-mark); outline-offset: 2px; }
+}
+@media (forced-colors: active) {
+  .live-changed { outline: 1px solid Highlight; outline-offset: 2px; }
+  .stream-state[data-state=live] .stream-mark { background: CanvasText; }
+}
