@@ -97,7 +97,8 @@ run_claude() { # run_claude <out.jsonl> <prompt> [allowedTools...]
 }
 
 echo "0. worktree hooks"
-check "commit in the primary checkout refused" bash -c '! git -C "$1" commit -q --allow-empty -m "chore(PLAT-1): blocked"' _ "$primary"
+commit_refused() { ! git -C "$1" commit -q --allow-empty -m "chore(PLAT-1): blocked"; }
+check "commit in the primary checkout refused" commit_refused "$primary"
 
 echo "1. plugin loads"
 run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"
