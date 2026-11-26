@@ -11,6 +11,10 @@ docs, tests, CI and chores are not.
 
 - keep each agent session inside its own repository (#9) ([33ce2c8](https://github.com/ryanhelms/agentflow/commit/33ce2c82b533b33c4a310ddd8ec2442d8ff420ff))
 
+### Fixes
+
+- **release:** resume a release whose tag push failed (#11) ([4e47090](https://github.com/ryanhelms/agentflow/commit/4e470900294e949c77b64ed9c03eb58dd3731125))
+
 ## [0.55.1](https://github.com/ryanhelms/agentflow/compare/v0.55.0...v0.55.1) - 2026-11-26
 
 ### Fixes
