@@ -48,19 +48,17 @@ var laneWrites = []string{
 // unregisteredWrites lists the CLI commands of this lane that write and are
 // not in the registry at all: no Spec, so no events.
 var unregisteredWrites = map[string]string{
-	"config publish":       "its tool, agentflow_config_apply, takes a custom input schema (an enum on operation, raw JSON values) that command.MCP cannot carry yet; the usage path also holds a flag",
-	"config save_personal": "writes the personal layer, outside any repository (ScopeNone); the usage path holds an underscore that no Spec can bind",
-	"init":                 "writes the repository's files before there is an App to open; not an operation of this lane",
-	"remove":               "undoes init, with no App for the same reason",
-	"pin":                  "edits a workflow file through the plain file system; not an operation of this lane",
-	"install":              "configures AI clients outside any repository (ScopeNone)",
-	"login":                "stores a credential outside any repository (ScopeNone)",
-	"logout":               "removes a credential outside any repository (ScopeNone)",
-	"setup login":          "signs in to a provider through its CLI or MCP client, outside any repository (ScopeNone)",
-	"setup logout":         "disconnects a provider enrollment, outside any repository (ScopeNone)",
-	"release init":         "detects units and writes releases.yml and the release-please files; runs no gate and no audit",
-	"release sync":         "regenerates the release-please files; runs no gate and no audit",
-	"doctor":               "--fix repairs the installation; its --providers flag selects another command, so no Spec can bind the path",
+	"init":         "writes the repository's files before there is an App to open; not an operation of this lane",
+	"remove":       "undoes init, with no App for the same reason",
+	"pin":          "edits a workflow file through the plain file system; not an operation of this lane",
+	"install":      "configures AI clients outside any repository (ScopeNone)",
+	"login":        "stores a credential outside any repository (ScopeNone)",
+	"logout":       "removes a credential outside any repository (ScopeNone)",
+	"setup login":  "signs in to a provider through its CLI or MCP client, outside any repository (ScopeNone)",
+	"setup logout": "disconnects a provider enrollment, outside any repository (ScopeNone)",
+	"release init": "detects units and writes releases.yml and the release-please files; runs no gate and no audit",
+	"release sync": "regenerates the release-please files; runs no gate and no audit",
+	"doctor":       "--fix repairs the installation; its --providers flag selects another command, so no Spec can bind the path",
 }
 
 // directCalls lists writes that a command-line flag runs as a direct app call:
@@ -83,9 +81,7 @@ var toolInputs = map[string]map[string]any{
 
 // legacyOnlyTools lists the write tools of the MCP server that the registry
 // cannot provide yet.
-var legacyOnlyTools = map[string]string{
-	"agentflow_config_apply": "its input schema is built from configconsole.ApplyRequest with an enum on operation; command.MCP has no custom schema, so a Spec would change the schema the tool golden file pins",
-}
+var legacyOnlyTools = map[string]string{}
 
 func isWrite(m command.Meta) bool { return m.Class == policy.Local || m.Class == policy.Remote }
 
@@ -122,7 +118,8 @@ func TestEveryWriteOperationEmitsEvents(t *testing.T) {
 var selfAuditing = map[string]bool{
 	"eod.post": true, "docs.publish": true, "adr.draft": true, "release.publish": true, "notify": true,
 	"setup.apply": true, "finish": true, "sweep": true, "delegate": true, "promote": true, "secops.triage": true,
-	"config.set": true, "config.undo": true,
+	"config.apply": true,                      // configconsole.Review and PersonalAutonomy audit their writes
+	"config.set":   true, "config.undo": true, // settings.Service audits under the class it gated with
 }
 
 // checkWriteRules applies the rules that need only the Spec's metadata.
