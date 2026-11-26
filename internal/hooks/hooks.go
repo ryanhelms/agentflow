@@ -320,8 +320,13 @@ var MergeGH worktree.GH = worktree.ExecGH
 // or of the current branch's PR when it names none.
 func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
 	args := []string{"pr", "view"}
-	if pr := mergeTarget(cmd); pr != "" {
+	pr, repo := mergeArgs(cmd)
+	if pr != "" {
 		args = append(args, pr)
+	}
+	// Look the PR up in the repository the merge targets, not the current one.
+	if repo != "" {
+		args = append(args, "--repo", repo)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -331,23 +336,39 @@ func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
 
 // mergeTarget returns the PR argument of a `gh pr merge` command.
 func mergeTarget(cmd string) string {
+	pr, _ := mergeArgs(cmd)
+	return pr
+}
+
+// mergeArgs returns the PR argument and the -R/--repo value of a `gh pr merge` command.
+func mergeArgs(cmd string) (pr, repo string) {
 	loc := ghMergeRe.FindStringIndex(cmd)
 	if loc == nil {
-		return ""
+		return "", ""
 	}
 	valued := map[string]bool{"-A": true, "--author-email": true, "-b": true, "--body": true, "-F": true, "--body-file": true, "--match-head-commit": true, "-t": true, "--subject": true, "-R": true, "--repo": true}
 	words := shellWords(cmd[loc[1]:])
 	for i := 0; i < len(words); i++ {
 		w := words[i]
-		if strings.HasPrefix(w, "-") {
+		switch {
+		case w == "-R" || w == "--repo":
+			if i+1 < len(words) {
+				repo = words[i+1]
+			}
+			i++
+		case strings.HasPrefix(w, "--repo="):
+			repo = strings.TrimPrefix(w, "--repo=")
+		case strings.HasPrefix(w, "-R") && len(w) > 2:
+			repo = w[2:]
+		case strings.HasPrefix(w, "-"):
 			if valued[w] {
 				i++
 			}
-			continue
+		case pr == "":
+			pr = w
 		}
-		return w
 	}
-	return ""
+	return pr, repo
 }
 
 // shellWords splits a command into words, honouring single and double quotes.

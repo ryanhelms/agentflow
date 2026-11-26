@@ -78,8 +78,12 @@ git commit -q --allow-empty -m "chore(PLAT-1): init"
 "$XDG_CACHE_HOME/agentflow/current/agentflow" init --non-interactive --provider task_management=jira >/dev/null
 rm -f .claude/settings.json # load the plugin from this checkout instead of the marketplace
 git add -A
-git commit -q -m "chore(PLAT-1): add agentflow configuration"
-git switch -q -c PLAT-123-gpu-quota-api
+# The pre-commit hook refuses commits in the primary checkout; this setup commit is the exception.
+AGENTFLOW_ALLOW_PRIMARY=1 git commit -q -m "chore(PLAT-1): add agentflow configuration"
+primary="$repo"
+repo="$tmp/worktree"
+git worktree add -q -b PLAT-123-gpu-quota-api "$repo"
+cd "$repo"
 mkdir -p api
 printf 'package api\n\n// Quota is a per-tenant GPU quota.\ntype Quota struct{ GPUs int }\n' >api/quota.go
 printf 'package api\n\nimport "testing"\n\nfunc TestQuota(t *testing.T) { _ = Quota{GPUs: 1} }\n' >api/quota_test.go
@@ -91,6 +95,9 @@ run_claude() { # run_claude <out.jsonl> <prompt> [allowedTools...]
     --output-format stream-json --verbose --max-turns 25 \
     --allowedTools "$@" </dev/null >"$out" 2>"$out.err" || true
 }
+
+echo "0. worktree hooks"
+check "commit in the primary checkout refused" bash -c '! git -C "$1" commit -q --allow-empty -m "chore(PLAT-1): blocked"' _ "$primary"
 
 echo "1. plugin loads"
 run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"

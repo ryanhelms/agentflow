@@ -247,7 +247,8 @@ func coordinatorMerge(cmd string, opt NeverOptions) string {
 	if !opt.CoordinatorMerge || opt.MergeBase == nil {
 		return human
 	}
-	if strings.ContainsAny(cmd, ";&|`$") {
+	// A newline runs a second command just like ";" does.
+	if strings.ContainsAny(cmd, ";&|`$\n\r") {
 		return human + " (policy.coordinator_merge allows only a single gh pr merge command)"
 	}
 	base, err := opt.MergeBase(cmd)

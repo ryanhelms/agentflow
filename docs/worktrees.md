@@ -76,6 +76,8 @@ directory, or from the branch name. It refuses when:
 - the branch has commits that are on no `origin` branch and not part of the merged PR head
 - the branch is protected or is the default branch
 - the PR is not merged
+- the local or remote branch has commits after the merged PR's head, such as follow-up work
+  pushed after the merge
 
 The PR counts as merged when `gh pr view <branch> --json state,mergedAt,baseRefName,headRefOid`
 says so. Without a PR, the branch must have advanced past its starting commit and be an
@@ -133,6 +135,7 @@ local hooks next to `commit-msg` and sets `core.hooksPath=.githooks`:
   commit the files `agentflow init` wrote. A repository with no commits is allowed.
 
 The Claude Code PreToolUse hook keeps the never-list. With `policy.coordinator_merge: true` it
-allows `gh pr merge` when the PR's base, read with `gh pr view`, is not `main` or `master`. The
-command must be a single `gh pr merge` with no shell chaining. `--convention-only` still
+allows `gh pr merge` when the PR's base, read with `gh pr view` (with the command's `-R`/`--repo`
+when it has one), is not `main` or `master`. The command must be a single `gh pr merge` with no
+shell chaining or second line. `--convention-only` still
 checks only messages and titles.
