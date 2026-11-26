@@ -136,6 +136,43 @@
     "mandatory": true
   },
   {
+    "action": "console.settings",
+    "rules": [
+      {
+        "class": "local",
+        "action": "console.settings",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "console.settings",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Settings saves require confirmation.",
+    "mandatory": true
+  },
+  {
     "action": "delegate",
     "rules": [
       {

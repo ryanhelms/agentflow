@@ -86,6 +86,10 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/document/edit", s.editDocument)
 	mux.HandleFunc("POST /api/preview", s.preview)
 	mux.HandleFunc("POST /api/publish", s.publish)
+	mux.HandleFunc("GET /api/settings/catalog", s.settingsCatalog)
+	mux.HandleFunc("POST /api/settings/preview", s.settingsPreview)
+	mux.HandleFunc("POST /api/settings/save", s.settingsSave)
+	mux.HandleFunc("POST /api/settings/undo", s.settingsUndo)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")

@@ -1,0 +1,7 @@
+$ agentflow config set --dry-run autonomy.local=auto approval_window=10m
+--- stdout
+personal:autonomy.local: (unset) → "auto"
+personal:approval_window: (unset) → "10m"
+info loosens personal:autonomy.local: Allows local actions without confirmation.
+info loosens personal:approval_window: Lengthens the approval window from 5m to 10m.
+status: ok

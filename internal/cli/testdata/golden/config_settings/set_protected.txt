@@ -1,0 +1,8 @@
+$ agentflow config set --yes --mode worktree commit.subject_max=60
+--- stdout
+repo:commit.subject_max: (unset) → 60
+error protected change set: This worktree is on a protected branch. Save to a pull request instead, or switch to a task branch.
+repository: worktree main
+status: invalid
+--- error
+not saved: invalid

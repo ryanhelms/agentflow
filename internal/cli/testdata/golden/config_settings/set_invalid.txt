@@ -1,0 +1,6 @@
+$ agentflow config set --yes personal:autonomy.remote=always
+--- stdout
+error enum personal:autonomy.remote: expected one of suggest, confirm, auto.
+status: invalid
+--- error
+not saved: invalid
