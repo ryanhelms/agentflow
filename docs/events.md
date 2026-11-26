@@ -6,9 +6,12 @@ changes as events in the repository's event store, under
 `agentflow_events` MCP tool all read those events. The contract is the ADR
 [Event bus, message store and event stream](knowledge/engineering/decisions/event-driven-platform.md).
 
-Events are recorded only while the daemon runs. `agentflow events` reads only the
-current repository's store; following several repositories with one cursor comes in a
-later phase.
+Events are recorded only while the daemon runs. Events that belong to no repository,
+such as a change to `~/.agentflow/config.yml`, go to one more store, `global`, in the
+console's private registry (`~/.agentflow-ui/`). `agentflow events` and the
+`agentflow_events` tool read this repository and `global`; where the daemon has not created
+the `global` store, they read the repository alone. `agentflow events --all-repos` reads
+every repository the daemon serves as well.
 
 ## Read events from a terminal
 
@@ -17,6 +20,7 @@ agentflow events                       # up to 100 events, then the cursor to re
 agentflow events --type 'git.**'       # only git events
 agentflow events --since 'v1:3f2a9c1b7d4e5f60=42'
 agentflow events --follow              # start the daemon if needed, print new events until Ctrl-C
+agentflow events --all-repos           # every repository the daemon serves, plus global
 agentflow events --json                # {repo, events, cursor, more}
 ```
 
@@ -24,17 +28,62 @@ agentflow events --json                # {repo, events, cursor, more}
 | --- | --- |
 | `--since CURSOR` | Print only events after this cursor. Each page ends with the cursor to pass next. |
 | `--type PATTERN` | Event type pattern, repeatable. `*` matches one segment, a final `**` the rest. |
-| `--topic T` | Topic `REPO/WORKTREE/PATTERN`, repeatable. `*` as `REPO` means this repository. |
+| `--topic T` | Topic `REPO/WORKTREE/PATTERN`, repeatable. `REPO` is a repository ID, `global` or `*`. `*` means this repository, or every repository with `--all-repos`. |
 | `--limit N` | Most events per page: default 100, at most 1000. Ignored with `--follow`. |
+| `--all-repos` | Read every repository the daemon serves, plus `global`, as one list ordered by time. |
 | `--follow` | Keep printing. With `--json`, prints one `{event, cursor}` object per line. |
 
-The command only reads. It never writes to the store or takes its lock. `--follow` first
-starts the daemon the same way as `agentflow ui --no-open`, without opening a browser,
-because the daemon runs the watcher.
+Each line shows the event's time, its repository (a 16-character ID, or `global`), its
+sequence number in that repository, its type, its worktree, its source and its payload.
+Sequence numbers count per repository, so two repositories repeat them. Use the ID from a
+line as `REPO` in `--topic`. A topic that names another repository is accepted only with
+`--all-repos`, and only for a repository the daemon serves.
 
-The MCP tool `agentflow_events` takes `since`, `types`, `topics` and `limit` and returns
-`{repo, events, cursor, more}`. It has no follow mode: call it again with the returned
-`cursor`.
+The cursor has one entry per repository, for example
+`v1:3f2a9c1b7d4e5f60=42,global=7`. A repository missing from the cursor starts at its
+oldest retained event. A cursor older than a repository's retained events is rejected;
+start again without `--since`.
+
+The command only reads. It never writes to a store or takes its lock. `--follow` first
+starts the daemon the same way as `agentflow ui --no-open`, without opening a browser,
+because the daemon runs the watcher. With `--all-repos`, `--follow` reads the list of
+served repositories again every 5 seconds. When a repository starts or stops being served,
+it rebuilds the combined reader from the cursor it has reached, so no event repeats or
+goes missing.
+
+The terminal user owns every repository the daemon serves, so `--all-repos` crosses no
+trust boundary. The MCP tool `agentflow_events` does not offer it: agents work in one
+repository. It takes `since`, `types`, `topics` and `limit`, reads this repository and
+`global`, and returns `{repo, events, cursor, more}`. It has no follow mode: call it again
+with the returned `cursor`.
+
+## MCP configuration reload
+
+A running MCP server (`agentflow mcp`) picks up configuration changes without a restart.
+It rebuilds its configuration from `.agentflow/config.yml`, `.agentflow/providers/` and the
+same two files in `~/.agentflow/`, in two ways:
+
+- **From events.** The server follows this repository's store and the `global` store, as
+  a reader, and reloads when an event reports a change to its own worktree's repository
+  layer or to the personal layer. A burst of events, such as an editor's save, makes one
+  reload, 250 ms after the last event. The server never starts the daemon for this.
+- **Before each tool call.** The server compares the size, modification time and file
+  identity of those files with the ones it last loaded, and reloads first when they
+  differ. This keeps it correct while no daemon runs, when no event arrives.
+
+A reload keeps the approval key and prompt owner of the session. A tool call that is
+already running finishes with the configuration it started with; the next call uses the new
+one. A confirmation token issued before a reload is checked against the new policy when it is
+used. If the new files do not load, the server keeps the old configuration and the next
+tool result says so once; it tries again after the next edit. Each reload, and each
+failed reload, adds a one-line notice to the next tool result.
+
+A reload does not change what the server told the client when the session started:
+
+- The server instructions and the tool list stay as they were. When a reload changes the
+  selected providers, the next tool result asks you to restart the AI session.
+- A server that started in configuration recovery mode (the configuration did not load)
+  stays in recovery mode. Restart the session after you repair the file.
 
 ## Event types
 
@@ -85,6 +134,8 @@ with `observed: true`, and the journal's own later write adds nothing.
 agent that runs with another home writes its approvals there, and they never reach the
 console. Start the console from a shell that uses the same home as your agents. The daemon
 holds a lock on `console.lock` in the home it watches, and releases it when it stops.
+`agentflow doctor` warns (`!`, not a failed check) when the console daemon uses a different
+`AGENTFLOW_HOME` from the shell you run it in, and prints nothing about it when no daemon runs.
 
 ## Events from hooks
 

@@ -35,11 +35,16 @@ type ExitError struct {
 func (e *ExitError) Error() string { return e.Msg }
 
 // CommitMsg validates (and strips AI trailers from) a commit message file.
-// Run as `agentflow hook commit-msg`, it publishes hook.ran.
-func CommitMsg(ctx context.Context, file string, stderr io.Writer) (err error) {
-	if fromHookCommand() {
-		defer func(start time.Time) { hookRan(ctx, "commit-msg", "git", start, err, false) }(time.Now())
-	}
+// It is what `agentflow lint-msg` runs, for every commit in the pre-push hook
+// and in CI, so it publishes nothing. The git hook is CommitMsgHook.
+func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
+	return commitMsg(ctx, file, stderr)
+}
+
+// CommitMsgHook is the git commit-msg hook (`agentflow hook commit-msg`): it
+// does what CommitMsg does and publishes hook.ran.
+func CommitMsgHook(ctx context.Context, file string, stderr io.Writer) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "commit-msg", "git", start, err, false) }(time.Now())
 	return commitMsg(ctx, file, stderr)
 }
 

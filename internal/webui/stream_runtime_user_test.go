@@ -199,8 +199,13 @@ func TestUserEventsPublishGlobalChanges(t *testing.T) {
 // runs on its own: the same two changes must come out of the real store
 // with a sequence number, after a reconnect too.
 func TestUserEventsAreStoredInTheDurableGlobalStore(t *testing.T) {
-	if _, err := openGlobalStore(context.Background()); errors.Is(err, errNoGlobalStore) {
+	probe, err := openGlobalStore(context.Background())
+	if errors.Is(err, errNoGlobalStore) {
 		t.Skip("TODO(global store): the durable global event store does not exist yet")
+	}
+	if err == nil {
+		// The probe is the store's owner; release it before the runtime opens its own.
+		_ = probe.Close()
 	}
 	u := startUserRuntime(t, nil)
 	if err := os.WriteFile(filepath.Join(u.home, "config.yml"), []byte("autonomy: {}\n"), 0o600); err != nil {
