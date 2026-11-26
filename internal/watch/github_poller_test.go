@@ -83,28 +83,22 @@ func (h *ghHarness) start() {
 
 func (h *ghHarness) stop() {
 	h.cancel()
-	select {
-	case err := <-h.done:
-		if err != nil {
-			h.t.Errorf("Run = %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		h.t.Error("poller did not stop")
+	if err := <-h.done; err != nil {
+		h.t.Errorf("Run = %v", err)
 	}
 }
 
-func (h *ghHarness) waitCreated(n int) {
+// waitCreated blocks until the poll loop has created n timers in all, which
+// it does only after finishing the cycle before.
+func (h *ghHarness) waitCreated(n int) { h.clock.waitCreated(n) }
+
+// setTarget passes t to the poller and waits for the loop to wake and arm a
+// new timer. Only use it for a change that wakes the loop.
+func (h *ghHarness) setTarget(t watch.GitHubTarget) {
 	h.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if created, _ := h.clock.stats(); created >= n {
-			return
-		}
-		if time.Now().After(deadline) {
-			h.t.Fatalf("poll loop did not reach timer %d", n)
-		}
-		time.Sleep(time.Millisecond)
-	}
+	created, _ := h.clock.stats() // before Set: the loop may react at once
+	h.poller.Set(t)
+	h.waitCreated(created + 1)
 }
 
 // delay is the wait the loop asked for after its latest cycle.
@@ -645,9 +639,7 @@ func TestGitHubPollerHonoursRetryAfter(t *testing.T) {
 
 	// A target change cannot bring the next poll forward.
 	h.target.Branches = map[bus.WorktreeID]string{featureWT: "feature", "main": "main"}
-	h.poller.Set(h.target)
-	created, _ := h.clock.stats()
-	h.waitCreated(created + 1)
+	h.setTarget(h.target)
 	if d := h.delay(); d != 5*time.Minute {
 		t.Fatalf("delay after a target change = %v, want 5m0s", d)
 	}
@@ -683,14 +675,20 @@ func TestGitHubPollerWaitsForResetAcrossRepositories(t *testing.T) {
 	h.apiMu.Lock()
 	h.apis["acme/other"] = other
 	h.apiMu.Unlock()
+	created, _ := h.clock.stats()
 	h.poller.Set(watch.GitHubTarget{Repo: otherRepo, Slug: "acme/other", Watched: true})
-	time.Sleep(100 * time.Millisecond)
+	// Its loop creates a timer for the first poll, finds the hold, and waits
+	// for the reset in a second timer, without a request in between.
+	h.waitCreated(created + 2)
+	if _, d := h.clock.stats(); d != 20*time.Minute {
+		t.Fatalf("the second repository waits %v, want the time to the reset", d)
+	}
 	if got := other.take(); len(got) != 0 {
 		t.Fatalf("the second repository polled during the limit: %q", got)
 	}
 
-	// After the reset, it polls.
-	created, _ := h.clock.stats()
+	// After the reset, both repositories poll.
+	created, _ = h.clock.stats()
 	h.clock.Advance(20 * time.Minute)
 	h.waitCreated(created + 2)
 	if got := other.take(); len(got) == 0 {
@@ -742,9 +740,7 @@ func TestGitHubPollerWakesOnTargetChange(t *testing.T) {
 	h.gh.take()
 
 	h.target.Branches = map[bus.WorktreeID]string{featureWT: "other"}
-	h.poller.Set(h.target)
-	created, _ := h.clock.stats()
-	h.waitCreated(created + 1)
+	h.setTarget(h.target)
 	if d := h.delay(); d != 5*time.Second {
 		t.Fatalf("early poll in %v, want the 5s minimum gap", d)
 	}
@@ -779,8 +775,10 @@ func TestGitHubPollerDisablesRepositoryWithoutSlug(t *testing.T) {
 	if !ok || s.Health != watch.GitHubDisabled || len(s.Pulls) != 0 {
 		t.Fatalf("state = %+v, %v", s, ok)
 	}
+	// The loop of a disabled repository ends and releases its timer, so
+	// nothing is left to fire.
+	h.clock.waitPending(0)
 	h.clock.Advance(time.Hour)
-	time.Sleep(50 * time.Millisecond)
 	if got := h.gh.take(); len(got) != 0 {
 		t.Fatalf("polled a disabled repository: %q", got)
 	}
@@ -841,16 +839,7 @@ func TestGitHubPollerAPIErrorBacksOff(t *testing.T) {
 			t.Errorf("Run = %v", err)
 		}
 	})
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if n, _ := clock.stats(); n >= 2 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no cycle")
-		}
-		time.Sleep(time.Millisecond)
-	}
+	clock.waitCreated(2) // Timer(0) for the first poll, then the timer after it
 	if _, d := clock.stats(); d != time.Minute {
 		t.Fatalf("delay = %v", d)
 	}
@@ -928,17 +917,8 @@ func TestGitHubPollerReportsDisabledBeforeRun(t *testing.T) {
 			t.Errorf("Run = %v", err)
 		}
 	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if got := h.rec.takeHealth(); len(got) > 0 {
-			if len(got) != 1 || got[0].Health != "disabled" {
-				t.Fatalf("health = %+v", got)
-			}
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("no health event for a disabled repository")
-		}
-		time.Sleep(time.Millisecond)
+	got := h.rec.waitHealth(1)
+	if len(got) != 1 || got[0].Health != "disabled" {
+		t.Fatalf("health = %+v", got)
 	}
 }
