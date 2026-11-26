@@ -164,10 +164,20 @@ prints nothing about it, because git and agents read hook output.
 ## Events from operations
 
 Operations that run through agentflow's command registry record `op.*` events, from the
-CLI and from MCP tools alike. So far these are `policy explain`, `policy status`,
-`policy approve` (`agentflow_policy_explain`, `agentflow_approval_status`,
-`agentflow_approval_approve`) and `eod post` (`agentflow_eod_post`); the other commands
-follow during phase 3. A read, such as `policy explain`, records nothing. A write records:
+CLI and from MCP tools alike. So far these are:
+
+| Commands | MCP tools |
+| --- | --- |
+| `policy explain`, `policy status`, `policy approve` | `agentflow_policy_explain`, `agentflow_approval_status`, `agentflow_approval_approve` |
+| `eod post` | `agentflow_eod_post` |
+| `commit` (also `--prepare` and `--split`), `preview` | `agentflow_commit`, `agentflow_commit_prepare`, `agentflow_commit_context`, `agentflow_commit_plan`, `agentflow_commit_preview`, `agentflow_commit_validate` |
+| `push` (also `--prepare`) | `agentflow_push`, `agentflow_push_prepare` |
+| `pr` (also `--prepare` and `--check`), `pr mark-ready` (also `--prepare`) | `agentflow_pr_open`, `agentflow_pr_prepare`, `agentflow_pr_ready`, `agentflow_pr_mark_ready`, `agentflow_pr_mark_ready_prepare` |
+| `review`, `review reply` | `agentflow_review_threads`, `agentflow_review_reply` |
+| `status`, `collisions` | `agentflow_ship_status`, `agentflow_collisions` |
+
+The other commands follow during phase 3. A read, such as `policy explain`, `status` or
+`pr --check`, records nothing. A write records:
 
 | Event | When |
 | --- | --- |
@@ -191,7 +201,10 @@ When the daemon has not registered the worktree yet, the event is sent again as 
 repository-wide event.
 
 `policy approve` also writes one line to `audit.log` with its operation and operation ID.
-Commands whose own code already writes an audit line, such as `eod post`, write no extra
+So do the prepare commands, which write no line of their own (`commit --prepare`,
+`push --prepare`, `pr --prepare`, `pr mark-ready --prepare` and their tools), and
+`agentflow_commit_context` when it stages paths. Commands whose own code already writes an
+audit line, such as `eod post`, `commit`, `push`, `pr` and `review reply`, write no extra
 one.
 
 The notify socket accepts only `hook.ran`, `commit.created` and `op.*`, only from a process that
