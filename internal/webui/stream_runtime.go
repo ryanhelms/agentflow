@@ -230,13 +230,24 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 
 // repoProjections are the projections of one repository's projector.
 func repoProjections(r *repoEvents, github func() watch.GitHubCache, approvals func() ApprovalSource) []Projection {
-	return []Projection{
+	projections := []Projection{
 		&overviewProjection{repo: r},
 		&activityProjection{repo: r, cache: github},
 		&approvalsProjection{repo: r, source: approvals, now: time.Now},
 		&tabsProjection{repo: r},
 	}
+	for _, extend := range projectionExtensions {
+		projections = append(projections, extend(r))
+	}
+	return projections
 }
+
+// projectionExtensions add projections to every repository's projector. A
+// later lane registers its projection from its own file's init (the
+// timeline, lane 3.5), as runtimeExtensions do for sources. A projector's
+// projections are fixed before it starts, so a runtimeExtension, which
+// sees a repository only after its projector runs, cannot add one.
+var projectionExtensions []func(r *repoEvents) Projection
 
 // repoEvents is one repository's share of the event runtime.
 type repoEvents struct {

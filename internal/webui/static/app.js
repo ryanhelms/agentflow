@@ -513,7 +513,7 @@ let configTimer;
 // The overview follows its own worktree; activity and approvals are states of
 // the whole repository; the tabs state carries navigation for this tab.
 const liveTopics = ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**",
-  "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/ui.**"];
+  "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**"];
 const live = AgentflowEvents.connect({
   endpoint: new URL("api/events",location.href).href,
   credential: () => session,
@@ -532,12 +532,13 @@ const live = AgentflowEvents.connect({
     showLive(states.find(ownOverview)?.state ?? null);
     showRepository("activity",states.find(repositoryState("activity"))?.state ?? null);
     showRepository("approvals",states.find(repositoryState("approvals"))?.state ?? null);
+    showRepository("timeline",states.find(repositoryState("timeline"))?.state ?? null);
     tabs.receive(states.find(ownTabs)?.state ?? null);
   },
   onDelta({states,event}) {
     const own = states.find(ownOverview);
     if (own) showLive(own.state);
-    for (const name of ["activity","approvals"]) {
+    for (const name of ["activity","approvals","timeline"]) {
       const next = states.find(repositoryState(name));
       if (next) showRepository(name,next.state);
     }
@@ -564,8 +565,13 @@ function repositoryState(name) {
 // Activity and approvals (docs/design/ui/live-stream.md, "Live panels").
 // liveRepository holds the raw state last received; the panels keep the last
 // values on screen when the stream has none.
-const liveRepository = {activity: null, approvals: null};
+const liveRepository = {activity: null, approvals: null, timeline: null};
 const panels = AgentflowPanels.createPanels({
+  root: document, worktree: worktreeID, announce,
+  actionName: action => commonActions[action]
+});
+// The operation timeline (docs/design/ui/live-stream.md, "Timeline").
+const timeline = AgentflowTimeline.createTimeline({
   root: document, worktree: worktreeID, announce,
   actionName: action => commonActions[action]
 });
@@ -581,7 +587,8 @@ function renderRepository(name, flash = false) {
   if (name === "activity") {
     panels.showActivity(liveRepository.activity,flash);
     renderHandoff(flash);
-  } else panels.showApprovals(liveRepository.approvals,flash);
+  } else if (name === "timeline") timeline.show(liveRepository.timeline,flash);
+  else panels.showApprovals(liveRepository.approvals,flash);
   renderStream();
 }
 
@@ -663,6 +670,7 @@ function renderStream() {
     $(prefix + "-note").hidden = !text;
     $(key + "-wait").hidden = shown || Boolean(text);
   }
+  timeline.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.timeline)});
   const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
   $("handoff-note").textContent = stale;
   $("handoff-note").hidden = !stale;
@@ -833,6 +841,7 @@ async function loadState() {
     renderOverview();
     renderRepository("activity");
     renderRepository("approvals");
+    renderRepository("timeline");
     $("connection").hidden = true;
     $("connection-options").hidden = true;
     $("connection-feedback").textContent = "";
@@ -854,6 +863,7 @@ $("refresh").addEventListener("click", () => {
   liveOverview = null;
   liveRepository.activity = null;
   liveRepository.approvals = null;
+  liveRepository.timeline = null;
   liveReady = false;
   live.resync();
   loadState();

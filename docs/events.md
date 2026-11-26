@@ -300,10 +300,15 @@ The other projections (JSON shapes in `internal/webui/projection_states.go`):
 | `activity` | repository (no `worktree`) | `gh.**`, `commit.created`, `hook.ran`, `git.head.changed`, `git.worktrees.changed` | `pulls` (open, ready to merge first; each with `worktree`, `ci`, `failed`, `depends_on`), `issues` (bound issues with their `worktree`), `recent` (the 20 newest commits and blocked or failed hooks), `github` (`state`: `ok`, `disabled`, `unavailable` or `rate_limited`; `retry_at`) and `handoff` |
 | `approvals` | repository | `approval.**` | `open` (pending and approved, oldest first; `expired` once past `expires_at`) and `recent` (consumed, cancelled and expired from the last 24 hours, newest first, at most 10) |
 | `tabs` | worktree | `ui.tabs.changed` | `tabs` (`tab`, `attached`) and `navigation` (`id`, `tab`, `screen`, `role`, `target`, or `null`) |
+| `timeline` | repository | `op.**`, `approval.**` | `operations` (at most 50 from the last 7 days, newest first; each with `id`, `operation`, `client`, `worktree`, `subject`, `task`, `branch`, `state`, `code`, `approval`, `links` and up to 12 `steps`) and `truncated`. Shape in `internal/webui/projection_timeline_state.go` |
 
 GitHub data comes from the daemon's poller cache, so a snapshot never calls GitHub.
 Approvals come from the approval records, not from the events alone. Answering an
 approval still uses the console's approve flow.
+The timeline is rebuilt from the repository's stored events, at most the newest 1000. It
+groups `op.*` events by their correlation ID (the operation ID) and `approval.*` events by
+their operation ID. A stream gets timeline updates for the event types its topics name, so
+ask for both `op.**` and `approval.**`.
 
 **Tabs on the stream.** A tab attaches with `POST /w/<id>/api/tabs/attach {"tab": "<32
 hex>"}` under its worktree session. It stays attached while a stream of the origin lists
