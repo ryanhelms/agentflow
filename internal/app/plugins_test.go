@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,5 +133,94 @@ func TestPluginListWithNothingInstalledIsAnEmptyList(t *testing.T) {
 	raw, _ := json.Marshal(list)
 	if string(raw) != `{"plugins":[]}` {
 		t.Fatalf("list = %s", raw)
+	}
+}
+
+func letterLine(t *testing.T, consumer, eventID, reason, secret string) string {
+	t.Helper()
+	payload, _ := json.Marshal(map[string]string{"title": secret})
+	b, err := json.Marshal(bus.Letter{
+		Event:    bus.Event{ID: eventID, Type: bus.TypeGHCIUpdated, Repo: "repo-1", Payload: payload},
+		Consumer: consumer, Reason: reason, Time: time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestPluginListShowsEachPluginsNewestDeadLettersWithoutPayloads(t *testing.T) {
+	home := t.TempDir()
+	installPlugin(t, home, "ci-notify", "0.1.0")
+	installPlugin(t, home, "other-plugin", "1.0.0")
+	noGlobalStore(t)
+	var lines []string
+	for i := range 25 {
+		lines = append(lines, letterLine(t, "plugin:ci-notify", fmt.Sprintf("evt-%02d", i), "timeout", "SECRET PR TITLE"))
+	}
+	lines = append(lines,
+		letterLine(t, "plugin:other-plugin", "evt-other", "crashed", "x"),
+		letterLine(t, "plugin:removed-plugin", "evt-gone", "exited", "x"),
+		letterLine(t, "projection:timeline", "evt-proj", "error", "x"),
+		"not json",
+		"")
+	if err := os.WriteFile(filepath.Join(manifest.PluginsPath(home), manifest.DeadLetterFile), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list, err := (&App{Home: home}).PluginList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ci, other := list.Plugins[0], list.Plugins[1]
+	if len(ci.DeadLetters) != MaxPluginLetters || ci.DeadLetters[0].EventID != "evt-24" || ci.DeadLetters[MaxPluginLetters-1].EventID != "evt-05" {
+		t.Fatalf("ci-notify letters = %+v", ci.DeadLetters)
+	}
+	if l := ci.DeadLetters[0]; l.Reason != "timeout" || l.EventType != bus.TypeGHCIUpdated || l.EventRepo != "repo-1" || l.Time.IsZero() {
+		t.Errorf("letter = %+v", l)
+	}
+	if len(other.DeadLetters) != 1 || other.DeadLetters[0].Reason != "crashed" {
+		t.Fatalf("other-plugin letters = %+v", other.DeadLetters)
+	}
+	raw, _ := json.Marshal(list)
+	if strings.Contains(string(raw), "SECRET PR TITLE") || strings.Contains(string(raw), "payload") {
+		t.Errorf("the list carries an event payload: %s", raw)
+	}
+}
+
+func TestPluginListWithoutADeadLetterFileHasEmptyLists(t *testing.T) {
+	home := t.TempDir()
+	installPlugin(t, home, "ci-notify", "0.1.0")
+	noGlobalStore(t)
+	list, err := (&App{Home: home}).PluginList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(list.Plugins[0].DeadLetters)
+	if string(raw) != "[]" {
+		t.Fatalf("dead_letters = %s", raw)
+	}
+}
+
+func TestPluginListReadsOnlyTheTailOfAHugeDeadLetterFile(t *testing.T) {
+	home := t.TempDir()
+	installPlugin(t, home, "ci-notify", "0.1.0")
+	noGlobalStore(t)
+	filler := strings.Repeat("x", 1<<20)
+	var b strings.Builder
+	b.WriteString(letterLine(t, "plugin:ci-notify", "evt-old", "timeout", "x") + "\n")
+	for range 9 {
+		b.WriteString(filler + "\n")
+	}
+	b.WriteString(letterLine(t, "plugin:ci-notify", "evt-new", "crashed", "x") + "\n")
+	if err := os.WriteFile(filepath.Join(manifest.PluginsPath(home), manifest.DeadLetterFile), []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	list, err := (&App{Home: home}).PluginList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := list.Plugins[0].DeadLetters
+	if len(got) != 1 || got[0].EventID != "evt-new" {
+		t.Fatalf("letters = %+v", got)
 	}
 }

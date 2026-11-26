@@ -23,7 +23,8 @@ $ agentflow plugin list --json
           "notify"
         ]
       },
-      "installed_at": "<time>"
+      "installed_at": "<time>",
+      "dead_letters": []
     }
   ]
 }

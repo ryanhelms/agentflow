@@ -66,6 +66,10 @@ func TestGoldenPlugin(t *testing.T) {
 	g.check("plugin/list.txt", g.run("", "plugin", "list"))
 	g.check("plugin/list_json.txt", g.run("", "plugin", "list", "--json"))
 
+	// The command the documentation gives for turning a plugin on.
+	g.check("plugin/enable.txt", g.run("", "config", "set", "plugins.ci-notify.enabled=true", "--yes"))
+	g.check("plugin/list_enabled.txt", g.run("", "plugin", "list"))
+
 	upgraded := strings.Replace(goldenPluginManifest, "version: 0.1.0", "version: 0.2.0", 1)
 	if err := os.WriteFile(filepath.Join(src, "agentflow-plugin.yml"), []byte(upgraded), 0o644); err != nil {
 		t.Fatal(err)
@@ -75,5 +79,8 @@ func TestGoldenPlugin(t *testing.T) {
 	g.check("plugin/remove_unknown.txt", g.run("", "plugin", "remove", "never-added", "--yes"))
 	g.check("plugin/remove_declined.txt", g.run("n\n", "plugin", "remove", "ci-notify"))
 	g.check("plugin/remove.txt", g.run("", "plugin", "remove", "ci-notify", "--yes"))
+	if b, err := os.ReadFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml")); err != nil || strings.Contains(string(b), "ci-notify") {
+		t.Errorf("plugin remove left plugins.ci-notify in the personal settings: %v\n%s", err, b)
+	}
 	g.check("plugin/remove_json_again.txt", g.run("", "plugin", "remove", "ci-notify", "--yes", "--json"))
 }

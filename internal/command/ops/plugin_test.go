@@ -427,3 +427,20 @@ func TestPluginHasOnlyAListTool(t *testing.T) {
 		}
 	}
 }
+
+func TestPluginListTextCountsUndeliveredEvents(t *testing.T) {
+	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+	cleanPluginHome(t, r.home)
+	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--yes", "--json"); err != nil {
+		t.Fatal(err)
+	}
+	letter := `{"event":{"id":"evt-1","type":"gh.ci.updated","repo":"repo-1","payload":{}},"consumer":"plugin:ci-notify","reason":"timeout","time":"2026-11-26T09:00:00Z"}` + "\n"
+	writeOpsFile(t, filepath.Join(manifest.PluginsPath(r.home), manifest.DeadLetterFile), letter+letter)
+	out := quietStdout(t)
+	if _, _, err := r.cli(t, false, "plugin", "list"); err != nil {
+		t.Fatal(err)
+	}
+	if text := out(); text != "ci-notify 0.1.0  declarative  turned off, 2 events not delivered\n" {
+		t.Fatalf("list text = %q", text)
+	}
+}

@@ -1,10 +1,16 @@
 package app
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -162,6 +168,23 @@ type PluginInfo struct {
 	Extensions  []string             `json:"extensions"`
 	Permissions manifest.Permissions `json:"permissions"`
 	InstalledAt time.Time            `json:"installed_at"`
+	// DeadLetters are the plugin's newest undelivered events, newest first, at
+	// most MaxPluginLetters. A letter names the event and why it failed. It has
+	// no payload, so no pull request title or check name reaches a client.
+	DeadLetters []PluginLetter `json:"dead_letters"`
+}
+
+// MaxPluginLetters is how many dead letters plugin list shows for each plugin.
+const MaxPluginLetters = 20
+
+// PluginLetter is one event the console could not deliver to a plugin. Reason
+// is a fixed code: timeout, crashed, exited, protocol, action or rpc_error.
+type PluginLetter struct {
+	EventID   string     `json:"event_id"`
+	EventType bus.Type   `json:"event_type"`
+	EventRepo bus.RepoID `json:"event_repo"`
+	Reason    string     `json:"reason"`
+	Time      time.Time  `json:"time"`
 }
 
 // PluginList lists the installed plugins, sorted by ID, with the state the
@@ -174,6 +197,7 @@ func (a *App) PluginList(ctx context.Context) (PluginList, error) {
 		return PluginList{}, err
 	}
 	states := a.pluginStates(ctx)
+	letters := pluginLetters(a.Home)
 	out := PluginList{Plugins: []PluginInfo{}}
 	for _, p := range installed {
 		info := PluginInfo{ID: p.ID, Name: p.Manifest.Name, Version: p.Version, Tier: string(p.Tier), Hash: p.Hash,
@@ -193,6 +217,10 @@ func (a *App) PluginList(ctx context.Context) (PluginList, error) {
 		}
 		if a.Cfg != nil {
 			info.DisabledInRepo = slices.Contains(a.Cfg.Plugins.Disabled, p.ID)
+		}
+		info.DeadLetters = letters[p.ID]
+		if info.DeadLetters == nil {
+			info.DeadLetters = []PluginLetter{}
 		}
 		if s, ok := states[p.ID]; ok {
 			info.State, info.Code = string(s.State), s.Code
@@ -225,4 +253,57 @@ func (a *App) pluginStates(ctx context.Context) map[string]bus.PluginLifecycleCh
 		}
 	}
 	return states
+}
+
+// pluginConsumerPrefix starts the Consumer of a plugin's dead letter.
+const pluginConsumerPrefix = "plugin:"
+
+// maxLetterFileBytes bounds what plugin list reads of the dead letter file,
+// which the host keeps near 1 MiB.
+const maxLetterFileBytes = 8 << 20
+
+// pluginLetters reads <home>/plugins/deadletter.jsonl, one bus.Letter per
+// line, and returns each plugin's newest letters, newest first. A missing or
+// unreadable file, and a line that is not a letter, give nothing: the file is
+// the host's, and plugin list only shows it. Payloads are dropped.
+func pluginLetters(home string) map[string][]PluginLetter {
+	out := map[string][]PluginLetter{}
+	f, err := os.Open(filepath.Join(manifest.PluginsPath(home), manifest.DeadLetterFile))
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return out
+	}
+	if info.Size() > maxLetterFileBytes {
+		// Keep the tail, which holds the newest letters, and drop the line it cuts.
+		if _, err := f.Seek(info.Size()-maxLetterFileBytes, io.SeekStart); err != nil {
+			return out
+		}
+	}
+	r := bufio.NewReaderSize(f, 64<<10)
+	first := info.Size() > maxLetterFileBytes
+	for {
+		line, err := r.ReadBytes('\n')
+		if first {
+			first = false
+		} else if len(bytes.TrimSpace(line)) > 0 {
+			var l bus.Letter
+			if json.Unmarshal(line, &l) == nil {
+				if id, ok := strings.CutPrefix(l.Consumer, pluginConsumerPrefix); ok && id != "" {
+					out[id] = append(out[id], PluginLetter{EventID: l.Event.ID, EventType: l.Event.Type, EventRepo: l.Event.Repo, Reason: l.Reason, Time: l.Time})
+				}
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	for id, list := range out {
+		slices.Reverse(list)
+		out[id] = list[:min(len(list), MaxPluginLetters)]
+	}
+	return out
 }

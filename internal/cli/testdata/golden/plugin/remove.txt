@@ -1,11 +1,13 @@
 $ agentflow plugin remove ci-notify --yes
 --- stdout
 Removed ci-notify 0.2.0.
+Deleted plugins.ci-notify from your personal settings.
 --- stderr
 Agentflow plugin.install: confirm (default)
 Remove plugin ci-notify 0.2.0: "CI failure notifications"
-  hash      sha256:<digest-2>
+  hash      sha256:<digest-5>
   deletes
     the installed copy of ci-notify 0.2.0
     the plugin's data directory, and everything the plugin stored in it
+    plugins.ci-notify in your personal settings: whether it was enabled and its settings
 ! A running plugin is stopped when the console sees the change. Removing cannot be undone: add the plugin again to get it back.

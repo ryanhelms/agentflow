@@ -132,7 +132,8 @@ repository turns it off, and the last state the console reported. A line ends
 with `FILES CHANGED` when the installed copy no longer matches its hash. Run
 `plugin add` again to repair it.
 
-`--json` adds the hash, the extensions and the permissions. AI clients can read
+`--json` adds the hash, the extensions, the permissions and each plugin's newest
+undelivered events (`dead_letters`, at most 20, without their payloads). AI clients can read
 the same list with the `agentflow_plugin_list` tool. No tool adds, removes or
 turns on a plugin: that is your decision, at your terminal.
 

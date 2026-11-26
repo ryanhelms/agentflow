@@ -188,6 +188,9 @@ func printPluginList(w io.Writer, list app.PluginList) {
 			}
 			parts = append(parts, state)
 		}
+		if n := len(p.DeadLetters); n > 0 {
+			parts = append(parts, fmt.Sprintf("%d events not delivered", n))
+		}
 		if !p.HashOK {
 			parts = append(parts, "FILES CHANGED since it was added: run plugin add again")
 		}
