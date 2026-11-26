@@ -7,6 +7,8 @@ package delegate
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -169,7 +171,7 @@ func Build(ctx context.Context, home, target boundary.Repo, checkout string, req
 		return nil, fmt.Errorf("tmux is not installed, so agentflow cannot start a session; start one in %s yourself and give it this task: %s", checkout, p.Message)
 	}
 	p.Status, p.Agent = StatusStart, DefaultAgent(req.Agent, "")
-	p.Session = sessionName(RepoName(target.Name()))
+	p.Session = sessionName(RepoName(target.Name()), checkout, p.Agent, p.Message)
 	p.argv = [][]string{
 		{"tmux", "new-session", "-d", "-P", "-F", "#{pane_id}", "-s", p.Session, "-c", checkout,
 			"-e", boundary.SessionEnv + "=" + target.CommonDir, p.Agent, p.Message},
@@ -182,8 +184,13 @@ func Build(ctx context.Context, home, target boundary.Repo, checkout string, req
 
 var unsafeSession = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 
-func sessionName(repo string) string {
-	return "agentflow-" + unsafeSession.ReplaceAllString(repo, "-") + "-" + time.Now().Format("20060102-150405")
+// sessionName names the tmux session for a delegation. The suffix comes from
+// the request, not the clock: the plan is part of the confirmation token, and
+// the preview and the confirmed apply build it separately, seconds or minutes
+// apart, so the name has to be the same both times.
+func sessionName(repo string, request ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(request, "\x00")))
+	return "agentflow-" + unsafeSession.ReplaceAllString(repo, "-") + "-" + hex.EncodeToString(sum[:4])
 }
 
 // FindPane returns the tmux pane of a running agent session in the target
