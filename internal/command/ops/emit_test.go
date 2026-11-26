@@ -149,9 +149,6 @@ func checkScopeNoneWrite(t *testing.T, a *app.App, m command.Meta, reason string
 		t.Errorf("%s: gate %v, action %q, AuditByInvoker %v: want a gate, an autonomy action and the Invoker's audit line", m.Name, m.Gate, m.Action, m.AuditByInvoker)
 	}
 	const id = "op_00112233445566778899aabbccddeeff"
-	// The reference Invoker returns before it audits whenever the scope is
-	// ScopeNone, as it must for a read. Only the production Invoker, which
-	// skips the audit line for a read by its class, audits a ScopeNone write.
 	for _, sc := range []struct {
 		name string
 		run  func(context.Context) (any, error)
@@ -172,8 +169,8 @@ func checkScopeNoneWrite(t *testing.T, a *app.App, m command.Meta, reason string
 				if len(em.Events()) != 0 {
 					t.Errorf("published %v, want no events", em.Types())
 				}
-				if want := map[bool]int{true: 1, false: 0}[name == "production"]; len(au.Lines()) != want {
-					t.Errorf("%d audit lines from the %s Invoker, want %d", len(au.Lines()), name, want)
+				if len(au.Lines()) != 1 {
+					t.Errorf("%d audit lines from the %s Invoker, want 1", len(au.Lines()), name)
 				}
 			})
 		}
