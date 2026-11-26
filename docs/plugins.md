@@ -55,8 +55,9 @@ operations. Agentflow therefore does three things:
   input, such as a script, a pipe or a CI job.
 - The Claude Code pre-bash hook blocks an agent from running them. It also blocks
   `agentflow plugin approve`, the name kept for approving a plugin's writes. See
-  [What the hook catches](#what-the-hook-catches). The hook's never-list is off in
-  `--convention-only` mode, and Codex has no such hook.
+  [What the hook catches](#what-the-hook-catches). This rule also holds in
+  `--convention-only` mode, which switches off the rest of the never-list, because
+  plugins belong to you and not to a repository. Codex has no such hook.
 
 The refusals say `run this in your own terminal`. There is no override flag or
 variable. `--yes` is accepted and ignored: the question is always asked.

@@ -776,7 +776,8 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   data; remote writes derived from it always need confirmation.
 - **Never list.** At every autonomy level agentflow refuses force-pushes, pushes to protected
   branches, PR merges, remote branch deletes and acting as another user. Its Claude Code
-  hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`. With
+  hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`, in
+  `--convention-only` mode too. With
   `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
   `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary

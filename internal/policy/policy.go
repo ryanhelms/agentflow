@@ -215,13 +215,14 @@ var ReleaseBranches = []string{"main", "master"}
 
 // ForbiddenWith is Forbidden with the configured relaxations.
 func ForbiddenWith(cmd string, protected []string, currentBranch string, opt NeverOptions) string {
+	if reason := ForbiddenAlways(cmd); reason != "" {
+		return reason
+	}
 	switch {
 	case forcePushRe.MatchString(cmd):
 		return "force-push is never allowed through agentflow-managed agents"
 	case deleteRefRe.MatchString(cmd):
 		return "deleting remote branches is never allowed through agentflow-managed agents"
-	case changesPlugins(cmd):
-		return "adding, removing and approving plugins is a human decision; ask the user to run agentflow plugin add, remove or approve in their own terminal"
 	case ghMergeRe.MatchString(cmd):
 		if reason := coordinatorMerge(cmd, opt); reason != "" {
 			return reason
@@ -236,6 +237,17 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 	}
 	if target != "" && IsProtected(target, protected) {
 		return fmt.Sprintf("pushing to protected branch %q is never allowed; push a feature branch and open a PR", target)
+	}
+	return ""
+}
+
+// ForbiddenAlways returns a reason for the never-list entries that hold in
+// every mode and repository, including pre-bash --convention-only. Plugins
+// belong to the user, not to a repository, so no repository's mode lets an
+// agent add, remove or approve one.
+func ForbiddenAlways(cmd string) string {
+	if changesPlugins(cmd) {
+		return "adding, removing and approving plugins is a human decision; ask the user to run agentflow plugin add, remove or approve in their own terminal"
 	}
 	return ""
 }

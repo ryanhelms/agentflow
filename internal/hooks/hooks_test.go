@@ -175,9 +175,13 @@ func TestSessionStartReportsConfiguredProviders(t *testing.T) {
 	}
 }
 
+// preBashModes are the two modes of the pre-bash hook. The plugin rule holds in
+// both.
+var preBashModes = map[string]bool{"never list": false, "convention only": true}
+
 // preBashExit runs the pre-bash hook on command and returns its exit code and
 // what it printed.
-func preBashExit(t *testing.T, command string) (int, string) {
+func preBashExit(t *testing.T, command string, conventionOnly bool) (int, string) {
 	t.Helper()
 	in, err := json.Marshal(map[string]any{"tool_input": map[string]any{"command": command}})
 	if err != nil {
@@ -185,14 +189,15 @@ func preBashExit(t *testing.T, command string) (int, string) {
 	}
 	var errBuf bytes.Buffer
 	var ee *ExitError
-	if errors.As(PreBash(context.Background(), bytes.NewReader(in), &errBuf, false), &ee) {
+	if errors.As(PreBash(context.Background(), bytes.NewReader(in), &errBuf, conventionOnly), &ee) {
 		return ee.Code, errBuf.String()
 	}
 	return 0, errBuf.String()
 }
 
 // Installing, removing and approving plugin writes are the person's
-// decisions: the hook blocks them however the binary is invoked.
+// decisions: the hook blocks each of these ways of invoking the binary, in both
+// modes, because plugins belong to the user and not to a repository.
 func TestPreBashBlocksPluginDecisions(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, command := range []string{
@@ -237,8 +242,10 @@ func TestPreBashBlocksPluginDecisions(t *testing.T) {
 		"out=$(agentflow plugin add x --json)",
 		"agentflow plugin list && agentflow plugin add x",
 	} {
-		if code, shown := preBashExit(t, command); code != 2 || !strings.Contains(shown, "in their own terminal") {
-			t.Errorf("%q: exit %d, want it blocked (%s)", command, code, shown)
+		for mode, conventionOnly := range preBashModes {
+			if code, shown := preBashExit(t, command, conventionOnly); code != 2 || !strings.Contains(shown, "in their own terminal") {
+				t.Errorf("%s, %q: exit %d, want it blocked (%s)", mode, command, code, shown)
+			}
 		}
 	}
 }
@@ -268,8 +275,10 @@ func TestPreBashAllowsMentionsOfPluginCommands(t *testing.T) {
 		"codex plugin add agentflow@nscale",
 		"claude plugin remove agentflow",
 	} {
-		if code, shown := preBashExit(t, command); code != 0 {
-			t.Errorf("%q: exit %d, want it allowed (%s)", command, code, shown)
+		for mode, conventionOnly := range preBashModes {
+			if code, shown := preBashExit(t, command, conventionOnly); code != 0 {
+				t.Errorf("%s, %q: exit %d, want it allowed (%s)", mode, command, code, shown)
+			}
 		}
 	}
 }

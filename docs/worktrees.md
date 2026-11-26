@@ -148,4 +148,5 @@ command must be a single `gh pr merge` with no shell chaining. The never-list al
 `agentflow plugin add`, `remove` and `approve`. It does not catch a command built while it
 runs, piped into a shell or written to a file first: see
 [What the hook catches](plugins.md#what-the-hook-catches).
-`--convention-only` still checks only messages and titles.
+`--convention-only` skips the rest of the never-list and checks messages and titles. The
+plugin rule and the [repository boundary](repo-boundary.md) still apply in that mode.
