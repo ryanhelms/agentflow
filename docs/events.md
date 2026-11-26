@@ -175,9 +175,21 @@ CLI and from MCP tools alike. So far these are:
 | `pr` (also `--prepare` and `--check`), `pr mark-ready` (also `--prepare`) | `agentflow_pr_open`, `agentflow_pr_prepare`, `agentflow_pr_ready`, `agentflow_pr_mark_ready`, `agentflow_pr_mark_ready_prepare` |
 | `review`, `review reply` | `agentflow_review_threads`, `agentflow_review_reply` |
 | `status`, `collisions` | `agentflow_ship_status`, `agentflow_collisions` |
+| `start`, `task create`, `task link` | `agentflow_start`, `agentflow_ticket_create`, `agentflow_jira_remote_link` |
+| `transition`, `comment` | `agentflow_transition`, `agentflow_comment` |
+| `ac` (also `done` and `undo`), `scope` | `agentflow_ac_checklist`, `agentflow_ac_update`, `agentflow_scope_check` |
+| `context`, `work`, `standup` | `agentflow_context`, `agentflow_my_work`, `agentflow_standup` |
+| `docs get`, `docs search`, `docs publish`, `adr new` | `agentflow_docs_get`, `agentflow_docs_search`, `agentflow_docs_publish`, `agentflow_adr_draft` |
+| `release plan`, `release preview`, `release publish`, `promote` | `agentflow_release_plan`, `agentflow_release_preview` |
+| `notify`, `secops triage` | `agentflow_notify` |
+| `finish`, `worktree go-work` | `agentflow_finish`, `agentflow_worktree_go_work` |
 
-The other commands follow during phase 3. A read, such as `policy explain`, `status` or
-`pr --check`, records nothing. A write records:
+`sweep`, `delegate` and `setup apply` record them when an MCP tool runs them
+(`agentflow_sweep`, `agentflow_delegate`, `agentflow_setup_apply`), and from the command
+line once their output moves into the registry; the other commands follow during phase 3.
+`transition --github-event` and `transition --shipped`, the CI modes, record nothing. A
+read, such as `policy explain`, `status`, `pr --check`, `docs get` or `release plan`,
+records nothing, and neither does a preview (`--dry-run`, `dry_run`). A write records:
 
 | Event | When |
 | --- | --- |
@@ -200,12 +212,12 @@ and otherwise drops them with one warning on standard error. It never creates a 
 When the daemon has not registered the worktree yet, the event is sent again as a
 repository-wide event.
 
-`policy approve` also writes one line to `audit.log` with its operation and operation ID.
-So do the prepare commands, which write no line of their own (`commit --prepare`,
-`push --prepare`, `pr --prepare`, `pr mark-ready --prepare` and their tools), and
-`agentflow_commit_context` when it stages paths. Commands whose own code already writes an
-audit line, such as `eod post`, `commit`, `push`, `pr` and `review reply`, write no extra
-one.
+`policy approve` and `worktree go-work` also write one line to `audit.log` with their
+operation and operation ID. So do the prepare commands, which write no line of their own
+(`commit --prepare`, `push --prepare`, `pr --prepare`, `pr mark-ready --prepare` and their
+tools), and `agentflow_commit_context` when it stages paths. Commands whose own code
+already writes an audit line, such as `eod post`, `commit`, `push`, `pr` and `review
+reply`, write no extra one.
 
 The notify socket accepts only `hook.ran`, `commit.created` and `op.*`, only from a process that
 proves it can read the daemon's private registry file (`~/.agentflow-ui/`), and only for

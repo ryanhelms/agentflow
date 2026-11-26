@@ -487,9 +487,12 @@ which must be a private directory owned by that user.
 Agentflow's hooks record a `hook.ran` event each time they run (`pre-bash` only
 when it blocks a command) and hand it to a running daemon over a private local
 socket. Operations run through the command registry (so far `policy`, `eod post`,
-`commit`, `push`, `pr`, `pr mark-ready` and `review reply`, from the CLI or MCP) record
-`op.requested` and their outcome (`op.applied`, `op.failed`, `op.awaiting_approval`, ...)
-the same way, grouped by operation ID; like hooks, they never create a store. Approval requests and their outcomes (`approval.requested`,
+`commit`, `push`, `pr`, `pr mark-ready`, `review reply`, the task commands such as
+`start`, `transition`, `comment` and `ac done`, the document, release, notification and
+worktree commands, and `secops triage`; from the CLI or MCP, as `docs/events.md` lists)
+record `op.requested` and their outcome (`op.applied`, `op.failed`,
+`op.awaiting_approval`, ...) the same way, grouped by operation ID; like hooks, they
+never create a store. Approval requests and their outcomes (`approval.requested`,
 `approval.resolved`, `approval.expired`) and changes to a worktree's AI client
 settings files (`client.settings.changed`) are events too. Approval records are
 read from the `AGENTFLOW_HOME` the daemon started with, so start the console from
