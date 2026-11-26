@@ -48,17 +48,17 @@ var laneWrites = []string{
 // unregisteredWrites lists the CLI commands of this lane that write and are
 // not in the registry at all: no Spec, so no events.
 var unregisteredWrites = map[string]string{
-	"init":                 "writes the repository's files before there is an App to open; not an operation of this lane",
-	"remove":               "undoes init, with no App for the same reason",
-	"pin":                  "edits a workflow file through the plain file system; not an operation of this lane",
-	"install":              "configures AI clients outside any repository (ScopeNone)",
-	"login":                "stores a credential outside any repository (ScopeNone)",
-	"logout":               "removes a credential outside any repository (ScopeNone)",
-	"setup login":          "signs in to a provider through its CLI or MCP client, outside any repository (ScopeNone)",
-	"setup logout":         "disconnects a provider enrollment, outside any repository (ScopeNone)",
-	"release init":         "detects units and writes releases.yml and the release-please files; runs no gate and no audit",
-	"release sync":         "regenerates the release-please files; runs no gate and no audit",
-	"doctor":               "--fix repairs the installation; its --providers flag selects another command, so no Spec can bind the path",
+	"init":         "writes the repository's files before there is an App to open; not an operation of this lane",
+	"remove":       "undoes init, with no App for the same reason",
+	"pin":          "edits a workflow file through the plain file system; not an operation of this lane",
+	"install":      "configures AI clients outside any repository (ScopeNone)",
+	"login":        "stores a credential outside any repository (ScopeNone)",
+	"logout":       "removes a credential outside any repository (ScopeNone)",
+	"setup login":  "signs in to a provider through its CLI or MCP client, outside any repository (ScopeNone)",
+	"setup logout": "disconnects a provider enrollment, outside any repository (ScopeNone)",
+	"release init": "detects units and writes releases.yml and the release-please files; runs no gate and no audit",
+	"release sync": "regenerates the release-please files; runs no gate and no audit",
+	"doctor":       "--fix repairs the installation; its --providers flag selects another command, so no Spec can bind the path",
 }
 
 // directCalls lists writes that a command-line flag runs as a direct app call:
@@ -81,8 +81,7 @@ var toolInputs = map[string]map[string]any{
 
 // legacyOnlyTools lists the write tools of the MCP server that the registry
 // cannot provide yet.
-var legacyOnlyTools = map[string]string{
-}
+var legacyOnlyTools = map[string]string{}
 
 func isWrite(m command.Meta) bool { return m.Class == policy.Local || m.Class == policy.Remote }
 
