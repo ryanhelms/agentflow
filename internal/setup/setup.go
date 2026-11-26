@@ -34,7 +34,7 @@ const (
 	blockEnd   = "<!-- agentflow:end -->"
 )
 
-var executables = map[string]bool{".agentflow/bin/agentflow": true, ".githooks/commit-msg": true}
+var executables = map[string]bool{".agentflow/bin/agentflow": true, ".githooks/commit-msg": true, ".githooks/pre-commit": true, ".githooks/pre-push": true}
 
 // Init writes templates/repo into the repository root. Existing files are left
 // alone unless force is set; AGENTS.md gets its agentflow block inserted or refreshed.
@@ -104,7 +104,7 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 		hooks = strings.TrimSpace(hooks)
 		switch {
 		case hooks == "" && hasDefaultHooks(ctx, repo):
-			res.Notes = append(res.Notes, "kept the existing Git hooks; chain .githooks/commit-msg from your commit-msg hook to enable Agentflow lint")
+			res.Notes = append(res.Notes, "kept the existing Git hooks; chain .githooks/commit-msg, pre-commit and pre-push from your hooks to enable Agentflow lint and worktree protection")
 		case hooks == "":
 			if _, err := repo.Git(ctx, "config", "--local", managedHooks, "true"); err != nil {
 				return res, err
@@ -114,7 +114,7 @@ func Init(ctx context.Context, repoDir string, force bool) (*Result, error) {
 			}
 			res.Notes = append(res.Notes, "set core.hooksPath=.githooks for this clone")
 		case hooks != ".githooks":
-			res.Notes = append(res.Notes, "kept the existing core.hooksPath; chain .githooks/commit-msg from your hook to enable Agentflow lint")
+			res.Notes = append(res.Notes, "kept the existing core.hooksPath; chain .githooks/commit-msg, pre-commit and pre-push from your hooks to enable Agentflow lint and worktree protection")
 		}
 		// An explicit init undoes the opt-out `agentflow remove` leaves behind.
 		_, _ = repo.Git(ctx, "config", "--local", "--unset", AutoInitKey)

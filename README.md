@@ -139,6 +139,8 @@ releases:
 | `.agentflow/releases.yml` + release-please files | Deployable units and branching strategy for semantic releases |
 | `.agentflow/bin/agentflow` (+ `.cmd`, `.ps1`) | Launcher: installs and verifies the binary, then runs it |
 | `.githooks/commit-msg` | Local commit convention check |
+| `.githooks/pre-commit` | Refuses commits in the primary checkout; use a task worktree |
+| `.githooks/pre-push` | Blocks pushes to `policy.protected_branches` |
 | `.github/workflows/agentflow.yml` | The one caller workflow for every agentflow Action, pinned to the release commit (`@<sha> # vX.Y.Z`) |
 | `.jira/config.yml` | Maps GitHub Environments to Jira deployment environments |
 | `.claude/`, `.codex/`, `.grok/`, `.cursor/`, `.vscode/`, `.gemini/` | AI client configuration |
@@ -425,6 +427,11 @@ Deployments and release lookup also support local JSON fixtures.
 | Inspect, edit and review configuration | `agentflow config OP` | `agentflow_config`, `agentflow_config_apply` |
 | Create a task | `agentflow task create` | `agentflow_ticket_create` |
 | Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
+| Work in a task worktree | `agentflow start KEY --worktree` | `agentflow_start` with `worktree: true` |
+| Regenerate the worktree's `go.work` | `agentflow worktree go-work` | `agentflow_worktree_go_work` |
+| Clean up after the PR merges | `agentflow finish [BRANCH]` | `/agentflow:finish` |
+| Finish merged worktrees, report the rest | `agentflow sweep [--all-repos]` | `/agentflow:sweep` |
+| Open the develop → main release PR (you, not an agent) | `agentflow promote` | – |
 | See the ticket context | `agentflow context` | loaded automatically at session start |
 | Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA` | `/agentflow:ac` |
 | Check for scope drift | `agentflow scope` | `/agentflow:scope` |
@@ -620,7 +627,8 @@ CI.
 The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `remove`,
 `install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
-`eod`, `docs`, `adr`, `release`, `update` and `version`. The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
+`eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `worktree` and `promote`
+(which only explains that you run `agentflow promote` yourself). The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos agentflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
 `update`) run only when you invoke them. Install directly from the internal
@@ -649,7 +657,11 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.
 - **Never list.** At every autonomy level agentflow refuses force-pushes, pushes to protected
-  branches, PR merges, remote branch deletes and acting as another user.
+  branches, PR merges, remote branch deletes and acting as another user. With
+  `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
+  `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
+  `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
+  checkout. [Task worktrees](docs/worktrees.md)
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
@@ -734,6 +746,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | --- | --- |
 | [docs/blueprint.html](docs/blueprint.html) | Architecture, automations, plugin, rollout and decisions |
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
+| [docs/worktrees.md](docs/worktrees.md) | Task worktrees, `go.work`, `finish`, `sweep`, `promote` and the hooks |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
 | [CHANGELOG.md](CHANGELOG.md) | Generated release history of agentflow |

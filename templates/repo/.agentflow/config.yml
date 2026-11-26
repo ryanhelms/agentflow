@@ -28,5 +28,14 @@ policy:
   # allow_auto_pr_publication: true  # permit automatic PR creation with its feature-branch push
   # max_approval_window: 15m     # caps the user's approval_window (default 5m)
   protected_branches: [main, master, develop, "release/*"]
+  # coordinator_merge: true      # let an agent `gh pr merge` PRs whose base is not main or master
   test_cmd: make test
   lint_cmd: make lint
+
+# Task worktrees: `agentflow start <issue> --worktree` creates <root>/<repo>/<branch>.
+# worktree:
+#   root: ~/.worktrees
+#   go_work:                     # write a git-excluded go.work into each worktree
+#     use: [".", "multiplayer"]
+#     siblings:                  # module => repo and path; uses that repo's worktree for the
+#       example.local/sdk: {repo: other-repo, path: sdk}   # same branch or issue, else its checkout

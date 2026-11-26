@@ -2,13 +2,16 @@
 package hooks
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/nscaledev/agentflow/internal/app"
 	"github.com/nscaledev/agentflow/internal/commit"
@@ -16,6 +19,7 @@ import (
 	"github.com/nscaledev/agentflow/internal/gitx"
 	"github.com/nscaledev/agentflow/internal/policy"
 	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/nscaledev/agentflow/internal/worktree"
 )
 
 // ExitError carries a process exit code.
@@ -91,11 +95,49 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 			fmt.Fprintf(stdout, "agentflow: %s is pinned to agentflow %s, older than the installed agentflow. "+
 				"Offer the developer `/agentflow:pin`, which re-pins it and opens a PR for review.\n", setup.CallerWorkflow, from)
 		}
+		worktreeNotes(ctx, a, stdout)
 	}
 	if notice != "" {
 		fmt.Fprintln(stdout, notice)
 	}
 	return nil
+}
+
+// SweepSummaryTimeout bounds the session-start worktree summary.
+var SweepSummaryTimeout = 3 * time.Second
+
+// worktreeNotes tells the agent to work in a worktree when the session starts in
+// a primary checkout, and summarises worktrees that need attention. The summary
+// is offline (no fetch, no gh) and time-boxed so session start stays fast.
+func worktreeNotes(ctx context.Context, a *app.App, stdout io.Writer) {
+	if a.InPrimaryCheckout(ctx) {
+		fmt.Fprintf(stdout, "agentflow: this session is in the primary checkout of %s. Make every change in a task worktree: "+
+			"run `agentflow start <issue> --worktree`, then work in the directory it prints. Commits here are refused by the pre-commit hook.\n",
+			worktree.RepoName(ctx, a.Repo))
+	}
+	ctx, cancel := context.WithTimeout(ctx, SweepSummaryTimeout)
+	defer cancel()
+	res, _, err := a.Sweep(ctx, app.SweepRequest{DryRun: true, Offline: true}, "")
+	if err != nil || res == nil {
+		return
+	}
+	counts := map[string]int{}
+	for _, w := range res.Worktrees {
+		counts[w.State]++
+	}
+	var parts []string
+	for _, state := range []string{worktree.StateWouldFinish, worktree.StateDirty, worktree.StateUnpushed, worktree.StateStale, worktree.StateOrphaned} {
+		if n := counts[state]; n > 0 {
+			label := strings.ReplaceAll(state, "_", " ")
+			if state == worktree.StateWouldFinish {
+				label = "merged and ready to finish"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", n, label))
+		}
+	}
+	if len(parts) > 0 {
+		fmt.Fprintf(stdout, "agentflow worktrees: %s. Offer `agentflow sweep` to finish merged ones and review the rest.\n", strings.Join(parts, ", "))
+	}
 }
 
 // autoInit handles a session in a repo without .agentflow/config.yml, following the
@@ -164,14 +206,18 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 	branch := ""
 	var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
 	keyHint := ""
+	never := policy.NeverOptions{MergeBase: func(cmd string) (string, error) { return MergeBase(ctx, dir, cmd) }}
 	if repo, err := gitx.Open(ctx, dir); err == nil {
 		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			protected, rules = cfg.Policy.ProtectedBranches, cfg.Commit
+			never.CoordinatorMerge = cfg.Policy.CoordinatorMerge
 		}
 		branch = repo.Branch(ctx)
 		keyHint = gitx.KeyFromBranch(branch)
 	}
-	if reason := policy.Forbidden(cmd, protected, branch); reason != "" && !conventionOnly {
+	if conventionOnly {
+		never.CoordinatorMerge = false
+	} else if reason := policy.ForbiddenWith(cmd, protected, branch, never); reason != "" {
 		fmt.Fprintln(stderr, "agentflow blocked this command: "+reason)
 		return &ExitError{Code: 2, Msg: reason}
 	}
@@ -265,4 +311,113 @@ func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer)
 		return nil
 	}
 	return json.NewEncoder(stdout).Encode(map[string]string{"systemMessage": "agentflow: " + strings.Join(notes, "; ")})
+}
+
+// MergeGH runs gh for MergeBase; tests replace it.
+var MergeGH worktree.GH = worktree.ExecGH
+
+// MergeBase returns the base branch of the PR a `gh pr merge` command names,
+// or of the current branch's PR when it names none.
+func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
+	args := []string{"pr", "view"}
+	if pr := mergeTarget(cmd); pr != "" {
+		args = append(args, pr)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := MergeGH(ctx, dir, append(args, "--json", "baseRefName", "--jq", ".baseRefName")...)
+	return strings.TrimSpace(out), err
+}
+
+// mergeTarget returns the PR argument of a `gh pr merge` command.
+func mergeTarget(cmd string) string {
+	loc := ghMergeRe.FindStringIndex(cmd)
+	if loc == nil {
+		return ""
+	}
+	valued := map[string]bool{"-A": true, "--author-email": true, "-b": true, "--body": true, "-F": true, "--body-file": true, "--match-head-commit": true, "-t": true, "--subject": true, "-R": true, "--repo": true}
+	words := shellWords(cmd[loc[1]:])
+	for i := 0; i < len(words); i++ {
+		w := words[i]
+		if strings.HasPrefix(w, "-") {
+			if valued[w] {
+				i++
+			}
+			continue
+		}
+		return w
+	}
+	return ""
+}
+
+// shellWords splits a command into words, honouring single and double quotes.
+func shellWords(s string) []string {
+	var words []string
+	var cur strings.Builder
+	in, quote, started := false, byte(0), false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case in && c == quote:
+			in = false
+		case in:
+			if quote == '"' && c == '\\' && i+1 < len(s) {
+				i++
+				c = s[i]
+			}
+			cur.WriteByte(c)
+		case c == '\'' || c == '"':
+			in, quote, started = true, c, true
+		case c == ' ' || c == '\t' || c == '\n':
+			if started {
+				words = append(words, cur.String())
+				cur.Reset()
+				started = false
+			}
+		default:
+			cur.WriteByte(c)
+			started = true
+		}
+	}
+	if started {
+		words = append(words, cur.String())
+	}
+	return words
+}
+
+// PrePush is the git pre-push hook. It reads "<local ref> <local sha> <remote ref>
+// <remote sha>" lines and blocks any update of a branch in policy.protected_branches.
+// AGENTFLOW_ALLOW_PROMOTE=1 allows main and master, for a release promotion only.
+func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer) error {
+	dir, _ := os.Getwd()
+	protected := config.DefaultProtected
+	if repo, err := gitx.Open(ctx, dir); err == nil {
+		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
+			protected = cfg.Policy.ProtectedBranches
+		}
+	}
+	promote := os.Getenv("AGENTFLOW_ALLOW_PROMOTE") == "1"
+	var blocked []string
+	sc := bufio.NewScanner(stdin)
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) != 4 {
+			continue
+		}
+		branch := strings.TrimPrefix(fields[2], "refs/heads/")
+		if !strings.HasPrefix(fields[2], "refs/heads/") || !policy.IsProtected(branch, protected) {
+			continue
+		}
+		if promote && slices.Contains(policy.ReleaseBranches, branch) {
+			continue
+		}
+		blocked = append(blocked, branch)
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+	for _, b := range blocked {
+		fmt.Fprintf(stderr, "✖ agentflow: pushing to protected branch %s is blocked; push a feature branch and open a PR\n", b)
+	}
+	return &ExitError{Code: 1, Msg: "push to a protected branch"}
 }

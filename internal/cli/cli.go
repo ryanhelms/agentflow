@@ -78,7 +78,16 @@ Work
   task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
               [--template NAME --template-revision REV] [--dry-run] [--yes]
   task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
-  start KEY [--worktree]         branch or worktree for KEY; apply supported start effects
+  start KEY [--worktree]         branch or worktree for KEY; apply supported start effects.
+                                 Worktrees go to <worktree.root>/<repo>/<branch> (default ~/.worktrees)
+                                 with a git-excluded .agentflow/worktree.yml and, if configured, go.work
+  worktree go-work               regenerate go.work in this worktree from worktree.go_work
+  finish [BRANCH] [--dry-run] [--yes]
+                                 after the PR merges: remove the worktree, the local and the remote branch
+  sweep [--all-repos] [--dry-run] [--stale-days N] [--json] [--yes]
+                                 finish merged worktrees; report dirty, unpushed, stale and orphaned ones
+  promote [--from develop] [--to main] [--dry-run] [--yes]
+                                 open the develop -> main release PR (merge commit); people only, not agents
   context [KEY]                  ticket bundle for the current branch
   ac [list] [KEY] [--json]       acceptance criteria checklist with local done state
   ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]
@@ -132,7 +141,7 @@ Runtime
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
-  hook commit-msg FILE | session-start | pre-bash | stop   [--client NAME]
+  hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop   [--client NAME]
   update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
 `
@@ -289,6 +298,14 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return nil
 	case "start":
 		return runStart(ctx, args)
+	case "finish":
+		return runFinish(ctx, args)
+	case "sweep":
+		return runSweep(ctx, args)
+	case "promote":
+		return runPromote(ctx, args)
+	case "worktree":
+		return runWorktree(ctx, args)
 	case "context":
 		a, err := open(ctx)
 		if err != nil {
@@ -389,7 +406,7 @@ func open(ctx context.Context) (*app.App, error) {
 
 func runHook(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: agentflow hook commit-msg FILE | session-start | pre-bash | stop")
+		return errors.New("usage: agentflow hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop")
 	}
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
@@ -436,6 +453,8 @@ func runHook(ctx context.Context, args []string) error {
 		return nil
 	case "pre-bash":
 		return hooks.PreBash(ctx, os.Stdin, os.Stderr, *conventionOnly)
+	case "pre-push":
+		return hooks.PrePush(ctx, os.Stdin, os.Stderr)
 	case "stop":
 		return hooks.Stop(ctx, *client, os.Stdin, os.Stdout)
 	}
@@ -703,7 +722,21 @@ func runStart(ctx context.Context, args []string) error {
 		}
 		key = items[idx-1].Key
 	}
-	return confirmLoop(*yes, func(tok string) (any, error) { return a.Start(ctx, key, *wt, tok) })
+	var started *app.StartResult
+	err = confirmLoop(*yes, func(tok string) (any, error) {
+		out, err := a.Start(ctx, key, *wt, tok)
+		switch r := out.(type) {
+		case app.StartResult:
+			started = &r
+		case *app.StartResult:
+			started = r
+		}
+		return out, err
+	})
+	if started != nil && started.Worktree != "" && started.Next != "" {
+		fmt.Fprintf(os.Stderr, "Worktree: %s\n%s\n", started.Worktree, started.Next)
+	}
+	return err
 }
 
 func runCommit(ctx context.Context, args []string) error {
@@ -954,9 +987,19 @@ func runPR(ctx context.Context, args []string) error {
 
 // confirmLoop runs fn; on needs_confirmation it asks the user and re-runs with the token.
 func confirmLoop(yes bool, fn func(token string) (any, error)) error {
+	out, done, err := confirmed(yes, fn)
+	if err != nil || done {
+		return err
+	}
+	return printJSON(out)
+}
+
+// confirmed runs fn through the confirmation flow and returns its final result.
+// done is true when nothing ran because the policy only suggests commands.
+func confirmed(yes bool, fn func(token string) (any, error)) (any, bool, error) {
 	out, err := fn("")
 	if err != nil {
-		return err
+		return out, false, err
 	}
 	if p, ok := out.(*app.Pending); ok {
 		switch p.Status {
@@ -965,27 +1008,27 @@ func confirmLoop(yes bool, fn func(token string) (any, error)) error {
 			for _, c := range p.Commands {
 				fmt.Println("  " + c)
 			}
-			return nil
+			return nil, true, nil
 		case "needs_confirmation":
 			if !yes {
 				release, err := p.OpenPrompt()
 				if err != nil {
-					return err
+					return nil, false, err
 				}
 				defer release()
 			}
 			if err := printApproval(p); err != nil {
-				return errors.Join(err, p.Cancel())
+				return nil, false, errors.Join(err, p.Cancel())
 			}
 			if !yes && !strings.HasPrefix(strings.ToLower(ask("Proceed? [y/N]: ")), "y") {
-				return errors.Join(errors.New("cancelled"), p.Cancel())
+				return nil, false, errors.Join(errors.New("cancelled"), p.Cancel())
 			}
 			if out, err = fn(p.ConfirmToken); err != nil {
-				return err
+				return out, false, err
 			}
 		}
 	}
-	return printJSON(out)
+	return out, false, nil
 }
 
 func ask(prompt string) string {

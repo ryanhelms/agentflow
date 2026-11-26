@@ -15,6 +15,8 @@ import (
 func newRepo(t *testing.T) string {
 	t.Helper()
 	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	// Task worktrees default to ~/.worktrees; keep them out of the real home.
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("JIRA_USER", "")
 	t.Setenv("JIRA_TOKEN", "")
 	dir := t.TempDir()

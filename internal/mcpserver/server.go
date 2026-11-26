@@ -210,6 +210,17 @@ type startIn struct {
 	Worktree     bool   `json:"worktree,omitempty" jsonschema:"create a git worktree instead of switching branch (automatic when there are uncommitted changes)"`
 	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
 }
+type finishIn struct {
+	Branch       string `json:"branch,omitempty" jsonschema:"branch to finish; default is the worktree the server runs in"`
+	DryRun       bool   `json:"dry_run,omitempty" jsonschema:"report the steps without removing anything"`
+	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
+}
+type sweepIn struct {
+	AllRepos     bool   `json:"all_repos,omitempty" jsonschema:"every repository under worktree.root and in worktree.checkouts"`
+	DryRun       bool   `json:"dry_run,omitempty" jsonschema:"report only; finish nothing"`
+	StaleDays    int    `json:"stale_days,omitempty" jsonschema:"report worktrees with no commits for longer than this many days (default 7)"`
+	ConfirmToken string `json:"confirm_token,omitempty" jsonschema:"token from a needs_confirmation response, after the user agreed"`
+}
 type pathsIn struct {
 	Paths []string `json:"paths,omitempty" jsonschema:"files to stage for this commit; empty uses what is already staged"`
 }
@@ -324,6 +335,20 @@ func (s *Server) register() {
 		func(ctx context.Context, in startIn) (any, error) {
 			return a.Start(ctx, in.Key, in.Worktree, in.ConfirmToken)
 		})
+	add(s, "agentflow_finish", "After a task's PR is merged, remove its worktree, local branch and remote branch. Refuses with uncommitted or unpushed work or an unmerged PR. Safe to repeat.", remote,
+		func(ctx context.Context, in finishIn) (any, error) {
+			return a.Finish(ctx, in.Branch, in.DryRun, in.ConfirmToken)
+		})
+	add(s, "agentflow_sweep", "Finish every merged task worktree and report dirty, unpushed, stale and orphaned worktrees without deleting them. Use dry_run to report only.", remote,
+		func(ctx context.Context, in sweepIn) (any, error) {
+			res, pending, err := a.Sweep(ctx, app.SweepRequest{AllRepos: in.AllRepos, DryRun: in.DryRun, StaleDays: in.StaleDays}, in.ConfirmToken)
+			if pending != nil {
+				return pending, err
+			}
+			return res, err
+		})
+	add(s, "agentflow_worktree_go_work", "Regenerate go.work in the current task worktree from worktree.go_work in .agentflow/config.yml.", local,
+		func(ctx context.Context, _ noIn) (any, error) { return a.WorktreeGoWork(ctx) })
 	add(s, "agentflow_ac_checklist", "Acceptance criteria for the ticket as a checklist with local done state.", readOnly,
 		func(ctx context.Context, in keyIn) (any, error) { return a.Checklist(ctx, in.Key) })
 	add(s, "agentflow_ac_update", "Tick or untick an acceptance criterion with evidence; optionally post progress to the ticket.", local,
