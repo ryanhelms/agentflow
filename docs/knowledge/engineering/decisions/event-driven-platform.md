@@ -1227,6 +1227,8 @@ The repository target adds `protected` (error: `worktree` mode on a protected br
 | repository, `worktree` mode (with or without personal) | `local` | `console.settings` | |
 | repository, `draft` or `direct` | `remote` | `console.publish` | `console.settings` when personal edits are included |
 
+In every row, `console.autonomy` is also related when the save changes a personal approval setting (`autonomy.*`, `approval_window`) or loosens policy, so the strictest rule wins and `console.autonomy: suggest` (personal or as the repository ceiling) cannot be bypassed. `console.autonomy` therefore covers both classes (`local remote`).
+
 - `console.settings` is a new autonomy action (`local remote`, "Settings saves require confirmation."). Adding a key is backwards compatible; lane 4.2 adds it to `autonomyCatalog`.
 - **A save always needs a confirmation**, whatever the policy level: `OperationGate.RequireConfirmation` (lane 4.2) turns a `proceed` without a token into `needs_confirmation`. The CLI asks (or takes `--yes`), an MCP prompt owner shows the summary, and the browser shows the Save review. This keeps today's rule that `console.*` writes are always reviewed.
 - **The summary** bound into the approval is: the operation, the `base` revisions, every change (ID, layer value before and after; sensitive values as digests), the `confirm` list, the repository plan (mode, title, destination, head, the source baseline `consolepublish` uses today) and the file revisions after. Any change to these between preview and save makes the token fail with `operation_changed`, and the caller previews again.

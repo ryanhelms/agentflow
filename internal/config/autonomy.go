@@ -32,7 +32,7 @@ var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"adr_draft":             {"local", ""},
 	"comment":               {"remote", "Some provider routes require confirmation."},
 	"commit":                {"local", ""},
-	"console.autonomy":      {"local", "Agent changes to personal approval settings require confirmation."},
+	"console.autonomy":      {"local remote", "Agent changes to personal approval settings require confirmation."},
 	"console.publish":       {"remote", "Repository console publication requires confirmation."},
 	"console.reply":         {"local", "Repository console replies require confirmation."},
 	"console.settings":      {"local remote", "Settings saves require confirmation."},

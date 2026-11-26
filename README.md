@@ -574,7 +574,9 @@ agentflow config set autonomy.actions.commit=auto approval_window=15m
 ```
 
 `config set` saves every edit together or none of them, and always asks for
-confirmation, even under `auto` (action `console.settings`). The summary lists
+confirmation, even under `auto` (action `console.settings`). A save that
+changes `autonomy.*` or `approval_window`, or loosens policy, also answers to
+`console.autonomy`, so `console.autonomy: suggest` still holds. The summary lists
 edits that loosen policy first. Personal edits apply at once. Repository edits
 (`repo:` IDs, such as `repo:policy.max_autonomy.local`) open a draft pull request
 by default; `--mode direct` applies them to the default branch through the same

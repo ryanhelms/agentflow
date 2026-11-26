@@ -122,6 +122,7 @@ func TestEveryWriteOperationEmitsEvents(t *testing.T) {
 var selfAuditing = map[string]bool{
 	"eod.post": true, "docs.publish": true, "adr.draft": true, "release.publish": true, "notify": true,
 	"setup.apply": true, "finish": true, "sweep": true, "delegate": true, "promote": true, "secops.triage": true,
+	"config.set": true, "config.undo": true,
 }
 
 // checkWriteRules applies the rules that need only the Spec's metadata.

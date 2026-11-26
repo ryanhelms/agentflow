@@ -79,21 +79,45 @@ func (p *settingsProjection) State(ctx context.Context, key ProjectionKey) (json
 	if key.Repo != p.repo.id || !ok || !w.available() {
 		return jsonNull, nil
 	}
-	st, err := settingsStateOf(ctx, w.Root)
+	st, err := settingsStateOf(ctx, w.Root, p.pullState)
 	if err != nil {
 		return nil, err
 	}
 	return json.Marshal(st)
 }
 
+// pullState is the state of pull request n in the GitHub poller's cache, so
+// last_save.undoable turns true once the saved pull request merges (the
+// gh.pr.updated event recomputes every worktree).
+func (p *settingsProjection) pullState(n int) (string, bool) {
+	if p.repo.github == nil {
+		return "", false
+	}
+	cache := p.repo.github()
+	if cache == nil {
+		return "", false
+	}
+	gs, ok := cache.GitHubState(p.repo.id)
+	if !ok {
+		return "", false
+	}
+	for _, pr := range gs.Pulls {
+		if pr.Number == n {
+			return string(pr.State), pr.State != ""
+		}
+	}
+	return "", false
+}
+
 // settingsStateOf computes the SettingsState of the worktree at root.
-func settingsStateOf(ctx context.Context, root string) (SettingsState, error) {
+// pullState may be nil.
+func settingsStateOf(ctx context.Context, root string, pullState func(int) (string, bool)) (SettingsState, error) {
 	home, err := config.HomeDir()
 	if err != nil {
 		return SettingsState{}, err
 	}
 	svc := &settings.Service{Root: root, Repo: &gitx.Repo{Dir: root}, Home: home, Catalog: consolecfg.RepoCatalog(root),
-		Publisher: settings.DefaultPublisher}
+		Publisher: settings.DefaultPublisher, PullState: pullState}
 	st, err := svc.State(ctx)
 	if err != nil {
 		return SettingsState{}, err
