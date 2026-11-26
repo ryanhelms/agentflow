@@ -1002,6 +1002,21 @@ In `internal/command/ops`. For every registered Spec:
 8. **A CLI "no" at the prompt** shows on the timeline only through `approval.resolved{state: cancelled}`. The CLI sends no `op.failed` for it.
 9. **Commands outside a repository publish nothing.** `global` stays limited to the configuration and client-settings families, as the phase 2 scoping rule says; `op.*` is never global.
 
+*Decided by the coordinator when the lanes were integrated (PR #59).*
+
+10. **A refusal is a map; a success is an `appliedMap`.** The delivery app methods (push, PR, mark-ready) return `map[string]any` both for a success (`{"status": "pushed"}`) and for a refusal (`{"status": "not_ready"}`). Their Specs convert a success into `appliedMap` (`internal/command/ops/delivery.go`), a named type that marshals exactly like the map, so `Classify` reports it as `op.applied`. A refusal stays a plain map and becomes `op.failed` with its `status` as the code. CLI and tool output is unchanged.
+11. **Prepare operations audit once, through the Invoker.** `commit --prepare`, `push --prepare`, `pr --prepare`, `pr mark-ready --prepare`, their tools, and `agentflow_commit_context` when it stages paths write no audit line of their own, so their Specs set `Policy.AuditByInvoker`: one line per call, with the operation ID. `worktree go-work` is audited by the Invoker for the same reason. `agentflow_commit_context` with no paths only reads the staged index and counts as a dry run: no events and no line.
+12. **Projections join through `projectionExtensions`.** Lane 3.5 added `projectionExtensions []func(*repoEvents) Projection` in `internal/webui/stream_runtime.go`. `repoProjections` appends one projection per entry to the four built-in ones (overview, activity, approvals, tabs) when it builds a repository's projector. The timeline registers itself from `projection_timeline.go`'s `init`. A `runtimeExtension` could not do this: it sees a repository only after its projector starts, and a projector's projections are fixed by then. Later phases add projections the same way, without editing `repoProjections`.
+13. **What stays legacy for the cleanup PR.** The lanes left these on the legacy path in `internal/cli` and `internal/mcpserver`; the cleanup PR moves them or records why not:
+    - `lint-msg` stays a runtime command (the `commit-msg` hook contract).
+    - `agentflow task` with no subcommand still reaches the legacy `runTask`; its usage error must stay.
+    - The CLI of `sweep`, `delegate` and `setup apply`: their tools are registered and publish events, but `CLIEnv.Confirm` prints the final result as JSON, while these commands print a table or plan text, and `setup apply` has its own prompt.
+    - The CLI of `setup` (plan), `setup providers` and `ui`, which must run without an App.
+    - The `events` CLI.
+    - `config` and `agentflow_config_apply`, whose input schema (an enum on `operation`, raw JSON values) `command.MCP` cannot carry yet.
+    - Writes with no Spec at all: `init`, `remove`, `pin`, `install`, `login`, `logout`, `setup login`, `setup logout`, `release init`, `release sync` and `doctor --fix`. `TestEveryWriteOperationEmitsEvents` lists each with its reason and fails when an entry is no longer true.
+    - `transition --github-event` and `transition --shipped` stay direct app calls: CI modes with no tool, which publish no events.
+
 ### Phase 3 consequences
 
 - Every operation is one Spec in one file. The CLI, the MCP tool list, the usage text and the parity check follow from the registry, so phases 4 to 11 add operations in parallel lanes without touching shared files.
