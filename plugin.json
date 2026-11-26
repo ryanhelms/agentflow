@@ -1,6 +1,6 @@
 {
   "name": "agentflow",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "description": "Manage Agentflow in a project and use its delivery workflow tools.",
   "mcpServers": "./adapters/vscode/plugin-mcp.json"
 }

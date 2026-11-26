@@ -5,6 +5,16 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.55.0](https://github.com/ryanhelms/agentflow/compare/v0.54.0...v0.55.0) - 2026-11-26
+
+### Breaking changes
+
+- add the task worktree lifecycle and local enforcement (#2) ([aa737dc](https://github.com/ryanhelms/agentflow/commit/aa737dcddd619278e58683c839a9024996ea843d))
+
+### Features
+
+- add the task worktree lifecycle and local enforcement (#2) ([aa737dc](https://github.com/ryanhelms/agentflow/commit/aa737dcddd619278e58683c839a9024996ea843d))
+
 ## [0.54.0](https://github.com/ryanhelms/agentflow/compare/v0.53.0...v0.54.0) - 2026-11-26
 
 ### Breaking changes
