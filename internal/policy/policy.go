@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/boundary"
 	"github.com/ryanhelms/agentflow/internal/config"
 )
 
@@ -219,6 +220,8 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 		return "force-push is never allowed through agentflow-managed agents"
 	case deleteRefRe.MatchString(cmd):
 		return "deleting remote branches is never allowed through agentflow-managed agents"
+	case changesPlugins(cmd):
+		return "adding, removing and approving plugins is a human decision; ask the user to run agentflow plugin add, remove or approve in their own terminal"
 	case ghMergeRe.MatchString(cmd):
 		if reason := coordinatorMerge(cmd, opt); reason != "" {
 			return reason
@@ -235,6 +238,38 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 		return fmt.Sprintf("pushing to protected branch %q is never allowed; push a feature branch and open a PR", target)
 	}
 	return ""
+}
+
+// pluginDecisions are the plugin subcommands that only a person may run:
+// installing, removing, and approving what a plugin asks to write.
+var pluginDecisions = []string{"add", "remove", "approve"}
+
+// changesPlugins reports whether cmd runs one of agentflow's plugin
+// decisions, however the program is invoked: by name, by the path of a
+// launcher or of a cached build, through go run, or inside a shell, script or
+// another wrapper (boundary.SimpleCommands). Unlike the patterns above, a
+// command that only mentions the words in an argument of another program does
+// not match.
+func changesPlugins(cmd string) bool {
+	for _, words := range boundary.SimpleCommands(cmd) {
+		program, args := words[0], words[1:]
+		switch name := boundary.ProgramName(program); {
+		case name == "agentflow":
+		// The Claude Code plugin's launcher is bin/launch.
+		case name == "launch" && (strings.Contains(strings.ToLower(program), "agentflow") || strings.Contains(program, "CLAUDE_PLUGIN_ROOT")):
+		case name == "go" && len(args) > 1 && args[0] == "run" && boundary.ProgramName(args[1]) == "agentflow":
+			args = args[2:]
+		default:
+			continue
+		}
+		if len(args) > 1 && args[0] == "--native-client" {
+			args = args[2:]
+		}
+		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsProtected reports whether branch matches any protected pattern.
