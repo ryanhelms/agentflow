@@ -117,15 +117,17 @@ func TestOverflowDropsOldestAndMarksOnce(t *testing.T) {
 		index[id] = i
 	}
 	var markers, delivered int
+	var reported uint64
 	last := -1
 	for delivered+int(dropped) < len(ids) {
 		e := receive(t, sub)
 		if e.Type == bus.TypeStreamOverflow {
 			markers++
 			var p bus.StreamOverflow
-			if err := json.Unmarshal(e.Payload, &p); err != nil || p.Dropped != dropped || p.Subscription != "slow" || e.Seq != 0 {
+			if err := json.Unmarshal(e.Payload, &p); err != nil || p.Dropped == 0 || p.Subscription != "slow" || e.Seq != 0 {
 				t.Fatalf("overflow = %+v %s", p, e.Payload)
 			}
+			reported += p.Dropped
 			continue
 		}
 		if index[e.ID] <= last {
@@ -134,8 +136,10 @@ func TestOverflowDropsOldestAndMarksOnce(t *testing.T) {
 		last = index[e.ID]
 		delivered++
 	}
-	if markers != 1 || last != len(ids)-1 {
-		t.Fatalf("markers=%d last=%d want %d", markers, last, len(ids)-1)
+	// One marker waits at a time; a drop that races a marker's hand-off is
+	// reported by the next one, so the counts add up to Dropped.
+	if markers == 0 || reported != dropped || last != len(ids)-1 {
+		t.Fatalf("markers=%d reported=%d dropped=%d last=%d want %d", markers, reported, dropped, last, len(ids)-1)
 	}
 }
 

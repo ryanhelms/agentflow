@@ -18,6 +18,7 @@
 //   - Topic and Pattern implement a Message Filter on each subscription.
 //   - Cursor is the resume point for a Durable Subscriber.
 //
-// Package bustest holds an in-memory fake for tests. The production bus
-// arrives with phase 1 lane 1.1.
+// New returns the production in-process bus. AuditTap is the audit Wire
+// Tap; package busaudit adapts it to policy.Gate.Audit. Package bustest
+// wraps New for tests.
 package bus
