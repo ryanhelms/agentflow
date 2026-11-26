@@ -21,6 +21,9 @@ import (
 type instance struct {
 	Port int    `json:"port"`
 	Key  string `json:"key"`
+	// Notify is the notify socket's endpoint in registry form
+	// (notifysock.Endpoint.String), empty when the socket is not running.
+	Notify string `json:"notify,omitempty"`
 }
 
 func (i instance) origin() string {
@@ -42,6 +45,11 @@ func daemonPrefix(registry string) (string, error) {
 	if err := makePrivateDir(registry); err != nil && !errors.Is(err, os.ErrExist) {
 		return "", fmt.Errorf("create console registry: %w", err)
 	}
+	return existingPrefix(registry)
+}
+
+// existingPrefix is daemonPrefix for a registry that must already exist.
+func existingPrefix(registry string) (string, error) {
 	info, err := os.Lstat(registry)
 	if err != nil || !info.IsDir() || !privateMode(registry, info) {
 		return "", errors.New("console registry requires a private user-owned directory")
@@ -183,11 +191,16 @@ func serveRegistered(ctx context.Context, registry string, port int, op daemonRe
 	if err != nil {
 		return err
 	}
-	defer d.startEvents(ctx)()
+	notify, err := newNotifySetup(prefix, i)
+	if err != nil {
+		return err
+	}
+	defer d.startEvents(withNotifySetup(ctx, notify))()
 	launch, err := d.register(ctx, op)
 	if err != nil {
 		return err
 	}
+	i.Notify = notify.Endpoint()
 	if err := writeInstance(prefix, i); err != nil {
 		return err
 	}

@@ -525,7 +525,7 @@ The daemon reads a connection's next request only after answering the previous o
 2. On `store.ErrOwned`, send over the socket (`Sent`).
 3. If the socket reports `ErrNoDaemon` (the daemon is starting or stopping, or predates the socket), rejects the event or times out, drop it and warn once (`Dropped`).
 
-CLI and MCP processes warn on stderr. Hooks pass no warning function, because git and agents read hook output; a dropped hook event is silent. Lane 2.2 adds the test that an owned store sends over the socket, replacing the phase 1 drop test.
+CLI and MCP processes warn on stderr. Hooks pass no warning function, because git and agents read hook output; a dropped hook event is silent. Hooks also never create a store: they run in every repository the plugin reaches, so step 1 applies only when the store directory (its `repo-id`) already exists. Without a store no daemon has owned the repository (the owner creates it), so the socket would refuse the event as `unknown_repo`; the hook drops it silently without dialing. Lane 2.2 adds the test that an owned store sends over the socket, replacing the phase 1 drop test.
 
 **Producers.**
 
