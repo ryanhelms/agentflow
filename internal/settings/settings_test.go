@@ -23,6 +23,7 @@ import (
 type fakePublisher struct {
 	published []string
 	state     string
+	stateErr  error
 	fail      error
 }
 
@@ -43,7 +44,7 @@ func (f *fakePublisher) Publish(_ context.Context, _ *gitx.Repo, _ configconsole
 }
 
 func (f *fakePublisher) State(context.Context, *gitx.Repo, settings.Publication) (string, error) {
-	return f.state, nil
+	return f.state, f.stateErr
 }
 
 type fixture struct {
@@ -631,5 +632,48 @@ func TestPersonalSymlink(t *testing.T) {
 	}
 	if pv, _ := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "auto")}}); pv.Status != settings.StatusInvalid {
 		t.Errorf("link to a directory: %s", pv.Status)
+	}
+}
+
+// Without GitHub, an undo still reverts the personal part and says the
+// repository part stayed.
+func TestUndoWithoutGitHubRevertsPersonalPart(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60), set("personal:autonomy.remote", "suggest")}})
+	f.pub.stateErr = errors.New("dial tcp: no route to host")
+	pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{})
+	if err != nil || pv.Status != settings.StatusOK || !has(codes(pv), "warning:reference") || len(pv.Changes) != 1 || pv.Changes[0].ID != "personal:autonomy.remote" {
+		t.Fatalf("preview %s %v %+v %v", pv.Status, codes(pv), pv.Changes, err)
+	}
+	res, ok := f.undo(t, settings.UndoRequest{}).(settings.SaveResult)
+	if !ok || res.Status != settings.StatusSaved || !strings.Contains(res.Error, "Only the personal settings were undone") || strings.Contains(f.personal(t), "suggest") {
+		t.Fatalf("undo %+v, personal %q", res, f.personal(t))
+	}
+	if len(f.pub.published) != 1 {
+		t.Errorf("the undo published %d times", len(f.pub.published)-1)
+	}
+}
+
+// A worktree-mode save is undone only from the worktree (branch) that wrote
+// it: the journal is shared by every worktree of the clone.
+func TestUndoRefusesFromAnotherWorktree(t *testing.T) {
+	f := newFixture(t, "task-1")
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	f.save(t, cs)
+	git(t, f.dir, "stash", "-q")
+	git(t, f.dir, "switch", "-q", "-c", "task-2")
+	git(t, f.dir, "stash", "pop", "-q")
+	pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{})
+	if err != nil || pv.Status != settings.StatusInvalid || !has(codes(pv), "error:reference") {
+		t.Fatalf("undo from task-2: %s %v %v", pv.Status, codes(pv), err)
+	}
+	if !strings.Contains(pv.Diagnostics[0].Message, "task-1") {
+		t.Errorf("message %q", pv.Diagnostics[0].Message)
+	}
+	git(t, f.dir, "stash", "-q")
+	git(t, f.dir, "switch", "-q", "task-1")
+	git(t, f.dir, "stash", "pop", "-q")
+	if pv, _ := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{}); pv.Status != settings.StatusOK {
+		t.Errorf("undo from task-1: %s %v", pv.Status, codes(pv))
 	}
 }

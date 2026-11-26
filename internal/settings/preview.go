@@ -22,6 +22,9 @@ type plan struct {
 	edits   []*edit
 	preview Preview
 	pub     *configconsole.PublicationPlan
+	// note is display text the SaveResult carries (Error): what an undo
+	// left out.
+	note string
 }
 
 func (p *plan) touches(l config.FieldLayer) bool {

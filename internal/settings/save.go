@@ -300,7 +300,7 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 	if err := s.journalWritable(); err != nil {
 		return nil, errors.New("cannot write the settings journal, so nothing was saved")
 	}
-	res := SaveResult{Status: StatusSaved, Operation: id, Changes: p.preview.Changes, Restart: p.preview.Restart}
+	res := SaveResult{Status: StatusSaved, Operation: id, Changes: p.preview.Changes, Restart: p.preview.Restart, Error: p.note}
 	var pub *Publication
 	repoDone := false
 	if p.touches(config.FieldRepo) {

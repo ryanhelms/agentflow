@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/ryanhelms/agentflow/internal/config"
 )
@@ -44,21 +45,45 @@ func (s *Service) undoPlan(ctx context.Context, req UndoRequest) (*plan, *Journa
 		return nil, nil, ErrNothingToUndo
 	}
 	cs := inverse(rec, req.Repo)
+	note := ""
 	published, err := s.publishedOpen(ctx, rec)
 	if err != nil {
-		return nil, nil, err
+		// GitHub cannot say whether the pull request merged: undo the
+		// personal part alone, and say so.
+		personal := personalEdits(cs.Edits)
+		if len(personal) == 0 {
+			return nil, nil, err
+		}
+		if len(personal) < len(cs.Edits) {
+			note = "Only the personal settings were undone: " + err.Error() + ". The repository part of the save stays as it is."
+		}
+		cs.Edits = personal
+	}
+	otherWorktree := ""
+	if pub := rec.Publication; pub != nil && pub.Mode == RepoWorktree {
+		if branch := s.branch(ctx); branch != pub.Branch {
+			otherWorktree = pub.Branch
+		}
 	}
 	extra := func(c *check) {
-		if !published {
-			return
+		if note != "" {
+			c.add(SeverityWarning, nil, CodeReference, note)
 		}
 		for _, e := range c.edits {
-			if e.layer == config.FieldRepo {
+			switch {
+			case e.layer != config.FieldRepo:
+			case otherWorktree != "":
+				c.add(SeverityError, e, CodeReference, "This change was written to "+RepoFile+" in the worktree of branch "+otherWorktree+
+					". Undo it from that worktree.")
+			case published:
 				c.add(SeverityError, e, CodePublished, "This change waits in pull request "+rec.Publication.URL+". Close the pull request to discard it.")
 			}
 		}
 	}
 	p, err := s.plan(ctx, cs, extra)
+	if p != nil {
+		p.note = note
+	}
 	if err != nil || !req.SkipConflicts || p.preview.Status != StatusConflict {
 		return p, rec, err
 	}
@@ -79,7 +104,21 @@ func (s *Service) undoPlan(ctx context.Context, req UndoRequest) (*plan, *Journa
 	}
 	cs.Edits = keep
 	p, err = s.plan(ctx, cs, extra)
+	if p != nil {
+		p.note = note
+	}
 	return p, rec, err
+}
+
+// personalEdits are the edits of the personal layer.
+func personalEdits(edits []Edit) []Edit {
+	var out []Edit
+	for _, e := range edits {
+		if strings.HasPrefix(e.ID, string(config.FieldPersonal)+":") {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // inverse builds the ChangeSet that reverts rec: each edit back to its

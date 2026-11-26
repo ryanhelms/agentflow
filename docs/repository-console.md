@@ -154,7 +154,9 @@ agentflow config undo
 - `agentflow config undo` reverses the last save in this repository; fields
   changed since conflict unless you pass `--skip-conflicts`. A field whose pull
   request is still open cannot be undone: close the pull request. A second undo
-  redoes the save.
+  redoes the save. A `--mode worktree` save is undone only from the worktree
+  that wrote it. When GitHub cannot be reached to check the pull request, the
+  undo reverts the personal part alone and says so.
 - Personal YAML never leaves your machine: previews and the console show field
   values only.
 
