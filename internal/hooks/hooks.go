@@ -27,12 +27,28 @@ import (
 type ExitError struct {
 	Code int
 	Msg  string
+	// Reason is the fixed code a hook.ran event carries for this refusal
+	// (ReasonConvention, ReasonRepoBoundary, ...). Never text.
+	Reason string
 }
 
 func (e *ExitError) Error() string { return e.Msg }
 
 // CommitMsg validates (and strips AI trailers from) a commit message file.
+// It is what `agentflow lint-msg` runs, for every commit in the pre-push hook
+// and in CI, so it publishes nothing. The git hook is CommitMsgHook.
 func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
+	return commitMsg(ctx, file, stderr)
+}
+
+// CommitMsgHook is the git commit-msg hook (`agentflow hook commit-msg`): it
+// does what CommitMsg does and publishes hook.ran.
+func CommitMsgHook(ctx context.Context, file string, stderr io.Writer) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "commit-msg", "git", start, err, false) }(time.Now())
+	return commitMsg(ctx, file, stderr)
+}
+
+func commitMsg(ctx context.Context, file string, stderr io.Writer) error {
 	raw, err := os.ReadFile(file)
 	if err != nil {
 		return err
@@ -71,11 +87,17 @@ func CommitMsg(ctx context.Context, file string, stderr io.Writer) error {
 	} else {
 		fmt.Fprintln(stderr, "  format: type[(scope)][!]: imperative summary   e.g. feat(cli): add release plan")
 	}
-	return &ExitError{Code: 1, Msg: "invalid commit message"}
+	return &ExitError{Code: 1, Msg: "invalid commit message", Reason: ReasonConvention}
 }
 
-// SessionStart prints the selected providers and task context for the AI client.
-func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) error {
+// SessionStart prints the selected providers and task context for the AI
+// client, and publishes hook.ran.
+func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "session-start", client, start, err, false) }(time.Now())
+	return sessionStart(ctx, client, notice, stdout)
+}
+
+func sessionStart(ctx context.Context, client, notice string, stdout io.Writer) error {
 	dir, _ := os.Getwd()
 	a, err := app.Open(ctx, dir, client)
 	if err != nil {
@@ -250,7 +272,14 @@ func RepoBoundary(ctx context.Context, cmd, cwd string) *boundary.Refusal {
 // subjects. Claude Code treats exit code 2 as "block" and shows stderr to the model.
 // The repository boundary applies in every mode. conventionOnly skips the never-list: agentflow's own repo uses it, because maintainers
 // there ask agents to merge PRs explicitly.
-func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) error {
+// It runs before every shell command, so it publishes hook.ran only when it
+// blocks a command or fails.
+func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "pre-bash", "claude", start, err, true) }(time.Now())
+	return preBash(ctx, stdin, stderr, conventionOnly)
+}
+
+func preBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) error {
 	var in claudeHookInput
 	if err := json.NewDecoder(stdin).Decode(&in); err != nil {
 		return nil
@@ -263,7 +292,7 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 	if refusal := RepoBoundary(ctx, cmd, in.Cwd); refusal != nil {
 		msg := refusal.Message()
 		fmt.Fprintln(stderr, "agentflow blocked this command: "+msg)
-		return &ExitError{Code: 2, Msg: msg}
+		return &ExitError{Code: 2, Msg: msg, Reason: ReasonRepoBoundary}
 	}
 	protected := config.DefaultProtected
 	branch := ""
@@ -282,7 +311,7 @@ func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 		never.CoordinatorMerge = false
 	} else if reason := policy.ForbiddenWith(cmd, protected, branch, never); reason != "" {
 		fmt.Fprintln(stderr, "agentflow blocked this command: "+reason)
-		return &ExitError{Code: 2, Msg: reason}
+		return &ExitError{Code: 2, Msg: reason, Reason: ReasonNeverList}
 	}
 	// PR titles become the squash commit on the default branch: check them before the
 	// PR exists, leaving room for the " (#123)" GitHub appends.
@@ -329,7 +358,7 @@ func report(stderr io.Writer, what string, issues []commit.Issue) error {
 		}
 		fmt.Fprintln(stderr)
 	}
-	return &ExitError{Code: 2, Msg: "invalid " + what}
+	return &ExitError{Code: 2, Msg: "invalid " + what, Reason: ReasonConvention}
 }
 
 func unquote(s string) string {
@@ -347,8 +376,14 @@ func unquote(s string) string {
 	return s
 }
 
-// Stop reminds about uncommitted work and unticked criteria without blocking.
-func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer) error {
+// Stop reminds about uncommitted work and unticked criteria without
+// blocking, and publishes hook.ran.
+func Stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "stop", client, start, err, false) }(time.Now())
+	return stop(ctx, client, stdin, stdout)
+}
+
+func stop(ctx context.Context, client string, stdin io.Reader, stdout io.Writer) error {
 	var in claudeHookInput
 	_ = json.NewDecoder(stdin).Decode(&in)
 	if in.StopHookActive {
@@ -525,17 +560,22 @@ func shellWords(s string) []string {
 // AGENTFLOW_ALLOW_PROMOTE=1 allows main and master, for a release promotion only.
 // args are git's REMOTE and URL. It also refuses a push from a repository other
 // than the session's (AGENTFLOW_SESSION_REPO) and a push to a URL that is none of
-// the repository's remotes.
-func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer, args ...string) error {
+// the repository's remotes. It publishes hook.ran.
+func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer, args ...string) (err error) {
+	defer func(start time.Time) { hookRan(ctx, "pre-push", "git", start, err, false) }(time.Now())
+	return prePush(ctx, stdin, stderr, args...)
+}
+
+func prePush(ctx context.Context, stdin io.Reader, stderr io.Writer, args ...string) error {
 	dir, _ := os.Getwd()
 	if msg := SessionMismatch(ctx, dir); msg != "" {
 		fmt.Fprintln(stderr, "✖ agentflow: "+msg)
-		return &ExitError{Code: 1, Msg: "push from another repository"}
+		return &ExitError{Code: 1, Msg: "push from another repository", Reason: ReasonRepoBoundary}
 	}
 	if len(args) == 2 {
 		if msg := foreignPushURL(ctx, dir, args[0], args[1]); msg != "" {
 			fmt.Fprintln(stderr, "✖ agentflow: "+msg)
-			return &ExitError{Code: 1, Msg: "push to another repository"}
+			return &ExitError{Code: 1, Msg: "push to another repository", Reason: ReasonRepoBoundary}
 		}
 	}
 	protected := config.DefaultProtected
@@ -567,5 +607,5 @@ func PrePush(ctx context.Context, stdin io.Reader, stderr io.Writer, args ...str
 	for _, b := range blocked {
 		fmt.Fprintf(stderr, "✖ agentflow: pushing to protected branch %s is blocked; push a feature branch and open a PR\n", b)
 	}
-	return &ExitError{Code: 1, Msg: "push to a protected branch"}
+	return &ExitError{Code: 1, Msg: "push to a protected branch", Reason: ReasonProtectedBranch}
 }

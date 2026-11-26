@@ -26,15 +26,15 @@ type setupApplyIn struct {
 
 func (s *Server) registerProviderSetup() {
 	add(s, "agentflow_setup_plan", "Inspect selected providers, probe a declared MCP companion, or check its registration in an explicit project client. Returns a fresh read-only readiness plan with next steps.", readOnly,
-		func(ctx context.Context, in setupPlanIn) (any, error) {
-			return setup.PlanSetup(ctx, s.app.Repo.Dir, in.Client, in.Companion)
+		func(ctx context.Context, a *app.App, in setupPlanIn) (any, error) {
+			return setup.PlanSetup(ctx, a.Repo.Dir, in.Client, in.Companion)
 		})
 	add(s, "agentflow_setup_providers", "List every provider each role accepts, the default, which one this workspace selects, its contract, the provider definition files loaded, and whether agentflow checks readiness itself or through an MCP companion. With explain, also each selected provider's effective settings, the layer that set each one and any release constraint. Reads local configuration only.", readOnly,
-		func(ctx context.Context, in setupProvidersIn) (any, error) {
-			return setup.ListConfiguredProviders(ctx, s.app.Repo.Dir, s.app.Cfg, s.app.HasCfg, in.Explain)
+		func(ctx context.Context, a *app.App, in setupProvidersIn) (any, error) {
+			return setup.ListConfiguredProviders(ctx, a.Repo.Dir, a.Cfg, a.HasCfg, in.Explain)
 		})
 	add(s, "agentflow_setup_apply", "Install a pinned gh or MCP companion, or register the selected adapter or companion in an explicit project client. Each action requires local confirmation. Rerun agentflow_setup_plan to verify. Host trust and sign-in are handled by the client.", remote,
-		func(ctx context.Context, in setupApplyIn) (any, error) {
-			return s.app.ApplySetup(ctx, app.SetupAction{Client: in.Client, Companion: in.Companion, InstallGH: in.InstallGH, InstallMCP: in.Install}, in.ConfirmToken)
+		func(ctx context.Context, a *app.App, in setupApplyIn) (any, error) {
+			return a.ApplySetup(ctx, app.SetupAction{Client: in.Client, Companion: in.Companion, InstallGH: in.InstallGH, InstallMCP: in.Install}, in.ConfirmToken)
 		})
 }

@@ -131,7 +131,7 @@ func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
 	return g, nil
 }
 
-func (g *Gate) directory() string { return filepath.Join(g.auditDir, "approvals") }
+func (g *Gate) directory() string { return ApprovalsDir(g.auditDir) }
 
 func (g *Gate) locked(fn func() error) error {
 	dir := g.directory()
@@ -228,9 +228,44 @@ func (g *Gate) credential(s string) (string, bool, error) {
 	return id, true, nil
 }
 
+// OperationIDOf returns the operation ID a confirm token or operation ID
+// names, without checking the bearer's MAC. It is a correlation hint for
+// events and the timeline only: it grants nothing, and the gate still
+// checks the token when the operation runs.
+func OperationIDOf(token string) (string, bool) {
+	if strings.HasPrefix(token, "op_") {
+		if _, err := parseID(token); err != nil {
+			return "", false
+		}
+		return token, true
+	}
+	if !strings.HasPrefix(token, "cf_") {
+		return "", false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token[3:])
+	if err != nil || len(raw) != 16+sha256.Size {
+		return "", false
+	}
+	return "op_" + hex.EncodeToString(raw[:16]), true
+}
+
+// ScopeKey is the file-name prefix of the approval records of the
+// repository whose common git dir is repository, after Configure resolved
+// its symbolic links: 32 lowercase hex characters. Records are named
+// "<ScopeKey>-<operation ID>.json" in the approvals directory. The event
+// watcher uses it to route a record to its repository without reading
+// paths from the record.
+func ScopeKey(repository string) string {
+	scope := sha256.Sum256([]byte(repository))
+	return fmt.Sprintf("%x", scope[:16])
+}
+
+// ApprovalsDir is the approvals directory of the journal rooted at dir
+// (NewGate's dir, normally config.Home()).
+func ApprovalsDir(dir string) string { return filepath.Join(dir, "approvals") }
+
 func (g *Gate) recordPath(id string) string {
-	scope := sha256.Sum256([]byte(g.scope))
-	return filepath.Join(g.directory(), fmt.Sprintf("%x-%s.json", scope[:16], id))
+	return filepath.Join(g.directory(), ScopeKey(g.scope)+"-"+id+".json")
 }
 
 func (g *Gate) load(id string) (approvalRecord, error) {

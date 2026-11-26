@@ -541,13 +541,13 @@ func TestManualOpenDuringBrowserStartupReusesFirstTab(t *testing.T) {
 				t.Fatal("recovery request blocked on a pending browser launch")
 			}
 			id := strings.Repeat("a", 32)
-			tab, stream := hub.attach(id, ws.origin, ws.worktreePath)
-			if tab == nil {
+			if !hub.attach(id, ws.origin, ws.worktreePath, "") {
 				t.Fatal("attach failed")
 			}
-			defer hub.detach(tab, stream, false)
-			select {
-			case event := <-tab.events:
+			release := hub.hold([]string{id})
+			defer release()
+			{
+				event := waitNavigation(t, hub, id)
 				target, err := url.Parse(event.Target)
 				if err != nil || event.Screen != "providers" || target.Host != origin.Host || target.Path == origin.Path {
 					t.Fatal("wrong cross-worktree navigation")
@@ -556,8 +556,6 @@ func TestManualOpenDuringBrowserStartupReusesFirstTab(t *testing.T) {
 				if w.Code != 200 {
 					t.Fatalf("ack: %d", w.Code)
 				}
-			case <-time.After(3 * time.Second):
-				t.Fatal("late tab did not receive navigation")
 			}
 			if got := <-done; got.err != nil || got.url != "" {
 				t.Fatal("manual request returned a duplicate launch after acknowledgement")

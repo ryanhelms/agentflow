@@ -3,6 +3,7 @@ module github.com/ryanhelms/agentflow
 go 1.26.0
 
 require (
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/zalando/go-keyring v0.2.8

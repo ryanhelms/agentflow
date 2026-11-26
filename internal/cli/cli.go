@@ -35,6 +35,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/setup/initproviders"
 	"github.com/ryanhelms/agentflow/internal/update"
 	"github.com/ryanhelms/agentflow/internal/version"
+	"github.com/ryanhelms/agentflow/internal/watch"
 	"github.com/ryanhelms/agentflow/internal/webui"
 )
 
@@ -116,6 +117,11 @@ Work
   review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
+  events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--all-repos] [--follow] [--json]
+                                 git, configuration and user-level events recorded by the console
+                                 daemon, for this repository and global; --all-repos reads every
+                                 repository the daemon serves; --follow starts the daemon and
+                                 prints new events until interrupted
   eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs get REF [--json]          read one document by qualified reference
@@ -144,7 +150,7 @@ Runtime
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
-  hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop   [--client NAME]
+  hook commit-msg FILE | pre-push [REMOTE URL] | post-commit | session-start | pre-bash | stop   [--client NAME]
   update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
 `
@@ -224,7 +230,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
+	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "events", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -368,6 +374,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 		printStandup(out)
 		return nil
+	case "events":
+		return runEvents(ctx, args)
 	case "ac":
 		return runAC(ctx, args)
 	case "scope":
@@ -411,7 +419,7 @@ func open(ctx context.Context) (*app.App, error) {
 
 func runHook(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: agentflow hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop")
+		return errors.New("usage: agentflow hook commit-msg FILE | pre-push [REMOTE URL] | post-commit | session-start | pre-bash | stop")
 	}
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
@@ -434,7 +442,11 @@ func runHook(ctx context.Context, args []string) error {
 		if len(positional) != 1 {
 			return errors.New("usage: agentflow hook commit-msg FILE")
 		}
-		return hooks.CommitMsg(ctx, positional[0], os.Stderr)
+		return hooks.CommitMsgHook(ctx, positional[0], os.Stderr)
+	case "post-commit":
+		// git has already made the commit: this hook only tells the console and must not fail it.
+		_ = hooks.PostCommit(ctx)
+		return nil
 	case "session-start":
 		notice := ""
 		if u, err := newUpdater(ctx); err == nil && u != nil {
@@ -1284,6 +1296,7 @@ func runDoctor(ctx context.Context, args []string) error {
 		}
 		report(len(missing) == 0, "flow map", a.Cfg.FlowMap+map[bool]string{true: "", false: " (no block for " + strings.Join(missing, ",") + ")"}[len(missing) == 0])
 	}
+	printDaemonHome(os.Stdout, checkDaemonHome(ctx))
 	clients := setup.Detect()
 	sort.Strings(clients)
 	report(true, "AI clients on PATH", strings.Join(clients, ", "))
@@ -1291,6 +1304,24 @@ func runDoctor(ctx context.Context, args []string) error {
 		return &hooks.ExitError{Code: 1, Msg: "doctor found problems"}
 	}
 	return nil
+}
+
+// checkDaemonHome asks whether the console daemon watches this process's
+// agentflow home. Tests replace it.
+var checkDaemonHome = webui.CheckDaemonHome
+
+// printDaemonHome prints the doctor line for the console daemon's home: a
+// warning (!) when the daemon watches another AGENTFLOW_HOME, which does not
+// fail doctor, and nothing when no daemon runs.
+func printDaemonHome(w io.Writer, c watch.HomeCheck) {
+	if !c.Checked {
+		return
+	}
+	mark := "✓"
+	if c.Warn {
+		mark = "!" // a warning does not clear ok
+	}
+	fmt.Fprintf(w, "%s %-26s %s\n", mark, "console daemon home", c.Detail)
 }
 
 func runRelease(ctx context.Context, args []string) error {

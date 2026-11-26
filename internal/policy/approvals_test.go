@@ -383,3 +383,23 @@ func TestDirectAutoPublicationRetiresOutstandingReceipts(t *testing.T) {
 		})
 	}
 }
+
+func TestOperationIDOf(t *testing.T) {
+	g := gateFor(t, t.TempDir(), "owner")
+	id := "op_0123456789abcdef0123456789abcdef"
+	for _, token := range []string{id, g.token(id)} {
+		got, ok := OperationIDOf(token)
+		if !ok || got != id {
+			t.Errorf("OperationIDOf(%q) = %q, %v", token, got, ok)
+		}
+		// The ID matches what the gate itself resolves.
+		if resolved, _, err := g.credential(token); err != nil || resolved != got {
+			t.Errorf("gate resolves %q to %q, %v", token, resolved, err)
+		}
+	}
+	for _, bad := range []string{"", "op_xyz", "op_0123456789ABCDEF0123456789ABCDEF", "cf_!!", "cf_" + strings.Repeat("A", 10), "tok"} {
+		if got, ok := OperationIDOf(bad); ok {
+			t.Errorf("OperationIDOf(%q) = %q", bad, got)
+		}
+	}
+}

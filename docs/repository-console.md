@@ -321,16 +321,31 @@ event types, branch creation and external CI can still run.
 ## Hand off work
 
 **Overview** reports the branch, revision, changed paths, configuration
-problems and recognized workflow pin. **Check activity** adds recent open
-GitHub PRs, their review and merge states, and dependencies between visible
-PRs. If Agent Commander is running locally, it also lists pending worker
-questions from this exact worktree. Review the question and confirm your
+problems and recognized workflow pin. The branch, revision, changes and
+configuration problems update on their own while the console is open; the
+indicator beside **Resync** shows whether those updates are live, reconnecting,
+resyncing or offline. **Resync** reloads the checkout and restarts the live
+updates.
+
+**Activity** lists the repository's open GitHub PRs with their checks, review
+and merge readiness and the PR each depends on, the issues bound to its
+worktrees, and recent commits and blocked or failed hooks. It also shows
+GitHub's state: up to date, not connected, unavailable, or rate limited with
+the time Agentflow retries. **Approvals** lists the requests that wait for an
+answer with the time each has left, and the outcomes of the last 24 hours.
+Answer an approval in the agent session or terminal that asked for it. Both
+panels update on their own; a changed value is highlighted for two seconds and
+announced to screen readers.
+
+If Agent Commander opened the console, **Needs attention** also lists pending
+worker questions from this exact worktree. They load with the checkout and
+again on **Resync**. Review the question and confirm your
 answer to send it to the worker. These operations use the permissions of the
 Agent Commander connection that opened the worktree. A remembered browser can
 continue editing configuration after that connection expires. To reconnect
 worker activity, follow the instruction on Overview to open a fresh local
 link from the intended worktree. **Handoff** provides a copyable summary for
-the next developer or agent. The local configuration editor also works with
+the next developer or agent; its pull requests follow the live updates. The local configuration editor also works with
 Agent Commander disconnected.
 
 ## Update the console design tokens

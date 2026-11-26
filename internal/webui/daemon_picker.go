@@ -28,6 +28,14 @@ func (d *daemon) pickerResource(w http.ResponseWriter, r *http.Request, clone re
 		pickerAsset(w, "nscale-tokens.css", "text/css; charset=utf-8")
 	case "/_agentflow/style.css":
 		pickerAsset(w, "style.css", "text/css; charset=utf-8")
+	case "/_agentflow/event-worker.js":
+		// One origin-wide URL, so every tab of a clone shares one SharedWorker
+		// and therefore one event stream.
+		if _, err := assets.ReadFile("static/event-worker.js"); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		pickerAsset(w, "event-worker.js", "text/javascript; charset=utf-8")
 	case "/_agentflow/worktrees":
 		origin := "http://" + d.publicHost(clone.Host)
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")

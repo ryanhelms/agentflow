@@ -115,7 +115,10 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 		}
 	}
 
-	// Provider operations and explain must agree until this server restarts.
+	// Provider operations and explain read one snapshot per call, and the
+	// snapshot follows the files: a new definition is picked up by the next
+	// call (see reload_test.go for the full reload behaviour).
+	before := s.app.Load()
 	defDir := filepath.Join(os.Getenv("AGENTFLOW_HOME"), "providers")
 	if err := os.MkdirAll(defDir, 0700); err != nil {
 		t.Fatal(err)
@@ -123,8 +126,9 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(defDir, "later.yml"), []byte("version: 1\nproviders: {jira: {task_management: {settings: {site: https://later.example}}}}"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if out := call("agentflow_setup_providers", map[string]any{"explain": true}); !strings.Contains(out, s.app.Cfg.Jira.Site) || strings.Contains(out, "later.example") || strings.Contains(out, "later.yml") {
-		t.Fatalf("explain differs from active snapshot: %s", out)
+	out0 := call("agentflow_setup_providers", map[string]any{"explain": true})
+	if now := s.app.Load(); now == before || !strings.Contains(out0, "later.example") || !strings.Contains(out0, "later.yml") {
+		t.Fatalf("explain differs from the reloaded snapshot: %s", out0)
 	}
 
 	if out := call("agentflow_commit_validate", map[string]any{"message": "updated stuff"}); !strings.Contains(out, "PLAT-123") {
@@ -153,12 +157,13 @@ func TestToolsOverInMemoryTransport(t *testing.T) {
 
 func TestDesktopWriteEntryPoints(t *testing.T) {
 	for _, client := range []string{"claude", "claude-desktop", "codex"} {
-		s := &Server{app: &app.App{Client: client}, writer: &native.SessionWriter{}, slackWriter: &native.SessionWriter{}}
+		s := &Server{writer: &native.SessionWriter{}, slackWriter: &native.SessionWriter{}}
+		a := &app.App{Client: client}
 		wantNotify := s.slackWriter
 		if client == "codex" {
 			wantNotify = s.writer
 		}
-		if s.writerForTool("agentflow_notify") != wantNotify {
+		if s.writerForTool(a, "agentflow_notify") != wantNotify {
 			t.Errorf("%s notification writer differs from its configured connection", client)
 		}
 		for name, desktop := range map[string]bool{
@@ -166,7 +171,7 @@ func TestDesktopWriteEntryPoints(t *testing.T) {
 			"agentflow_start": true, "agentflow_transition": true, "agentflow_commit": false,
 			"agentflow_eod_post": false, "agentflow_ac_update": false, "agentflow_ticket_create": true,
 		} {
-			if got := s.writerForTool(name) != nil; got != (desktop || client == "codex") {
+			if got := s.writerForTool(a, name) != nil; got != (desktop || client == "codex") {
 				t.Errorf("%s %s writer available = %t", client, name, got)
 			}
 		}

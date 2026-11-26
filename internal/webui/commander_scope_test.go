@@ -160,14 +160,17 @@ func TestCommanderCrossWorktreeTabScope(t *testing.T) {
 			}
 			_, scope := s.commanderFor(req)
 			id := strings.Repeat("7", 32)
-			tab, stream := s.tabs.attach(id, s.origin, s.worktreePath, scope)
-			defer s.tabs.detach(tab, stream, false)
+			if !s.tabs.attach(id, s.origin, s.worktreePath, scope) {
+				t.Fatal("attach failed")
+			}
+			release := s.tabs.hold([]string{id})
+			defer release()
 			op = registration(linked, "open", "handoff")
 			op.Commander = tc.caller
 			done := make(chan error, 1)
 			go func() { _, e := d.register(t.Context(), op); done <- e }()
-			select {
-			case event := <-tab.events:
+			{
+				event := waitNavigation(t, s.tabs, id)
 				dest, err := url.Parse(event.Target)
 				if err != nil || dest.Path == u.Path {
 					t.Fatal("sibling navigation missing")
@@ -184,8 +187,6 @@ func TestCommanderCrossWorktreeTabScope(t *testing.T) {
 				if ack := request(t, s, "POST", "/api/tabs/ack", s.origin, "session", map[string]any{"id": event.ID, "tab": id, "handled": true}); ack.Code != 200 {
 					t.Fatal("could not acknowledge")
 				}
-			case <-time.After(3 * time.Second):
-				t.Fatal("missing navigation")
 			}
 			if err := <-done; err != nil {
 				t.Fatal(err)
