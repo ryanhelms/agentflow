@@ -449,7 +449,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
-| See or follow git and configuration events | `agentflow events [--follow]` | `agentflow_events` or `/agentflow:events` |
+| See or follow git and configuration events | `agentflow events [--follow] [--all-repos]` | `agentflow_events` or `/agentflow:events` |
 | End-of-day task comments | `agentflow eod post KEY=NOTE` | `/agentflow:eod` |
 | Next release version | `agentflow release plan` | "what version will this ship as?" |
 
@@ -466,11 +466,38 @@ An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 
 The overview is live: a branch switch, a commit, staging or an edit under
-`.agentflow/` shows without a refresh. All tabs of a clone share one event
-stream. If the overview looks out of date, press **Resync** to discard it and
-load a fresh snapshot. `agentflow events --follow` prints the same events in a
+`.agentflow/` shows without a refresh. So do the repository's open pull
+requests with their checks, review and merge readiness, the issues bound to
+its worktrees, recent commits and blocked or failed hooks, approvals with the
+time each has left, and the handoff brief. The **Activity** panel also shows
+when GitHub is unavailable or rate limited and when Agentflow retries. All
+tabs of a clone share one event stream, which also carries requests to show a
+screen in an open tab. If the overview looks out of date, press **Resync** to
+discard it and load a fresh snapshot. `agentflow events --follow` prints the same events in a
 terminal; see [docs/events.md](docs/events.md). The daemon records events
-while it runs, in the repository's git dir under `agentflow/events/`.
+while it runs, in the repository's git dir under `agentflow/events/`. Changes to
+user-level files (the personal configuration layer and user-level client
+settings) go to one store per OS user and host, `~/.agentflow-ui/<host-hash>.events/`,
+which must be a private directory owned by that user.
+Agentflow's hooks record a `hook.ran` event each time they run (`pre-bash` only
+when it blocks a command) and hand it to a running daemon over a private local
+socket. Approval requests and their outcomes (`approval.requested`,
+`approval.resolved`, `approval.expired`) and changes to a worktree's AI client
+settings files (`client.settings.changed`) are events too. Approval records are
+read from the `AGENTFLOW_HOME` the daemon started with, so start the console from
+a shell that uses the same home as your agents; `agentflow doctor` warns when the
+console daemon uses a different `AGENTFLOW_HOME`.
+The daemon also polls GitHub for pull request, check and bound-issue changes of each
+repository with a GitHub remote, using your `gh` login, and records them as
+`gh.pr.updated`, `gh.ci.updated` and `gh.issue.updated` events. A quiet
+repository costs only conditional requests, which GitHub does not count against
+the rate limit, and polling slows down by itself as the limit runs low. The
+console shows the poller's health (`ok`, `rate_limited`, `unavailable`, or `disabled`
+for a repository without a GitHub remote) as soon as the first poll ends.
+`agentflow events` reads this repository's events and the user-level (`global`) ones, such as
+a change to `~/.agentflow/config.yml`. Add `--all-repos` to read every repository the
+daemon serves in one list. A running MCP server follows the same configuration events and
+reloads its configuration when `.agentflow/` or `~/.agentflow/` changes.
 
 Run `agentflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
@@ -535,8 +562,11 @@ through one hour, subject to the repo maximum.
 In `agentflow ui`, open **Autonomy** to inspect the effective rule for each action,
 save personal preferences or stage repository ceilings for review. Select
 **Inherit** to remove an override. Run `agentflow policy explain commit` in the
-affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. Restart
-a running Agentflow MCP server after editing the configuration. Host sandbox
+affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. A running
+Agentflow MCP server reloads the configuration after you edit it (see
+[MCP configuration reload](docs/events.md#mcp-configuration-reload)), so the next tool call uses
+the new settings. Restart the AI session after you change the selected providers, which changes the
+server's instructions, or to leave configuration recovery mode. Host sandbox
 permissions and provider sign-in prompts are controlled by their respective clients.
 
 Agentflow runs configured Git commit hooks, including native hooks on Windows.

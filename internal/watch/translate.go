@@ -13,8 +13,9 @@ import (
 
 // Event sources set by the built-in Translators.
 const (
-	SourceGit    = "watch.git"
-	SourceConfig = "watch.config"
+	SourceGit       = "watch.git"
+	SourceConfig    = "watch.config"
+	SourceApprovals = "watch.approvals"
 )
 
 // Tracker is implemented by stateful Translators. The Watcher calls Track
@@ -24,6 +25,23 @@ const (
 type Tracker interface {
 	Track(ctx context.Context, t Target) error
 	Untrack(t Target)
+}
+
+// Timed is implemented by a Translator that has events of its own to
+// produce when a time passes, not only when a file changes: the approval
+// translator reports an approval whose expiry passed before any process
+// recorded it. The FileWatcher asks for the earliest deadline, wakes then
+// and calls Tick, so the Translator needs no timers or goroutines of its
+// own and stays deterministic under test.
+type Timed interface {
+	// SetWake gives the Translator a function that makes the watcher read
+	// NextDeadline again. Call it after a change the watcher cannot see
+	// (a repository started to be served, for example). It never blocks.
+	SetWake(wake func())
+	// NextDeadline returns the earliest time Tick has work to do.
+	NextDeadline() (time.Time, bool)
+	// Tick returns the events that are due at now.
+	Tick(ctx context.Context, now time.Time) ([]bus.Event, error)
 }
 
 // Chain runs several Translators on every Batch and concatenates their
@@ -36,9 +54,12 @@ var (
 	_ Tracker    = Chain(nil)
 )
 
-// NewTranslator returns the phase 1 Translator: git, then repository
-// configuration.
-func NewTranslator() Chain { return Chain{NewGitTranslator(), NewConfigTranslator()} }
+// NewTranslator returns the Translator for worktrees: git, repository
+// configuration, then the worktree's client settings files. The user-level
+// sources have their own, NewUserTranslator.
+func NewTranslator() Chain {
+	return Chain{NewGitTranslator(), NewConfigTranslator(), NewClientSettingsTranslator()}
+}
 
 // Translate implements Translator. A failing member does not stop the
 // others; their errors are joined.

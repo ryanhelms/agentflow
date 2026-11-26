@@ -27,8 +27,9 @@ func TestTapRecordsOnlyActions(t *testing.T) {
 	tap.Tap(ctx, bus.Event{Type: bus.TypeGitHeadChanged})
 	tap.Tap(ctx, bus.Event{Type: bus.TypeConfigLayerChanged})
 	tap.Tap(ctx, bus.Event{Type: "op.applied"})
-	tap.Tap(ctx, bus.Event{Type: "approval.requested"})
-	if got := strings.Join(r.actions, ","); got != "op.applied=published,approval.requested=published" {
+	tap.Tap(ctx, bus.Event{Type: bus.TypeApprovalRequested})
+	tap.Tap(ctx, bus.Event{Type: bus.TypeApprovalResolved})
+	if got := strings.Join(r.actions, ","); got != "op.applied=published" {
 		t.Fatalf("audited %q", got)
 	}
 }

@@ -7,9 +7,11 @@ import (
 
 // AuditedFamilies are the event families the audit tap records. They are
 // actions; every other family (git.*, config.*, stream.*) is an observation
-// and is not audited. No phase 1 type belongs to them, so in phase 1 the
-// tap is wired but records nothing.
-var AuditedFamilies = []string{"approval", "op"}
+// and is not audited. approval.* is not audited either: the gate's own
+// approval journal already records every transition (ADR, phase 2
+// decision 6). No type of these families exists before phase 3, so until
+// then the tap is wired but records nothing.
+var AuditedFamilies = []string{"op"}
 
 // Audited reports whether the audit tap records events of type t.
 func Audited(t Type) bool {

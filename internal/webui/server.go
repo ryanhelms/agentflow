@@ -32,7 +32,11 @@ type server struct {
 	launchMu                     sync.Mutex
 	tabs                         *tabHub
 	tabsOnce                     sync.Once
-	worktreePath                 string
+	// tabsStreamed says that something other than the event runtime serves
+	// the tabs state on this server's stream (test fixtures do). Without
+	// either, a tab cannot receive navigation and is not attached.
+	tabsStreamed bool
+	worktreePath string
 	// Serialize approval consumption and publishing. Re-read policy for every save.
 	writeMu   sync.Mutex
 	gate      *policy.Gate
@@ -57,13 +61,18 @@ func Serve(ctx context.Context, dir string, port int, ready func(string)) error 
 
 func (s *server) handler() http.Handler {
 	files, _ := fs.Sub(assets, "static")
+	if s.events != nil {
+		// The tabs projection reads this clone's hub, which publishes
+		// ui.tabs.changed to the repository's stream.
+		s.events.bindTabs(s.tabRoutes())
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(files))
 	mux.HandleFunc("POST /api/session", s.exchange)
 	mux.HandleFunc("POST /api/resume", s.resume)
 	mux.HandleFunc("GET /api/state", s.state)
-	mux.HandleFunc("GET /api/tabs/events", s.tabEvents)
 	mux.HandleFunc("GET "+EventStreamPath, s.eventStream)
+	mux.HandleFunc("POST /api/tabs/attach", s.tabAttach)
 	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)
 	mux.HandleFunc("POST /api/tabs/leave", s.tabLeave)
 	mux.HandleFunc("GET /api/activity", s.activity)
