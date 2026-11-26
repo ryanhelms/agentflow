@@ -125,8 +125,9 @@ func TestGitHubExtensionKeepsTargetCurrent(t *testing.T) {
 		len(tg.Issues) != 1 || tg.Issues[linkedID] != 35 {
 		t.Fatalf("target = %+v", tg)
 	}
-	if rt.githubCache() == nil {
-		t.Fatal("no cache for projections")
+	// The activity projection reads the poller's cache.
+	if got, ok := rt.githubCache().(*fakeGitHubPoller); !ok || got != poller {
+		t.Fatalf("the activity projection's cache is %v, not the poller", rt.githubCache())
 	}
 
 	// An open event stream makes the repository watched.

@@ -104,6 +104,9 @@ func (x *githubExtension) start(rt *eventRuntime) error {
 			fmt.Fprintln(os.Stderr, "agentflow:", msg)
 		}
 	})
+	// The activity projection reads the poller's cache, so a snapshot never
+	// calls GitHub.
+	rt.setGitHubCache(x.poller)
 	ctx, cancel := context.WithCancel(rt.ctx)
 	x.cancel = cancel
 	x.wg.Add(2)
@@ -134,17 +137,6 @@ func (x *githubExtension) attached(*repoEvents, registeredWorktree) {
 func (x *githubExtension) stop() {
 	x.cancel()
 	x.wg.Wait()
-}
-
-// githubCache returns the poller's cache for projections, or nil when the
-// poller did not start. Reading it never calls GitHub.
-func (rt *eventRuntime) githubCache() watch.GitHubCache {
-	for _, e := range rt.exts {
-		if x, ok := e.(*githubExtension); ok && x.poller != nil {
-			return x.poller
-		}
-	}
-	return nil
 }
 
 func (x *githubExtension) refreshLoop(ctx context.Context) {

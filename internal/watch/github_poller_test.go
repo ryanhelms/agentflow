@@ -84,7 +84,10 @@ func (h *ghHarness) start() {
 func (h *ghHarness) stop() {
 	h.cancel()
 	select {
-	case <-h.done:
+	case err := <-h.done:
+		if err != nil {
+			h.t.Errorf("Run = %v", err)
+		}
 	case <-time.After(5 * time.Second):
 		h.t.Error("poller did not stop")
 	}
@@ -832,7 +835,12 @@ func TestGitHubPollerAPIErrorBacksOff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- p.Run(ctx, &recorder{t: t}) }()
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("Run = %v", err)
+		}
+	})
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if n, _ := clock.stats(); n >= 2 {
