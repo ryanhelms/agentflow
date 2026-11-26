@@ -264,7 +264,24 @@ type Projection interface {
 }
 ```
 
-The projector (lane 1.4) subscribes once, caches each key's last state, coalesces work per key through a `bus.Queue`, and sends a state only when its JSON changed. A key that no longer exists gets state `null`. Phase 1 has one projection, `overview`, keyed by worktree. Lane 1.4 defines its JSON in `projection_overview.go`: branch, HEAD OID, detached, upstream ahead and behind, staged, unstaged and untracked counts, git operation, bound task, and configuration validity. Changing that shape later needs an amendment.
+The projector (lane 1.4) subscribes once, caches each key's last state, coalesces work per key, and sends a state only when its JSON changed. A key that no longer exists gets state `null`. Phase 1 has one projection, `overview`, keyed by worktree. Lane 1.4 defines its JSON in `projection_overview.go`: branch, HEAD OID, detached, upstream ahead and behind, staged, unstaged and untracked counts, git operation, bound task, and configuration validity. Changing that shape later needs an amendment.
+
+*Amended after phase 1 integration (#29).* The projector coalesces by draining the events already waiting on its subscription, up to a batch cap, and recomputing each affected key once per pass. It does not use a `bus.Queue`. The `overview` state is:
+
+| Field | Meaning |
+| --- | --- |
+| `branch` | Branch name; `""` when detached. |
+| `head` | Short OID, as `/api/state` `head`; `""` before the first commit. |
+| `oid` | Full OID. |
+| `detached` | HEAD is detached. |
+| `upstream` | `{name, ahead, behind}`; omitted when the branch has no upstream. |
+| `changed` | Paths with any change, as `/api/state` `dirty_count`. |
+| `staged`, `unstaged`, `untracked` | Counts. |
+| `operation` | `""`, `rebase`, `merge`, `cherry-pick`, `revert` or `bisect`. |
+| `task` | Bound task, omitted when none. |
+| `config` | `{valid, problems}`. |
+
+`GET /api/events` answers 503 when the console has no event store for its repository. The client keeps retrying.
 
 ### SSE wire format
 
@@ -278,6 +295,8 @@ The projector (lane 1.4) subscribes once, caches each key's last state, coalesce
 - `Last-Event-ID: <cursor>`, optional, sent by the client itself.
 
 **Scope.** A stream authenticated on one worktree may follow every worktree of the same repository. This is the existing trust boundary, not a new one: the console key is already shared per clone and origin (one remember key per clone and origin), so that browser can already resume a session for any of those worktrees. A stream never sees another clone or another console host. The server refuses with 403 any topic outside the authenticated repository.
+
+*Amended after phase 1 integration (#29).* A `Last-Event-ID` with an entry for any other repository is also refused with 403, before the stream opens. So the server never sends a `resync` with reason `topics` (`ResyncTopics`) for it; that reason stays reserved.
 
 **Frames.** Every frame is one SSE event whose data is one line of JSON (`internal/webui/projection.go`):
 
@@ -312,7 +331,9 @@ data: {"reason":"overflow"}
 - With an expired cursor or more than 1000 missed events: `resync`, `snapshot`, then deltas.
 - When the stream's own subscription overflows: `resync` with reason `overflow`, `snapshot`, then deltas.
 
-**Topic multiplexing.** One connection carries every topic a browser needs, across all worktrees of the repository. For example, `*/*/git.**` and `*/*/config.**` follow every worktree. `agentflow events --follow` reads every repository's store, so its cursor can span many repositories.
+**Topic multiplexing.** One connection carries every topic a browser needs, across all worktrees of the repository. For example, `*/*/git.**` and `*/*/config.**` follow every worktree.
+
+*Amended after phase 1 integration (#29).* In phase 1, `agentflow events` reads only the current repository's store, and a topic naming another repository is an error. Following many repositories with one cursor (through `store.Union`) moves to phase 2.
 
 **One stream per browser.** Browsers allow about 6 HTTP/1.1 connections per host. Every worktree of a repository shares one console host, and the old tab stream already has to give its connection back every 5 seconds to avoid starving other requests. So the browser opens **one** event stream per console origin, in a `SharedWorker` (`static/event-worker.js`), and every tab of that origin shares it. Where `SharedWorker` is unavailable, each tab opens its own stream. The page posts its session credential to the worker; on 401 the worker asks the pages for a fresh one through the existing `unauthorized` flow. The worker reconnects with `Last-Event-ID` and a backoff from 250 ms to 10 s, and changes its topics by reconnecting with the union of its tabs' topics. The server allows 8 streams per origin and answers 429 beyond that.
 
@@ -334,7 +355,7 @@ A lane changes only the files it owns. Shared files have one owner. A lane that 
 | 1.1 Bus | `internal/bus/*.go` (adds `New`, the audit tap in `audit.go`), `internal/bus/bustest/**` | `internal/bus/store/**` |
 | 1.2 Store | `internal/bus/store/**` (file store, `Open`, union reader, `storetest`) | `internal/bus/*.go` |
 | 1.3 Watcher | `internal/watch/**`, `go.mod`, `go.sum` (fsnotify only) | `internal/webui/**` |
-| 1.4 Stream, projections, CLI and MCP | `internal/webui/stream*.go`, `internal/webui/projection*.go`, the event wiring in `internal/webui/daemon.go` and `server.go` (route, bus, store and watcher start-up), `internal/app/events*.go`, `internal/cli/events*.go`, **`internal/cli/cli.go`, `internal/mcpserver/server.go`, `internal/cli/parity_test.go`**, `adapters/claude-code/skills/events/SKILL.md`, `README.md`, `docs/events.md`, the blueprint capability table | `internal/webui/static/**` |
+| 1.4 Stream, projections, CLI and MCP | `internal/webui/stream*.go`, `internal/webui/projection*.go`, the event wiring in `internal/webui/daemon.go`, `server.go`, `instance.go` (event runtime start-up in the serve child) and `daemon_picker.go` (the origin-wide `event-worker.js` route) (route, bus, store and watcher start-up), `internal/app/events*.go`, `internal/cli/events*.go`, **`internal/cli/cli.go`, `internal/mcpserver/server.go`, `internal/cli/parity_test.go`**, `adapters/claude-code/skills/events/SKILL.md`, `README.md`, `docs/events.md`, the blueprint capability table | `internal/webui/static/**` |
 | 1.5 Browser client | `internal/webui/static/event-worker.js`, the overview part of `internal/webui/static/app.js`, the script tag in `static/index.html`, overview rules in `static/style.css` | any Go file |
 
 Lane 1.4 is the only phase 1 lane that may edit `cli.go`, `mcpserver/server.go` or `parity_test.go`. Exported contract types (`Event`, `Cursor`, `Topic`, `Pattern`, the type registry and payloads, every interface in this ADR, `webui.Projection` and the frame types) change only through an amendment to this ADR. Moving the worktree ID derivation out of `inspectWorktree` in `daemon.go`, so the CLI can compute worktree IDs without a daemon, is lane 1.4's job.

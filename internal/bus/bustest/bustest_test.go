@@ -116,8 +116,10 @@ func TestOverflowDropsOldestAndMarksOnce(t *testing.T) {
 	for i, id := range ids {
 		index[id] = i
 	}
-	// The pump may take a marker while publishing continues, so a burst can
-	// produce more than one marker; their counts must add up to Dropped.
+	// One marker waits at a time, but a drop that races a marker's hand-off
+	// is reported by the next one, so a burst can produce more than one
+	// marker. Only scheduling-independent facts are checked: at least one
+	// marker, counts adding up to Dropped, order kept, last event delivered.
 	var markers, delivered int
 	var reported uint64
 	last := -1

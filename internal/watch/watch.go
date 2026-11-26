@@ -2,10 +2,10 @@
 // repository configuration into bus events.
 //
 // The contract is fixed by the ADR
-// docs/knowledge/engineering/decisions/event-driven-platform.md. Package
-// watchtest holds a fake Source; the fsnotify and polling sources, the
-// debouncing Aggregator and the Watcher arrive with phase 1 lane 1.3, which
-// also adds the github.com/fsnotify/fsnotify dependency.
+// docs/knowledge/engineering/decisions/event-driven-platform.md. New
+// returns the FileWatcher, which runs NewNotifySource (fsnotify) and falls
+// back per Target to NewPollSource; NewTranslator turns its Batches into
+// git and configuration events. Package watchtest holds a fake Source.
 //
 // Pattern names (Enterprise Integration Patterns):
 //

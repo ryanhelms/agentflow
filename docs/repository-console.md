@@ -321,7 +321,11 @@ event types, branch creation and external CI can still run.
 ## Hand off work
 
 **Overview** reports the branch, revision, changed paths, configuration
-problems and recognized workflow pin. **Check activity** adds recent open
+problems and recognized workflow pin. The branch, revision, changes and
+configuration problems update on their own while the console is open; the
+indicator beside **Resync** shows whether those updates are live, reconnecting,
+resyncing or offline. **Resync** reloads the checkout and restarts the live
+updates. **Check activity** adds recent open
 GitHub PRs, their review and merge states, and dependencies between visible
 PRs. If Agent Commander is running locally, it also lists pending worker
 questions from this exact worktree. Review the question and confirm your

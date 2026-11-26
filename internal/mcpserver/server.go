@@ -197,6 +197,12 @@ type keyIn struct {
 	Key string `json:"key,omitempty" jsonschema:"task key or qualified reference; defaults to the branch task"`
 }
 type noIn struct{}
+type eventsIn struct {
+	Since  string   `json:"since,omitempty" jsonschema:"cursor from an earlier result; omit to start at the oldest retained event"`
+	Types  []string `json:"types,omitempty" jsonschema:"event type patterns, e.g. git.** or config.layer.changed; * matches one segment, a final ** the rest"`
+	Topics []string `json:"topics,omitempty" jsonschema:"topics REPO/WORKTREE/PATTERN; * as REPO means this repository"`
+	Limit  int      `json:"limit,omitempty" jsonschema:"most events to return (default 100, at most 1000)"`
+}
 type nativeKeyIn struct {
 	keyIn
 	nativeReadIn
@@ -441,6 +447,9 @@ func (s *Server) register() {
 		})
 	add(s, "agentflow_ship_status", "PR, checks, review threads, deployments and ticket status in one view.", readOnly,
 		func(ctx context.Context, _ noIn) (any, error) { return a.ShipStatus(ctx) })
+
+	add(s, "agentflow_events", "Page through this repository's git and configuration events (branch switches, commits, ref and index changes, git operations, .agentflow config edits) recorded by the console daemon. Returns {events, cursor}; pass cursor as since to get only newer events. Read-only; there is no follow mode, so poll with the cursor.", readOnly,
+		func(ctx context.Context, in eventsIn) (any, error) { return a.Events(ctx, app.EventsQuery(in)) })
 
 	// Team and knowledge
 	add(s, "agentflow_standup", "Activity since the last working day (commits, PRs, reviews, tickets, blockers) to draft a standup.", readOnly,
