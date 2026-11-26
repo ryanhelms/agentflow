@@ -3,9 +3,9 @@
 // bus.Cursor after a reconnect and `agentflow events` can read history.
 //
 // The contract is fixed by the ADR
-// docs/knowledge/engineering/decisions/event-driven-platform.md. Package
-// storetest holds an in-memory fake; the file-backed store arrives with
-// phase 1 lane 1.2.
+// docs/knowledge/engineering/decisions/event-driven-platform.md. Open
+// returns the file-backed store, Union reads many repositories' stores as
+// one, and package storetest holds an in-memory fake.
 //
 // Layout, under the repository's common git dir:
 //
@@ -101,8 +101,8 @@ const (
 	RoleReader
 )
 
-// Reader reads stored events. Store implements it for one repository; a
-// union of stores (lane 1.2) implements it for many.
+// Reader reads stored events. Store implements it for one repository;
+// Union implements it for many.
 type Reader interface {
 	// ReadFrom yields, in order, every stored event that from has not
 	// Seen, for the repositories the reader covers. Within a repository
