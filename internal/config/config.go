@@ -89,6 +89,8 @@ type Repo struct {
 		CoordinatorMerge bool `yaml:"coordinator_merge,omitempty"`
 	} `yaml:"policy"`
 	Worktree Worktree `yaml:"worktree,omitempty"`
+	// Plugins lets a repository turn installed plugins off for itself.
+	Plugins RepoPlugins `yaml:"plugins,omitempty"`
 
 	legacyJiraSite, legacyConfluenceSite bool
 }
@@ -124,6 +126,9 @@ type User struct {
 		Orgs []string `yaml:"orgs"`
 	} `yaml:"init"`
 	Worktree UserWorktree `yaml:"worktree,omitempty"`
+	// Plugins holds the installed plugins' enabled flags and settings, by
+	// plugin ID. Only the personal layer enables a plugin.
+	Plugins map[string]UserPlugin `yaml:"plugins,omitempty"`
 }
 
 // Worktree is the repository's worktree section: where `agentflow start --worktree`

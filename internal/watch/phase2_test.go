@@ -20,6 +20,13 @@ func TestClassifyUser(t *testing.T) {
 	}{
 		{"/h/.agentflow/config.yml", SignalPersonalConfig, "", true},
 		{"/h/.agentflow/providers/jira.yaml", SignalPersonalConfig, "", true},
+		{"/h/.agentflow/plugins/installed.json", SignalPersonalConfig, "", true},
+		{"/h/.agentflow/plugins/installed.json.lock", 0, "", false},
+		{"/h/.agentflow/plugins/.installed-123", 0, "", false},
+		{"/h/.agentflow/plugins/deadletter.jsonl", 0, "", false},
+		{"/h/.agentflow/plugins/ci-notify/data/plugin.log", 0, "", false},
+		{"/h/.agentflow/plugins/ci-notify/installed.json", 0, "", false},
+		{"/h/.agentflow/installed.json", 0, "", false},
 		{"/h/.agentflow/approvals/" + record, SignalApproval, "", true},
 		{"/h/.claude/settings.json", SignalClientSettings, "claude", true},
 		{"/h/.codex/config.toml", SignalClientSettings, "codex", true},
@@ -45,7 +52,7 @@ func TestClassifyUser(t *testing.T) {
 		}
 		dirs[p.Dir] = true
 	}
-	if !dirs[filepath.FromSlash("/h/.agentflow/approvals")] || !dirs[filepath.FromSlash("/h/.claude")] {
+	if !dirs[filepath.FromSlash("/h/.agentflow/approvals")] || !dirs[filepath.FromSlash("/h/.agentflow/plugins")] || !dirs[filepath.FromSlash("/h/.claude")] {
 		t.Errorf("missing directories: %v", dirs)
 	}
 }

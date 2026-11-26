@@ -421,12 +421,15 @@ func (t *UserTranslator) approvalEvent(typ bus.Type, repo bus.RepoID, at time.Ti
 	return []bus.Event{e}, nil
 }
 
-// personalHashes hashes ~/.agentflow/config.yml and providers/*.y{a,}ml,
-// keyed by their slash-separated path relative to home.
+// personalHashes hashes ~/.agentflow/config.yml, providers/*.y{a,}ml and the
+// plugin registry, keyed by their slash-separated path relative to home.
 func personalHashes(home string) map[string][sha256.Size]byte {
 	out := map[string][sha256.Size]byte{}
 	if sum, ok := hashSettingsFile(filepath.Join(home, "config.yml")); ok {
 		out["config.yml"] = sum
+	}
+	if sum, ok := hashSettingsFile(filepath.Join(home, filepath.FromSlash(PluginRegistryPath))); ok {
+		out[PluginRegistryPath] = sum
 	}
 	list, _ := os.ReadDir(filepath.Join(home, "providers"))
 	for _, e := range list {

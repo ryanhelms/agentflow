@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -527,6 +528,10 @@ type policyState struct {
 	autoPR    bool
 	merge     bool
 	protected []string
+	// plugins are the plugins the personal layer enables, and disabled the
+	// plugins the repository turns off for itself.
+	plugins  map[string]bool
+	disabled []string
 }
 
 func policyOf(files [2]string) policyState {
@@ -538,7 +543,11 @@ func policyOf(files [2]string) policyState {
 	if err != nil || repo == nil {
 		repo, _, _ = config.ParseRepoCore(nil)
 	}
-	p := policyState{levels: map[string]config.Level{}, autoPR: repo.Policy.AllowAutoPRPublication, merge: repo.Policy.CoordinatorMerge, protected: repo.Policy.ProtectedBranches}
+	p := policyState{levels: map[string]config.Level{}, autoPR: repo.Policy.AllowAutoPRPublication, merge: repo.Policy.CoordinatorMerge, protected: repo.Policy.ProtectedBranches,
+		plugins: map[string]bool{}, disabled: repo.Plugins.Disabled}
+	for id, plugin := range user.Plugins {
+		p.plugins[id] = plugin.Enabled
+	}
 	for _, action := range append([]string{""}, config.AutonomyActions()...) {
 		for _, class := range []string{"local", "remote"} {
 			d := config.ResolveAutonomy(user, repo, class, action, false)
@@ -591,6 +600,19 @@ func loosening(before, after [2]string) string {
 	for _, branch := range a.protected {
 		if !slices.Contains(b.protected, branch) {
 			return fmt.Sprintf("Stops protecting %s.", branch)
+		}
+	}
+	// A plugin is code that runs with the permissions its manifest lists, so
+	// turning one on loosens, and so does letting a repository's plugins run
+	// again.
+	for _, id := range slices.Sorted(maps.Keys(b.plugins)) {
+		if b.plugins[id] && !a.plugins[id] {
+			return fmt.Sprintf("Turns on the plugin %s, which then runs in the console with the permissions its manifest lists.", id)
+		}
+	}
+	for _, id := range a.disabled {
+		if !slices.Contains(b.disabled, id) {
+			return fmt.Sprintf("Lets the plugin %s run for this repository again.", id)
 		}
 	}
 	return ""
