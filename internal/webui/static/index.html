@@ -14,6 +14,7 @@
   <script src="document-editor.js" defer></script>
   <script src="tab-navigation.js" defer></script>
   <script src="event-worker.js" defer></script>
+  <script src="live-panels.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -88,14 +89,48 @@
           </section>
           <div class="overview-grid">
             <section class="panel" aria-labelledby="attention-title">
-              <div class="section-heading"><h2 id="attention-title">Needs attention</h2><button id="activity" class="button secondary small" type="button">Check activity</button></div>
+              <div class="section-heading"><h2 id="attention-title">Needs attention</h2></div>
               <p class="muted" id="activity-note"></p><ul class="rows" id="attention-list"></ul>
             </section>
-            <section class="panel" aria-labelledby="routing-title">
-              <div class="section-heading"><h2 id="routing-title">Provider roles</h2><a href="#providers">Manage</a></div>
-              <ul class="rows" id="routing-list"></ul>
+            <section class="panel" id="approvals-panel" aria-labelledby="approvals-title">
+              <div class="section-heading"><h2 id="approvals-title" tabindex="-1">Approvals</h2><span class="tag" data-state="warn" id="approval-count"></span></div>
+              <p id="approvals-note" class="live-note" hidden></p>
+              <p id="approvals-wait" class="muted">Waiting for live updates…</p>
+              <div id="approvals-body" hidden>
+                <h3 id="approval-open-title">Open</h3>
+                <ul class="rows live-list" id="approval-open" aria-labelledby="approval-open-title"></ul>
+                <h3 id="approval-recent-title">Recent outcomes</h3>
+                <ul class="rows live-list" id="approval-recent" aria-labelledby="approval-recent-title"></ul>
+                <p class="muted panel-hint">Answer an approval in the agent session or terminal that asked for it.</p>
+              </div>
             </section>
           </div>
+          <section class="panel activity-panel" id="activity-panel" aria-labelledby="activity-title">
+            <div class="section-heading"><h2 id="activity-title" tabindex="-1">Activity</h2>
+              <span id="github-health" class="health" data-state="unknown" hidden><span class="state-mark" aria-hidden="true"></span><span id="github-label"></span></span>
+            </div>
+            <p id="activity-live-note" class="live-note" hidden></p>
+            <p id="github-note" class="muted" hidden></p>
+            <p id="activity-wait" class="muted">Waiting for live updates…</p>
+            <div id="activity-body" class="activity-columns" hidden>
+              <div>
+                <h3 id="pulls-title">Pull requests <span class="tag" id="pull-count"></span></h3>
+                <ul class="rows live-list" id="pull-list" aria-labelledby="pulls-title"></ul>
+              </div>
+              <div>
+                <h3 id="issues-title">Issues <span class="tag" id="issue-count"></span></h3>
+                <ul class="rows live-list" id="issue-list" aria-labelledby="issues-title"></ul>
+              </div>
+              <div>
+                <h3 id="recent-title">Recent commits and hooks</h3>
+                <ul class="rows live-list" id="recent-list" aria-labelledby="recent-title"></ul>
+              </div>
+            </div>
+          </section>
+          <section class="panel roles-panel" aria-labelledby="routing-title">
+            <div class="section-heading"><h2 id="routing-title">Provider roles</h2><a href="#providers">Manage</a></div>
+            <ul class="rows" id="routing-list"></ul>
+          </section>
         </section>
         <section id="page-providers" aria-labelledby="providers-title" hidden>
           <div class="page-heading"><h1 id="providers-title">Providers</h1><p>Choose a provider for each role and trace its settings to their source.</p></div>
@@ -233,7 +268,8 @@
         <section id="page-handoff" aria-labelledby="handoff-title" hidden>
           <div class="page-heading"><h1 id="handoff-title">Handoff</h1><p>Share the current checkout context with another developer or agent.</p></div>
           <div class="panel"><div class="section-heading"><h2>Repository brief</h2><button id="copy-handoff" class="button secondary small" type="button">Copy brief</button></div>
-            <pre id="handoff-text" class="brief"></pre><p id="copy-message" class="notice" role="status" hidden></p>
+            <p id="handoff-note" class="live-note" hidden></p>
+            <pre id="handoff-text" class="brief"></pre><p id="handoff-updated" class="muted" hidden></p><p id="copy-message" class="notice" role="status" hidden></p>
           </div>
         </section>
       </main>

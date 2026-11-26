@@ -13,6 +13,8 @@
   const snapshotWait = 5000;  // a snapshot must follow a resync frame
   const offlineAfter = 3;     // failed attempts before "reconnecting" becomes "offline"
   const maxTopics = 64;
+  const maxTabs = 16;
+  const tabForm = /^[0-9a-f]{32}$/;
   const endpointPath = /^\/w\/[a-z0-9][a-z0-9-]{0,62}\/api\/events$/;
   const topicForm = /^(\*|[0-9a-z]{1,32})\/(\*|[a-z0-9][a-z0-9-]{0,62})\/[a-z0-9_.*-]{1,96}$/;
 
@@ -116,8 +118,10 @@
   }
 
   // The hub owns the stream and fans it out to ports. A port is a tab: it
-  // posts hello {endpoint, credential, topics}, credential, resync and bye,
-  // and receives status, snapshot, delta and unauthorized.
+  // posts hello {endpoint, credential, topics, tab}, credential, resync and
+  // bye, and receives status, snapshot, delta and unauthorized. tab is the ID
+  // the page attached with (POST api/tabs/attach); the stream lists every
+  // port's ID in tab= so the console keeps those tabs attached.
   function createHub() {
     const ports = new Map();
     const store = createStore();
@@ -144,10 +148,17 @@
       for (const tab of ports.values()) for (const topic of tab.topics) all.add(topic);
       return [...all].sort().slice(0, maxTopics);
     }
+    function tabs() {
+      const all = new Set();
+      for (const tab of ports.values()) if (tab.tab) all.add(tab.tab);
+      return [...all].sort().slice(0, maxTabs);
+    }
     // What the running stream was opened with. A change needs a reconnect.
     function plan() {
       const lead = leader();
-      return lead ? lead.tab.endpoint + "?" + topics().map(topic => "topic=" + encodeURIComponent(topic)).join("&") : "";
+      if (!lead) return "";
+      const query = [...topics().map(topic => "topic=" + encodeURIComponent(topic)), ...tabs().map(tab => "tab=" + tab)];
+      return lead.tab.endpoint + "?" + query.join("&");
     }
     function stop() {
       clearTimeout(snapshotTimer);
@@ -268,7 +279,8 @@
         if (url.origin === scope.location.origin && endpointPath.test(url.pathname) && !url.search && !url.hash && !url.username && !url.password) endpoint = url.href;
       } catch { /* Not a console address. */ }
       const wanted = Array.isArray(message.topics) ? message.topics.filter(topic => typeof topic === "string" && topicForm.test(topic)) : [];
-      ports.set(port, {endpoint, credential: typeof message.credential === "string" ? message.credential : "", topics: wanted.slice(0, maxTopics)});
+      const tab = typeof message.tab === "string" && tabForm.test(message.tab) ? message.tab : "";
+      ports.set(port, {endpoint, credential: typeof message.credential === "string" ? message.credential : "", topics: wanted.slice(0, maxTopics), tab});
       send(port, {type: "status", status});
       if (store.ready) send(port, {type: "snapshot", cursor: store.cursor, states: store.list()});
       if (!controller || plan() !== running) restart();
@@ -346,7 +358,7 @@
       target.start?.();
     }
     function greet() {
-      port.postMessage({type: "hello", endpoint: options.endpoint, credential: options.credential(), topics: options.topics()});
+      port.postMessage({type: "hello", endpoint: options.endpoint, credential: options.credential(), topics: options.topics(), tab: options.tab?.() || ""});
     }
     function open() {
       if (options.shared !== false && typeof scope.SharedWorker === "function") {

@@ -2,6 +2,7 @@ package webui
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -133,4 +134,87 @@ func (f *scriptedStream) install(mux *http.ServeMux) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(f.requests)
 	})
+}
+
+// tabsStream is an /api/events endpoint for a console without an event
+// runtime: it serves only the tabs projection of one tab hub, as the daemon
+// does, so browser tests can drive tab navigation over the stream.
+type tabsStream struct {
+	hub       *tabHub
+	worktrees []string
+
+	mu   sync.Mutex
+	subs map[chan struct{}]struct{}
+}
+
+// newTabsStream follows hub for the worktrees with these route IDs.
+func newTabsStream(hub *tabHub, worktrees ...string) *tabsStream {
+	f := &tabsStream{hub: hub, worktrees: worktrees, subs: map[chan struct{}]struct{}{}}
+	hub.onChange(func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		for sub := range f.subs {
+			select {
+			case sub <- struct{}{}:
+			default:
+			}
+		}
+	})
+	return f
+}
+
+func (f *tabsStream) frame(name string, seq int) string {
+	const repo = "3f2a9c1b7d4e5f60"
+	states := make([]map[string]any, 0, len(f.worktrees))
+	for _, id := range f.worktrees {
+		states = append(states, map[string]any{"projection": ProjectionTabs, "repo": repo, "worktree": id, "state": f.hub.tabsState("/w/" + id + "/")})
+	}
+	cursor := fmt.Sprintf("v1:%s=%d", repo, seq)
+	body := map[string]any{"cursor": cursor, "states": states}
+	if name == "delta" {
+		body = map[string]any{"event": map[string]any{"id": fmt.Sprintf("e%d", seq), "type": "ui.tabs.changed", "repo": repo, "seq": seq}, "states": states}
+	}
+	data, _ := json.Marshal(body)
+	return fmt.Sprintf("event: %s\nid: %s\ndata: %s\n\n", name, cursor, data)
+}
+
+// events serves GET <worktree>/api/events for sessions authorized accepts.
+func (f *tabsStream) events(authorized func(*http.Request) bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !authorized(r) {
+			problem(w, http.StatusUnauthorized, "fixture session ended")
+			return
+		}
+		tabs, err := streamTabs(r.URL.Query()["tab"])
+		if err != nil {
+			problem(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		defer f.hub.hold(tabs)()
+		sub := make(chan struct{}, 1)
+		f.mu.Lock()
+		f.subs[sub] = struct{}{}
+		f.mu.Unlock()
+		defer func() {
+			f.mu.Lock()
+			delete(f.subs, sub)
+			f.mu.Unlock()
+		}()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher, _ := w.(http.Flusher)
+		seq := 1
+		_, _ = io.WriteString(w, "retry: 250\n\n"+f.frame("snapshot", seq))
+		flusher.Flush()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-sub:
+				seq++
+				_, _ = io.WriteString(w, f.frame("delta", seq))
+				flusher.Flush()
+			}
+		}
+	}
 }

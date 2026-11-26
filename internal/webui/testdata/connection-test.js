@@ -136,14 +136,16 @@
     check(!sessionStorage.getItem("agentflow.commander:/w/second/"),"Commander grant reached a sibling worktree");
     check(await openTab("screen=overview"),"overview did not open");
     await until(() => !byID("page-overview").hidden,"overview not visible");
-    byID("activity").click();
+    // Worker requests load with the checkout; a navigation clears them until Resync.
+    check(!byID("activity") && !document.querySelector(".reply-form") && byID("activity-note").textContent.includes("Resync"),"the pull button remains, or cleared worker requests are not explained");
+    byID("refresh").click();
     await until(() => !!document.querySelector(".reply-form"),"bound worker request unavailable");
     check(await openTab("screen=handoff"),"explicit request did not reach the same worktree");
     await until(() => !byID("page-handoff").hidden,"explicit request did not reach Handoff");
     check(!byID("handoff-text").textContent.includes("Fixture worker question") && !document.querySelector(".reply-form"),"explicit navigation retained worker activity");
     check(sessionStorage.getItem(capKey)===grant,"tab navigation replaced the Commander grant");
     check(await openTab("screen=overview"),"overview did not reopen");
-    byID("activity").click();
+    byID("refresh").click();
     await until(() => !!document.querySelector(".reply-form"),"same-context worker question failed to reload");
     const worker=document.querySelector(".reply-form");
     worker.querySelector("textarea").value="fixture answer";
@@ -152,8 +154,7 @@
     worker.requestSubmit();
     await until(() => !sessionStorage.getItem(capKey) && !document.querySelector(".reply-form"),"expired Commander authority retained worker data");
     check(!byID("console-shell").hidden && byID("activity-note").textContent.includes("Commander"),"Commander expiry disrupted configuration or hid recovery");
-    byID("activity").click();
-    await until(() => byID("attention-list").textContent.includes("Fixture pull request"),"unbound checkout activity unavailable");
+    check(!byID("attention-list").textContent.includes("Fixture pull request"),"the console pulled activity without a Commander session");
     check(await openTab("screen=providers&role=notifications"),"existing tab did not acknowledge navigation");
     await until(() => byID("role-title").textContent === "Notifications","tool navigation lost its role");
     reopen(first,"handoff");
