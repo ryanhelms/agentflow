@@ -166,8 +166,15 @@ prints nothing about it, because git and agents read hook output.
 Operations that run through agentflow's command registry record `op.*` events, from the
 CLI and from MCP tools alike. So far these are `policy explain`, `policy status`,
 `policy approve` (`agentflow_policy_explain`, `agentflow_approval_status`,
-`agentflow_approval_approve`) and `eod post` (`agentflow_eod_post`); the other commands
-follow during phase 3. A read, such as `policy explain`, records nothing. A write records:
+`agentflow_approval_approve`), `eod post` (`agentflow_eod_post`), `docs publish`
+(`agentflow_docs_publish`), `adr new` (`agentflow_adr_draft`), `release publish`,
+`notify` (`agentflow_notify`), `finish` (`agentflow_finish`), `promote`, `secops triage`
+and `worktree go-work` (`agentflow_worktree_go_work`). `sweep`, `delegate` and `setup apply`
+record them when an MCP tool runs them (`agentflow_sweep`, `agentflow_delegate`,
+`agentflow_setup_apply`), and from the command line once their output moves into the
+registry; the other commands follow during phase 3. A read, such as `policy explain`,
+`docs get` or `release plan`, records nothing, and neither does a preview (`--dry-run`,
+`dry_run`). A write records:
 
 | Event | When |
 | --- | --- |
@@ -190,9 +197,9 @@ and otherwise drops them with one warning on standard error. It never creates a 
 When the daemon has not registered the worktree yet, the event is sent again as a
 repository-wide event.
 
-`policy approve` also writes one line to `audit.log` with its operation and operation ID.
-Commands whose own code already writes an audit line, such as `eod post`, write no extra
-one.
+`policy approve` and `worktree go-work` also write one line to `audit.log` with their
+operation and operation ID. Commands whose own code already writes an audit line, such as
+`eod post`, write no extra one.
 
 The notify socket accepts only `hook.ran`, `commit.created` and `op.*`, only from a process that
 proves it can read the daemon's private registry file (`~/.agentflow-ui/`), and only for
