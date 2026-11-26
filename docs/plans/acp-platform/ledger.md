@@ -12,7 +12,7 @@ Phase gates:
 | 2 | #51 | `develop-p2` at `a5648e3` | approvals, the commit hook, config, client settings and tabs live; MCP reload | done |
 | 3 | #59 (contract, issue #52) | `develop-p3` at `c555ac4` | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | done; promoted to `main` by auto-promote, released as v0.57.0 on 2026-11-26 |
 | 4 | #72 (contract, issue #68) | `develop-p4` at `33f5ffd` | `config set --dry-run` flags a loosening edit; `console.autonomy: suggest` blocks an autonomy raise; the Settings page review with loosening ticks | done; promoted to `main`, released as v0.58.0 on 2026-11-26 |
-| 5 | contract issue #77 | | `plugin add` both samples; a CI failure becomes a `notify` operation from `plugin:ci-notify` on the timeline; a failed operation gets a `timeline-hints` annotation; the Plugins page shows live state and a restart after a crash; plugin settings on the Settings page | contract in progress |
+| 5 | #82 (contract, issue #77) | | `plugin add` both samples; a CI failure becomes a `notify` operation from `plugin:ci-notify` on the timeline; a failed operation gets a `timeline-hints` annotation; the Plugins page shows live state and a restart after a crash; plugin settings on the Settings page | contract in progress |
 
 Lanes:
 
@@ -41,7 +41,7 @@ Lanes:
 | 4.1 | `Field` metadata (label, description, group, widget, applies, sensitive, source) and `TestEveryConfigFieldHasControl` | S | #69 | #73 | done |
 | 4.2 | Settings backend as Commands: change set, live checks, preview, atomic save, personal layer applied at once, repo layer written to the worktree and published as a PR, undo last save; `agentflow config set A=1 B=2` | O | #70 | #74, #75 | done |
 | 4.3 | Settings UI: controls for every field type, Save bar, preview, conflict warnings, undo, search, "modified" filter | F | #71 | #76 | done |
-| 5.0 | Phase 5 contract ADR: manifest, tiers, extension points, JSON-RPC methods, lifecycle, events, plugins projection, settings, commands, security, ownership | O | #77 | | in progress |
+| 5.0 | Phase 5 contract ADR: manifest, tiers, extension points, JSON-RPC methods, lifecycle, events, plugins projection, settings, commands, security, ownership | O | #77 | #82 | in progress |
 | 5.1 | Shared stdio JSON-RPC framing (from `codexhost/stdio.go`, which stays as it is) and scrubbed-environment launcher | O | #78 | | pending |
 | 5.2 | Plugin host: three tiers, registry (Abstract Factory), lifecycle, crash isolation into Dead Letter | O | #79 | | pending |
 | 5.3 | Plugin commands, the two sample plugins, docs (`docs/plugins.md`) | S | #80 | | pending |
