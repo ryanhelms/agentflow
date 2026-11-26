@@ -433,6 +433,7 @@ No phase 2 family is audited by the Wire Tap. `approval.*` was audited under the
 - The registry directory comes from `os/user`, not `$HOME` or `AGENTFLOW_HOME`, which a repository or agent can set. `daemonPrefix` already checks that it is a private directory owned by this OS user.
 - The registry is per host. A home directory shared between machines would otherwise give two daemons the same store.
 - The daemon opens it as `store.RoleOwner` at start-up. Nothing else writes it: no socket type is global.
+- **Owner: lane 2.7 (#41).** `store.OpenGlobal(ctx, dir, role)` opens a store directory by path, with the same segments, rotation, retention and roles as `store.Open`. Its `repo-id` holds `global`, so `Open` and `OpenGlobal` never accept each other's directory, and it appends only `bus.GlobalRepo` events. Every role refuses a directory that is a symbolic link or, on Unix, not owned by the effective user or has any group or other mode bit (`store.ErrNotPrivate`). Windows has no mode bits: `OpenGlobal` checks only for a real directory, and the daemon (`internal/webui/stream_global.go`, the `openGlobalStore` seam) creates `<host-hash>.events` with the registry's owner-only DACL and checks owner and DACL with `privateMode` before it opens it. When the check fails the daemon starts without a global store and says so on stderr. `store.Union` reads it next to repository stores unchanged.
 
 **No leak across OS users.** One daemon runs per OS user per host (unchanged). Its `global` store, its socket and its registry file are in that user's private registry. The socket checks the peer's user ID where the platform reports it and needs the key from the private registry file. The watcher adds a user-level directory only after checking that this OS user owns it, and takes the OS home from `os/user`.
 
@@ -627,6 +628,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 | 2.4 Projections and tabs | #36 | `internal/webui/projection_*.go`, `stream.go`, `stream_runtime.go` (projector registration, the `global` store, global subscriptions), `tabs.go`, `workspace.go`, `server.go` (routes) | `internal/webui/static/**`, `instance*.go` |
 | 2.5 UI | #37 | `internal/webui/static/**` (`app.js`, `tab-navigation.js`, `event-worker.js`, `style.css`, `index.html`) | any Go file |
 | 2.6 MCP reload and events CLI | #38 | `internal/mcpserver/**`; `internal/app/events*.go`; `internal/cli/events*.go`, **`internal/cli/cli.go`, `internal/cli/parity_test.go`**; `internal/webui/served.go` (`ServedRepos`); `adapters/claude-code/skills/events/SKILL.md` | `internal/webui` files other than `served.go` |
+| 2.7 Durable global store | #41 | `internal/bus/store` (`OpenGlobal`, `private_*.go`, `global_test.go`); `internal/webui/stream_global.go` and the `openGlobalStore` seam in `stream_runtime.go` | other `stream_runtime.go` code, `instance*.go` |
 
 - Lane 2.6 is the only phase 2 lane that may edit `cli.go`, `mcpserver/server.go` or `parity_test.go`.
 - Lanes 2.1, 2.2 and 2.3 start their daemon parts only by registering a `runtimeExtension` from their own file's `init`. None of them edits `stream_runtime.go`.

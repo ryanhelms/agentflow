@@ -135,6 +135,13 @@ and user-level client settings. Every stream receives the repository states such
 alters (a personal-layer edit updates `overview.config`); only a stream with a
 `global/*/config.**` or `global/*/client.**` topic also receives the `global` events
 themselves and a `global=<seq>` entry in its cursor. `Last-Event-ID` may carry that entry.
+The daemon stores `global` events, so a reconnecting stream replays them like repository
+events. The store is `~/.agentflow-ui/<host-hash>.events/`, from the OS user's profile
+(never `AGENTFLOW_HOME` or `$HOME`), one per host, with the same segments and retention as a
+repository store. The daemon refuses it unless it is a directory owned by this OS user that
+no one else can read: mode `0700` on Unix, an owner-only DACL inherited from
+`~/.agentflow-ui` on Windows. Without it, `global` events still reach the console live
+but are not replayed.
 
 Frames: `snapshot` (replace all state), `delta` (one event and the states it changed;
 `null` removes a key), `resync` (discard state; a `snapshot` follows) and a `: ping`
