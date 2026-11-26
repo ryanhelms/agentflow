@@ -57,6 +57,15 @@ func TestHookCommandsPublishAndLintMsgDoesNot(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
+	// Hooks publish only to a repository that already has an event store
+	// (a daemon creates it), so mark it as the daemon would.
+	storeDir := store.Path(filepath.Join(dir, ".git"))
+	if err := os.MkdirAll(storeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, store.RepoIDFile), []byte("0123456789abcdef"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	st := storetest.New("0123456789abcdef")
 	old := app.OpenEventStore
 	app.OpenEventStore = func(_ context.Context, _ string, role store.Role) (store.Store, error) {

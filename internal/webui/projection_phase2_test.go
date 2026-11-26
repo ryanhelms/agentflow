@@ -637,3 +637,27 @@ func TestApprovalsOverEventStream(t *testing.T) {
 		t.Fatalf("delta carries another repository's approval: %s", raw)
 	}
 }
+
+// The poller's first poll and health changes publish only the transient
+// gh.health.changed. The activity projection recomputes on it, so the
+// console leaves "unavailable" without waiting for a PR or CI change.
+func TestActivityFollowsGitHubHealth(t *testing.T) {
+	c := newLiveConsole(t)
+	stream, _ := c.open(t, "?topic="+url.QueryEscape("*/*/gh.**"))
+	snap := decode[SnapshotFrame](t, stream.expect(t, FrameSnapshot))
+	if st, ok := findState(snap.States, ProjectionActivity, ""); !ok || !strings.Contains(string(st.State), `"state":"unavailable"`) {
+		t.Fatalf("snapshot = %+v", snap.States)
+	}
+	for _, health := range []watch.GitHubHealth{watch.GitHubOK, watch.GitHubRateLimited, watch.GitHubDisabled} {
+		c.gh.set(c.ev.id, watch.GitHubState{Health: health})
+		e := bus.Event{Type: bus.TypeGHHealthChanged, Source: "watch.github", Repo: c.ev.id, Payload: payload(t, bus.GHHealthChanged{Health: string(health)})}
+		if keys := c.projection(t, ProjectionActivity).Keys(e); len(keys) != 1 {
+			t.Fatalf("keys = %v", keys)
+		}
+		c.publish(t, e)
+		st, d := nextState[ActivityState](t, stream, ProjectionActivity, "")
+		if st.GitHub.State != health || d.Event.Type != bus.TypeGHHealthChanged {
+			t.Fatalf("after %s: github = %+v, event %s", health, st.GitHub, d.Event.Type)
+		}
+	}
+}

@@ -41,6 +41,7 @@ func TestConsoleConnectionBrowser(t *testing.T) {
 		// These servers have no event runtime: serve the hub's tabs state
 		// on the stream, as the daemon does.
 		stream := newTabsStream(s.tabRoutes(), "first", "second")
+		s.tabsStreamed, second.tabsStreamed = true, true
 		worktree.HandleFunc("GET /api/events", stream.events(s.authorized))
 		secondRoutes.HandleFunc("GET /api/events", stream.events(second.authorized))
 		page, err := assets.ReadFile("static/index.html")

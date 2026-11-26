@@ -388,7 +388,7 @@ Everything in the phase 1 sections still holds unless a paragraph here says it c
 | Event types, payloads, the global rule | `internal/bus/types_phase2.go`, `TypeInfo.Global` in `internal/bus/types.go`, the check in `Event.Validate` |
 | Approval record names | `policy.ScopeKey`, `policy.ApprovalsDir` |
 | Local socket | `internal/notifysock` (wire types, limits, handshake proofs, `Check`, `Deliver`), `internal/notifysock/notifysocktest` |
-| New watch sources | `internal/watch/user.go` (`UserTarget`, `UserPaths`, `ClassifyUser`, client settings tables, `ParseApprovalRecord`, `ApprovalRouter`, `ApprovalTransition`, `ObservedExpiry`) |
+| New watch sources | `internal/watch/user.go` (`UserTarget`, `UserPaths`, `ClassifyUser`, client settings tables, `ParseApprovalRecord`, `ApprovalRouter`, `ApprovalTransition`, `ApprovalTransitions`, `ObservedExpiry`) |
 | GitHub poller | `internal/watch/github.go` (`GitHubTarget`, `GitHubAPI`, `GitHubMeta`, `GitHubState`, `GitHubPoller`, `GitHubCache`, `NextPoll`) |
 | Projections | `internal/webui/projection_states.go` |
 | Daemon start-up seam | `runtimeExtension` and `runtimeExtensions` in `internal/webui/stream_runtime.go` |
@@ -406,6 +406,7 @@ Everything in the phase 1 sections still holds unless a paragraph here says it c
 | `gh.pr.updated` | any | never | `GHPullUpdated{number, title, url, state, draft, head_ref, head_sha, base_ref, author, review_decision, merge_state, updated_at, previous}` | daemon, `watch.github` | a pull request of the repository changed |
 | `gh.ci.updated` | any | never | `GHCIUpdated{pull, head_ref, head_sha, state, counts, failed, url, previous}` | daemon, `watch.github` | the combined checks of a tracked head commit changed |
 | `gh.issue.updated` | any | never | `GHIssueUpdated{number, title, url, state, state_reason, labels, assignees, updated_at, previous}` | daemon, `watch.github` | an issue bound to a worktree changed |
+| `gh.health.changed` | repository, transient | never | `GHHealthChanged{health, previous, retry_at}` | daemon, `watch.github` | the poller finished its first poll of a repository, its health changed (`ok`, `rate_limited`, `unavailable`), or it became `disabled` |
 | `config.layer.changed` | any | allowed | phase 1 payload; layer `personal` now produced | daemon, `watch.config` | `~/.agentflow/config.yml` or `~/.agentflow/providers/*.y{a,}ml` changes (in `global`) |
 | `client.settings.changed` | any | allowed | `ClientSettingsChanged{client, scope, paths}` | daemon, `watch.config` | a client settings file changes, in the home directory (`global`) or a worktree |
 | `ui.tabs.changed` | repository, transient | never | `UITabsChanged{}` | daemon, tab hub | a tab attaches or detaches, or a navigation starts or ends |
@@ -461,7 +462,8 @@ Everything else in those directories is ignored: `events.jsonl`, `confirm.key`, 
 
 - A journal line has no repository, so it cannot be routed without reading the record anyway. The record's file name carries the scope key, and its body has the state, expiry and prompt owner.
 - `policy.ScopeKey(common)` is the record prefix for a repository; the gate computes it from the common git dir with symbolic links resolved. The daemon builds an `ApprovalRouter` from the scope key of every repository it serves. A record of any other scope produces no event.
-- At start the translator scans the directory and seeds each record's state without publishing. After that, `ApprovalTransition(previous, current)` decides the event. Prepared operations (an `auto` policy) and records first seen in a final state produce nothing.
+- At start the translator scans the directory and seeds each record's state without publishing. After that, `ApprovalTransitions(previous, current, asked)` decides the events. Prepared operations (an `auto` policy) and records that finished before the repository was served produce nothing.
+- A record created and answered within one debounce window is first seen in its final state. When it was issued after the repository was served and has a prompt owner (a prepared operation never has one), it produces `approval.requested` and then its resolution or expiry with `previous: pending`, so a stream never sees an answer without its request. (Integration follow-up, issue #49.)
 - Records expire lazily: the journal writes `expired` only when a process next touches the record. The translator arms one timer per open record and publishes `approval.expired` with `observed: true` when `ObservedExpiry` becomes true. A later `expired` write then produces nothing.
 - The payload is the record's public view: operation ID, action, class, policy source, issue and expiry times, and the client part of the prompt owner (before the `/`). Never the fingerprint, related keys or the owner's session MAC.
 
@@ -549,7 +551,9 @@ One `watch.GitHubPoller` in the daemon polls every served repository that has a 
 
 A 304 does not count against GitHub's primary rate limit for authenticated requests, so an unchanged repository costs almost nothing.
 
-**Change detection.** The poller keeps the last value of every PR, CI state and issue, and publishes only when a value changes. The first successful poll after start seeds the state without events. The activity projection reads this state through `watch.GitHubCache`, so a snapshot never calls GitHub.
+**Change detection.** The poller keeps the last value of every PR, CI state and issue, and publishes only when a value changes. The first successful poll after start seeds the state without `gh.pr`, `gh.ci` or `gh.issue` events. The activity projection reads this state through `watch.GitHubCache`, so a snapshot never calls GitHub.
+
+**Health.** The first poll of a repository and every later health change publish the transient `gh.health.changed`, and so does a repository becoming `disabled` (it has no GitHub remote). The activity projection recomputes on it (`gh.**`). Without it, a quiet repository's activity stayed `unavailable` after the first poll, and a rate limit or recovery showed only with the next data event. A cycle that keeps the same health publishes nothing. (Integration follow-up, issue #49.)
 
 **Interval** (`watch.NextPoll`).
 
@@ -577,18 +581,20 @@ The poller never retries a rate-limited request earlier than GitHub asked. Lane 
 
 The JSON shapes are the types in `internal/webui/projection_states.go`. In short:
 
-- `activity`: `pulls` (each with its worktree, CI state, failed checks and the PR it depends on), `issues`, `recent` (at most 20 `commit.created` and blocked or failed `hook.ran` entries, newest first), `github` (`state`, `retry_at`) and the `handoff` note. Agent Commander items stay on `GET /api/activity` in phase 2.
+- `activity`: `pulls` (each with its worktree, CI state, failed checks and the PR it depends on), `issues`, `recent` (at most 20 `commit.created` and blocked or failed `hook.ran` entries, newest first), `github` (`state`, `retry_at`) and the `handoff` note. Agent Commander items, worker questions included, stay on `GET /api/activity` in phase 2 (decision 3).
+- `approvals`: an `ApprovalItem` has no resolution time. `recent` is ordered and windowed by the record file's modification time, and the console shows no "answered at".
 - `approvals`: `open` (pending and approved, oldest first, with `expired` set when `ObservedExpiry` holds) and `recent` (consumed, cancelled and expired from the last 24 hours, at most 10). Answering still goes through the existing approve flow, which checks the bearer.
 - `tabs`: `tabs` (`{tab, attached}`) and `navigation` (`{id, tab, screen, role, target}` or null).
 
 **Tabs on the stream.** `TabsState` replaces `GET /api/tabs/events`:
 
-1. A tab attaches with `POST /w/<id>/api/tabs/attach {tab}` under its own worktree session and Agent Commander capability, which the hub checks exactly as the old stream did.
+1. A tab attaches with `POST /w/<id>/api/tabs/attach {tab}` under its own worktree session and Agent Commander capability. A console without an event stream for the worktree (the stream answers 503) refuses the attach with 503, because the tab could never receive a navigation; the browser attaches again once its stream delivers a snapshot.
 2. It stays attached while an event stream of the origin lists it in a `tab=<32 hex>` query parameter (at most 16 per stream), plus a 10-second grace (`TabGrace`) for a reconnecting SharedWorker.
 3. A navigation appears in the state of the tab's worktree. Only the tab whose ID matches acts on it. The target is already chosen for that tab, so the browser never sees another tab's capability.
 4. The tab still acknowledges with `POST /api/tabs/ack` and leaves with `POST /api/tabs/leave`. The hub clears the navigation on the ack or after 2 seconds, and publishes `ui.tabs.changed` each time.
+5. A navigation never hangs. With no attached tab it returns at once; when no tab acknowledges within 2 seconds, or the target is not a `/w/<id>/` path of the tab's origin (for example the standalone `/`), it returns "no tab" and the caller opens a new tab.
 
-Lane 2.4 keeps `GET /api/tabs/events` working until lane 2.5's client has switched, then removes it in a follow-up PR on the same issue.
+`GET /api/tabs/events` is removed (issue #49): no client uses it since lane 2.5 (#48).
 
 **Resync control.** The Refresh button becomes "resync": the client drops its state and reconnects without `Last-Event-ID`, which yields a fresh snapshot. No new endpoint is needed.
 
@@ -615,6 +621,29 @@ The terminal user owns every repository the daemon serves, so the CLI's wider vi
 **What does not reload.** The MCP `Instructions` (sent once at initialize) and the registered tool list. When a reload changes the selected providers, the next tool result carries a notice to restart the session. A server in configuration recovery mode stays in recovery mode until restart (decision 7).
 
 **Notices.** A reload, a failed reload and "restart to refresh instructions" are appended to the next tool result, like update notices.
+
+### Phase 2 exported APIs added by the lanes
+
+The lanes added these exported names beyond the contract table at the top of this section. They are part of the phase 2 contract: changing them needs an amendment here.
+
+| Lane | Package | Names |
+| --- | --- | --- |
+| 2.1 (#33) | `internal/watch` | `Timed` (a Translator with timers: `SetWake`, `NextDeadline`, `Tick`), `UserTranslator` (`NewUserTranslator`, `Serve`, `RepoForScope`), `(*FileWatcher).AddUser`, `CanonicalUser`, `OwnedDir`, `ApprovalPayload`; the console lock: `ConsoleLockName` (`console.lock` in the agentflow home), `HoldConsoleHome`, `ConsoleWatches` and `CheckHome`, which `agentflow doctor` uses for the `AGENTFLOW_HOME` warning (decision 1) |
+| 2.1 (#33) | `internal/policy` | `ListJournal(dir, scopeKey, since)`, `ReadJournalRecord(path)`, `JournalRecord` |
+| 2.3 (#35) | `internal/watch` | `NewGitHubPoller(GitHubOptions)`, `GitHubOptions{API, Classify, Clock, OnError}`, `GitHubClock`, `GitHubFailure` and its kinds |
+| 2.3 (#35) | `internal/gh` | `(*Client).GetConditional(ctx, path, etag, out)`, `Classify(err)` |
+| 2.6 / 2.7 (#38, #41) | `internal/webui`, `internal/app` | `webui.GlobalStoreDir()`, `webui.OpenGlobalEventStore(ctx, role)`, and the `app.OpenGlobalEventStore` hook that `internal/webui` sets from `init` so `internal/app` can open the `global` store without importing `webui` |
+
+GitHub poller behaviours that lane 2.3 fixed and the table above does not show:
+
+- The PR list asks for one page of 50 (`per_page=50`) and never pages. A repository with more open PRs keeps only the 50 most recently updated in view; a tracked PR pushed out of view is looked up once.
+- The check runs and the combined status are both asked with `per_page=100`.
+- A change of a tracked head's checks also triggers the GraphQL enrichment for that PR, because checks decide the merge state.
+- A failed GraphQL enrichment is retried in the next cycles, at most 3 times per PR, then waits for the PR's next change.
+- An issue that answers 404 is left alone for 10 minutes and does not count as a failure of the repository.
+- Two polls of one repository start at least 5 seconds apart, so a burst of target changes is not a burst of requests.
+
+Client settings (integration follow-up, issue #49): a user-level client settings directory (`~/.claude` and the like) may be a symbolic link owned by this OS user to a directory owned by this OS user, as dotfiles managers make it. The watcher watches the real directory and reports its changes under the link's path. A link to a directory of another owner is still refused and reported, and an agentflow home or its subdirectories must still be real directories.
 
 ### File ownership for phase 2 lanes
 
@@ -651,7 +680,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 
 1. **`AGENTFLOW_HOME` differs between the daemon and a client.** Decided: the daemon watches only its own home (`config.HomeDir()` in the daemon process). Approval records written under another home never reach it. Lane 2.1 adds a warning to `agentflow doctor` when the current process's home differs from the running daemon's.
 2. **The `post-commit` hook.** Decided: phase 2 ships it only in this repository's `.githooks/`. `agentflow init` and `templates/repo/` do not write it into consuming repositories yet, so consumer-facing behaviour does not change. Writing it for consumers stays an owner decision for a later phase.
-3. **Agent Commander activity.** Decided: it stays request-driven on `GET /api/activity` in phase 2.
+3. **Agent Commander activity.** Decided: it stays request-driven on `GET /api/activity` in phase 2, worker questions included. The `activity` projection carries none of it.
 4. **`pre-bash` events.** Decided: `pre-bash` publishes `hook.ran` only for blocked and failed outcomes. The phase 3 timeline does not need allowed runs.
 5. **GraphQL cost.** Decided: keep the GraphQL enrichment (review decision and merge state), only for PRs whose entry in the open list changed. Lane 2.3 adds a test that counts requests per poll cycle (see "Phase 2 GitHub poller").
 6. **Double record of approvals.** Decided: the Wire Tap no longer audits `approval.*`, because the gate's journal already records every transition. `bus.AuditedFamilies` is now `["op"]`.

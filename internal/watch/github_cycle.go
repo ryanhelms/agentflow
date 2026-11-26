@@ -137,13 +137,22 @@ func (p *githubPoller) poll(run *pollRun, rp *repoPoll) time.Duration {
 	delay := cy.finish()
 
 	rp.mu.Lock()
+	previous, had := rp.state.Health, rp.have
 	rp.state = w.snapshot()
 	rp.have = true
+	state := rp.state
 	rp.mu.Unlock()
 	for _, e := range events {
 		if _, err := run.pub.Publish(run.ctx, e); err != nil && run.ctx.Err() == nil {
 			p.report(err)
 		}
+	}
+	// The first poll and every health change publish nothing else, so the
+	// activity projection would keep its old health without this.
+	if !had {
+		p.publishHealth(run, rp.repo, "", state)
+	} else if state.Health != previous {
+		p.publishHealth(run, rp.repo, previous, state)
 	}
 	return delay
 }

@@ -17,8 +17,8 @@ function consoleTabs({credential, commander, unauthorized, navigate, request, se
       body: JSON.stringify({tab: id})});
   }
 
-  // Attach until the console accepts the tab. A refused tab (400, 403, 404)
-  // stays detached; a busy console (429) or a network error is retried.
+  // Attach until the console accepts the tab. A refused tab (400, 403, 404,
+  // 503) stays detached; a busy console (429) or a network error is retried.
   async function attach(run) {
     let delay = firstDelay;
     while (active && run === epoch) {
@@ -34,7 +34,9 @@ function consoleTabs({credential, commander, unauthorized, navigate, request, se
         if (!(await unauthorized(key))) return;
         continue;
       }
-      if (status === 400 || status === 403 || status === 404) return;
+      // 503: the console has no event stream for this worktree, so it cannot
+      // navigate this tab. receive() attaches again once a snapshot arrives.
+      if (status === 400 || status === 403 || status === 404 || status === 503) return;
       await new Promise(resolve => setTimeout(resolve, delay));
       delay = Math.min(delay * 2, lastDelay);
     }

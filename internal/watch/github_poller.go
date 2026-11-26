@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -151,15 +152,30 @@ func cloneTarget(t GitHubTarget) GitHubTarget {
 // Set implements GitHubPoller.
 func (p *githubPoller) Set(t GitHubTarget) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if t.Slug == "" || !validGitHubSlug(t.Slug) {
+		previous := GitHubHealth("")
 		if rp := p.repos[t.Repo]; rp != nil {
+			rp.mu.Lock()
+			if rp.have {
+				previous = rp.state.Health
+			}
+			rp.mu.Unlock()
 			rp.close()
 			delete(p.repos, t.Repo)
 		}
+		was := p.disabled[t.Repo]
 		p.disabled[t.Repo] = true
+		run := p.run
+		p.mu.Unlock()
+		// Disabling is a health change the activity projection must see:
+		// without it, a repository without a GitHub remote would stay
+		// "unavailable" until some other event recomputed the state.
+		if !was && run != nil {
+			p.publishHealth(run, t.Repo, previous, GitHubState{Health: GitHubDisabled})
+		}
 		return
 	}
+	defer p.mu.Unlock()
 	delete(p.disabled, t.Repo)
 	t = cloneTarget(t)
 	rp := p.repos[t.Repo]
@@ -219,7 +235,12 @@ func (p *githubPoller) Run(ctx context.Context, pub bus.Publisher) error {
 	for _, rp := range p.repos {
 		p.start(rp)
 	}
+	disabled := slices.Collect(maps.Keys(p.disabled))
 	p.mu.Unlock()
+	// Repositories disabled before Run had no publisher to report it.
+	for _, repo := range disabled {
+		p.publishHealth(run, repo, "", GitHubState{Health: GitHubDisabled})
+	}
 
 	<-ctx.Done()
 	p.mu.Lock()
@@ -318,6 +339,20 @@ func (p *githubPoller) currentRate() RateLimit {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.rate
+}
+
+// publishHealth publishes the transient gh.health.changed for repo. The
+// activity projection recomputes on it, so the console leaves "unavailable"
+// after the first poll and follows rate limits and recoveries.
+func (p *githubPoller) publishHealth(run *pollRun, repo bus.RepoID, previous GitHubHealth, s GitHubState) {
+	b, err := json.Marshal(bus.GHHealthChanged{Health: string(s.Health), Previous: string(previous), RetryAt: s.RetryAt.UTC()})
+	if err != nil {
+		return
+	}
+	e := bus.Event{Type: bus.TypeGHHealthChanged, Source: "watch.github", Repo: repo, Time: p.clock.Now().UTC(), Payload: b}
+	if _, err := run.pub.Publish(run.ctx, e); err != nil && run.ctx.Err() == nil {
+		p.report(err)
+	}
 }
 
 func (p *githubPoller) report(err error) {

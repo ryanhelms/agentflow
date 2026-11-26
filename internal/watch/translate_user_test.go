@@ -206,7 +206,11 @@ func TestUserTranslatorIgnoresWhatIsNotAnApproval(t *testing.T) {
 	if evs := f.translate(f.record(fixtureScope, opID(2), "consumed", exp, nil)); len(evs) != 0 {
 		t.Fatalf("prepared then consumed: %v", types(evs))
 	}
-	if evs := f.translate(f.record(fixtureScope, opID(3), "consumed", exp, nil)); len(evs) != 0 {
+	// A record issued before the repository was served and first seen
+	// finished produces nothing (TestUserTranslatorRequestAndAnswerInOneBatch
+	// covers one issued since).
+	before := map[string]any{"issued_at": f.clock.Add(-time.Hour).Format(time.RFC3339Nano)}
+	if evs := f.translate(f.record(fixtureScope, opID(3), "consumed", exp, before)); len(evs) != 0 {
 		t.Fatalf("first seen consumed: %v", types(evs))
 	}
 	// Files that are no record, a record naming another operation, a broken one.
@@ -250,8 +254,9 @@ func TestUserTranslatorStartsSilently(t *testing.T) {
 	open := f.record(fixtureScope, opID(1), "pending", exp, nil)
 	f.record(fixtureScope, opID(2), "approved", exp, nil)
 	f.record(fixtureScope, opID(3), "consumed", exp, nil)
-	stale := f.record(fixtureScope, opID(4), "pending", exp, nil)
 	old := f.clock.Add(-3 * time.Hour)
+	issuedOld := map[string]any{"issued_at": old.Format(time.RFC3339Nano)}
+	stale := f.record(fixtureScope, opID(4), "pending", exp, issuedOld)
 	if err := os.Chtimes(stale, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +280,7 @@ func TestUserTranslatorStartsSilently(t *testing.T) {
 		t.Fatalf("expired record after seeding: %v", types(evs))
 	}
 	// A record too old to be open that is touched later is first seen finished.
-	f.record(fixtureScope, opID(4), "expired", exp, nil)
+	f.record(fixtureScope, opID(4), "expired", exp, issuedOld)
 	if evs := f.translate(stale); len(evs) != 0 {
 		t.Fatalf("stale record: %v", types(evs))
 	}
@@ -379,9 +384,12 @@ func TestUserTranslatorRescanFindsWhatWasMissed(t *testing.T) {
 	f.record(fixtureScope, opID(1), "pending", exp, nil)
 	f.record(fixtureScope, opID(2), "consumed", exp, nil)
 	// The watcher asks for a rescan by reporting the directory itself.
+	// The consumed record was issued since serving, so it was created and
+	// answered unseen: its request comes before its resolution.
 	evs := f.translate(filepath.Join(f.u.Home, "approvals"))
-	if len(evs) != 1 || evs[0].Type != bus.TypeApprovalRequested || decode[bus.ApprovalRequested](t, evs[0]).OperationID != opID(1) {
-		t.Fatalf("rescan = %v", types(evs))
+	if got := types(evs); !slices.Equal(got, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalRequested, bus.TypeApprovalResolved}) ||
+		decode[bus.ApprovalRequested](t, evs[0]).OperationID != opID(1) || decode[bus.ApprovalResolved](t, evs[2]).OperationID != opID(2) {
+		t.Fatalf("rescan = %v", got)
 	}
 	if evs := f.translate(filepath.Join(f.u.Home, "approvals")); len(evs) != 0 {
 		t.Fatalf("second rescan = %v", types(evs))
@@ -527,5 +535,57 @@ func TestCanonicalUserAndOwnedDir(t *testing.T) {
 		if err != nil || got.UserHome != root || got.Home != filepath.Join(root, ".agentflow") {
 			t.Fatalf("CanonicalUser through a link = %+v, %v", got, err)
 		}
+	}
+}
+
+// A record created and approved within one debounce window is first seen in
+// its final state. It still produces the request before the resolution; a
+// prepared operation (no prompt owner) consumed as fast produces nothing.
+func TestUserTranslatorRequestAndAnswerInOneBatch(t *testing.T) {
+	f := newUserFixture(t)
+	f.tr.Serve(fixtureScope, fixtureRepo)
+	exp := f.clock.Add(5 * time.Minute)
+
+	for i, state := range []bus.ApprovalState{bus.StateApproved, bus.StateConsumed, bus.StateCancelled} {
+		id := opID(10 + i)
+		p := f.record(fixtureScope, id, string(state), exp, nil)
+		evs := f.translate(p)
+		if got := types(evs); !slices.Equal(got, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalResolved}) {
+			t.Fatalf("%s: events = %v", state, got)
+		}
+		if r := decode[bus.ApprovalRequested](t, evs[0]); r.OperationID != id {
+			t.Fatalf("%s: request = %+v", state, r)
+		}
+		if r := decode[bus.ApprovalResolved](t, evs[1]); r.State != state || r.Previous != bus.StatePending || r.OperationID != id {
+			t.Fatalf("%s: resolution = %+v", state, r)
+		}
+		for _, e := range evs {
+			if err := e.Validate(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if evs := f.translate(p); len(evs) != 0 {
+			t.Fatalf("%s: repeated %v", state, types(evs))
+		}
+	}
+
+	p := f.record(fixtureScope, opID(30), "expired", exp, nil)
+	if got := types(f.translate(p)); !slices.Equal(got, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalExpired}) {
+		t.Fatalf("expired: events = %v", got)
+	}
+
+	p = f.record(fixtureScope, opID(31), "consumed", exp, map[string]any{"prompt_owner": ""})
+	if evs := f.translate(p); len(evs) != 0 {
+		t.Fatalf("a prepared operation produced %v", types(evs))
+	}
+}
+
+// Records that finished before the repository was served stay silent.
+func TestUserTranslatorSeedsFinishedRecordsSilently(t *testing.T) {
+	f := newUserFixture(t)
+	p := f.record(fixtureScope, opID(40), "consumed", f.clock.Add(time.Minute), nil)
+	f.tr.Serve(fixtureScope, fixtureRepo)
+	if evs := f.translate(p); len(evs) != 0 {
+		t.Fatalf("a seeded record produced %v", types(evs))
 	}
 }

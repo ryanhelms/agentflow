@@ -487,11 +487,13 @@ settings files (`client.settings.changed`) are events too. Approval records are
 read from the `AGENTFLOW_HOME` the daemon started with, so start the console from
 a shell that uses the same home as your agents; `agentflow doctor` warns when the
 console daemon uses a different `AGENTFLOW_HOME`.
-It also polls GitHub for pull request, check and bound-issue changes of each
+The daemon also polls GitHub for pull request, check and bound-issue changes of each
 repository with a GitHub remote, using your `gh` login, and records them as
 `gh.pr.updated`, `gh.ci.updated` and `gh.issue.updated` events. A quiet
 repository costs only conditional requests, which GitHub does not count against
-the rate limit, and polling slows down by itself as the limit runs low.
+the rate limit, and polling slows down by itself as the limit runs low. The
+console shows the poller's health (`ok`, `rate_limited`, `unavailable`, or `disabled`
+for a repository without a GitHub remote) as soon as the first poll ends.
 `agentflow events` reads this repository's events and the user-level (`global`) ones, such as
 a change to `~/.agentflow/config.yml`. Add `--all-repos` to read every repository the
 daemon serves in one list. A running MCP server follows the same configuration events and

@@ -116,14 +116,13 @@ type ApprovalSource interface {
 	Approvals(ctx context.Context, repo bus.RepoID) ([]ApprovalItem, error)
 }
 
-// TabsState is the "tabs" state, which replaces GET /api/tabs/events. Key:
+// TabsState is the "tabs" state, which carries tab navigation. Key:
 // one worktree (the tabs showing it). Topics: ui.tabs.changed, published
 // by the tab hub when a tab attaches or detaches or a navigation starts or
 // ends.
 //
 // A tab attaches with POST /w/<id>/api/tabs/attach {tab}, under its own
-// worktree session and Agent Commander capability exactly as the old
-// stream checked them, and stays attached while some event stream of the
+// worktree session and Agent Commander capability, and stays attached while some event stream of the
 // origin lists it in a tab=<32 hex> query parameter (at most 16), plus
 // TabGrace. It still acknowledges with POST /api/tabs/ack and leaves with
 // POST /api/tabs/leave.
@@ -142,8 +141,7 @@ type TabView struct {
 	Attached time.Time `json:"attached"`
 }
 
-// TabNavigation is one navigation request, as the old stream's
-// "navigate" event carried it. Target is already chosen for this tab (the
+// TabNavigation is one navigation request. Target is already chosen for this tab (the
 // scoped target when the tab's Commander scope matches), so the browser
 // never sees another tab's capability.
 type TabNavigation struct {

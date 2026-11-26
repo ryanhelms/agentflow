@@ -861,3 +861,84 @@ func TestGitHubPollerAPIErrorBacksOff(t *testing.T) {
 		t.Fatalf("calls = %d", calls)
 	}
 }
+
+// The first poll and every health change publish gh.health.changed, so the
+// activity projection leaves "unavailable" without waiting for a data event.
+// A cycle that keeps the same health publishes nothing.
+func TestGitHubPollerPublishesHealthChanges(t *testing.T) {
+	h := newGHHarness(t, quiet)
+	h.start()
+	if got := h.rec.takeHealth(); len(got) != 1 || got[0].Health != "ok" || got[0].Previous != "" {
+		t.Fatalf("first poll health = %+v", got)
+	}
+	h.next()
+	if got := h.rec.takeHealth(); len(got) != 0 {
+		t.Fatalf("unchanged cycle published %+v", got)
+	}
+
+	// Rate limited, then recovered.
+	h.gh.set(func(f *fakeGitHub) {
+		f.fail["pulls"] = 403
+		f.failHdr["Retry-After"] = "300"
+	})
+	h.next()
+	got := h.rec.takeHealth()
+	if len(got) != 1 || got[0].Health != "rate_limited" || got[0].Previous != "ok" ||
+		!got[0].RetryAt.Equal(h.clock.Now().Add(5*time.Minute)) {
+		t.Fatalf("rate limited health = %+v", got)
+	}
+	h.gh.set(func(f *fakeGitHub) {
+		delete(f.fail, "pulls")
+		delete(f.failHdr, "Retry-After")
+	})
+	h.next()
+	if got := h.rec.takeHealth(); len(got) != 1 || got[0].Health != "ok" || got[0].Previous != "rate_limited" || !got[0].RetryAt.IsZero() {
+		t.Fatalf("recovered health = %+v", got)
+	}
+
+	// Unavailable, twice in a row: one event.
+	h.gh.set(func(f *fakeGitHub) { f.fail["pulls"] = 502 })
+	h.next()
+	h.next()
+	if got := h.rec.takeHealth(); len(got) != 1 || got[0].Health != "unavailable" || got[0].Previous != "ok" {
+		t.Fatalf("unavailable health = %+v", got)
+	}
+
+	// Losing the GitHub remote disables the repository, once.
+	h.poller.Set(watch.GitHubTarget{Repo: repo})
+	h.poller.Set(watch.GitHubTarget{Repo: repo})
+	if got := h.rec.takeHealth(); len(got) != 1 || got[0].Health != "disabled" || got[0].Previous != "unavailable" {
+		t.Fatalf("disabled health = %+v", got)
+	}
+	if got := h.rec.take(); len(got) != 0 {
+		t.Fatalf("health changes published data events %v", typesOf(got))
+	}
+}
+
+// A repository disabled before Run starts is reported when it starts.
+func TestGitHubPollerReportsDisabledBeforeRun(t *testing.T) {
+	h := newGHHarness(t, quiet)
+	h.poller.Set(watch.GitHubTarget{Repo: repo})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- h.poller.Run(ctx, h.rec) }()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("Run = %v", err)
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if got := h.rec.takeHealth(); len(got) > 0 {
+			if len(got) != 1 || got[0].Health != "disabled" {
+				t.Fatalf("health = %+v", got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no health event for a disabled repository")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

@@ -27,6 +27,11 @@ const (
 	TypeGHCIUpdated Type = "gh.ci.updated"
 	// TypeGHIssueUpdated: an issue bound to a worktree changed.
 	TypeGHIssueUpdated Type = "gh.issue.updated"
+	// TypeGHHealthChanged: the GitHub poller finished its first poll of a
+	// repository, or the repository's health changed (rate limited,
+	// unavailable, recovered, disabled). Transient: the activity projection
+	// is its only consumer, and the state is in the poller's cache.
+	TypeGHHealthChanged Type = "gh.health.changed"
 	// TypeClientSettingsChanged: a client's settings file changed, in the
 	// user's home (GlobalRepo) or in a worktree.
 	TypeClientSettingsChanged Type = "client.settings.changed"
@@ -44,6 +49,7 @@ var phase2Types = []TypeInfo{
 	{Type: TypeGHPullUpdated, Scope: ScopeAny, Phase: 2},
 	{Type: TypeGHCIUpdated, Scope: ScopeAny, Phase: 2},
 	{Type: TypeGHIssueUpdated, Scope: ScopeAny, Phase: 2},
+	{Type: TypeGHHealthChanged, Scope: ScopeRepo, Transient: true, Phase: 2},
 	{Type: TypeClientSettingsChanged, Scope: ScopeAny, Phase: 2, Global: GlobalAllowed},
 	{Type: TypeUITabsChanged, Scope: ScopeRepo, Transient: true, Phase: 2},
 }
@@ -246,6 +252,15 @@ type GHIssueUpdated struct {
 	Assignees   []string  `json:"assignees,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	Previous    string    `json:"previous,omitempty"`
+}
+
+// GHHealthChanged is the payload of gh.health.changed. Health is one of
+// "ok", "disabled", "unavailable" or "rate_limited" (watch.GitHubHealth).
+type GHHealthChanged struct {
+	Health string `json:"health"`
+	// Previous is empty for the first report of the repository.
+	Previous string    `json:"previous,omitempty"`
+	RetryAt  time.Time `json:"retry_at,omitzero"`
 }
 
 // SettingsScope says where a client settings file lives.

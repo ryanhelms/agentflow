@@ -179,6 +179,28 @@ func ApprovalTransition(previous, current bus.ApprovalState) (bus.Type, bool) {
 	return "", false
 }
 
+// ApprovalTransitions is the sequence of events a record's state change
+// produces. It is ApprovalTransition, plus one case: a record the
+// translator first sees after it started serving the repository (previous
+// is empty), already approved, cancelled, consumed or expired, was created
+// and answered within one debounce window. When it asked a person (asked:
+// the record has a prompt owner, which a prepared operation never has), it
+// produces approval.requested and then the event of its current state, with
+// previous StatePending, so a stream never sees a resolution without its
+// request.
+func ApprovalTransitions(previous, current bus.ApprovalState, asked bool) []bus.Type {
+	if previous == "" && asked && current != bus.StatePending {
+		if typ, ok := ApprovalTransition(bus.StatePending, current); ok {
+			return []bus.Type{bus.TypeApprovalRequested, typ}
+		}
+		return nil
+	}
+	if typ, ok := ApprovalTransition(previous, current); ok {
+		return []bus.Type{typ}
+	}
+	return nil
+}
+
 // ObservedExpiry reports whether a record that is still pending or
 // approved has passed expiresAt at now. The journal records an expiry only
 // when a process next touches the record, so UserTranslator.Tick reports

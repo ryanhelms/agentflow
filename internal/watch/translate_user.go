@@ -24,6 +24,9 @@ const (
 	// an older file that still says "pending" is an expiry nobody wrote yet,
 	// so the first read skips it.
 	maxOpenAge = 2 * time.Hour
+	// approvalSkew allows for a record issued just before Serve recorded
+	// its time, by another process on the same host.
+	approvalSkew = time.Second
 	// forgetAbove and forgetAfter bound memory: above that many records, the
 	// ones that finished more than forgetAfter ago are forgotten.
 	forgetAbove = 2048
@@ -42,7 +45,7 @@ const (
 //     worktree: only files that were added, removed or changed are named.
 //   - approval.* come from the record files. A repository's records are
 //     read silently when Serve starts to serve it, and from then on every
-//     state change goes through ApprovalTransition. A record of a
+//     state change goes through ApprovalTransitions. A record of a
 //     repository that is not served produces nothing.
 //   - A record that is still open when its expiry passes produces
 //     approval.expired with Observed set, from Tick, because the journal
@@ -60,6 +63,7 @@ type UserTranslator struct {
 	personal map[string][sha256.Size]byte
 	settings map[string][sha256.Size]byte
 	scopes   map[string]bus.RepoID
+	served   map[string]time.Time // when Serve first served each scope key
 	records  map[string]*approvalEntry
 }
 
@@ -91,7 +95,7 @@ func NewUserTranslator(u UserTarget) (*UserTranslator, error) {
 	}
 	return &UserTranslator{u: u, approvalsDir: policy.ApprovalsDir(u.Home), now: time.Now,
 		personal: map[string][sha256.Size]byte{}, settings: map[string][sha256.Size]byte{},
-		scopes: map[string]bus.RepoID{}, records: map[string]*approvalEntry{}}, nil
+		scopes: map[string]bus.RepoID{}, served: map[string]time.Time{}, records: map[string]*approvalEntry{}}, nil
 }
 
 // Target returns the canonical UserTarget the translator reads.
@@ -122,6 +126,9 @@ func (t *UserTranslator) RepoForScope(scopeKey string) (bus.RepoID, bool) {
 func (t *UserTranslator) Serve(scopeKey string, repo bus.RepoID) {
 	t.mu.Lock()
 	t.scopes[scopeKey] = repo
+	if _, ok := t.served[scopeKey]; !ok {
+		t.served[scopeKey] = t.now()
+	}
 	t.scanLocked(t.now(), true, scopeKey)
 	wake := t.wake
 	t.mu.Unlock()
@@ -290,11 +297,27 @@ func (t *UserTranslator) applyLocked(name string, at time.Time, seed bool) ([]bu
 	if seed {
 		return nil, nil
 	}
-	typ, emit := ApprovalTransition(previous, current)
-	if !emit {
-		return nil, nil
+	// A record created and answered between two looks at the directory
+	// is first seen in its final state: report the request, then the
+	// answer (ApprovalTransitions).
+	var out []bus.Event
+	from := previous
+	// Only a record issued since the repository was served can have been
+	// created and answered unseen; an older one finished before.
+	asked := rec.PromptOwner != "" && !rec.IssuedAt.Before(t.served[scope].Add(-approvalSkew))
+	for _, typ := range ApprovalTransitions(previous, current, asked) {
+		state := current
+		if typ == bus.TypeApprovalRequested {
+			state = bus.StatePending
+		}
+		evs, err := t.approvalEvent(typ, repo, at, e.view, state, from, false)
+		if err != nil {
+			return out, err
+		}
+		out = append(out, evs...)
+		from = state
 	}
-	return t.approvalEvent(typ, repo, at, e.view, current, previous, false)
+	return out, nil
 }
 
 // scanLocked applies every record of the served repositories (only

@@ -404,8 +404,12 @@ func (w *FileWatcher) route(c Change, now time.Time) {
 			w.agg.Add(r.t, c, now)
 		}
 	}
-	if us := w.user; us != nil && us.concerns(c.Path) {
-		w.agg.Add(us.t, c, now)
+	if us := w.user; us != nil {
+		uc := c
+		uc.Path = us.alias(c.Path)
+		if us.concerns(uc.Path) {
+			w.agg.Add(us.t, uc, now)
+		}
 	}
 	for _, ts := range w.targets {
 		typ, ok := Classify(ts.t, c.Path)

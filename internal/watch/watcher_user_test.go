@@ -373,31 +373,77 @@ func TestUserSourcesFallBackToPolling(t *testing.T) {
 	}
 }
 
+// A client settings directory that links to a directory of another user
+// (here root's /usr) is not watched, and the watcher says so. An agentflow
+// home that is a link is refused too (OwnedDir).
 func TestUserDirectoriesThatAreNotTheUsersAreNotWatched(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("links need privileges on Windows")
+		t.Skip("links need privileges on Windows, and owners are not checked")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root owns the link target")
+	}
+	foreign := "/usr"
+	if fi, err := os.Stat(foreign); err != nil || !fi.IsDir() {
+		t.Skip("no /usr")
 	}
 	env := newUserEnv(t)
-	elsewhere := repoDir(t)
-	if err := os.Symlink(elsewhere, filepath.Join(env.target.UserHome, ".claude")); err != nil {
+	if err := os.Symlink(foreign, filepath.Join(env.target.UserHome, ".claude")); err != nil {
 		t.Fatal(err)
 	}
 	h, _ := startUser(t, watch.ModePoll, env)
-	writeFile(t, filepath.Join(elsewhere, "settings.json"), `{}`)
 	writeFile(t, env.path("config.yml"), "a: 1\n")
 	e := h.wait(t, "personal config", func(e bus.Event) bool { return e.Type == bus.TypeConfigLayerChanged })
 	if e.Repo != bus.GlobalRepo {
 		t.Fatalf("event = %+v", e)
 	}
-	for _, e := range h.quiet(700 * time.Millisecond) {
-		if e.Type == bus.TypeClientSettingsChanged {
-			t.Fatalf("a linked directory was watched: %s", e.Payload)
-		}
-	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if !slices.ContainsFunc(h.errs, func(err error) bool { return strings.Contains(err.Error(), "not a directory owned by this user") }) {
+	if !slices.ContainsFunc(h.errs, func(err error) bool {
+		return strings.Contains(err.Error(), "not a directory owned by this user") && strings.Contains(err.Error(), ".claude")
+	}) {
 		t.Fatalf("the skipped directory was not reported: %v", h.errs)
+	}
+}
+
+// ~/.claude kept in a dotfiles repository is a symbolic link to a directory
+// the user owns. The real directory is watched, and its events name the
+// file under the link's path, as for a real directory.
+func TestLinkedClientSettingsDirectoryIsWatched(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("links need privileges on Windows")
+	}
+	for _, mode := range modes {
+		t.Run(string(mode), func(t *testing.T) {
+			env := newUserEnv(t)
+			dotfiles := filepath.Join(repoDir(t), "dotfiles", "claude")
+			if err := os.MkdirAll(dotfiles, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(dotfiles, filepath.Join(env.target.UserHome, ".claude")); err != nil {
+				t.Fatal(err)
+			}
+			h, _ := startUser(t, mode, env)
+			writeFile(t, filepath.Join(dotfiles, "settings.json"), `{"hooks":{}}`)
+			e := h.wait(t, "linked claude settings", func(e bus.Event) bool {
+				return e.Type == bus.TypeClientSettingsChanged && e.Repo == bus.GlobalRepo
+			})
+			s := payload[bus.ClientSettingsChanged](t, e)
+			if s.Client != "claude" || s.Scope != bus.SettingsUser || !slices.Equal(s.Paths, []string{".claude/settings.json"}) {
+				t.Fatalf("settings event = %+v", s)
+			}
+			if strings.Contains(string(e.Payload), "dotfiles") {
+				t.Fatalf("payload names the link target: %s", e.Payload)
+			}
+			h.mu.Lock()
+			errs := slices.Clone(h.errs)
+			h.mu.Unlock()
+			for _, err := range errs {
+				if strings.Contains(err.Error(), ".claude") {
+					t.Fatalf("linked directory reported: %v", err)
+				}
+			}
+		})
 	}
 }
 

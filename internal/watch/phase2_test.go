@@ -2,6 +2,7 @@ package watch
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -82,6 +83,24 @@ func TestApprovalTransition(t *testing.T) {
 		got, ok := ApprovalTransition(c.prev, c.cur)
 		if got != c.want || ok != (c.want != "") {
 			t.Errorf("ApprovalTransition(%q, %q) = %q, %v", c.prev, c.cur, got, ok)
+		}
+	}
+	for _, c := range []struct {
+		prev, cur bus.ApprovalState
+		asked     bool
+		want      []bus.Type
+	}{
+		{"", bus.StatePending, true, []bus.Type{bus.TypeApprovalRequested}},
+		{"", bus.StateApproved, true, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalResolved}},
+		{"", bus.StateConsumed, true, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalResolved}},
+		{"", bus.StateExpired, true, []bus.Type{bus.TypeApprovalRequested, bus.TypeApprovalExpired}},
+		{"", bus.StateConsumed, false, nil},
+		{"", "prepared", false, nil},
+		{bus.StatePending, bus.StateApproved, true, []bus.Type{bus.TypeApprovalResolved}},
+		{bus.StateConsumed, bus.StateConsumed, true, nil},
+	} {
+		if got := ApprovalTransitions(c.prev, c.cur, c.asked); !slices.Equal(got, c.want) {
+			t.Errorf("ApprovalTransitions(%q, %q, %v) = %v, want %v", c.prev, c.cur, c.asked, got, c.want)
 		}
 	}
 	now := time.Now()

@@ -94,6 +94,7 @@ type recorder struct {
 	t      *testing.T
 	mu     sync.Mutex
 	events []bus.Event
+	health []bus.Event // gh.health.changed, kept apart from the data events
 }
 
 // Publish checks e against the envelope rules the real bus applies, then
@@ -109,16 +110,40 @@ func (r *recorder) Publish(_ context.Context, e bus.Event) (bus.Event, error) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if e.Type == bus.TypeGHHealthChanged {
+		r.health = append(r.health, e)
+		return e, nil
+	}
 	r.events = append(r.events, e)
 	return e, nil
 }
 
-// take returns the events since the last call.
+// take returns the data events (all but gh.health.changed) since the last
+// call.
 func (r *recorder) take() []bus.Event {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := r.events
 	r.events = nil
+	return out
+}
+
+// takeHealth returns the gh.health.changed payloads since the last call.
+func (r *recorder) takeHealth() []bus.GHHealthChanged {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []bus.GHHealthChanged
+	for _, e := range r.health {
+		var p bus.GHHealthChanged
+		if err := json.Unmarshal(e.Payload, &p); err != nil {
+			r.t.Errorf("health payload: %v", err)
+		}
+		if e.Worktree != "" || !e.Time.Equal(e.Time.UTC()) {
+			r.t.Errorf("health event %+v", e)
+		}
+		out = append(out, p)
+	}
+	r.health = nil
 	return out
 }
 

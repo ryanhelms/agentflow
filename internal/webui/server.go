@@ -32,7 +32,11 @@ type server struct {
 	launchMu                     sync.Mutex
 	tabs                         *tabHub
 	tabsOnce                     sync.Once
-	worktreePath                 string
+	// tabsStreamed says that something other than the event runtime serves
+	// the tabs state on this server's stream (test fixtures do). Without
+	// either, a tab cannot receive navigation and is not attached.
+	tabsStreamed bool
+	worktreePath string
 	// Serialize approval consumption and publishing. Re-read policy for every save.
 	writeMu   sync.Mutex
 	gate      *policy.Gate
@@ -67,7 +71,6 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/session", s.exchange)
 	mux.HandleFunc("POST /api/resume", s.resume)
 	mux.HandleFunc("GET /api/state", s.state)
-	mux.HandleFunc("GET /api/tabs/events", s.tabEvents)
 	mux.HandleFunc("GET "+EventStreamPath, s.eventStream)
 	mux.HandleFunc("POST /api/tabs/attach", s.tabAttach)
 	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)

@@ -104,7 +104,11 @@ A reload does not change what the server told the client when the session starte
 
 Besides each worktree, the daemon watches a few directories in your own home. It watches
 each non-recursively, only when you own it and it is not a symbolic link, and polls
-where notifications are unavailable.
+where notifications are unavailable. One exception: a client directory such as `~/.claude`
+may be a symbolic link that you own to a directory that you own (a dotfiles repository,
+for example). The daemon then watches the real directory and reports its files under the
+link's name. A link to a directory of another user is not watched, and the daemon says so
+on stderr.
 
 | Where | Files | Event |
 | --- | --- | --- |
@@ -122,7 +126,9 @@ content, so saving a file without a change reports nothing.
 that repository only; the daemon ignores records of repositories it does not serve. When
 the daemon starts to serve a repository it reads the existing records silently: an
 approval that was already waiting shows in the console's approvals list, and its later
-changes arrive as events. The events carry the operation, its action and class, the client
+changes arrive as events. An approval that is asked for and answered within a fraction of a
+second, as `--yes` does, still produces `approval.requested` before its
+`approval.resolved`. The events carry the operation, its action and class, the client
 that owns the prompt, and the issue and expiry times. They never carry the approval token,
 the request fingerprint or the prompt owner's session.
 
@@ -174,9 +180,12 @@ not polled.
 | `gh.pr.updated` | an open pull request changed, or one left the open list because it was merged or closed |
 | `gh.ci.updated` | the checks of a pull request head changed. Only heads of branches that a served worktree has checked out are watched. |
 | `gh.issue.updated` | an issue bound to a served worktree (`agentflow start --worktree` records it) changed |
+| `gh.health.changed` | the first poll of a repository finished, or its polling health changed (`ok`, `rate_limited`, `unavailable`, `disabled`). Transient: not stored, so `agentflow events` does not show it; the console's `activity` state follows it. |
 
 An event is published only when a value changed. The first poll after the daemon starts, and
-the first poll of a repository, record the current state and publish nothing. An event
+the first poll of a repository, record the current state and publish no `gh.pr`, `gh.ci`
+or `gh.issue` event; they publish `gh.health.changed`, so the console leaves `unavailable`.
+A repository without a GitHub remote reports `disabled`. An event
 belongs to the worktree whose branch is the pull request head, or that is bound to the
 issue; it is repository-wide when no served worktree matches. Titles, labels and check
 names are cut at 256 bytes, and lists at 20 entries.
@@ -269,8 +278,10 @@ it in `tab=`, and for 10 seconds after the last such stream closes. A navigation
 in the `tabs` state of the tab's worktree; only the tab whose ID matches acts on it and
 acknowledges with `POST /api/tabs/ack`. The daemon clears it on the acknowledgement or
 after 2 seconds. `POST /api/tabs/leave` detaches the tab at once. A tab that the
-console no longer lists attaches again. The browser no longer opens the older
-`GET /api/tabs/events` stream.
+console no longer lists attaches again. When the worktree has no event stream (the stream
+answers 503), the attach answers 503 too, so `agentflow ui` opens a new tab instead of
+waiting for one that cannot receive the navigation. A navigation that no tab acknowledges
+within 2 seconds also opens a new tab. The older `GET /api/tabs/events` stream is removed.
 
 The browser shares one stream per console origin through a `SharedWorker` loaded from
 `/_agentflow/event-worker.js`.

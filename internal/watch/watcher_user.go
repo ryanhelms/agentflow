@@ -21,6 +21,11 @@ type userState struct {
 	t  Target
 	g  *group
 	tr Translator
+	// links maps the real directory of a client settings directory that is
+	// a symbolic link (for example ~/.claude -> ~/dotfiles/claude) to the
+	// link's path. The watcher watches the real directory and reports its
+	// changes under the link's path, which is what ClassifyUser knows.
+	links map[string]string
 }
 
 // AddUser starts watching the user-level directories of u (UserPaths) and
@@ -32,7 +37,11 @@ type userState struct {
 //
 // A directory that exists but is a symbolic link, or belongs to another
 // user, is not watched, and neither is anything below an agentflow home
-// that fails the same check; OnError reports each one. A directory that
+// that fails the same check; OnError reports each one. One exception: a
+// client settings directory in the OS home (~/.claude and the like, often
+// kept in a dotfiles repository) may be a symbolic link owned by this user
+// to a directory owned by this user. The real directory is watched, and its
+// changes are reported under the link's path. A directory that
 // appears later is not checked again, but every file the translators read
 // from it is (UserTranslator reads only regular files the user owns).
 //
@@ -48,6 +57,11 @@ func (w *FileWatcher) AddUser(u UserTarget, tr Translator) error {
 		return errors.New("watch: a user target needs a Translator")
 	}
 	var roots []Path
+	links := map[string]string{}
+	clientDirs := map[string]bool{}
+	for _, f := range UserClientSettings {
+		clientDirs[filepath.Dir(filepath.Join(u.UserHome, filepath.FromSlash(f.Path)))] = true
+	}
 	homeOK := true
 	if exists, ok := OwnedDir(u.Home); exists && !ok {
 		homeOK = false
@@ -63,13 +77,18 @@ func (w *FileWatcher) AddUser(u UserTarget, tr Translator) error {
 		}
 		if p.Dir != u.Home { // the home was checked above
 			if exists, ok := OwnedDir(p.Dir); exists && !ok {
+				if real, linked := ownedLinkedDir(p.Dir); linked && clientDirs[p.Dir] && !inHome {
+					links[real] = p.Dir
+					roots = append(roots, Path{Dir: real, Recursive: p.Recursive})
+					continue
+				}
 				w.opts.OnError(fmt.Errorf("watch: not watching %s: not a directory owned by this user", p.Dir))
 				continue
 			}
 		}
 		roots = append(roots, p)
 	}
-	us := &userState{u: u, t: Target{Repo: bus.GlobalRepo}, tr: tr}
+	us := &userState{u: u, t: Target{Repo: bus.GlobalRepo}, tr: tr, links: links}
 
 	w.mu.Lock()
 	if w.closed {
@@ -141,6 +160,40 @@ func OwnedDir(dir string) (exists, ok bool) {
 		return false, errors.Is(err, fs.ErrNotExist)
 	}
 	return true, fi.IsDir() && ownedByCurrentUser(fi)
+}
+
+// ownedLinkedDir reports whether dir is a symbolic link owned by this user
+// to a real directory owned by this user, and returns that directory free of
+// symbolic links. On Windows the owner is not checked.
+func ownedLinkedDir(dir string) (string, bool) {
+	li, err := os.Lstat(dir)
+	if err != nil || li.Mode()&fs.ModeSymlink == 0 || !ownedByCurrentUser(li) {
+		return "", false
+	}
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", false
+	}
+	real = filepath.Clean(real)
+	fi, err := os.Lstat(real)
+	if err != nil || !fi.IsDir() || !ownedByCurrentUser(fi) {
+		return "", false
+	}
+	return real, true
+}
+
+// alias returns path under the link's path when it is in the real
+// directory of a linked client settings directory, and path otherwise.
+func (us *userState) alias(path string) string {
+	for real, link := range us.links {
+		if rel, ok := under(real, path); ok {
+			return filepath.Join(link, filepath.FromSlash(rel))
+		}
+		if path == real {
+			return link
+		}
+	}
+	return path
 }
 
 // concerns reports whether path concerns the user target: a classified
