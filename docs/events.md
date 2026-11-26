@@ -77,3 +77,17 @@ The browser shares one stream per console origin through a `SharedWorker` loaded
 
 The watcher uses file notifications and falls back to polling per worktree when
 notifications are unavailable. Set `AGENTFLOW_WATCH=poll` to force polling.
+
+## Configuration changes and a running MCP server
+
+From phase 2, a running agentflow MCP server picks up edits to `.agentflow/config.yml`,
+`.agentflow/providers/`, `~/.agentflow/config.yml` and `~/.agentflow/providers/` without
+a restart. A tool call that is already running finishes with the configuration it
+started with.
+
+Restart the client session in these cases, because they do not reload:
+
+- The server started in configuration recovery mode. It stays in recovery mode after you
+  fix the configuration.
+- The change adds or removes MCP tools, or changes the server's instructions (for example
+  a different provider selection). The next tool result tells you when this applies.

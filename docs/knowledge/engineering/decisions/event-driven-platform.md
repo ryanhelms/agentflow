@@ -140,7 +140,7 @@ func Handle(ctx context.Context, sub Subscription, consumer string, h Handler, d
 
 **Point-to-Point Channel.** `Bus.Queue(name)` carries work items, for example "recompute the overview of worktree W". Each item goes to exactly one receiver. Queue items skip Interceptors, Taps and the store. `Send` waits while the queue (64 items) is full, until its context ends: back-pressure, not dropping.
 
-**Wire Tap to audit.** Lane 1.1 provides an audit tap over `policy.Gate.Audit`. It records `op.*` and `approval.*` events, which are actions. Observation families such as `git.*` and `config.*` are not audited. In phase 1 no audited type exists yet, so the tap is wired but records nothing.
+**Wire Tap to audit.** Lane 1.1 provides an audit tap over `policy.Gate.Audit`. It records `op.*` events, which are actions (*amended in phase 2: `approval.*` is no longer audited, see "Phase 2 decisions", item 6*). Observation families such as `git.*` and `config.*` are not audited. In phase 1 no audited type exists yet, so the tap is wired but records nothing.
 
 **Dead Letter Channel.** `bus.Handle` runs a handler per event; an error or a panic becomes a `bus.Letter{event, consumer, reason, time}` and the consumer carries on. The default channel keeps the last 256 letters in memory. Plugins (phase 5) add a persistent one. Overflow drops are not dead letters; `Subscription.Dropped` counts them.
 
@@ -418,7 +418,7 @@ Rules every payload follows:
 - The worktree of a `gh.*` event is the served worktree whose branch is the PR's head (for issues: the worktree bound to the issue). With none, the event is repository-wide.
 - `LayerClient` stays reserved and unused. Client settings have their own type because they are not an agentflow configuration layer and do not change `config.Effective`.
 
-`approval.*` is audited by the Wire Tap (phase 1 rule). The other phase 2 families are observations and are not audited.
+No phase 2 family is audited by the Wire Tap. `approval.*` was audited under the phase 1 rule; it is not any more, because the gate's approval journal already records every transition (decision 6).
 
 ### Phase 2 scoping: repository or `global`
 
@@ -530,7 +530,7 @@ CLI and MCP processes warn on stderr. Hooks pass no warning function, because gi
 **Producers.**
 
 - Every `agentflow hook ...` invocation publishes `hook.ran` when it ends, within a 300 ms budget. `pre-bash` runs before every shell command, so it publishes only `blocked` and `failed` outcomes. `reason` is a fixed code, never text.
-- `commit.created` comes from a new `post-commit` git hook: `agentflow hook post-commit` (lane 2.2 implements `hooks.PostCommit`; lane 2.6 adds the CLI dispatch, since it owns `cli.go`). It parses the subject with `internal/commit`. The hook ships in `templates/repo/.githooks/post-commit` and in this repo's `.githooks/`, and `agentflow remove` must remove it. Without the hook, `git.head.changed` still updates the overview.
+- `commit.created` comes from a new `post-commit` git hook: `agentflow hook post-commit` (lane 2.2 implements `hooks.PostCommit`; lane 2.6 adds the CLI dispatch, since it owns `cli.go`). It parses the subject with `internal/commit`. In phase 2 the hook ships **only in this repository's `.githooks/`**. `agentflow init` and `templates/repo/` do not write it into consuming repositories (decision 2). Without the hook, `git.head.changed` still updates the overview.
 
 ### Phase 2 GitHub poller (lane 2.3)
 
@@ -563,7 +563,7 @@ A 304 does not count against GitHub's primary rate limit for authenticated reque
 | `X-RateLimit-Remaining: 0` | until `X-RateLimit-Reset` |
 | Consecutive failures (secondary limits, network, 5xx) | 1, 2, 4 ... minutes, at most 15 |
 
-The poller never retries a rate-limited request earlier than GitHub asked. Authentication and permission errors set health to `unavailable` and back off. A repository without a GitHub remote is `disabled`. Health and the retry time are part of `GitHubState` and of the activity projection.
+The poller never retries a rate-limited request earlier than GitHub asked. Lane 2.3 adds a test that counts the requests of one poll cycle against an `httptest` server: one PR list, one check-runs and one status request per tracked head, one request per bound issue, and a GraphQL query only when the PR list changed and only for the changed PRs. Authentication and permission errors set health to `unavailable` and back off. A repository without a GitHub remote is `disabled`. Health and the retry time are part of `GitHubState` and of the activity projection.
 
 ### Phase 2 projections (lane 2.4)
 
@@ -611,7 +611,7 @@ The terminal user owns every repository the daemon serves, so the CLI's wider vi
 
 **Swap and in-flight calls.** The server holds the App in an `atomic.Pointer[app.App]`. Each tool handler loads it once at its start and uses that App for the whole call, so a call in flight finishes with the configuration it started with. The next call uses the new one. A confirmation token issued before a reload is checked against the new policy when it is used: a tightened policy fails with `ErrChanged` and a fresh preview, and a loosened policy never upgrades an existing prompt (existing gate behaviour). The session writers get the new approval window through `SetApprovalWindow`.
 
-**What does not reload.** The MCP `Instructions` (sent once at initialize) and the registered tool list. When a reload changes the selected providers, the next tool result carries a notice to restart the session. A server in configuration recovery mode stays in recovery mode until restart.
+**What does not reload.** The MCP `Instructions` (sent once at initialize) and the registered tool list. When a reload changes the selected providers, the next tool result carries a notice to restart the session. A server in configuration recovery mode stays in recovery mode until restart (decision 7).
 
 **Notices.** A reload, a failed reload and "restart to refresh instructions" are appended to the next tool result, like update notices.
 
@@ -621,8 +621,8 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 
 | Lane | Issue | Owns | Must not touch |
 | --- | --- | --- | --- |
-| 2.1 Watch sources | #33 | `internal/watch/**` except `github*.go`; `internal/policy/journal.go` (new, read-only); `internal/webui/stream_runtime_user.go` (its `runtimeExtension`) | `internal/gh/**`, other `internal/webui` files |
-| 2.2 Local socket and hooks | #34 | `internal/notifysock/**`; `internal/hooks/**`; `internal/webui/instance*.go` (`notify` field, `NotifyEndpoint`, `instance_notify*.go` with its `runtimeExtension`); `templates/repo/.githooks/post-commit`, `.githooks/post-commit`; the `remove` step for that hook in `internal/setup` | `internal/cli/cli.go` (lane 2.6 adds `hook post-commit`) |
+| 2.1 Watch sources | #33 | `internal/watch/**` except `github*.go`; `internal/policy/journal.go` (new, read-only); `internal/webui/stream_runtime_user.go` (its `runtimeExtension`); the `AGENTFLOW_HOME` mismatch check in `agentflow doctor` (decision 1) | `internal/gh/**`, other `internal/webui` files |
+| 2.2 Local socket and hooks | #34 | `internal/notifysock/**`; `internal/hooks/**`; `internal/webui/instance*.go` (`notify` field, `NotifyEndpoint`, `instance_notify*.go` with its `runtimeExtension`); `.githooks/post-commit` | `internal/cli/cli.go` (lane 2.6 adds `hook post-commit`); `templates/repo/**` and `internal/setup/**` (decision 2) |
 | 2.3 GitHub poller | #35 | `internal/gh/**`; `internal/watch/github*.go`; `internal/webui/stream_runtime_github.go` (its `runtimeExtension`) | other `internal/watch` files |
 | 2.4 Projections and tabs | #36 | `internal/webui/projection_*.go`, `stream.go`, `stream_runtime.go` (projector registration, the `global` store, global subscriptions), `tabs.go`, `workspace.go`, `server.go` (routes) | `internal/webui/static/**`, `instance*.go` |
 | 2.5 UI | #37 | `internal/webui/static/**` (`app.js`, `tab-navigation.js`, `event-worker.js`, `style.css`, `index.html`) | any Go file |
@@ -643,15 +643,17 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - [ ] The `global` store, the socket and every watched user-level directory belong to the daemon's OS user.
 - [ ] A stream may follow `global` only for `config.**` and `client.**`, and a `Last-Event-ID` may name no repository except its own and `global`.
 
-### Phase 2 open questions
+### Phase 2 decisions
 
-1. **`AGENTFLOW_HOME` differs between the daemon and a client.** Approval records written under another home never reach the daemon, so neither the events nor the approvals projection show them. Proposal: the daemon watches its own home only, and `agentflow doctor` warns when a process's home differs from the daemon's.
-2. **The `post-commit` hook is new consumer-facing behaviour.** `agentflow init` would write one more git hook into consuming repositories. It is additive, not breaking, but it changes the first row of "Two things that are easy to confuse" in `AGENTS.md`. Confirm before lane 2.2 ships it, or keep it in this repo's `.githooks/` only for phase 2.
-3. **Agent Commander activity** stays request-driven on `GET /api/activity`. Moving it onto events needs a Commander push channel, which is outside phase 2.
-4. **`pre-bash` events.** Publishing only blocked and failed outcomes keeps the store small. Confirm that the timeline in phase 3 does not need every allowed command.
-5. **GraphQL cost.** The review decision and merge state need GraphQL, which has no ETag. The poller asks only for changed PRs; if that still costs too much, drop the two fields from `gh.pr.updated` and keep them on `/api/activity`.
-6. **Double record of approvals.** The Wire Tap audits `approval.*` while the gate's journal already records every transition. Keep both (the audit log is the one policy tooling reads), or exclude `approval.*` from the tap.
-7. **Tool list reload.** MCP supports `tools/list_changed`. Phase 2 does not change the tool list on reload; recovery mode still needs a restart.
+*Decided by the coordinator on PR #39. These were the open questions of this amendment.*
+
+1. **`AGENTFLOW_HOME` differs between the daemon and a client.** Decided: the daemon watches only its own home (`config.HomeDir()` in the daemon process). Approval records written under another home never reach it. Lane 2.1 adds a warning to `agentflow doctor` when the current process's home differs from the running daemon's.
+2. **The `post-commit` hook.** Decided: phase 2 ships it only in this repository's `.githooks/`. `agentflow init` and `templates/repo/` do not write it into consuming repositories yet, so consumer-facing behaviour does not change. Writing it for consumers stays an owner decision for a later phase.
+3. **Agent Commander activity.** Decided: it stays request-driven on `GET /api/activity` in phase 2.
+4. **`pre-bash` events.** Decided: `pre-bash` publishes `hook.ran` only for blocked and failed outcomes. The phase 3 timeline does not need allowed runs.
+5. **GraphQL cost.** Decided: keep the GraphQL enrichment (review decision and merge state), only for PRs whose entry in the open list changed. Lane 2.3 adds a test that counts requests per poll cycle (see "Phase 2 GitHub poller").
+6. **Double record of approvals.** Decided: the Wire Tap no longer audits `approval.*`, because the gate's journal already records every transition. `bus.AuditedFamilies` is now `["op"]`.
+7. **Reload limits.** Decided: a server in configuration recovery mode, and the registered tool list, still need a restart after a configuration change. `docs/events.md` says so.
 
 ### Phase 2 consequences
 
@@ -659,4 +661,5 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - Every user-level event lives in one private, per-host `global` store of at most about 50 MB.
 - A process that is not the daemon can now add events while the daemon runs, but only `hook.ran` and `commit.created`, and only after proving it can read the daemon's private registry.
 - GitHub is polled only for repositories the daemon serves, mostly with free conditional requests, and never faster than GitHub allows.
-- A running MCP server follows configuration edits without a restart, except for its instructions and tool list.
+- A running MCP server follows configuration edits without a restart, except for its instructions, its tool list and recovery mode.
+- Consuming repositories see no change in phase 2: the `post-commit` hook stays in this repository.
