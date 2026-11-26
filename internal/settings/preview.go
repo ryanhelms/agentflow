@@ -3,9 +3,11 @@ package settings
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
@@ -156,10 +158,10 @@ func (s *Service) describe(ctx context.Context, c *check, p *plan, pv *Preview) 
 	}
 	if p.touches(config.FieldRepo) {
 		diff := c.planDiff
-		for _, e := range c.edits {
-			if e.known && e.field.Meta.Sensitive {
-				diff = "" // a sensitive value never leaves the disk, not even in a diff
-			}
+		// A sensitive value never leaves the disk, not even as a context
+		// line of a diff for another field.
+		if s.sensitiveSet(p.files.repo.Content) || s.sensitiveSet(p.next[1]) {
+			diff = ""
 		}
 		pv.Files = append(pv.Files, FileChange{Layer: config.FieldRepo, Path: RepoFile, Before: p.files.repo.Revision,
 			After: Revision(p.next[1], true), Diff: diff})
@@ -168,6 +170,35 @@ func (s *Service) describe(ctx context.Context, c *check, p *plan, pv *Preview) 
 		pv.Files = append(pv.Files, FileChange{Layer: config.FieldPersonal, Path: PersonalFile, Before: p.files.personal.Revision,
 			After: Revision(p.next[0], true)})
 	}
+}
+
+// sensitiveSet reports whether the repository file content sets any
+// sensitive field (for a wildcard path, anything under its fixed prefix).
+// A file that does not parse counts as set.
+func (s *Service) sensitiveSet(content string) bool {
+	for _, f := range s.Catalog.Fields() {
+		if f.Layer != config.FieldRepo || !f.Meta.Sensitive {
+			continue
+		}
+		keys, err := config.ParseFieldPath(f.Path)
+		if err != nil {
+			return true
+		}
+		for i, k := range keys {
+			if k == config.FieldWildcard {
+				keys = keys[:i]
+				break
+			}
+		}
+		if len(keys) == 0 {
+			return strings.TrimSpace(content) != ""
+		}
+		_, set, err := consolecfg.LayerValue(content, keys)
+		if err != nil || set {
+			return true
+		}
+	}
+	return false
 }
 
 func f0(p *plan) string { return p.files.personal.Content }

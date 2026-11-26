@@ -81,10 +81,24 @@
         "force_confirm": true,
         "approval_window": "5m0s",
         "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "console.autonomy",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
       }
     ],
     "classes": [
-      "local"
+      "local",
+      "remote"
     ],
     "confirmation": "Agent changes to personal approval settings require confirmation.",
     "mandatory": true

@@ -394,7 +394,8 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 		}
 	}
 	f.svc.Catalog = consolecfg.NewCatalog(fields)
-	pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("repo:flow_map", "acme/private@v1:flow.yml")}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}})
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:flow_map", "acme/private@v1:flow.yml")}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	pv, err := f.svc.Preview(t.Context(), cs)
 	if err != nil || len(pv.Changes) != 1 {
 		t.Fatalf("%v %+v", err, pv)
 	}
@@ -404,9 +405,80 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 	if c := pv.Changes[0]; !c.After.Redacted || c.After.JSON != nil || c.After.Digest == "" {
 		t.Errorf("change %+v", c)
 	}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := json.Marshal(out.(*app.Pending).Summary); strings.Contains(string(raw), "private@v1") {
+		t.Errorf("the approval summary carries a sensitive value: %s", raw)
+	}
+	// Once the file sets it, editing another field must not show it as a
+	// context line of the diff, in the preview or the approval summary.
+	if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte("flow_map: acme/private@v1:secret.yml\n"+repoConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	pv, err = f.svc.Preview(t.Context(), other)
+	if err != nil || len(pv.Changes) != 1 {
+		t.Fatalf("%v %+v", err, pv)
+	}
+	out, err = f.svc.Save(t.Context(), other, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{"preview": pv, "summary": out.(*app.Pending).Summary} {
+		if raw, _ := json.Marshal(v); strings.Contains(string(raw), "secret.yml") {
+			t.Errorf("the %s shows a sensitive value through the diff: %s", name, raw)
+		}
+	}
 	st, _ := f.svc.State(t.Context())
 	raw, _ := json.Marshal(st)
 	if strings.Contains(string(raw), "ryanhelms/agentflow@v0") {
 		t.Errorf("state carries a sensitive default: %s", raw)
+	}
+}
+
+// A personal approval change answers to console.autonomy as well: suggest
+// there, personal or as the repository ceiling, wins over console.settings.
+func TestApprovalChangesAnswerToConsoleAutonomy(t *testing.T) {
+	for name, tc := range map[string]struct{ personal, repo string }{
+		"personal suggest": {personal: "autonomy:\n  actions:\n    console.autonomy: suggest\n", repo: repoConfig},
+		"repository ceiling": {repo: repoConfig + "    actions:\n      console.autonomy: suggest\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, "task-1")
+			if tc.personal != "" {
+				if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(tc.personal), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte(tc.repo), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.reopen(t)
+			before := f.personal(t)
+			for _, cs := range []settings.ChangeSet{
+				{Edits: []settings.Edit{set("personal:autonomy.local", "auto")}},
+				{Edits: []settings.Edit{set("personal:approval_window", "10m")}},
+				{Edits: []settings.Edit{set("personal:autonomy.local", "auto"), set("repo:commit.subject_max", 60)}},
+			} {
+				out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p, ok := out.(*app.Pending)
+				if !ok || p.Status != "suggest" || p.ConfirmToken != "" {
+					t.Fatalf("save %v returned %#v, want suggest", cs.Edits, out)
+				}
+			}
+			if f.personal(t) != before || len(f.pub.published) != 0 {
+				t.Errorf("a suggest-only save wrote something")
+			}
+			// Other personal fields still save under console.settings.
+			res := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:atlassian.email", "me@example.com")}})
+			if res.Status != settings.StatusSaved {
+				t.Errorf("unrelated field: %+v", res)
+			}
+		})
 	}
 }

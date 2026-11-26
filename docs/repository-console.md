@@ -136,6 +136,11 @@ agentflow config undo
 - A save is checked again, gated once and always confirmed, also under `auto`.
   Loosening edits (a higher autonomy level, a longer approval window, automatic
   PR publication, coordinator merges, fewer protected branches) are listed first.
+- A save that changes `autonomy.*` or `approval_window`, or loosens policy, is
+  gated by `console.autonomy` as well as `console.settings`; the stricter rule
+  wins.
+- The repository diff is left out while any sensitive field is set in the
+  file, before or after the save.
 - All layers are written or none. If a layer file changes between the
   confirmation and the save, the save fails with `operation_changed`; preview
   again.

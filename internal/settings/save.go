@@ -135,15 +135,51 @@ func (p *plan) mode() RepoMode {
 }
 
 // gate resolves the class and action of the save (ADR, "Phase 4 save").
+//
+// A save that changes personal approval settings (autonomy.* or
+// approval_window) or loosens policy anywhere also answers to
+// console.autonomy, the action agentflow_config_apply gates personal
+// approval changes with: the strictest of the related rules wins, so
+// console.autonomy: suggest, personal or as a repository ceiling, cannot
+// be bypassed through the settings editor.
 func (p *plan) gate() (policy.Class, string, []string) {
+	var related []string
 	if p.touches(config.FieldRepo) && p.mode() != RepoWorktree {
-		var related []string
 		if p.touches(config.FieldPersonal) {
-			related = []string{"console.settings"}
+			related = append(related, "console.settings")
+		}
+		if p.approvalChange() {
+			related = append(related, "console.autonomy")
 		}
 		return policy.Remote, "console.publish", related
 	}
-	return policy.Local, "console.settings", nil
+	if p.approvalChange() {
+		related = append(related, "console.autonomy")
+	}
+	return policy.Local, "console.settings", related
+}
+
+// approvalChange reports whether the plan changes a personal approval
+// setting or loosens policy.
+func (p *plan) approvalChange() bool {
+	if len(p.preview.Confirm) > 0 {
+		return true
+	}
+	for _, c := range p.preview.Changes {
+		if approvalField(c.ID) {
+			return true
+		}
+	}
+	return false
+}
+
+// approvalField reports whether id is a personal approval setting.
+func approvalField(id string) bool {
+	path, ok := strings.CutPrefix(id, "personal:")
+	if !ok {
+		return false
+	}
+	return path == "approval_window" || path == "autonomy" || strings.HasPrefix(path, "autonomy.")
 }
 
 // gateSummary is the payload bound into the approval: any difference
