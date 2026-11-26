@@ -22,8 +22,13 @@ import (
 
 // ---- fake clock ----
 
+// fakeClock is time under the test's control. Timer creation and release
+// signal a condition variable, so a test waits for the poller to reach a
+// timer instead of polling the wall clock; a poller that never gets there
+// fails by the test timeout.
 type fakeClock struct {
 	mu      sync.Mutex
+	cond    *sync.Cond
 	now     time.Time
 	timers  []*fakeTimer
 	created int
@@ -35,7 +40,11 @@ type fakeTimer struct {
 	ch chan time.Time
 }
 
-func newFakeClock(now time.Time) *fakeClock { return &fakeClock{now: now} }
+func newFakeClock(now time.Time) *fakeClock {
+	c := &fakeClock{now: now}
+	c.cond = sync.NewCond(&c.mu)
+	return c
+}
 
 func (c *fakeClock) Now() time.Time {
 	c.mu.Lock()
@@ -48,6 +57,7 @@ func (c *fakeClock) Timer(d time.Duration) (<-chan time.Time, func()) {
 	defer c.mu.Unlock()
 	c.created++
 	c.last = d
+	defer c.cond.Broadcast()
 	tm := &fakeTimer{at: c.now.Add(d), ch: make(chan time.Time, 1)}
 	if d <= 0 {
 		tm.ch <- c.now
@@ -60,6 +70,7 @@ func (c *fakeClock) Timer(d time.Duration) (<-chan time.Time, func()) {
 		for i, t := range c.timers {
 			if t == tm {
 				c.timers = append(c.timers[:i], c.timers[i+1:]...)
+				c.cond.Broadcast()
 				return
 			}
 		}
@@ -82,6 +93,24 @@ func (c *fakeClock) Advance(d time.Duration) {
 	c.timers = rest
 }
 
+// waitCreated blocks until n timers have been created in all.
+func (c *fakeClock) waitCreated(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for c.created < n {
+		c.cond.Wait()
+	}
+}
+
+// waitPending blocks until exactly n timers are waiting to fire.
+func (c *fakeClock) waitPending(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for len(c.timers) != n {
+		c.cond.Wait()
+	}
+}
+
 func (c *fakeClock) stats() (created int, last time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -93,8 +122,23 @@ func (c *fakeClock) stats() (created int, last time.Duration) {
 type recorder struct {
 	t      *testing.T
 	mu     sync.Mutex
+	cond   *sync.Cond // created on first use, signalled by each health event
 	events []bus.Event
 	health []bus.Event // gh.health.changed, kept apart from the data events
+}
+
+// waitHealth blocks until n health events have been recorded since the last
+// takeHealth, and returns them like takeHealth.
+func (r *recorder) waitHealth(n int) []bus.GHHealthChanged {
+	r.mu.Lock()
+	if r.cond == nil {
+		r.cond = sync.NewCond(&r.mu)
+	}
+	for len(r.health) < n {
+		r.cond.Wait()
+	}
+	r.mu.Unlock()
+	return r.takeHealth()
 }
 
 // Publish checks e against the envelope rules the real bus applies, then
@@ -112,6 +156,9 @@ func (r *recorder) Publish(_ context.Context, e bus.Event) (bus.Event, error) {
 	defer r.mu.Unlock()
 	if e.Type == bus.TypeGHHealthChanged {
 		r.health = append(r.health, e)
+		if r.cond != nil {
+			r.cond.Broadcast()
+		}
 		return e, nil
 	}
 	r.events = append(r.events, e)
