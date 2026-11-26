@@ -119,3 +119,9 @@ func TestChecksumMismatch(t *testing.T) {
 		t.Fatal("mismatch accepted")
 	}
 }
+
+func TestRepoSlug(t *testing.T) {
+	if Repo != "ryanhelms/agentflow" {
+		t.Fatalf("Repo = %q", Repo)
+	}
+}

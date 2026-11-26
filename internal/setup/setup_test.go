@@ -182,7 +182,7 @@ func TestPluginLauncherMatchesTemplate(t *testing.T) {
 
 func TestPinWorkflow(t *testing.T) {
 	sha := strings.Repeat("ab12", 10)
-	src := []byte("    uses: nscaledev/agentflow/.github/workflows/jira-key.yml@v0\n    uses: actions/checkout@v4\n")
+	src := []byte("    uses: ryanhelms/agentflow/.github/workflows/jira-key.yml@v0\n    uses: actions/checkout@v4\n")
 	got := string(PinWorkflow(src, sha, "0.4.3"))
 	if !strings.Contains(got, "jira-key.yml@"+sha+" # v0.4.3\n") || !strings.Contains(got, "actions/checkout@v4") {
 		t.Errorf("pinned = %q", got)
@@ -240,7 +240,7 @@ func TestInitPinsCallerWorkflow(t *testing.T) {
 
 func TestRepinWorkflow(t *testing.T) {
 	sha := strings.Repeat("cd34", 10)
-	src := []byte("uses: nscaledev/agentflow/a.yml@v0\nuses: nscaledev/agentflow/b.yml@" + strings.Repeat("1", 40) + " # v0.5.1\nuses: nscaledev/agentflow/c.yml@main\n")
+	src := []byte("uses: ryanhelms/agentflow/a.yml@v0\nuses: ryanhelms/agentflow/b.yml@" + strings.Repeat("1", 40) + " # v0.5.1\nuses: ryanhelms/agentflow/c.yml@main\n")
 	got := string(RepinWorkflow(src, sha, "v0.6.0"))
 	if strings.Count(got, "@"+sha+" # v0.6.0\n") != 3 {
 		t.Errorf("repinned = %q", got)

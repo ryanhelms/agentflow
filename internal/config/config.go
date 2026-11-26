@@ -125,8 +125,8 @@ type User struct {
 var (
 	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
 	DefaultSite       = "https://nscale.atlassian.net"
-	DefaultFlowMap    = "nscaledev/agentflow@v0:flow-map.yml"
-	DefaultInitOrgs   = []string{"nscaledev"}
+	DefaultFlowMap    = "ryanhelms/agentflow@v0:flow-map.yml"
+	DefaultInitOrgs   = []string{"nscaledev", "ryanhelms"}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
 	DefaultCheckEvery = 6 * time.Hour
 )

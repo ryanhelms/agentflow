@@ -14,7 +14,7 @@ Re-prompt for a missing, invalid or bare repository. Use the existing checkout,
 including linked worktrees. Work from that root. Report the resolved path.
 
 Use the verified launcher supplied by the installed plugin, or the official
-release installer from `nscaledev/agentflow`. The GitHub URL identifies the
+release installer from `ryanhelms/agentflow`. The GitHub URL identifies the
 Agentflow distribution. The destination path identifies the employee's project.
 Use structured argument lists for paths, including paths with spaces. Run GitHub
 authentication through the user's signed-in client.
@@ -49,7 +49,7 @@ working directory in the target checkout throughout.
 ## Update
 
 1. Record the current version through the verified launcher. Resolve the target
-   with `gh release view --repo nscaledev/agentflow --json tagName --jq .tagName`.
+   with `gh release view --repo ryanhelms/agentflow --json tagName --jq .tagName`.
 2. Run `agentflow update --latest-stable` from the project root. Respect
    project pins, major tracks and version blocks. Surface a conflict so the
    employee can decide whether to change project policy. On older versions

@@ -365,7 +365,7 @@ func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, ha
 		case !probeCommand(ctx, p.Root, "gh", "attestation", "verify", "--help"):
 			check(false, "first run requires gh on PATH with gh attestation verify support")
 		case !probeCommand(ctx, p.Root, "gh", "auth", "status", "--hostname", "github.com"):
-			check(false, "first run requires authenticated gh access to nscaledev/agentflow on github.com. Run gh auth login --hostname github.com")
+			check(false, "first run requires authenticated gh access to ryanhelms/agentflow on github.com. Run gh auth login --hostname github.com")
 		default:
 			check(false, "run the existing agentflow launcher in the client environment to install the release after checksum and signer verification")
 		}

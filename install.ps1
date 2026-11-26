@@ -67,14 +67,14 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
             $stage = $null
             try {
                 $gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-                if (!$gh) { throw 'Resolving the latest release requires GitHub CLI (gh) signed in to github.com with access to nscaledev/agentflow.' }
-                $tag = & $gh.Source api --hostname github.com repos/nscaledev/agentflow/releases/latest --jq .tag_name
+                if (!$gh) { throw 'Resolving the latest release requires GitHub CLI (gh) signed in to github.com with access to ryanhelms/agentflow.' }
+                $tag = & $gh.Source api --hostname github.com repos/ryanhelms/agentflow/releases/latest --jq .tag_name
                 if ($LASTEXITCODE -ne 0 -or @($tag).Count -ne 1 -or $tag -cnotmatch '^v\d+\.\d+\.\d+$') {
-                    throw 'Could not resolve the latest stable nscaledev/agentflow release. Check gh auth status and repository access.'
+                    throw 'Could not resolve the latest stable ryanhelms/agentflow release. Check gh auth status and repository access.'
                 }
                 $commandArgs = @('init')
                 if (!$command -or (Split-Path -Leaf (Split-Path -Parent $command)) -ne $tag.Substring(1)) {
-                    $source = "repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=$tag"
+                    $source = "repos/ryanhelms/agentflow/contents/templates/repo/.agentflow/bin/agentflow.ps1?ref=$tag"
                     $response = & $gh.Source api --hostname github.com $source
                     if ($LASTEXITCODE -ne 0) { throw "Could not download the Agentflow launcher at $tag." }
                     $file = ($response -join [Environment]::NewLine) | ConvertFrom-Json

@@ -1,20 +1,20 @@
 # Default owner: Engineering Enablement owns agentflow, its Actions and Jira Automation exports.
-*                               @nscaledev/eng-enablement
+*                               @ryanhelms
 
 # Status mapping. Each project block in flow-map.yml must also be approved by
 # that team's lead. Add one line per team as they join (rollout phase P8), e.g.
-#   /flow-map.yml               @nscaledev/eng-enablement @nscaledev/platform-leads
-/flow-map.yml                   @nscaledev/eng-enablement
+#   /flow-map.yml               @ryanhelms
+/flow-map.yml                   @ryanhelms
 
 # Version policy and release automation: changes affect every install.
-/policy/                        @nscaledev/eng-enablement
-/.github/workflows/release.yml  @nscaledev/eng-enablement
-/internal/update/               @nscaledev/eng-enablement
+/policy/                        @ryanhelms
+/.github/workflows/release.yml  @ryanhelms
+/internal/update/               @ryanhelms
 
 # Agent instructions. CLAUDE.md only points at AGENTS.md (checked in CI).
-/AGENTS.md                      @nscaledev/eng-enablement
-/CLAUDE.md                      @nscaledev/eng-enablement
-/.claude/                       @nscaledev/eng-enablement
+/AGENTS.md                      @ryanhelms
+/CLAUDE.md                      @ryanhelms
+/.claude/                       @ryanhelms
 
 # Shared Confluence templates are owned jointly by engineering managers.
-/confluence-templates/          @nscaledev/eng-managers
+/confluence-templates/          @ryanhelms

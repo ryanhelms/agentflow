@@ -41,7 +41,7 @@ for file in "${markers[@]}"; do
 done
 printf 'Initializing Agentflow in %s.\n' "$root"
 command -v gh >/dev/null || { echo 'agentflow: resolving the latest release requires the GitHub CLI (gh) signed in to github.com' >&2; exit 1; }
-tag=$(gh release view --repo nscaledev/agentflow --json tagName -q .tagName)
+tag=$(gh release view --repo ryanhelms/agentflow --json tagName -q .tagName)
 if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   printf 'agentflow: expected a stable Agentflow release tag, got %s\n' "$tag" >&2
   exit 1
@@ -57,6 +57,6 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 # Fetch atomically from our release source rather than running code from the target checkout.
 gh api --hostname github.com -H 'Accept: application/vnd.github.raw+json' \
-  "repos/nscaledev/agentflow/contents/templates/repo/.agentflow/bin/agentflow?ref=$tag" > "$tmp/launcher"
+  "repos/ryanhelms/agentflow/contents/templates/repo/.agentflow/bin/agentflow?ref=$tag" > "$tmp/launcher"
 if [ ! -s "$tmp/launcher" ]; then echo 'agentflow: GitHub returned an empty launcher' >&2; exit 1; fi
 sh "$tmp/launcher" --bootstrap-release "$tag" init

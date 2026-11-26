@@ -14,10 +14,10 @@ To stop a bad release from running anywhere, follow
 ## Design guarantees
 
 - **Release integrity.** Releases are built only by `.github/workflows/release.yml` in
-  `nscaledev/agentflow`. Each archive is listed in `checksums.txt` and has a GitHub build
+  `ryanhelms/agentflow`. Each archive is listed in `checksums.txt` and has a GitHub build
   provenance attestation. The launcher and the self-updater install a build only when
-  both the SHA-256 and `gh attestation verify --repo nscaledev/agentflow --signer-workflow
-  nscaledev/agentflow/.github/workflows/release.yml` pass, so a build from any other workflow
+  both the SHA-256 and `gh attestation verify --repo ryanhelms/agentflow --signer-workflow
+  ryanhelms/agentflow/.github/workflows/release.yml` pass, so a build from any other workflow
   in the repo is rejected.
 - **Credentials.** Developer tokens are stored in the OS keychain (macOS Keychain, Secret
   Service, Windows Credential Manager). They are never written to config files, logs or

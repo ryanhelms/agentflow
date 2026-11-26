@@ -34,7 +34,7 @@ import (
 )
 
 // Repo is where releases and the version policy live.
-const Repo = "nscaledev/agentflow"
+const Repo = "ryanhelms/agentflow"
 
 // Options configures the updater from repo and user config.
 type Options struct {

@@ -37,7 +37,7 @@ func TestRepinLegacyCaller(t *testing.T) {
 	if _, err := Pin(root, false); err != nil {
 		t.Fatal(err)
 	}
-	want := "    uses: nscaledev/agentflow/.github/workflows/transitions.yml@" + newSHA + " # v0.53.0\n" +
+	want := "    uses: ryanhelms/agentflow/.github/workflows/transitions.yml@" + newSHA + " # v0.53.0\n" +
 		"    uses: example/devflow/.github/workflows/another.yml@main\n"
 	if data, err := os.ReadFile(dest); err != nil || string(data) != want {
 		t.Fatalf("workflow = %s, %v; want %s", data, err, want)

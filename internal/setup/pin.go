@@ -11,7 +11,7 @@ import (
 	"github.com/nscaledev/agentflow/internal/version"
 )
 
-// CallerWorkflow is the workflow `agentflow init` writes; its nscaledev/agentflow references
+// CallerWorkflow is the workflow `agentflow init` writes; its ryanhelms/agentflow references
 // are pinned to a release commit.
 const (
 	CallerWorkflow       = ".github/workflows/agentflow.yml"
@@ -20,13 +20,13 @@ const (
 
 var (
 	// a floating @v0 reference, as in the template
-	agentflowRefRe = regexp.MustCompile(`(uses: nscaledev/agentflow/[^@\s]+)@v0\b`)
+	agentflowRefRe = regexp.MustCompile(`(uses: ryanhelms/agentflow/[^@\s]+)@v0\b`)
 	// any reference, with the `# vX.Y.Z` comment a pin carries
-	agentflowAnyRefRe = regexp.MustCompile(`uses: nscaledev/(?:agentflow|devflow)/([^@\s]+)@[^\s#]+(?:[ \t]+#[ \t]*v[0-9][^\s]*)?`)
-	pinCommentRe      = regexp.MustCompile(`uses: nscaledev/(?:agentflow|devflow)/[^@\s]+@[0-9a-f]{40}[ \t]+#[ \t]*(v[0-9][^\s]*)`)
+	agentflowAnyRefRe = regexp.MustCompile(`uses: (?:nscaledev|ryanhelms)/(?:agentflow|devflow)/([^@\s]+)@[^\s#]+(?:[ \t]+#[ \t]*v[0-9][^\s]*)?`)
+	pinCommentRe      = regexp.MustCompile(`uses: (?:nscaledev|ryanhelms)/(?:agentflow|devflow)/[^@\s]+@[0-9a-f]{40}[ \t]+#[ \t]*(v[0-9][^\s]*)`)
 )
 
-// PinWorkflow pins every floating @v0 nscaledev/agentflow reference in a caller workflow to
+// PinWorkflow pins every floating @v0 ryanhelms/agentflow reference in a caller workflow to
 // the commit of this release (`@<sha> # v<version>`), so a moved tag can't change what
 // runs with the repo's secrets. Non-release builds leave the @v0 references.
 func PinWorkflow(data []byte, sha, ver string) []byte {
@@ -36,14 +36,14 @@ func PinWorkflow(data []byte, sha, ver string) []byte {
 	return agentflowRefRe.ReplaceAll(data, []byte("${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
 }
 
-// RepinWorkflow moves every nscaledev/agentflow reference, pinned or floating, to the
+// RepinWorkflow moves every ryanhelms/agentflow reference, pinned or floating, to the
 // commit of this release. `agentflow pin` uses it to update a repo to the installed
 // agentflow; the developer reviews the change in a PR.
 func RepinWorkflow(data []byte, sha, ver string) []byte {
 	if !version.ReleaseCommit(sha, ver) {
 		return data
 	}
-	return agentflowAnyRefRe.ReplaceAll(data, []byte("uses: nscaledev/agentflow/${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
+	return agentflowAnyRefRe.ReplaceAll(data, []byte("uses: ryanhelms/agentflow/${1}@"+sha+" # v"+strings.TrimPrefix(ver, "v")))
 }
 
 // PinnedVersion returns the oldest release the caller workflow is pinned to ("" when it

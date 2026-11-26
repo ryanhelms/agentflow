@@ -3,7 +3,7 @@
     "nscale": {
       "source": {
         "source": "github",
-        "repo": "nscaledev/agentflow"
+        "repo": "ryanhelms/agentflow"
       }
     }
   },
