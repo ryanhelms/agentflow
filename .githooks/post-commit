@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# agentflow repo's own post-commit hook: tells the running console about the new commit
+# (commit.created) with the agentflow built from this checkout. It never fails the
+# commit and prints nothing. Enable with: make install-hooks
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+export AGENTFLOW_NO_UPDATE=1
+# Only a built binary: compiling with `go run` on every commit would be too slow.
+if [ -x "$root/agentflow" ]; then
+  "$root/agentflow" hook post-commit >/dev/null 2>&1 || true
+fi
+exit 0

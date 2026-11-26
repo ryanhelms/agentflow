@@ -1,6 +1,10 @@
 package mcpserver
 
-import "context"
+import (
+	"context"
+
+	"github.com/ryanhelms/agentflow/internal/app"
+)
 
 type jiraRemoteLinkIn struct {
 	Key          string `json:"key,omitempty" jsonschema:"Jira issue key, or use the current branch's issue"`
@@ -11,7 +15,7 @@ type jiraRemoteLinkIn struct {
 
 func (s *Server) registerJiraRemoteLink() {
 	add(s, "agentflow_jira_remote_link", "Add a Web link to an existing Jira issue through a connected Atlassian MCP or signed-in Teamwork Graph CLI.", remote,
-		func(ctx context.Context, in jiraRemoteLinkIn) (any, error) {
-			return s.app.LinkJiraRemote(ctx, in.Key, in.URL, in.Title, in.ConfirmToken)
+		func(ctx context.Context, a *app.App, in jiraRemoteLinkIn) (any, error) {
+			return a.LinkJiraRemote(ctx, in.Key, in.URL, in.Title, in.ConfirmToken)
 		})
 }

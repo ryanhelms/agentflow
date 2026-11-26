@@ -37,7 +37,7 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 	branch := s.repo.Branch(ctx)
 	head, _ := s.repo.Git(ctx, "rev-parse", "--short", "HEAD")
 	head = strings.TrimSpace(head)
-	changes, err := s.repo.Changes(ctx)
+	changes, err := worktreeChanges(ctx, s.repo)
 	if err != nil {
 		problem(w, 422, err.Error())
 		return
@@ -79,6 +79,38 @@ func (s *server) state(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&note, "%s %s\n", c.Status, c.Path)
 	}
 	reply(w, 200, map[string]any{"root": s.repo.Dir, "repository": filepath.Base(s.repo.Dir), "branch": branch, "head": head, "version": version.Version, "dirty": len(changes) > 0, "dirty_count": len(changes), "pin": pin, "config": snapshot, "attention": attention, "handoff": note.String(), "completions": s.checkoutCompletions(ctx)})
+}
+
+// worktreeChanges lists changed paths like gitx.Repo.Changes, but with
+// --no-optional-locks: a plain git status refreshes the index, which the
+// watcher reports as git.index.changed, so every page load would wake the
+// overview projection and every open stream.
+func worktreeChanges(ctx context.Context, repo *gitx.Repo) ([]gitx.Change, error) {
+	out, err := repo.Git(ctx, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return nil, err
+	}
+	var changes []gitx.Change
+	entries := strings.Split(out, "\x00")
+	for i := 0; i < len(entries); i++ {
+		e := entries[i]
+		if len(e) < 4 {
+			continue
+		}
+		x, y, path := e[0], e[1], e[3:]
+		if x == 'R' || x == 'C' {
+			i++ // the next entry is the rename source
+		}
+		switch {
+		case x == '?' && y == '?':
+			changes = append(changes, gitx.Change{Status: "?", Path: path})
+		case x != ' ':
+			changes = append(changes, gitx.Change{Status: string(x), Path: path, Staged: true})
+		default:
+			changes = append(changes, gitx.Change{Status: string(y), Path: path})
+		}
+	}
+	return changes, nil
 }
 
 // Offer locally known names, including when the workstation is offline.
@@ -131,6 +163,12 @@ func (s *server) pullQueue(ctx context.Context) ([]item, error) {
 	sort.SliceStable(prs, func(i, j int) bool {
 		return prs[i].MergeStateStatus == "CLEAN" && !prs[i].IsDraft && (prs[j].MergeStateStatus != "CLEAN" || prs[j].IsDraft)
 	})
+	return pullItems(prs), nil
+}
+
+// pullItems describes ordered pull requests for /api/activity and the
+// activity projection's handoff note.
+func pullItems(prs []pull) []item {
 	out := make([]item, 0, len(prs))
 	for _, pr := range prs {
 		status := strings.ReplaceAll(strings.ToLower(pr.MergeStateStatus), "_", " ")
@@ -149,7 +187,16 @@ func (s *server) pullQueue(ctx context.Context) ([]item, error) {
 		}
 		out = append(out, item{Title: fmt.Sprintf("#%d %s", pr.Number, pr.Title), Detail: detail, URL: pr.URL})
 	}
-	return out, nil
+	return out
+}
+
+// handoffNote is the plain-text note of the handoff panel.
+func handoffNote(items []item) string {
+	var note strings.Builder
+	for _, it := range items {
+		fmt.Fprintf(&note, "%s — %s %s\n", it.Title, it.Detail, it.URL)
+	}
+	return note.String()
 }
 
 func (s *server) activity(w http.ResponseWriter, r *http.Request) {
@@ -172,11 +219,7 @@ func (s *server) activity(w http.ResponseWriter, r *http.Request) {
 	} else {
 		items = append(items, prs...)
 	}
-	var note strings.Builder
-	for _, it := range items {
-		fmt.Fprintf(&note, "%s — %s %s\n", it.Title, it.Detail, it.URL)
-	}
-	result := map[string]any{"attention": items, "handoff": note.String(), "commander_connected": available}
+	result := map[string]any{"attention": items, "handoff": handoffNote(items), "commander_connected": available}
 	if scope == "" {
 		result["commander_reconnect"] = true
 		result["warning"] = commanderReconnect
