@@ -37,6 +37,11 @@ type server struct {
 	writeMu   sync.Mutex
 	gate      *policy.Gate
 	publishTo configconsole.Publisher
+	// Live events (stream.go): nil outside the daemon or when the
+	// repository's store could not be opened.
+	events      *repoEvents
+	streams     *streamLimit
+	streamsOnce sync.Once
 }
 
 func randomKey() string {
@@ -58,6 +63,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/resume", s.resume)
 	mux.HandleFunc("GET /api/state", s.state)
 	mux.HandleFunc("GET /api/tabs/events", s.tabEvents)
+	mux.HandleFunc("GET "+EventStreamPath, s.eventStream)
 	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)
 	mux.HandleFunc("POST /api/tabs/leave", s.tabLeave)
 	mux.HandleFunc("GET /api/activity", s.activity)

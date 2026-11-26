@@ -61,7 +61,7 @@ code. agentflow makes git the source of truth and turns the rest into automation
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
-| **AI assist** | 29 MCP tools, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **AI assist** | 50 MCP tools, a live event stream of git and configuration changes, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -449,6 +449,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
+| See or follow git and configuration events | `agentflow events [--follow]` | `agentflow_events` or `/agentflow:events` |
 | End-of-day task comments | `agentflow eod post KEY=NOTE` | `/agentflow:eod` |
 | Next release version | `agentflow release plan` | "what version will this ship as?" |
 
@@ -463,6 +464,13 @@ once the local console has opened. Use `agentflow ui --status` to check the
 daemon or `agentflow ui --stop` to shut it down for all clones.
 An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
+
+The overview is live: a branch switch, a commit, staging or an edit under
+`.agentflow/` shows without a refresh. All tabs of a clone share one event
+stream. If the overview looks out of date, press **Resync** to discard it and
+load a fresh snapshot. `agentflow events --follow` prints the same events in a
+terminal; see [docs/events.md](docs/events.md). Phase 1 is still landing: until
+the event store, bus and watcher are merged, the daemon records no events.
 
 Run `agentflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
@@ -628,7 +636,7 @@ CI.
 
 The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `remove`,
 `install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
-`comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`,
+`comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`, `events`,
 `eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `delegate`, `worktree` and `promote`
 (which only explains that you run `agentflow promote` yourself). The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos agentflow has not set up yet. Skills that
@@ -758,6 +766,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/blueprint.html](docs/blueprint.html) | Architecture, automations, plugin, rollout and decisions |
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/worktrees.md](docs/worktrees.md) | Task worktrees, `go.work`, `finish`, `sweep`, `promote` and the hooks |
+| [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |

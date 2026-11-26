@@ -116,6 +116,9 @@ Work
   review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
+  events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--follow] [--json]
+                                 git and configuration events recorded by the console daemon;
+                                 --follow starts the daemon and prints new events until interrupted
   eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs get REF [--json]          read one document by qualified reference
@@ -224,7 +227,7 @@ func nativeWriter(client, command string) (*native.SessionWriter, error) {
 // quietCommand: commands that must stay fast and print nothing extra.
 func quietCommand(cmd string) bool {
 	switch cmd {
-	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "notify", "setup", "secops", "update", "version", "help":
+	case "config", "policy", "hook", "lint-msg", "keys", "mcp", "ui", "events", "notify", "setup", "secops", "update", "version", "help":
 		return true
 	}
 	return false
@@ -368,6 +371,8 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 		printStandup(out)
 		return nil
+	case "events":
+		return runEvents(ctx, args)
 	case "ac":
 		return runAC(ctx, args)
 	case "scope":
