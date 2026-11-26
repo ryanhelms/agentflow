@@ -13,13 +13,14 @@ const rememberKey = "agentflow.browser"; // localStorage is isolated by clone or
 let memoryGrant = "";
 let resumeAttempt;
 let leavingForWorktree = false;
-let rememberedModal;
-let modalContext;
-let pendingProviderChoice;
 let saveTimer;
 let loadSequence = 0;
-const screenNames = {overview: "repository overview", providers: "provider editor", autonomy: "autonomy settings", configuration: "configuration editor", handoff: "handoff screen"};
+// Providers and Autonomy are groups of the Settings page. Their screen names
+// stay, so agentflow ui --screen providers and saved links keep working.
+const screenNames = {overview: "repository overview", settings: "settings", providers: "provider settings", autonomy: "autonomy settings", configuration: "configuration editor", handoff: "handoff screen"};
 const views = Object.keys(screenNames);
+const pages = {overview: "overview", settings: "settings", providers: "settings", autonomy: "settings", configuration: "configuration", handoff: "handoff"};
+const settingsStore = "agentflow.settings:" + location.pathname;
 const roleNames = {
   code_hosting: "Code hosting", task_management: "Task management", knowledge_base: "Knowledge base",
   "devops.checks": "Checks", "devops.deployments": "Deployments", "devops.releases": "Releases",
@@ -30,20 +31,11 @@ let authAttempt = 0;
 let state = null;
 let activity = null;
 let commanderNote = "";
-let roleID = "";
 let filePath = "";
 let review = null;
-let settingBeingEdited = null;
-let settingEditor = null;
 let publishing = false;
 let previewSequence = 0;
 let connectionSequence = 0;
-let autonomyView = null;
-let autonomyLoading = false;
-let autonomySaving = false;
-let autonomySequence = 0;
-const autonomyForms = new Map();
-const autonomyLevels = { suggest: "Suggest", confirm: "Ask for confirmation", auto: "Automatic" };
 const commonActions = {
   commit: "Create a local commit", push: "Push a branch", pr_open_draft: "Open a draft pull request",
   pr_open: "Open a ready pull request", pr_ready_for_review: "Mark a pull request ready",
@@ -75,19 +67,11 @@ function roles() {
   return draft.providers?.roles || [];
 }
 function file(path = filePath) { return files().find((item) => item.path === path); }
-function role() { return roles().find((item) => item.role === roleID); }
 function display(value) {
   if (value === null) return "null";
   if (value === undefined) return "Unset";
   if (typeof value === "string") return value === "" ? '""' : value;
   return JSON.stringify(value);
-}
-function valueType(value) {
-  if (value === null) return "nullable";
-  return Array.isArray(value) ? "list" : typeof value;
-}
-function sourceName(source) {
-  return [source?.layer, source?.file].filter(Boolean).join(" · ") || "Source unavailable";
 }
 function outbound(label, target) {
   let url;
@@ -232,9 +216,11 @@ function destination() {
   const params = launching ? launchParams : new URLSearchParams(split < 0 ? "" : hash.slice(split + 1));
   const screen = launching ? params.get("screen") : split < 0 ? hash : hash.slice(0,split);
   const role = params.get("role");
+  const group = params.get("group") || "";
   return {
     screen: views.includes(screen) ? screen : "overview",
     role: screen === "providers" && Object.hasOwn(roleNames,role) ? role : "",
+    group: screen === "settings" && /^[a-z0-9_.-]{1,80}$/.test(group) ? group : "",
     launch: launching ? params.get("launch") : null
   };
 }
@@ -243,12 +229,27 @@ function route(screen, role) {
   return "#" + screen + (role ? "?role=" + encodeURIComponent(role) : "");
 }
 
+// The Settings group a destination opens, and the address of a group. The
+// providers and autonomy groups keep their own screens.
+function settingsGroup({screen,role,group}) {
+  if (screen === "providers") return role ? "providers." + role : "providers";
+  return screen === "autonomy" ? "autonomy" : group;
+}
+function groupRoute(group) {
+  if (group === "providers" || group === "autonomy") return "#" + group;
+  if (group.startsWith("providers.") && Object.hasOwn(roleNames,group.slice(10))) return route("providers",group.slice(10));
+  return "#settings" + (group ? "?group=" + encodeURIComponent(group) : "");
+}
+
 function updateConnectionOptions() {
   const {screen,role} = destination();
   const name = role ? labelRole(role).toLowerCase() + " provider editor" : screenNames[screen];
+  // The command line knows the providers and autonomy screens; any other
+  // Settings group reopens at the providers group.
+  const reopen = screen === "settings" ? "providers" : screen;
   $("chat-prompt").textContent = "Open the agentflow " + name + " for this repository.";
   const resume = drafts.size > 0;
-  $("reconnect-command").textContent = "agentflow ui --screen " + screen + (role ? " --role " + role : "");
+  $("reconnect-command").textContent = "agentflow ui --screen " + reopen + (role ? " --role " + role : "");
   $("terminal-instructions").textContent = resume
     ? "Run this command in the same worktree to resume its saved edits."
     : "Run this command in the worktree you want to manage.";
@@ -265,14 +266,11 @@ function updateConnectionOptions() {
 
 function showConnection(message) {
   const leavingConsole = !$("console-shell").hidden;
-  if (!$("console-shell").hidden) {
-    storeDrafts();
-    if ($("setting-dialog").open) rememberedModal = modalSnapshot();
-  }
+  if (!$("console-shell").hidden) storeDrafts();
   tabs.stop();
   live.stop();
   $("console-shell").hidden = true;
-  if ($("setting-dialog").open) $("setting-dialog").close();
+  if ($("settings-review").open) $("settings-review").close();
 
   $("connection-title").textContent = "Reconnect to agentflow";
   $("connection-message").textContent = message;
@@ -329,30 +327,15 @@ async function connect() {
 }
 
 function showPage(focus = false) {
-  const {screen,role} = destination();
+  const where = destination();
+  const {screen} = where;
   if ($("console-shell").hidden) { updateConnectionOptions(); return; }
-  if (screen === "providers") {
-    if (role && role !== roleID) { roleID = role; $("setting-filter").value = ""; }
-    renderProviders();
-    if (pendingProviderChoice?.role === roleID) {
-      const select=$("provider-choice");
-      if ([...select.options].some(o => o.value === pendingProviderChoice.choice)) {
-        select.value = pendingProviderChoice.choice;
-        windowChoice();
-      }
-      pendingProviderChoice = null;
-    }
-    if (rememberedModal?.role === roleID && !$("setting-dialog").open) {
-      const previous=rememberedModal;
-      openSetting(previous.setting,previous);
-    }
-  }
-  if (screen === "autonomy" && state) loadAutonomy();
-  for (const name of views) $("page-" + name).hidden = screen !== name;
+  for (const name of new Set(Object.values(pages))) $("page-" + name).hidden = pages[screen] !== name;
   for (const link of document.querySelectorAll("[data-page]")) {
     if (link.dataset.page === screen) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  if (pages[screen] === "settings" && state) settingsPage.open(settingsGroup(where));
   if (screen === "configuration" && state) renderEditor();
   if (focus) {
     $("main").focus({preventScroll: true});
@@ -378,20 +361,13 @@ document.addEventListener("input",event => {
 
 // Store only editable browser state. Each clone has its own origin and each
 // worktree has its own key. Credentials and review approvals live elsewhere.
-function modalSnapshot() {
-  if (!$("setting-dialog").open || !settingEditor || !modalContext) return rememberedModal;
-  return {...modalContext,raw:settingEditor.snapshot(),message:$("setting-message").textContent};
-}
-
 function storeDrafts() {
   if (!state || $("console-shell").hidden) return true;
-  const raw = {root:state.root,files:Array.from(drafts),filePath,role:roleID,roleFilter:$("setting-filter").value,
-    providerChoice:pendingProviderChoice?.choice || $("provider-choice").value,screen:destination().screen,modal:modalSnapshot(),
+  const raw = {root:state.root,files:Array.from(drafts),filePath,screen:destination().screen,
     document:window.snapshotDocumentEditor(),title:$("commit-title").value,task:$("task-ref").value,delivery:$("delivery").value};
   try {
     localStorage.setItem(savedDraftKey,JSON.stringify(raw));
     $("workspace-save-error").hidden = true;
-    $("setting-storage-error").hidden = true;
     return true;
   } catch {
     $("workspace-save-error").hidden = false;
@@ -416,23 +392,12 @@ function restoreDrafts(next) {
       if (Array.isArray(row) && typeof row[0] === "string" && typeof row[1]?.content === "string" && typeof row[1]?.base_digest === "string") drafts.set(row[0],row[1]);
     }
     if (typeof saved.filePath === "string") filePath = saved.filePath;
-    if (Object.hasOwn(roleNames,saved.role)) roleID = saved.role;
-    if (typeof saved.roleFilter === "string") $("setting-filter").value = saved.roleFilter;
-    if (typeof saved.providerChoice === "string") pendingProviderChoice = {role:roleID,choice:saved.providerChoice};
     if (typeof saved.title === "string") $("commit-title").value = saved.title;
     if (typeof saved.task === "string") $("task-ref").value = saved.task;
     if (["apply","draft"].includes(saved.delivery)) $("delivery").value = saved.delivery;
-    if (saved.modal && Object.hasOwn(roleNames,saved.modal.role) && saved.modal.setting?.path) rememberedModal = saved.modal;
     window.restoreDocumentEditor(saved.document);
-    if (!location.hash && views.includes(saved.screen)) history.replaceState(null,"",route(saved.screen,saved.screen==="providers" ? roleID : ""));
+    if (!location.hash && views.includes(saved.screen)) history.replaceState(null,"",route(saved.screen,""));
   } catch { /* An invalid or unavailable local draft cannot authorize a write. */ }
-}
-
-function hideSettingForNavigation() {
-  if ($("setting-dialog").open) {
-    rememberedModal = modalSnapshot();
-    $("setting-dialog").close();
-  }
 }
 
 async function renewSession(previous) {
@@ -456,17 +421,14 @@ const tabs = consoleTabs({
     if ((activity?.attention || []).some(commanderItem)) commanderNote = "Worker requests were cleared when this tab was asked to navigate. Use Resync to load them again.";
     clearCommanderActivity();
     const current = destination();
-    if (!next && current.screen === screen && (!role || roleID === role)) return {handled:true};
-    if (publishing || autonomySaving) {
+    if (!next && current.screen === screen && (!role || current.role === role)) return {handled:true};
+    if (publishing || settingsPage.busy) {
       notice("status","A save is in progress. Request the editor again once it finishes.");
       return {blocked:"publishing"};
     }
-    if (next && autonomyForms.size) {
-      notice("status","Save or discard the edits in Autonomy before switching worktrees.");
-      return {blocked:"autonomy"};
-    }
-    if (next && !storeDrafts()) {
-      if ($("setting-dialog").open) notice("setting-storage-error",$("workspace-save-error").textContent,true);
+    // A settings draft the browser could not store would be lost with the page.
+    if (next && (!storeDrafts() || !settingsPage.stored)) {
+      $("workspace-save-error").hidden = false;
       return {blocked:"storage"};
     }
     return {handled:true,perform() {
@@ -474,7 +436,7 @@ const tabs = consoleTabs({
         leavingForWorktree = true;
         location.assign(next.href);
       } else {
-        hideSettingForNavigation();
+        if ($("settings-review").open && !settingsPage.busy) $("settings-review").close();
         go(screen,role);
       }
     }};
@@ -512,6 +474,8 @@ let configTimer;
 
 // The overview follows its own worktree; activity and approvals are states of
 // the whole repository; the tabs state carries navigation for this tab.
+// A change of the personal layer is a "global" event. The stream sends the
+// states it changes without a topic for it (ADR, "Phase 2 scoping").
 const liveTopics = ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**",
   "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**"];
 const live = AgentflowEvents.connect({
@@ -533,6 +497,7 @@ const live = AgentflowEvents.connect({
     showRepository("activity",states.find(repositoryState("activity"))?.state ?? null);
     showRepository("approvals",states.find(repositoryState("approvals"))?.state ?? null);
     showRepository("timeline",states.find(repositoryState("timeline"))?.state ?? null);
+    showSettings(states.find(ownSettings)?.state ?? null,false);
     tabs.receive(states.find(ownTabs)?.state ?? null);
   },
   onDelta({states,event}) {
@@ -542,6 +507,8 @@ const live = AgentflowEvents.connect({
       const next = states.find(repositoryState(name));
       if (next) showRepository(name,next.state);
     }
+    const settings = states.find(ownSettings);
+    if (settings) showSettings(settings.state,true);
     const mine = states.find(ownTabs);
     if (mine) tabs.receive(mine.state);
     if (event?.type === "config.layer.changed" && (!event.worktree || event.worktree === worktreeID)) {
@@ -553,6 +520,9 @@ const live = AgentflowEvents.connect({
 
 function ownOverview(entry) {
   return entry.projection === "overview" && (worktreeID === "*" || entry.worktree === worktreeID);
+}
+function ownSettings(entry) {
+  return entry.projection === "settings" && (worktreeID === "*" || entry.worktree === worktreeID);
 }
 function ownTabs(entry) {
   return entry.projection === "tabs" && entry.worktree === worktreeID;
@@ -575,6 +545,26 @@ const timeline = AgentflowTimeline.createTimeline({
   root: document, worktree: worktreeID, announce,
   actionName: action => commonActions[action]
 });
+
+// The Settings page (docs/design/ui/settings.md). Its values are the
+// worktree's "settings" state; its own requests are catalog, preview, save
+// and undo.
+let liveSettings = null;
+const settingsPage = AgentflowSettings.createSettings({
+  root: document, request, announce, storageKey: settingsStore, route: groupRoute,
+  completions: () => ({
+    branches: [state?.branch,...(state?.completions?.branches || [])].filter(Boolean),
+    files: files().map(item => item.path)
+  })
+});
+
+function showSettings(raw, flash) {
+  const previous = liveSettings;
+  liveSettings = raw;
+  if (!state || $("console-shell").hidden) return;
+  settingsPage.show(raw,flash && Boolean(previous && raw));
+  renderStream();
+}
 
 function showRepository(name, raw) {
   const previous = liveRepository[name];
@@ -637,7 +627,7 @@ function showLive(raw) {
 
 function configChangedOnDisk() {
   if (!state || !session || $("console-shell").hidden) return;
-  if (publishing || autonomySaving || autonomyForms.size || hasPendingEdits()) {
+  if (publishing || hasPendingEdits()) {
     notice("status","The configuration changed on disk. Save or discard your edits, then use Resync to load it.");
     return;
   }
@@ -671,6 +661,7 @@ function renderStream() {
     $(key + "-wait").hidden = shown || Boolean(text);
   }
   timeline.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.timeline)});
+  settingsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveSettings)});
   const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
   $("handoff-note").textContent = stale;
   $("handoff-note").hidden = !stale;
@@ -842,6 +833,7 @@ async function loadState() {
     renderRepository("activity");
     renderRepository("approvals");
     renderRepository("timeline");
+    settingsPage.show(liveSettings);
     $("connection").hidden = true;
     $("connection-options").hidden = true;
     $("connection-feedback").textContent = "";
@@ -864,219 +856,10 @@ $("refresh").addEventListener("click", () => {
   liveRepository.activity = null;
   liveRepository.approvals = null;
   liveRepository.timeline = null;
+  liveSettings = null;
   liveReady = false;
   live.resync();
   loadState();
-});
-
-function settingsFrom(value = {}) {
-  const settings = { local: value.local || "", remote: value.remote || "", window: value.window || "",
-    actions: { ...value.actions } };
-  if (typeof value.allow_auto_pr_publication === "boolean") settings.allow_auto_pr_publication = value.allow_auto_pr_publication;
-  return settings;
-}
-
-function sameSettings(left, right) {
-  return ["local","remote","window","allow_auto_pr_publication"].every((key) => left[key] === right[key]) &&
-    Object.keys(left.actions).length === Object.keys(right.actions).length &&
-    Object.keys(left.actions).every((action) => left.actions[action] === right.actions[action]);
-}
-
-function layerForm() {
-  const scope = $("autonomy-scope").value;
-  return autonomyForms.get(scope) || {
-    settings: settingsFrom(autonomyView?.[scope]),
-    original: settingsFrom(autonomyView?.[scope]),
-    revision: autonomyView?.user_revision,
-    base: localDraft(repositoryFile)
-  };
-}
-
-function recordAutonomyEdit(field, value, action) {
-  const scope = $("autonomy-scope").value;
-  const form = layerForm();
-  if (action) {
-    if (value) form.settings.actions[action] = value;
-    else delete form.settings.actions[action];
-  } else {
-    form.settings[field] = value;
-  }
-  if (sameSettings(form.settings, form.original)) autonomyForms.delete(scope);
-  else autonomyForms.set(scope, form);
-  notice("autonomy-status");
-  updateAutonomyControls();
-}
-
-function autonomyBlocker(scope, form) {
-  if (scope === "personal") {
-    if (form.revision !== autonomyView.user_revision) return "Personal preferences changed on disk. Discard the form edits to load the current preferences.";
-    return "";
-  }
-  const item = file(repositoryFile);
-  const draft = localDraft(repositoryFile);
-  if (!item?.editable) return item?.reason || "The repository configuration is read-only.";
-  if (draft.base_digest !== item.digest) return "The checkout changed. Review the staged file in Configuration.";
-  if (form.base.content !== draft.content || form.base.base_digest !== draft.base_digest) return "The staged configuration changed. Discard the form edits to edit the current candidate.";
-  return "";
-}
-
-function updateAutonomyControls() {
-  const scope = $("autonomy-scope").value;
-  const dirty = autonomyForms.has(scope);
-  $("autonomy-controls").disabled = !autonomyView || autonomyLoading || autonomySaving;
-  const blocked = autonomyView && autonomyBlocker(scope, layerForm());
-  $("save-autonomy").disabled = !dirty || Boolean(blocked);
-  $("save-autonomy").textContent = scope === "personal" ? "Save preferences" : "Stage repository settings";
-  $("reset-autonomy").disabled = !dirty;
-  $("autonomy-state").textContent = !autonomyView ? "Unavailable" : dirty ? "Unsaved form edits" : scope === "repository" && drafts.has(repositoryFile) ? "Staged configuration" : "Current settings";
-  $("review-autonomy").hidden = !drafts.has(repositoryFile);
-  notice("autonomy-reason", blocked || "", true);
-}
-
-function fillAutonomyLevels(select, value) {
-  select.replaceChildren();
-  selectOption(select, "", "Inherit");
-  for (const [key, label] of Object.entries(autonomyLevels)) selectOption(select, key, label);
-  select.value = value || "";
-}
-
-function renderAutonomyActions() {
-  const scope = $("autonomy-scope").value;
-  const settings = layerForm().settings;
-  const target = $("autonomy-actions");
-  target.replaceChildren();
-  const search = $("autonomy-filter").value.trim().toLowerCase();
-  const common = Object.keys(commonActions);
-  const actions = [...(autonomyView?.actions || [])].sort((a,b) => {
-    const rank = (key) => common.includes(key) ? common.indexOf(key) : common.length;
-    return rank(a.action) - rank(b.action) || a.action.localeCompare(b.action);
-  });
-  for (const item of actions) {
-    const title = commonActions[item.action] || item.action.replaceAll("_", " ").replaceAll(".", " · ");
-    if (!(item.action + " " + title).toLowerCase().includes(search)) continue;
-    const row = element("div", "", "autonomy-action");
-    const detail = element("div");
-    detail.append(element("h3", title), element("code", item.action, "key"));
-    for (const rule of item.rules || []) {
-      const effective = element("div", "", "effective");
-      const part = item.includes?.includes(rule.action) ? "Included " + rule.action + " · " : "";
-      effective.append(element("strong", part + rule.class + " · " + (autonomyLevels[rule.level] || rule.level)),
-        element("small", "Rule " + rule.source + " · review window " + rule.approval_window + " (" + rule.window_source + ")"));
-      detail.append(effective);
-    }
-    if (item.includes?.includes("push")) {
-      detail.append(element("p", "The more restrictive of the PR and included push rules applies to publication."));
-    } else if (item.action === "push") {
-      detail.append(element("p", "This effective rule is for a standalone push. An explicit push preference or ceiling also applies when opening a pull request."));
-    }
-    if (item.confirmation) detail.append(element("p", (item.mandatory ? "Required review. " : "Provider rule. ") + item.confirmation));
-    const label = element("label", scope === "personal" ? "Personal preference" : "Repository ceiling");
-    const select = element("select");
-    select.setAttribute("aria-label", title + " · " + label.textContent);
-    fillAutonomyLevels(select, settings.actions[item.action]);
-    select.addEventListener("change", () => recordAutonomyEdit("actions", select.value, item.action));
-    label.append(select);
-    row.append(detail,label);
-    target.append(row);
-  }
-  if (!target.childElementCount) target.append(element("p", "No matching actions.", "muted"));
-}
-
-function renderAutonomy() {
-  updateAutonomyControls();
-  if (!autonomyView) {
-    $("autonomy-actions").replaceChildren();
-    $("autonomy-rules-source").textContent = "";
-    return;
-  }
-  const personal = $("autonomy-scope").value === "personal";
-  $("autonomy-scope-help").textContent = personal
-    ? "These preferences apply across your checkouts. An action preference overrides your class preference within repository ceilings."
-    : "These ceilings limit everyone in this checkout. Repository changes go through Configuration for review and publication.";
-  $("autonomy-rules-source").textContent = drafts.has(repositoryFile)
-    ? "This preview uses saved personal preferences and the staged repository configuration."
-    : "Effective rules use saved personal preferences and the repository configuration on disk.";
-  if (autonomyView.repository?.allow_auto_pr_publication) {
-    $("autonomy-rules-source").textContent += " The pull request’s target branch must also enable automatic publication.";
-  }
-  const values = layerForm().settings;
-  for (const field of ["local","remote"]) fillAutonomyLevels($("autonomy-" + field), values[field]);
-  $("autonomy-window").value = values.window;
-  $("autonomy-publication-policy").hidden = personal;
-  $("autonomy-publication").checked = values.allow_auto_pr_publication === true;
-  renderAutonomyActions();
-}
-
-async function loadAutonomy() {
-  if (autonomySaving) return;
-  const seq = ++autonomySequence;
-  autonomyLoading = true;
-  updateAutonomyControls();
-  notice("autonomy-status", "Loading approval settings…");
-  try {
-    const draft = drafts.get(repositoryFile);
-    const next = draft ? await request("api/autonomy/inspect", {content: draft.content, base_digest: draft.base_digest})
-      : await request("api/autonomy");
-    if (seq !== autonomySequence) return;
-    autonomyView = next;
-    notice("autonomy-status");
-  } catch (e) {
-    if (seq !== autonomySequence) return;
-    autonomyView = null;
-    notice("autonomy-status", e.message, true);
-  } finally {
-    if (seq === autonomySequence) { autonomyLoading = false; renderAutonomy(); }
-  }
-}
-
-$("autonomy-scope").addEventListener("change", renderAutonomy);
-$("autonomy-publication").addEventListener("change", (event) => recordAutonomyEdit("allow_auto_pr_publication", event.target.checked));
-$("autonomy-filter").addEventListener("input", renderAutonomyActions);
-$("autonomy-filter").addEventListener("keydown", (event) => {
-  if (event.key === "Enter") event.preventDefault();
-});
-for (const field of ["local","remote","window"]) {
-  const node = $("autonomy-" + field);
-  node.addEventListener(field === "window" ? "input" : "change", () => recordAutonomyEdit(field, node.value));
-}
-$("reset-autonomy").addEventListener("click", () => {
-  autonomyForms.delete($("autonomy-scope").value);
-  notice("autonomy-status");
-  renderAutonomy();
-});
-$("review-autonomy").addEventListener("click", () => {
-  filePath = repositoryFile;
-  renderEditor();
-});
-$("autonomy-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const scope = $("autonomy-scope").value;
-  const form = autonomyForms.get(scope);
-  if (!form || !autonomyView || autonomyLoading || autonomySaving || autonomyBlocker(scope, form)) return;
-  const draft = localDraft(repositoryFile);
-  const payload = { scope, settings: form.settings, user_revision: autonomyView.user_revision };
-  if (scope === "repository" || drafts.has(repositoryFile)) Object.assign(payload, {content: draft.content, base_digest: draft.base_digest});
-  autonomySaving = true;
-  updateAutonomyControls();
-  notice("autonomy-status", scope === "personal" ? "Saving preferences…" : "Staging repository settings…");
-  try {
-    const result = await request("api/autonomy", payload);
-    if (scope === "repository") {
-      if (typeof result.content !== "string" || !result.autonomy) throw new Error("The server returned an incomplete staged configuration.");
-      const latest = localDraft(repositoryFile);
-      if (latest.content !== draft.content || latest.base_digest !== draft.base_digest) throw new Error("The configuration changed while staging. Review the current candidate.");
-      putDraft(repositoryFile, result.content, draft.base_digest, result.providers);
-      filePath = repositoryFile;
-      invalidateReview();
-      renderEditor();
-      autonomyView = result.autonomy;
-    } else {
-      autonomyView = result;
-    }
-    autonomyForms.delete(scope);
-    notice("autonomy-status", scope === "personal" ? "Personal preferences saved." : "Repository settings staged. Open Configuration to preview and publish the change.");
-  } catch (e) { notice("autonomy-status", e.message, true); }
-  finally { autonomySaving = false; renderAutonomy(); }
 });
 
 function replyForm(entry) {
@@ -1175,118 +958,6 @@ function selectOption(select, value, label) {
 function chooseRole(id) {
   go("providers",id);
 }
-function renderProviders() {
-  const staged = drafts.has(repositoryFile);
-  const error = staged && !roles().length ? "Preview your edited repository configuration to inspect its provider settings." : problems();
-  notice("provider-error",error,true);
-  const available = roles();
-  $("role-count").textContent = String(available.length);
-  if (!role()) roleID = available[0]?.role || "";
-  const items = $("roles");
-  items.replaceChildren();
-  for (const item of available) {
-    const button = element("button",labelRole(item.role));
-    button.type = "button";
-    button.setAttribute("aria-pressed",String(item.role === roleID));
-    button.append(element("span",item.selected || "Unconfigured"));
-    button.addEventListener("click", () => {
-      chooseRole(item.role);
-      items.querySelector('[aria-pressed="true"]')?.focus({preventScroll: true});
-    });
-    items.append(button);
-  }
-  const active = role();
-  $("role-empty").hidden = Boolean(active);
-  $("role-detail").hidden = !active;
-  $("role-title").textContent = active ? labelRole(active.role) : "Provider";
-  const selected = active?.options?.find((option) => option.id === active.selected);
-  const roleFacts = active ? [active.contract, active.configured ? "Repository selection" : "Role default"] : [];
-  if (staged && active) roleFacts.unshift("Staged configuration");
-  if (selected?.readiness && selected.readiness !== "none") roleFacts.push("Verification method: " + selected.readiness);
-  $("role-contract").textContent = roleFacts.filter(Boolean).join(" · ");
-  notice("compose-message");
-  if (!active) return;
-  const choices = $("provider-choice");
-  choices.replaceChildren();
-  if (!active.selected) selectOption(choices,"","Choose a provider");
-  for (const option of active.options || []) selectOption(choices,option.id,option.id + (option.default ? " (default)" : ""));
-  choices.value = active.selected || "";
-  windowChoice();
-  renderSettings();
-}
-function windowChoice() {
-  const current = role();
-  const switching = Boolean(current && $("provider-choice").value && $("provider-choice").value !== current.selected);
-  $("stage-provider").disabled = !switching || !file(repositoryFile)?.editable;
-  $("switch-note").hidden = !switching;
-}
-$("provider-choice").addEventListener("change",windowChoice);
-
-function appendHistory(node, setting) {
-  const history = setting.history || [];
-  if (!history.length && !setting.constraint) return;
-  const detail = element("details");
-  detail.append(element("summary","Sources and constraints"));
-  if (history.length) {
-    const list = element("ol","","history");
-    for (const item of history) list.append(element("li",sourceName(item.source) + " · " + display(item.value)));
-    detail.append(list);
-  }
-  if (setting.constraint) detail.append(element("div","Release constraint · " + display(setting.constraint),"code wrap"));
-  node.append(detail);
-}
-function renderSettings() {
-  const filter = $("setting-filter").value.trim().toLowerCase();
-  const target = $("settings-list");
-  target.replaceChildren();
-  for (const setting of role()?.settings || []) {
-    const value = display(setting.value);
-    const origin = sourceName(setting.source);
-    if (!(setting.path + " " + value + " " + origin).toLowerCase().includes(filter)) continue;
-    const row = element("div","","setting");
-    const head = element("div","","setting-top");
-    head.append(element("strong",setting.path),element("span",propertySchema(setting).type || setting.type || valueType(setting.value),"field-type"));
-    const edit = element("button","Edit","button secondary small");
-    edit.disabled = !file(repositoryFile)?.editable || setting.constraint?.lock === true;
-    edit.setAttribute("aria-label","Edit " + setting.path);
-    edit.addEventListener("click",() => openSetting(setting));
-    head.append(edit);
-    row.append(head,settingSummary(setting.value),element("p",origin,"source-line"));
-    appendHistory(row,setting);
-    target.append(row);
-  }
-  if (!target.children.length) target.append(element("p",filter ? "No matching settings." : "This role has no settings to display.","muted"));
-}
-
-function settingSummary(value) {
-  if (Array.isArray(value)) {
-    if (!value.length) return element("div","Empty list","value muted");
-    const list = element("div","","collection-values");
-    for (const item of value.slice(0,8)) list.append(element("code", display(item)));
-    if (value.length > 8) list.append(element("span", "+" + (value.length - 8) + " more","muted"));
-    return list;
-  }
-  if (value && typeof value === "object") {
-    const count = Object.keys(value).length;
-    return element("div", count + (count === 1 ? " entry" : " entries"), "value muted");
-  }
-  return element("div",display(value),"value");
-}
-$("setting-filter").addEventListener("input",renderSettings);
-
-function settingPath(path) {
-  return (path.match(/(?:\\.|[^.\\])+/g) || []).map(part => part.replace(/\\(.)/g, "$1"));
-}
-
-function propertySchema(setting) {
-  let schema = state?.config?.schemas?.[roleID]?.[role()?.selected];
-  for (const key of settingPath(setting.path)) {
-    schema = schema?.properties && Object.hasOwn(schema.properties,key)
-      ? schema.properties[key] : schema?.additional_properties;
-  }
-  return schema || {};
-}
-
 function editorSuggestions(path) {
   const key = path.filter(part => typeof part === "string").at(-1);
   const git = state?.completions || {};
@@ -1312,39 +983,6 @@ function editorSuggestions(path) {
   return [];
 }
 
-function openSetting(setting, previous) {
-  settingBeingEdited = setting;
-  const schema = previous?.schema || propertySchema(setting);
-  const base = file(repositoryFile)?.digest;
-  const stale = previous && (previous.base !== base || previous.provider !== role()?.selected || !role()?.settings?.some(s => s.path === setting.path));
-  modalContext = previous || {role:roleID,provider:role()?.selected,setting,schema,base};
-  rememberedModal = undefined;
-  const inline = setting.history?.find(item => item.step === "inline");
-  // Map overrides merge by key. Start with what the team file actually owns,
-  // so editing one entry cannot copy personal or inherited entries into Git.
-  let value = inline ? inline.value : setting.value;
-  const isMap = schema.type === "object" && Boolean(schema.additional_properties);
-  if (isMap && !inline) value = {};
-  $("setting-dialog").toggleAttribute("data-collection", schema.type === "array" || schema.type === "object");
-  const parts = [...roleID.split("."), "settings", ...settingPath(setting.path)];
-  settingEditor = createTypedEditor($("typed-control"), schema, value, {
-    label: setting.path, path: parts, suggestions: editorSuggestions, allowed: setting.constraint?.allow, restore:previous?.raw
-  });
-  $("setting-name").textContent = labelRole(roleID) + " / " + setting.path;
-  const help = isMap
-    ? "Edit the keys owned by this repository. Removing a key restores any inherited value."
-    : "Stage a repository override, then preview its effective value before publishing.";
-  $("setting-help").textContent = help + (setting.source?.layer === "user" ? " A personal definition overrides this setting on your machine." : "");
-  $("stage-setting").disabled = Boolean(stale);
-  $("inherit-setting").disabled = !inline || Boolean(stale);
-  notice("setting-message",stale ? "The checkout changed since this edit began. Copy your input, then close and reopen the field to edit the current value." : (previous?.message || ""),Boolean(stale || previous?.message));
-  $("setting-dialog").showModal();
-  $("setting-dialog-title").focus();
-}
-
-$("close-setting").addEventListener("click",() => $("setting-dialog").close());
-$("setting-dialog").addEventListener("close",() => { settingBeingEdited = null; settingEditor = null; modalContext = null; scheduleSave(); });
-
 function localDraft(path) {
   const saved = drafts.get(path);
   const item = file(path);
@@ -1355,49 +993,6 @@ function putDraft(path, content, baseDigest, providers) {
   if (item && item.digest === baseDigest && content === item.content) drafts.delete(path);
   else drafts.set(path, { content, base_digest: baseDigest, providers });
 }
-async function compose(operation, setting, value) {
-  const item = file(repositoryFile);
-  if (!item?.editable) throw new Error("The repository configuration is read-only.");
-  const draft = localDraft(repositoryFile);
-  if (draft.base_digest !== item.digest) throw new Error("The base file changed. Review the current checkout in Configuration.");
-  const result = await request("api/compose", {
-    path: repositoryFile, content: draft.content, base_digest: draft.base_digest,
-    role: roleID, operation, setting, value
-  });
-  if (localDraft(repositoryFile).content !== draft.content) throw new Error("The candidate changed. Stage the value again.");
-  if (typeof result.content !== "string") throw new Error("The server returned no editable source.");
-  putDraft(repositoryFile,result.content,draft.base_digest,result.providers);
-  filePath = repositoryFile;
-  invalidateReview();
-  renderEditor();
-  go("configuration");
-  notice("edit-message",result.warning || "Change staged. You can edit more provider settings or preview this change.",Boolean(result.warning));
-}
-$("select-provider").addEventListener("submit",async (event) => {
-  event.preventDefault();
-  $("stage-provider").disabled = true;
-  try { await compose("select","",$("provider-choice").value); }
-  catch (e) { notice("compose-message",e.message,true); }
-  finally { windowChoice(); }
-});
-async function stageSetting(operation) {
-  const setting = settingBeingEdited;
-  if (!setting || $("stage-setting").disabled) return;
-  const revert = $("inherit-setting");
-  const wasDisabled = revert.disabled;
-  $("stage-setting").disabled = true;
-  revert.disabled = true;
-  try {
-    const value = operation === "remove" ? null : settingEditor.read();
-    if (value === undefined) throw new Error("Choose a value to stage.");
-    await compose(operation,setting.path,value);
-    $("setting-dialog").close();
-  } catch (e) { notice("setting-message",e.message,true); }
-  finally { $("stage-setting").disabled = false; revert.disabled = wasDisabled; }
-}
-$("setting-form").addEventListener("submit",(event) => { event.preventDefault(); stageSetting("set"); });
-$("inherit-setting").addEventListener("click",() => stageSetting("remove"));
-
 function invalidateReview() {
   previewSequence++;
   review = null;
@@ -1596,10 +1191,10 @@ $("publish").addEventListener("click",async () => {
 });
 
 function hasPendingEdits() {
-  return drafts.size || $("setting-dialog").open || $("document-control").querySelector("[data-modified]") || $("commit-title").value !== $("commit-title").defaultValue || $("task-ref").value || $("delivery").value === "draft";
+  return drafts.size || $("document-control").querySelector("[data-modified]") || $("commit-title").value !== $("commit-title").defaultValue || $("task-ref").value || $("delivery").value === "draft";
 }
 window.addEventListener("beforeunload",(event) => {
-  if (!leavingForWorktree && (autonomyForms.size || (!storeDrafts() && hasPendingEdits()))) { event.preventDefault(); event.returnValue = ""; }
+  if (!leavingForWorktree && ((!settingsPage.stored && settingsPage.edits.length) || (!storeDrafts() && hasPendingEdits()))) { event.preventDefault(); event.returnValue = ""; }
 });
 
 $("refresh").disabled = true;

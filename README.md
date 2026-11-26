@@ -426,6 +426,9 @@ Deployments and release lookup also support local JSON fixtures.
 | --- | --- | --- |
 | Open the local repository console | `agentflow ui` | `agentflow_ui_open` or `/agentflow:ui` |
 | Inspect, edit and review configuration | `agentflow config OP` | `agentflow_config`, `agentflow_config_apply` |
+| List settings with values and sources | `agentflow config fields [--group G] [--search Q] [--modified]` | `agentflow_config_fields` |
+| Change settings in both layers as one confirmed save | `agentflow config set [--dry-run] [--unset KEY] KEY=VALUE...` | `agentflow_config_preview`, `agentflow_config_set` |
+| Undo (or redo) the last settings save | `agentflow config undo [--skip-conflicts]` | `agentflow_config_undo` |
 | Create a task | `agentflow task create` | `agentflow_ticket_create` |
 | Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
 | Work in a task worktree | `agentflow start KEY --worktree` | `agentflow_start` with `worktree: true` |
@@ -510,11 +513,25 @@ a change to `~/.agentflow/config.yml`. Add `--all-repos` to read every repositor
 daemon serves in one list. A running MCP server follows the same configuration events and
 reloads its configuration when `.agentflow/` or `~/.agentflow/` changes.
 
-Run `agentflow ui` from the worktree you want to manage. The standalone browser
-console shows the active provider for each role, where its settings came from,
-and how a proposed edit changes the effective configuration. Add and reorder
-list entries, edit maps by key, and choose supported values in the provider
-and configuration editors. The source view also offers field and value
+Run `agentflow ui` from the worktree you want to manage. The **Settings** page
+has a control for every option of your personal settings and the repository's
+`.agentflow/config.yml`: switches, selects, steppers, duration pickers, lists,
+key and value tables, and pickers for providers, branches, files and credential
+variables. Each control shows where its value comes from, the repository ceiling
+that limits it, and what a live check found. Edits collect in one draft, and a
+Save bar shows how many there are and where each will go: personal changes to
+your own file, repository changes to a draft pull request by default, or to the
+worktree. **Review and save** shows every change, its effect and the repository
+diff, and asks you to tick each change that loosens the policy. **Undo** reverses
+the last save. A change made outside the page shows at once, with a choice to keep
+your edit or take the new value. You can search by name, description or ID and
+show only modified settings. **Providers** and **Autonomy** open their groups of
+this page. [Settings page design](docs/design/ui/settings.md)
+
+The **Configuration** page edits the other registered files (provider
+definitions, release units, the flow map, task templates). Add and reorder
+list entries, edit maps by key, and choose supported values in its field
+editor. The source view also offers field and value
 completion. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
@@ -549,6 +566,25 @@ autonomy:
 approval_window: 15m
 ```
 
+Or set the same values from the terminal, previewing first:
+
+```sh
+agentflow config set --dry-run autonomy.actions.commit=auto approval_window=15m
+agentflow config set autonomy.actions.commit=auto approval_window=15m
+```
+
+`config set` saves every edit together or none of them, and always asks for
+confirmation, even under `auto` (action `console.settings`). A save that
+changes `autonomy.*` or `approval_window`, or loosens policy, also answers to
+`console.autonomy`, so `console.autonomy: suggest` still holds. The summary lists
+edits that loosen policy first. Personal edits apply at once. Repository edits
+(`repo:` IDs, such as `repo:policy.max_autonomy.local`) open a draft pull request
+by default; `--mode direct` applies them to the default branch through the same
+publication flow, and `--mode worktree` writes `.agentflow/config.yml` in this
+worktree for you to commit (refused on a protected branch). `agentflow config
+undo` reverses the last save, and a second undo redoes it. See
+[Change settings as one save](docs/repository-console.md#change-settings-as-one-save).
+
 The two classes default to `confirm`. A named action overrides your class
 preference for that operation. The repository's `.agentflow/config.yml` sets
 ceilings independently.
@@ -570,8 +606,8 @@ with mandatory review still require confirmation when set to `auto`.
 The default review window is five minutes. Configured windows accept one minute
 through one hour, subject to the repo maximum.
 
-In `agentflow ui`, open **Autonomy** to inspect the effective rule for each action,
-save personal preferences or stage repository ceilings for review. Select
+In `agentflow ui`, open **Autonomy** to edit your personal levels and, under
+**Repository policy**, the repository ceilings, on the Settings page. Select
 **Inherit** to remove an override. Run `agentflow policy explain commit` in the
 affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. A running
 Agentflow MCP server reloads the configuration after you edit it (see

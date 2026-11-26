@@ -1,0 +1,2358 @@
+{
+ "catalog_revision": "sha256:fixture-1",
+ "fields": [
+  {
+   "id": "repo:code_hosting.provider",
+   "layer": "repo",
+   "path": "code_hosting.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "auto",
+     "github",
+     "none"
+    ],
+    "default": "auto"
+   },
+   "meta": {
+    "label": "Code hosting provider",
+    "description": "How agentflow finds the code host: detected from the Git remotes, or set to a specific forge. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 10,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "code_hosting"
+    }
+   }
+  },
+  {
+   "id": "repo:task_management.provider",
+   "layer": "repo",
+   "path": "task_management.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "asana",
+     "filesystem",
+     "github-issues",
+     "jira",
+     "repository",
+     "none"
+    ],
+    "default": "none"
+   },
+   "meta": {
+    "label": "Task provider",
+    "description": "Where tasks live: Jira, GitHub Issues, Asana, or files. None turns task actions off. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 20,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "task_management"
+    }
+   }
+  },
+  {
+   "id": "repo:knowledge_base.provider",
+   "layer": "repo",
+   "path": "knowledge_base.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "confluence",
+     "filesystem",
+     "github-wiki",
+     "repository",
+     "none"
+    ],
+    "default": "none"
+   },
+   "meta": {
+    "label": "Knowledge provider",
+    "description": "Where documents are searched and published: Confluence, a GitHub wiki, or files. None turns knowledge actions off. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 30,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "knowledge_base"
+    }
+   }
+  },
+  {
+   "id": "repo:devops.checks.provider",
+   "layer": "repo",
+   "path": "devops.checks.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "github",
+     "none"
+    ],
+    "default": "github"
+   },
+   "meta": {
+    "label": "Checks provider",
+    "description": "Where CI check results are read from. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 40,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "devops.checks"
+    }
+   }
+  },
+  {
+   "id": "repo:devops.deployments.provider",
+   "layer": "repo",
+   "path": "devops.deployments.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "fixture",
+     "github",
+     "none"
+    ],
+    "default": "github"
+   },
+   "meta": {
+    "label": "Deployments provider",
+    "description": "Where deployment status is read from: GitHub, or a fixture file. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 50,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "devops.deployments"
+    }
+   }
+  },
+  {
+   "id": "repo:devops.releases.provider",
+   "layer": "repo",
+   "path": "devops.releases.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "fixture",
+     "github",
+     "none"
+    ],
+    "default": "github"
+   },
+   "meta": {
+    "label": "Releases provider",
+    "description": "Where published releases are read from: GitHub, or a fixture file. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 60,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "devops.releases"
+    }
+   }
+  },
+  {
+   "id": "repo:secops.provider",
+   "layer": "repo",
+   "path": "secops.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "github",
+     "none"
+    ],
+    "default": "github"
+   },
+   "meta": {
+    "label": "SecOps provider",
+    "description": "Where security findings come from for triage. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 70,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "secops"
+    }
+   }
+  },
+  {
+   "id": "repo:notifications.provider",
+   "layer": "repo",
+   "path": "notifications.provider",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "router",
+     "slack",
+     "webhook",
+     "none"
+    ],
+    "default": "slack"
+   },
+   "meta": {
+    "label": "Notification provider",
+    "description": "How agentflow sends notifications: Slack, a webhook, or a router that sends each signal to several destinations. A running AI session keeps its old provider until it restarts.",
+    "group": "providers",
+    "order": 80,
+    "widget": "provider-picker",
+    "applies": "restart",
+    "picker": {
+     "role": "notifications"
+    }
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.hosts",
+   "layer": "repo",
+   "path": "code_hosting.settings.hosts",
+   "provider": "auto",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "github",
+      "gitlab",
+      "bitbucket",
+      "azure-devops"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Self-hosted forges",
+    "description": "Maps the hostname of a self-hosted code host to its forge type, so agentflow recognises remotes on that host.",
+    "group": "providers.code_hosting",
+    "order": 10,
+    "widget": "kv-table",
+    "applies": "live",
+    "placeholder": "git.example.com"
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.hosts",
+   "layer": "repo",
+   "path": "code_hosting.settings.hosts",
+   "provider": "github",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "github",
+      "gitlab",
+      "bitbucket",
+      "azure-devops"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Self-hosted forges",
+    "description": "Maps the hostname of a self-hosted code host to its forge type, so agentflow recognises remotes on that host.",
+    "group": "providers.code_hosting",
+    "order": 10,
+    "widget": "kv-table",
+    "applies": "live",
+    "placeholder": "git.example.com"
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.source_remote",
+   "layer": "repo",
+   "path": "code_hosting.settings.source_remote",
+   "provider": "auto",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Source remote",
+    "description": "Git remote that holds your branches. Without one, agentflow detects it.",
+    "group": "providers.code_hosting",
+    "order": 20,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.source_remote",
+   "layer": "repo",
+   "path": "code_hosting.settings.source_remote",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Source remote",
+    "description": "Git remote that holds your branches. Without one, agentflow detects it.",
+    "group": "providers.code_hosting",
+    "order": 20,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.target_remote",
+   "layer": "repo",
+   "path": "code_hosting.settings.target_remote",
+   "provider": "auto",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Target remote",
+    "description": "Git remote that pull requests go to. Without one, agentflow detects it.",
+    "group": "providers.code_hosting",
+    "order": 30,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:code_hosting.settings.target_remote",
+   "layer": "repo",
+   "path": "code_hosting.settings.target_remote",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Target remote",
+    "description": "Git remote that pull requests go to. Without one, agentflow detects it.",
+    "group": "providers.code_hosting",
+    "order": 30,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.project",
+   "layer": "repo",
+   "path": "task_management.settings.project",
+   "provider": "asana",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Default project",
+    "description": "Asana project that bare task IDs and new tasks use, as its GID.",
+    "group": "providers.task_management",
+    "order": 10,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.transitions",
+   "layer": "repo",
+   "path": "task_management.settings.transitions",
+   "provider": "asana",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "object",
+     "additional_properties": {
+      "type": "string"
+     }
+    }
+   },
+   "meta": {
+    "label": "Section transitions",
+    "description": "Maps each Asana project GID to its events and the section GID, completed, or none that each event moves a task to.",
+    "group": "providers.task_management",
+    "order": 20,
+    "widget": "kv-table",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.site",
+   "layer": "repo",
+   "path": "task_management.settings.site",
+   "provider": "jira",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Site",
+    "description": "Web address of the Jira site.",
+    "group": "providers.task_management",
+    "order": 30,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "https://nscale.atlassian.net"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.projects",
+   "layer": "repo",
+   "path": "task_management.settings.projects",
+   "provider": "jira",
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Projects",
+    "description": "Jira project keys that My Work and task search look in.",
+    "group": "providers.task_management",
+    "order": 40,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.repository",
+   "layer": "repo",
+   "path": "task_management.settings.repository",
+   "provider": "github-issues",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, that holds the issues. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.task_management",
+    "order": 50,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.labels",
+   "layer": "repo",
+   "path": "task_management.settings.labels",
+   "provider": "github-issues",
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Labels",
+    "description": "Labels that agentflow adds to the issues it creates.",
+    "group": "providers.task_management",
+    "order": 60,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.search.open_only",
+   "layer": "repo",
+   "path": "task_management.settings.search.open_only",
+   "provider": "github-issues",
+   "schema": {
+    "type": "boolean"
+   },
+   "meta": {
+    "label": "Open issues only",
+    "description": "Task search lists open issues only.",
+    "group": "providers.task_management",
+    "order": 70,
+    "widget": "toggle",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.search.limit",
+   "layer": "repo",
+   "path": "task_management.settings.search.limit",
+   "provider": "github-issues",
+   "schema": {
+    "type": "integer",
+    "nonnegative": true
+   },
+   "meta": {
+    "label": "Search limit",
+    "description": "Most issues one search returns. Zero uses the default.",
+    "group": "providers.task_management",
+    "order": 80,
+    "widget": "stepper",
+    "applies": "live",
+    "min": 0,
+    "step": 1
+   }
+  },
+  {
+   "id": "repo:task_management.settings.root",
+   "layer": "repo",
+   "path": "task_management.settings.root",
+   "provider": "filesystem",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Task directory",
+    "description": "Directory in the repository that holds the task files.",
+    "group": "providers.task_management",
+    "order": 90,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "dir",
+     "base": "repo"
+    }
+   }
+  },
+  {
+   "id": "repo:task_management.settings.repository",
+   "layer": "repo",
+   "path": "task_management.settings.repository",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, that holds the task files. Without one, agentflow uses the current repository.",
+    "group": "providers.task_management",
+    "order": 100,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.branch",
+   "layer": "repo",
+   "path": "task_management.settings.branch",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Branch",
+    "description": "Branch that holds the task files. Without one, agentflow uses the repository's default branch.",
+    "group": "providers.task_management",
+    "order": 110,
+    "widget": "branch-picker",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.directory",
+   "layer": "repo",
+   "path": "task_management.settings.directory",
+   "provider": "repository",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Task directory",
+    "description": "Directory in that repository that holds the task files.",
+    "group": "providers.task_management",
+    "order": 120,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "dir",
+     "base": "repo"
+    }
+   }
+  },
+  {
+   "id": "repo:task_management.settings.publication",
+   "layer": "repo",
+   "path": "task_management.settings.publication",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "pull-request",
+     "push"
+    ]
+   },
+   "meta": {
+    "label": "Publication",
+    "description": "How task file changes reach the branch: through a pull request, or by pushing.",
+    "group": "providers.task_management",
+    "order": 130,
+    "widget": "select",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.scope",
+   "layer": "repo",
+   "path": "task_management.settings.scope",
+   "provider": "filesystem",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Scope",
+    "description": "Scope that tasks belong to when a command names none.",
+    "group": "providers.task_management",
+    "order": 140,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.scope",
+   "layer": "repo",
+   "path": "task_management.settings.scope",
+   "provider": "repository",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Scope",
+    "description": "Scope that tasks belong to when a command names none.",
+    "group": "providers.task_management",
+    "order": 140,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.transitions",
+   "layer": "repo",
+   "path": "task_management.settings.transitions",
+   "provider": "filesystem",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "open",
+      "closed",
+      "none"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Event transitions",
+    "description": "Maps events and commit verbs to the state a task moves to: open, closed, or none to leave it alone.",
+    "group": "providers.task_management",
+    "order": 150,
+    "widget": "kv-table",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.transitions",
+   "layer": "repo",
+   "path": "task_management.settings.transitions",
+   "provider": "github-issues",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "open",
+      "closed",
+      "none"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Event transitions",
+    "description": "Maps events and commit verbs to the state a task moves to: open, closed, or none to leave it alone.",
+    "group": "providers.task_management",
+    "order": 150,
+    "widget": "kv-table",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.settings.transitions",
+   "layer": "repo",
+   "path": "task_management.settings.transitions",
+   "provider": "repository",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "open",
+      "closed",
+      "none"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Event transitions",
+    "description": "Maps events and commit verbs to the state a task moves to: open, closed, or none to leave it alone.",
+    "group": "providers.task_management",
+    "order": 150,
+    "widget": "kv-table",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.templates.catalog",
+   "layer": "repo",
+   "path": "task_management.templates.catalog",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Template catalog",
+    "description": "JSON file in the repository that lists the task templates. Required when task templates are used.",
+    "group": "providers.task_management",
+    "order": 160,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "file",
+     "base": "repo",
+     "glob": "*.json"
+    }
+   }
+  },
+  {
+   "id": "repo:task_management.templates.default.name",
+   "layer": "repo",
+   "path": "task_management.templates.default.name",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Default template",
+    "description": "Name of the template that new tasks use when none is named.",
+    "group": "providers.task_management",
+    "order": 170,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:task_management.templates.default.revision",
+   "layer": "repo",
+   "path": "task_management.templates.default.revision",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Default template revision",
+    "description": "Exact revision of the default template.",
+    "group": "providers.task_management",
+    "order": 180,
+    "widget": "text",
+    "applies": "live",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.site",
+   "layer": "repo",
+   "path": "knowledge_base.settings.site",
+   "provider": "confluence",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Site",
+    "description": "Web address of the Confluence site.",
+    "group": "providers.knowledge_base",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "https://nscale.atlassian.net"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.publish_spaces",
+   "layer": "repo",
+   "path": "knowledge_base.settings.publish_spaces",
+   "provider": "confluence",
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Publish spaces",
+    "description": "Confluence space keys that documents may be published to.",
+    "group": "providers.knowledge_base",
+    "order": 20,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.repository",
+   "layer": "repo",
+   "path": "knowledge_base.settings.repository",
+   "provider": "github-wiki",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, whose wiki holds the documents. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.knowledge_base",
+    "order": 30,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.root",
+   "layer": "repo",
+   "path": "knowledge_base.settings.root",
+   "provider": "filesystem",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Document directory",
+    "description": "Directory in the repository that holds the documents.",
+    "group": "providers.knowledge_base",
+    "order": 40,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "dir",
+     "base": "repo"
+    }
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.repository",
+   "layer": "repo",
+   "path": "knowledge_base.settings.repository",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, that holds the documents. Without one, agentflow uses the current repository.",
+    "group": "providers.knowledge_base",
+    "order": 50,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.branch",
+   "layer": "repo",
+   "path": "knowledge_base.settings.branch",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Branch",
+    "description": "Branch that holds the documents. Without one, agentflow uses the repository's default branch.",
+    "group": "providers.knowledge_base",
+    "order": 60,
+    "widget": "branch-picker",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.directory",
+   "layer": "repo",
+   "path": "knowledge_base.settings.directory",
+   "provider": "repository",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Document directory",
+    "description": "Directory in that repository that holds the documents.",
+    "group": "providers.knowledge_base",
+    "order": 70,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "dir",
+     "base": "repo"
+    }
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.publication",
+   "layer": "repo",
+   "path": "knowledge_base.settings.publication",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "pull-request",
+     "push"
+    ]
+   },
+   "meta": {
+    "label": "Publication",
+    "description": "How new documents reach the branch: through a pull request, or by pushing.",
+    "group": "providers.knowledge_base",
+    "order": 80,
+    "widget": "select",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.format",
+   "layer": "repo",
+   "path": "knowledge_base.settings.format",
+   "provider": "filesystem",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "okf",
+     "legacy"
+    ]
+   },
+   "meta": {
+    "label": "Document format",
+    "description": "Encoding of newly published documents: the open knowledge format, or the legacy format.",
+    "group": "providers.knowledge_base",
+    "order": 90,
+    "widget": "select",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:knowledge_base.settings.format",
+   "layer": "repo",
+   "path": "knowledge_base.settings.format",
+   "provider": "repository",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "okf",
+     "legacy"
+    ]
+   },
+   "meta": {
+    "label": "Document format",
+    "description": "Encoding of newly published documents: the open knowledge format, or the legacy format.",
+    "group": "providers.knowledge_base",
+    "order": 90,
+    "widget": "select",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:devops.checks.settings.repository",
+   "layer": "repo",
+   "path": "devops.checks.settings.repository",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, to read check results from. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.devops.checks",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:devops.deployments.settings.repository",
+   "layer": "repo",
+   "path": "devops.deployments.settings.repository",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, to read deployments from. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.devops.deployments",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:devops.deployments.settings.path",
+   "layer": "repo",
+   "path": "devops.deployments.settings.path",
+   "provider": "fixture",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Fixture file",
+    "description": "JSON file in the repository that stands in for the service, so deployments can be read without credentials.",
+    "group": "providers.devops.deployments",
+    "order": 20,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "file",
+     "base": "repo",
+     "glob": "*.json"
+    }
+   }
+  },
+  {
+   "id": "repo:devops.releases.settings.repository",
+   "layer": "repo",
+   "path": "devops.releases.settings.repository",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, to read releases from. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.devops.releases",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:devops.releases.settings.path",
+   "layer": "repo",
+   "path": "devops.releases.settings.path",
+   "provider": "fixture",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Fixture file",
+    "description": "JSON file in the repository that stands in for the service, so releases can be read without credentials.",
+    "group": "providers.devops.releases",
+    "order": 20,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "file",
+     "base": "repo",
+     "glob": "*.json"
+    }
+   }
+  },
+  {
+   "id": "repo:secops.settings.repository",
+   "layer": "repo",
+   "path": "secops.settings.repository",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Repository",
+    "description": "GitHub repository, as owner/name, whose findings agentflow reads. Without one, agentflow uses the detected code host repository.",
+    "group": "providers.secops",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "owner/name"
+   }
+  },
+  {
+   "id": "repo:secops.settings.findings",
+   "layer": "repo",
+   "path": "secops.settings.findings",
+   "provider": "github",
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "string",
+     "enum": [
+      "dependabot",
+      "code-scanning"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Finding sources",
+    "description": "Which GitHub alerts agentflow reads: Dependabot alerts, code scanning alerts, or both. An empty list reads none.",
+    "group": "providers.secops",
+    "order": 20,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:secops.settings.min_severity",
+   "layer": "repo",
+   "path": "secops.settings.min_severity",
+   "provider": "github",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "low",
+     "medium",
+     "high",
+     "critical"
+    ]
+   },
+   "meta": {
+    "label": "Minimum severity",
+    "description": "Lowest severity of a finding that agentflow reports.",
+    "group": "providers.secops",
+    "order": 30,
+    "widget": "select",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:secops.settings.incidents.fixture",
+   "layer": "repo",
+   "path": "secops.settings.incidents.fixture",
+   "provider": "github",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Incident fixture",
+    "description": "JSON file in the repository that lists incidents, for triage without a service.",
+    "group": "providers.secops",
+    "order": 40,
+    "widget": "file-picker",
+    "applies": "live",
+    "picker": {
+     "kind": "file",
+     "base": "repo",
+     "glob": "*.json"
+    }
+   }
+  },
+  {
+   "id": "repo:secops.settings.incidents.scope",
+   "layer": "repo",
+   "path": "secops.settings.incidents.scope",
+   "provider": "github",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Incident scope",
+    "description": "Stable name for the source of the incident fixture. Required with a fixture.",
+    "group": "providers.secops",
+    "order": 50,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.destination",
+   "layer": "repo",
+   "path": "notifications.settings.destination",
+   "provider": "slack",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Destination name",
+    "description": "Name that identifies this destination in delivery receipts.",
+    "group": "providers.notifications",
+    "order": 10,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.destination",
+   "layer": "repo",
+   "path": "notifications.settings.destination",
+   "provider": "webhook",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Destination name",
+    "description": "Name that identifies this destination in delivery receipts.",
+    "group": "providers.notifications",
+    "order": 10,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.credential_ref",
+   "layer": "repo",
+   "path": "notifications.settings.credential_ref",
+   "provider": "slack",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Webhook credential",
+    "description": "Name of the environment variable that holds the webhook URL. The URL itself never goes in the configuration.",
+    "group": "providers.notifications",
+    "order": 20,
+    "widget": "credential-ref",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.credential_ref",
+   "layer": "repo",
+   "path": "notifications.settings.credential_ref",
+   "provider": "webhook",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Webhook credential",
+    "description": "Name of the environment variable that holds the webhook URL. The URL itself never goes in the configuration.",
+    "group": "providers.notifications",
+    "order": 20,
+    "widget": "credential-ref",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.native.server",
+   "layer": "repo",
+   "path": "notifications.settings.native.server",
+   "provider": "slack",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "MCP server",
+    "description": "Name of the Slack MCP registration used for native delivery.",
+    "group": "providers.notifications",
+    "order": 30,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.native.workspace_id",
+   "layer": "repo",
+   "path": "notifications.settings.native.workspace_id",
+   "provider": "slack",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Workspace ID",
+    "description": "ID of the Slack workspace to send to.",
+    "group": "providers.notifications",
+    "order": 40,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.native.channel_id",
+   "layer": "repo",
+   "path": "notifications.settings.native.channel_id",
+   "provider": "slack",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Conversation ID",
+    "description": "ID of the Slack channel or conversation to send to.",
+    "group": "providers.notifications",
+    "order": 50,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:notifications.settings.native.actor_id",
+   "layer": "repo",
+   "path": "notifications.settings.native.actor_id",
+   "provider": "slack",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Required sender",
+    "description": "ID of the Slack user who must be signed in for delivery. Without one, any signed-in user may send.",
+    "group": "providers.notifications",
+    "order": 60,
+    "widget": "text",
+    "applies": "live",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:notifications.settings.header_refs",
+   "layer": "repo",
+   "path": "notifications.settings.header_refs",
+   "provider": "webhook",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Header variables",
+    "description": "Maps an HTTP header name to the environment variable that holds its value.",
+    "group": "providers.notifications",
+    "order": 70,
+    "widget": "kv-table",
+    "applies": "live",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:notifications.settings.rejected_statuses",
+   "layer": "repo",
+   "path": "notifications.settings.rejected_statuses",
+   "provider": "webhook",
+   "schema": {
+    "type": "array",
+    "items": {
+     "type": "integer"
+    }
+   },
+   "meta": {
+    "label": "Safe rejection codes",
+    "description": "HTTP 4xx status codes, other than 408, that guarantee the receiver rejected the request. Only list codes for which a retry is safe.",
+    "group": "providers.notifications",
+    "order": 80,
+    "widget": "chips",
+    "applies": "live",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:notifications.settings.destinations",
+   "layer": "repo",
+   "path": "notifications.settings.destinations",
+   "provider": "router",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "object",
+     "properties": {
+      "credential_ref": {
+       "type": "string"
+      },
+      "header_refs": {
+       "type": "object",
+       "additional_properties": {
+        "type": "string"
+       }
+      },
+      "native": {
+       "type": "object",
+       "nullable": true,
+       "properties": {
+        "actor_id": {
+         "type": "string"
+        },
+        "channel_id": {
+         "type": "string"
+        },
+        "server": {
+         "type": "string"
+        },
+        "workspace_id": {
+         "type": "string"
+        }
+       }
+      },
+      "provider": {
+       "type": "string",
+       "enum": [
+        "slack",
+        "webhook"
+       ]
+      },
+      "rejected_statuses": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       }
+      }
+     }
+    }
+   },
+   "meta": {
+    "label": "Destinations",
+    "description": "Named places the router can deliver to. Each has a provider and either a credential or a native Slack scope.",
+    "group": "providers.notifications",
+    "order": 90,
+    "widget": "kv-table",
+    "applies": "live"
+   },
+   "columns": {
+    "credential_ref": {
+     "label": "Credential",
+     "description": "Name of the environment variable that holds the webhook URL.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "credential-ref",
+     "applies": "live"
+    },
+    "header_refs": {
+     "label": "Header variables",
+     "description": "Maps an HTTP header name to the environment variable that holds its value.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "kv-table",
+     "applies": "live"
+    },
+    "native.actor_id": {
+     "label": "Required sender",
+     "description": "ID of the Slack user who must be signed in for delivery.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "text",
+     "applies": "live"
+    },
+    "native.channel_id": {
+     "label": "Conversation ID",
+     "description": "ID of the Slack channel or conversation to send to.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "text",
+     "applies": "live"
+    },
+    "native.server": {
+     "label": "MCP server",
+     "description": "Name of the Slack MCP registration used for native delivery.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "text",
+     "applies": "live"
+    },
+    "native.workspace_id": {
+     "label": "Workspace ID",
+     "description": "ID of the Slack workspace to send to.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "text",
+     "applies": "live"
+    },
+    "provider": {
+     "label": "Provider",
+     "description": "How this destination delivers.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "select",
+     "applies": "live"
+    },
+    "rejected_statuses": {
+     "label": "Safe rejection codes",
+     "description": "HTTP 4xx status codes, other than 408, that guarantee the receiver rejected the request.",
+     "group": "providers.notifications",
+     "order": 0,
+     "widget": "chips",
+     "applies": "live"
+    }
+   }
+  },
+  {
+   "id": "repo:notifications.settings.routes",
+   "layer": "repo",
+   "path": "notifications.settings.routes",
+   "provider": "router",
+   "schema": {
+    "type": "object",
+    "additional_properties": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   },
+   "meta": {
+    "label": "Routes",
+    "description": "Maps each signal to the destination names that receive it, in delivery order. Without routes, every signal goes to every destination.",
+    "group": "providers.notifications",
+    "order": 100,
+    "widget": "kv-table",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "personal:autonomy.local",
+   "layer": "personal",
+   "path": "autonomy.local",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "suggest",
+     "confirm",
+     "auto"
+    ]
+   },
+   "meta": {
+    "label": "Local actions",
+    "description": "Highest autonomy for local actions such as commit, in every repository.",
+    "group": "autonomy",
+    "order": 10,
+    "widget": "select",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "personal:autonomy.remote",
+   "layer": "personal",
+   "path": "autonomy.remote",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "suggest",
+     "confirm",
+     "auto"
+    ]
+   },
+   "meta": {
+    "label": "Remote actions",
+    "description": "Highest autonomy for remote actions such as push and opening a pull request, in every repository.",
+    "group": "autonomy",
+    "order": 20,
+    "widget": "select",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "personal:autonomy.actions",
+   "layer": "personal",
+   "path": "autonomy.actions",
+   "schema": {
+    "type": "object",
+    "nullable": true,
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "suggest",
+      "confirm",
+      "auto"
+     ]
+    },
+    "key_suggestions": [
+     "adr_draft",
+     "comment",
+     "commit",
+     "console.autonomy",
+     "console.publish",
+     "console.reply",
+     "delegate",
+     "docs_publish",
+     "eod",
+     "finish",
+     "jira_remote_link",
+     "notify",
+     "pr_open",
+     "pr_open_draft",
+     "pr_ready_for_review",
+     "promote",
+     "push",
+     "release_publish",
+     "review_reply",
+     "setup.install_gh",
+     "setup.install_mcp",
+     "setup.register_client",
+     "setup.register_mcp",
+     "start",
+     "sweep",
+     "ticket_create",
+     "transition"
+    ]
+   },
+   "meta": {
+    "label": "Action overrides",
+    "description": "Sets the autonomy level for single actions. An override replaces the local or remote level for that action.",
+    "group": "autonomy",
+    "order": 30,
+    "widget": "kv-table",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "personal:approval_window",
+   "layer": "personal",
+   "path": "approval_window",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Approval window",
+    "description": "How long a confirmation stays valid after agentflow shows its summary. A repository maximum can shorten it.",
+    "group": "autonomy",
+    "order": 40,
+    "widget": "duration",
+    "applies": "live",
+    "loosens": "longer",
+    "min_duration": "1m0s",
+    "max_duration": "1h0m0s",
+    "placeholder": "5m"
+   }
+  },
+  {
+   "id": "repo:policy.max_autonomy.local",
+   "layer": "repo",
+   "path": "policy.max_autonomy.local",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "suggest",
+     "confirm",
+     "auto"
+    ]
+   },
+   "meta": {
+    "label": "Local actions ceiling",
+    "description": "Highest autonomy anyone may use for local actions in this repository. A personal level above it has no effect.",
+    "group": "policy",
+    "order": 10,
+    "widget": "select",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "repo:policy.max_autonomy.remote",
+   "layer": "repo",
+   "path": "policy.max_autonomy.remote",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "suggest",
+     "confirm",
+     "auto"
+    ]
+   },
+   "meta": {
+    "label": "Remote actions ceiling",
+    "description": "Highest autonomy anyone may use for remote actions in this repository. A personal level above it has no effect.",
+    "group": "policy",
+    "order": 20,
+    "widget": "select",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "repo:policy.max_autonomy.actions",
+   "layer": "repo",
+   "path": "policy.max_autonomy.actions",
+   "schema": {
+    "type": "object",
+    "nullable": true,
+    "additional_properties": {
+     "type": "string",
+     "enum": [
+      "suggest",
+      "confirm",
+      "auto"
+     ]
+    },
+    "key_suggestions": [
+     "adr_draft",
+     "comment",
+     "commit",
+     "console.autonomy",
+     "console.publish",
+     "console.reply",
+     "delegate",
+     "docs_publish",
+     "eod",
+     "finish",
+     "jira_remote_link",
+     "notify",
+     "pr_open",
+     "pr_open_draft",
+     "pr_ready_for_review",
+     "promote",
+     "push",
+     "release_publish",
+     "review_reply",
+     "setup.install_gh",
+     "setup.install_mcp",
+     "setup.register_client",
+     "setup.register_mcp",
+     "start",
+     "sweep",
+     "ticket_create",
+     "transition"
+    ]
+   },
+   "meta": {
+    "label": "Action ceilings",
+    "description": "Caps the autonomy level for single actions in this repository, below the local or remote ceiling.",
+    "group": "policy",
+    "order": 30,
+    "widget": "kv-table",
+    "applies": "live",
+    "loosens": "level"
+   }
+  },
+  {
+   "id": "repo:policy.max_approval_window",
+   "layer": "repo",
+   "path": "policy.max_approval_window",
+   "schema": {
+    "type": "string",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Approval window ceiling",
+    "description": "Longest time a confirmation may stay valid in this repository. It shortens any longer personal window.",
+    "group": "policy",
+    "order": 40,
+    "widget": "duration",
+    "applies": "live",
+    "loosens": "longer",
+    "min_duration": "1m0s",
+    "max_duration": "1h0m0s",
+    "placeholder": "5m"
+   }
+  },
+  {
+   "id": "repo:policy.allow_auto_pr_publication",
+   "layer": "repo",
+   "path": "policy.allow_auto_pr_publication",
+   "schema": {
+    "type": "boolean"
+   },
+   "meta": {
+    "label": "Automatic pull request publication",
+    "description": "Lets an agent open a pull request and push its branch in one step without confirmation, even when the remote ceiling asks for confirmation.",
+    "group": "policy",
+    "order": 50,
+    "widget": "toggle",
+    "applies": "live",
+    "loosens": "enable"
+   }
+  },
+  {
+   "id": "repo:policy.coordinator_merge",
+   "layer": "repo",
+   "path": "policy.coordinator_merge",
+   "schema": {
+    "type": "boolean"
+   },
+   "meta": {
+    "label": "Coordinator merge",
+    "description": "Lets an agent merge a pull request whose base branch is not main or master. The rest of the never-list still applies.",
+    "group": "policy",
+    "order": 60,
+    "widget": "toggle",
+    "applies": "live",
+    "loosens": "enable"
+   }
+  },
+  {
+   "id": "repo:policy.protected_branches",
+   "layer": "repo",
+   "path": "policy.protected_branches",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Protected branches",
+    "description": "Branches that changes reach only through a pull request. A pattern with * matches several branches.",
+    "group": "policy",
+    "order": 70,
+    "widget": "branch-picker",
+    "applies": "live",
+    "loosens": "shrink",
+    "picker": {
+     "multiple": true
+    }
+   }
+  },
+  {
+   "id": "repo:policy.test_cmd",
+   "layer": "repo",
+   "path": "policy.test_cmd",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Test command",
+    "description": "Command the pull request readiness check runs to confirm that tests pass.",
+    "group": "policy",
+    "order": 80,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:policy.lint_cmd",
+   "layer": "repo",
+   "path": "policy.lint_cmd",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Lint command",
+    "description": "Command the pull request readiness check runs to confirm that lint passes.",
+    "group": "policy",
+    "order": 90,
+    "widget": "text",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:commit.types",
+   "layer": "repo",
+   "path": "commit.types",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string",
+     "suggestions": [
+      "feat",
+      "fix",
+      "perf",
+      "refactor",
+      "docs",
+      "test",
+      "build",
+      "ci",
+      "chore",
+      "revert"
+     ]
+    }
+   },
+   "meta": {
+    "label": "Commit types",
+    "description": "Conventional commit types that the commit message check accepts.",
+    "group": "commit",
+    "order": 10,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:commit.subject_max",
+   "layer": "repo",
+   "path": "commit.subject_max",
+   "schema": {
+    "type": "integer"
+   },
+   "meta": {
+    "label": "Subject length",
+    "description": "Longest commit subject, in characters. Pull request titles stay a little shorter so the squash commit fits.",
+    "group": "commit",
+    "order": 20,
+    "widget": "stepper",
+    "applies": "live",
+    "min": 13,
+    "step": 1
+   }
+  },
+  {
+   "id": "repo:commit.require_key",
+   "layer": "repo",
+   "path": "commit.require_key",
+   "schema": {
+    "type": "boolean",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Require a task key",
+    "description": "Commit subjects must carry a task key, such as a Jira key, that links the commit to its task.",
+    "group": "commit",
+    "order": 30,
+    "widget": "toggle",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:commit.ai_trailer",
+   "layer": "repo",
+   "path": "commit.ai_trailer",
+   "schema": {
+    "type": "boolean"
+   },
+   "meta": {
+    "label": "Keep AI trailers",
+    "description": "Keep AI attribution trailers in commit messages. When off, agentflow removes them.",
+    "group": "commit",
+    "order": 40,
+    "widget": "toggle",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:commit.breaking_paths",
+   "layer": "repo",
+   "path": "commit.breaking_paths",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Breaking-change paths",
+    "description": "Path patterns whose changes mark a commit as a breaking change. A pattern may use ** to match any number of directories.",
+    "group": "commit",
+    "order": 50,
+    "widget": "chips",
+    "applies": "live",
+    "advanced": true
+   }
+  },
+  {
+   "id": "personal:worktree.root",
+   "layer": "personal",
+   "path": "worktree.root",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Personal worktree root",
+    "description": "Directory that holds new task worktrees, as root/repository/branch, for repositories that set no root of their own.",
+    "group": "worktrees",
+    "order": 10,
+    "widget": "file-picker",
+    "applies": "new-worktrees",
+    "picker": {
+     "kind": "dir",
+     "base": "home"
+    }
+   }
+  },
+  {
+   "id": "personal:worktree.checkouts",
+   "layer": "personal",
+   "path": "worktree.checkouts",
+   "schema": {
+    "type": "object",
+    "nullable": true,
+    "additional_properties": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Primary checkouts",
+    "description": "Maps a repository name to the directory of its primary checkout, for checkouts outside the default location.",
+    "group": "worktrees",
+    "order": 20,
+    "widget": "kv-table",
+    "applies": "new-worktrees",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:worktree.root",
+   "layer": "repo",
+   "path": "worktree.root",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Repository worktree root",
+    "description": "Directory that holds new task worktrees, as root/repository/branch, for everyone who works in this repository.",
+    "group": "worktrees",
+    "order": 30,
+    "widget": "file-picker",
+    "applies": "new-worktrees",
+    "picker": {
+     "kind": "dir",
+     "base": "home"
+    }
+   }
+  },
+  {
+   "id": "repo:worktree.go_work.use",
+   "layer": "repo",
+   "path": "worktree.go_work.use",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "go.work modules",
+    "description": "Module directories, relative to the worktree root, that the go.work file in each new worktree uses.",
+    "group": "worktrees",
+    "order": 40,
+    "widget": "chips",
+    "applies": "new-worktrees",
+    "advanced": true
+   }
+  },
+  {
+   "id": "repo:worktree.go_work.siblings",
+   "layer": "repo",
+   "path": "worktree.go_work.siblings",
+   "schema": {
+    "type": "object",
+    "nullable": true,
+    "additional_properties": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string"
+      },
+      "repo": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "meta": {
+    "label": "go.work sibling modules",
+    "description": "Replaces a Go module in each new worktree's go.work with the same module in another repository: its matching worktree, or its primary checkout.",
+    "group": "worktrees",
+    "order": 50,
+    "widget": "kv-table",
+    "applies": "new-worktrees",
+    "advanced": true
+   },
+   "columns": {
+    "path": {
+     "label": "Module directory",
+     "description": "Directory of the module inside that repository.",
+     "group": "worktrees",
+     "order": 0,
+     "widget": "text",
+     "applies": "new-worktrees"
+    },
+    "repo": {
+     "label": "Repository",
+     "description": "Name of the repository that holds the module.",
+     "group": "worktrees",
+     "order": 0,
+     "widget": "text",
+     "applies": "new-worktrees"
+    }
+   }
+  },
+  {
+   "id": "personal:atlassian.email",
+   "layer": "personal",
+   "path": "atlassian.email",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Atlassian e-mail",
+    "description": "E-mail address of your Atlassian account, used to sign in to Jira and Confluence.",
+    "group": "integrations",
+    "order": 10,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "you@example.com"
+   }
+  },
+  {
+   "id": "repo:jira.site",
+   "layer": "repo",
+   "path": "jira.site",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Jira site",
+    "description": "Web address of the Jira site. The task provider's own site setting takes precedence.",
+    "group": "integrations",
+    "order": 20,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "https://nscale.atlassian.net"
+   }
+  },
+  {
+   "id": "repo:jira.projects",
+   "layer": "repo",
+   "path": "jira.projects",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Jira projects",
+    "description": "Jira project keys the task provider searches. The task provider's own projects setting takes precedence.",
+    "group": "integrations",
+    "order": 30,
+    "widget": "chips",
+    "applies": "live"
+   }
+  },
+  {
+   "id": "repo:confluence.site",
+   "layer": "repo",
+   "path": "confluence.site",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Confluence site",
+    "description": "Web address of the Confluence site. Without one, agentflow uses the Jira site.",
+    "group": "integrations",
+    "order": 40,
+    "widget": "text",
+    "applies": "live",
+    "placeholder": "https://nscale.atlassian.net"
+   }
+  },
+  {
+   "id": "repo:flow_map",
+   "layer": "repo",
+   "path": "flow_map",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Flow map",
+    "description": "Where the file is that maps events and commit verbs to Jira statuses: a path in the repository, or owner/repository@ref:path.",
+    "group": "integrations",
+    "order": 50,
+    "widget": "text",
+    "applies": "live",
+    "advanced": true,
+    "placeholder": "ryanhelms/agentflow@v0:flow-map.yml"
+   }
+  },
+  {
+   "id": "personal:update.auto",
+   "layer": "personal",
+   "path": "update.auto",
+   "schema": {
+    "type": "boolean",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Update automatically",
+    "description": "Check for and install new agentflow releases without asking. Turn off to update by hand.",
+    "group": "updates",
+    "order": 10,
+    "widget": "toggle",
+    "applies": "next-run"
+   }
+  },
+  {
+   "id": "repo:update.channel",
+   "layer": "repo",
+   "path": "update.channel",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "stable",
+     "beta"
+    ]
+   },
+   "meta": {
+    "label": "Release channel",
+    "description": "Which releases agentflow offers: stable releases only, or beta releases too.",
+    "group": "updates",
+    "order": 20,
+    "widget": "select",
+    "applies": "next-run"
+   }
+  },
+  {
+   "id": "repo:update.check_every",
+   "layer": "repo",
+   "path": "update.check_every",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Check interval",
+    "description": "How often agentflow checks for a new release. An invalid or non-positive value uses the default.",
+    "group": "updates",
+    "order": 30,
+    "widget": "duration",
+    "applies": "next-run",
+    "advanced": true,
+    "placeholder": "6h"
+   }
+  },
+  {
+   "id": "repo:update.track",
+   "layer": "repo",
+   "path": "update.track",
+   "schema": {
+    "type": "integer",
+    "nullable": true
+   },
+   "meta": {
+    "label": "Major version",
+    "description": "Major version of agentflow to follow. Without one, agentflow stays on the installed major version.",
+    "group": "updates",
+    "order": 40,
+    "widget": "stepper",
+    "applies": "next-run",
+    "advanced": true,
+    "min": 0,
+    "step": 1
+   }
+  },
+  {
+   "id": "repo:update.pin",
+   "layer": "repo",
+   "path": "update.pin",
+   "schema": {
+    "type": "string"
+   },
+   "meta": {
+    "label": "Pinned version",
+    "description": "Exact release to stay on. Without one, agentflow follows its channel.",
+    "group": "updates",
+    "order": 50,
+    "widget": "text",
+    "applies": "next-run",
+    "advanced": true
+   }
+  },
+  {
+   "id": "personal:init.auto",
+   "layer": "personal",
+   "path": "init.auto",
+   "schema": {
+    "type": "string",
+    "enum": [
+     "auto",
+     "ask",
+     "off"
+    ]
+   },
+   "meta": {
+    "label": "Set up new repositories",
+    "description": "What the AI-client plugins do in a repository that has no agentflow configuration: set it up, only suggest setup, or do nothing. Applies to the listed organisations only.",
+    "group": "init",
+    "order": 10,
+    "widget": "select",
+    "applies": "next-run"
+   }
+  },
+  {
+   "id": "personal:init.orgs",
+   "layer": "personal",
+   "path": "init.orgs",
+   "schema": {
+    "type": "array",
+    "nullable": true,
+    "items": {
+     "type": "string"
+    }
+   },
+   "meta": {
+    "label": "Organisations",
+    "description": "GitHub owners whose repositories the plugins may set up automatically.",
+    "group": "init",
+    "order": 20,
+    "widget": "chips",
+    "applies": "next-run"
+   }
+  }
+ ],
+ "groups": [
+  {
+   "id": "providers",
+   "label": "Providers",
+   "order": 100
+  },
+  {
+   "id": "providers.code_hosting",
+   "label": "Code hosting",
+   "order": 110
+  },
+  {
+   "id": "providers.task_management",
+   "label": "Task management",
+   "order": 120
+  },
+  {
+   "id": "providers.knowledge_base",
+   "label": "Knowledge base",
+   "order": 130
+  },
+  {
+   "id": "providers.devops.checks",
+   "label": "DevOps checks",
+   "order": 140
+  },
+  {
+   "id": "providers.devops.deployments",
+   "label": "DevOps deployments",
+   "order": 150
+  },
+  {
+   "id": "providers.devops.releases",
+   "label": "DevOps releases",
+   "order": 160
+  },
+  {
+   "id": "providers.secops",
+   "label": "SecOps",
+   "order": 170
+  },
+  {
+   "id": "providers.notifications",
+   "label": "Notifications",
+   "order": 180
+  },
+  {
+   "id": "autonomy",
+   "label": "Autonomy",
+   "order": 200
+  },
+  {
+   "id": "policy",
+   "label": "Repository policy",
+   "order": 300
+  },
+  {
+   "id": "commit",
+   "label": "Commits",
+   "order": 400
+  },
+  {
+   "id": "worktrees",
+   "label": "Worktrees",
+   "order": 500
+  },
+  {
+   "id": "integrations",
+   "label": "Integrations",
+   "order": 600
+  },
+  {
+   "id": "updates",
+   "label": "Updates",
+   "order": 700
+  },
+  {
+   "id": "init",
+   "label": "Automatic setup",
+   "order": 800
+  }
+ ]
+}

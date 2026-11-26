@@ -167,8 +167,6 @@ func run(ctx context.Context, cmd string, args []string) error {
 		return dispatch(ctx, cliEnv{}, invoker, rest)
 	}
 	switch cmd {
-	case "config":
-		return runConfig(ctx, args)
 	case "policy":
 		return runPolicy(ctx, args)
 	case "push":

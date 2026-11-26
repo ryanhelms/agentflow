@@ -195,8 +195,9 @@ func TestEventRuntimeOwnsStoreAndRoutesEvents(t *testing.T) {
 			if u.event.Type != bus.TypeGitHeadChanged {
 				continue
 			}
-			// git.head.changed also recomputes the repository's activity.
-			if u.event.Seq != 1 || len(u.states) != 2 || u.states[0].Projection != "overview" || !strings.Contains(string(u.states[0].State), `"branch":"main"`) || u.states[1].Projection != ProjectionActivity {
+			// git.head.changed also recomputes the repository's activity, and
+			// the worktree's settings (branch, protected).
+			if u.event.Seq != 1 || len(u.states) != 3 || u.states[2].Projection != ProjectionSettings || u.states[0].Projection != "overview" || !strings.Contains(string(u.states[0].State), `"branch":"main"`) || u.states[1].Projection != ProjectionActivity {
 				t.Fatalf("update = %+v", u)
 			}
 			got = true

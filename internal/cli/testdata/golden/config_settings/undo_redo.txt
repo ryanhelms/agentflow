@@ -1,0 +1,48 @@
+$ agentflow config undo --yes
+--- stdout
+personal:autonomy.remote: "confirm" → "suggest"
+personal:approval_window: (unset) → "10m"
+status: saved
+--- stderr
+Agentflow console.settings: confirm (default)
+default sets console.settings (local) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+{
+  "operation": "config.undo",
+  "confirm": [
+    {
+      "id": "personal:approval_window",
+      "reason": "loosens",
+      "message": "Lengthens the approval window from 5m to 10m."
+    }
+  ],
+  "changes": [
+    {
+      "id": "personal:autonomy.remote",
+      "before": {
+        "json": "confirm",
+        "set": true
+      },
+      "after": {
+        "json": "suggest",
+        "set": true
+      }
+    },
+    {
+      "id": "personal:approval_window",
+      "before": {
+        "set": false
+      },
+      "after": {
+        "json": "10m",
+        "set": true
+      }
+    }
+  ],
+  "base": {
+    "personal": "sha256:<digest-4>",
+    "repo": "sha256:<digest-2>"
+  },
+  "after": {
+    "personal": "sha256:<digest-3>"
+  }
+}
