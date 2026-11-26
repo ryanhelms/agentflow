@@ -1,0 +1,3 @@
+# The program that "go build -o timeline-hints ." writes. Never add it to Git.
+/timeline-hints
+/timeline-hints.exe

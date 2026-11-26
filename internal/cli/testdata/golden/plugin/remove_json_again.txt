@@ -1,0 +1,4 @@
+$ agentflow plugin remove ci-notify --yes --json
+--- stdout
+--- error
+plugin not installed: ci-notify

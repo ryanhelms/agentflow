@@ -185,3 +185,81 @@ func TestRepositoryCanOnlyTurnPluginsOff(t *testing.T) {
 		}
 	}
 }
+
+func TestClearPluginRemovesOnlyThatPluginsBlock(t *testing.T) {
+	f := newFixture(t, "task-1")
+	path := filepath.Join(f.home, "config.yml")
+	body := "# my notes\natlassian:\n  email: me@example.com # work\nplugins:\n  ci-notify:\n    enabled: true\n    settings:\n      signal: ci.failed\n  other-plugin:\n    enabled: false\nworktree:\n  root: /tmp/trees\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := f.svc.ClearPlugin("ci-notify")
+	if err != nil || !cleared {
+		t.Fatalf("ClearPlugin = %v, %v", cleared, err)
+	}
+	want := "# my notes\natlassian:\n  email: me@example.com # work\nplugins:\n  other-plugin:\n    enabled: false\nworktree:\n  root: /tmp/trees\n"
+	if got := f.personal(t); got != want {
+		t.Fatalf("personal settings:\n%s\nwant:\n%s", got, want)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %o", info.Mode().Perm())
+	}
+	// A second call finds nothing and writes nothing.
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("second ClearPlugin = %v, %v", cleared, err)
+	}
+	// The last plugin takes the empty plugins key with it.
+	if cleared, err := f.svc.ClearPlugin("other-plugin"); err != nil || !cleared {
+		t.Fatalf("ClearPlugin(other-plugin) = %v, %v", cleared, err)
+	}
+	if got, want := f.personal(t), "# my notes\natlassian:\n  email: me@example.com # work\nworktree:\n  root: /tmp/trees\n"; got != want {
+		t.Fatalf("personal settings:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestClearPluginLeavesAMissingOrUnrelatedFileAlone(t *testing.T) {
+	f := newFixture(t, "task-1")
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("no file: %v, %v", cleared, err)
+	}
+	if _, err := os.Stat(filepath.Join(f.home, "config.yml")); !os.IsNotExist(err) {
+		t.Fatalf("ClearPlugin created the file: %v", err)
+	}
+	// No defaults are written for a file that has no autonomy keys.
+	body := "# only a comment and one key\nupdate:\n  auto: false\n"
+	if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("nothing to clear: %v, %v", cleared, err)
+	}
+	if got := f.personal(t); got != body {
+		t.Fatalf("the file changed:\n%s", got)
+	}
+	for _, id := range []string{"", "../x", "Bad", "a"} {
+		if _, err := f.svc.ClearPlugin(id); err == nil {
+			t.Errorf("ClearPlugin(%q) succeeded", id)
+		}
+	}
+}
+
+func TestClearPluginWritesThroughALinkToADotfilesCheckout(t *testing.T) {
+	f := newFixture(t, "task-1")
+	real := filepath.Join(t.TempDir(), "dotfiles-config.yml")
+	if err := os.WriteFile(real, []byte("plugins:\n  ci-notify:\n    enabled: true\nupdate:\n  auto: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.home, "config.yml")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks are not available:", err)
+	}
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || !cleared {
+		t.Fatalf("ClearPlugin = %v, %v", cleared, err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the link was replaced by a file: %v", err)
+	}
+	if b, _ := os.ReadFile(real); string(b) != "update:\n  auto: false\n" {
+		t.Fatalf("checkout file:\n%s", b)
+	}
+}

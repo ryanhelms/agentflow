@@ -1,0 +1,13 @@
+$ agentflow plugin add <plugin-src> --json
+--- stdout
+{
+  "id": "ci-notify",
+  "name": "CI failure notifications",
+  "version": "0.1.0",
+  "tier": "declarative",
+  "hash": "sha256:<digest-1>",
+  "installed_at": "<time>",
+  "result": "unchanged",
+  "enabled": false,
+  "next": "It stays turned off until you turn it on: open Settings and tick plugins.ci-notify.enabled, or run: agentflow config set plugins.ci-notify.enabled=true"
+}
