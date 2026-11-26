@@ -60,6 +60,23 @@ contains `@AGENTS.md` so Claude Code loads this file.
   refuses cross-repository writes even in this repo's convention-only mode
   ([docs/repo-boundary.md](docs/repo-boundary.md)).
 
+## Active program
+
+The ACP platform program is running. Its goal, plan and ledger are in
+[docs/plans/acp-platform/](docs/plans/acp-platform/).
+
+> **Goal:** Deliver the ACP platform program in `docs/plans/acp-platform/plan.md` to `develop`, phase by phase. Each phase starts with its ADR contract, runs its lanes in parallel (one issue, worktree and PR each), and ends at its gate: all lanes merged, `make check` green, the phase demo working, tag `develop-pN`, ledger updated. Continue until phase 11 is done, then stop and ask the owner to run `agentflow promote`.
+>
+> **Rules for every agent:** Follow `AGENTS.md`. Use the GoF and EIP patterns named in the ADR. Every MCP tool has a CLI command. Every UI update arrives over the SSE event stream. Every config option has a structured control. Never merge into or push to `main`, and never run `agentflow promote`. Tests never call real external services or harnesses.
+>
+> **Stop and wait for the owner when:** a compatibility contract would break; a dependency other than `fsnotify` is needed; a security finding can't be fixed in its lane; a plan decision turns out wrong; or a step needs secrets, credentials or another repository.
+
+While the program is active:
+
+- PRs for program lanes target `develop`, not `main`.
+- Only the coordinator merges into `develop`.
+- The owner runs `agentflow promote` to release `develop` to `main`. No agent runs it.
+
 ## Two things that are easy to confuse
 
 This repo both **is** a product and **is released as** a product. Keep them apart.
@@ -85,6 +102,7 @@ make check        # everything CI runs (vet, test, lint, shellcheck, actionlint,
 make install-hooks   # build ./agentflow and check your commit messages locally
 make snapshot     # local multi-platform GoReleaser build, no publish
 make e2e          # drives the Claude Code plugin with `claude -p` (uses your Claude account)
+go test ./internal/app ./internal/cli -run Golden -update   # rewrite golden files after an intended output change
 scripts/build-blueprint.sh   # rebuild docs/blueprint.html from docs/artifact/
 ```
 
@@ -105,6 +123,7 @@ internal/release/            deployable units, release-please config, version ma
 internal/policy/             autonomy gate, single-use confirm tokens, never-list, audit
 internal/update/             self-update: channel/track, checksum + attestation, rollback
 internal/atlassian, gh/      Jira v3 + Confluence v2 and GitHub REST/GraphQL clients
+internal/goldentest/         golden-file helper for tests: normalises output, compares, -update
 internal/setup/              agentflow init/remove (templates/repo), install (adapters/), auto-init
 adapters/                    per-client files; adapters/claude-code is the plugin
 templates/repo/              files written into consuming repos (dotfiles included)
@@ -135,6 +154,16 @@ for the reader of the changelog.
 - Tests sit beside the code (`*_test.go`), use `t.TempDir()` and real `git` in temp repos,
   and never call real Jira, Confluence or GitHub. Use `httptest` for clients.
 - Keep golangci-lint at 0 issues; justify any `//nolint` inline.
+
+**Golden files.** `internal/app/testdata/golden/` and `internal/cli/testdata/golden/` pin
+the output of write operations: the `Pending` JSON that gated operations return, the result
+once they are applied, and what each command prints (stdout, stderr and the error). They
+change only when the output changes. If a test fails on a golden file and the new output
+is intended, run the package's tests with `-update`, review the diff and commit it with the
+change. Never edit a golden file by hand. Add a scenario to the same test file when you add
+a write operation or change its output. Times, confirmation tokens, approval IDs, prompt
+owners, object IDs and temporary paths are replaced by placeholders in
+`internal/goldentest`; add a rule there rather than a one-off replacement in a test.
 
 **Shell.** `#!/usr/bin/env bash`, `set -euo pipefail`, shellcheck-clean, quote everything,
 and stay compatible with bash 3.2 (macOS), so use `${arr[@]+"${arr[@]}"}` for possibly

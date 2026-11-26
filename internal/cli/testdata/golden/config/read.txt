@@ -1,0 +1,11 @@
+$ agentflow config read --input -
+--- stdin
+{"path": ".agentflow/config.yml"}
+--- stdout
+{
+  "path": ".agentflow/config.yml",
+  "kind": "Repository settings",
+  "editable": true,
+  "content": "agentflow: 1\ncommit: {require_key: false}\ntask_management: {provider: github-issues}\n",
+  "digest": "<digest-1>"
+}

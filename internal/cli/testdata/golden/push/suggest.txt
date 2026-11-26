@@ -1,0 +1,4 @@
+$ agentflow push
+--- stdout
+autonomy.remote sets push to suggest. Run it yourself
+  git push --no-follow-tags --recurse-submodules=no -- 'origin' '<object-1>:refs/heads/feature/pr'

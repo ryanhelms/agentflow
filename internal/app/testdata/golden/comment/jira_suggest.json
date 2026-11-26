@@ -1,0 +1,22 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.remote sets comment to suggest. Run it yourself",
+  "summary": {
+    "comment": "Quota check is in review.",
+    "key": "PLAT-1",
+    "site": "https://tasks.example"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "comment",
+    "level": "suggest",
+    "source": "autonomy.remote",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

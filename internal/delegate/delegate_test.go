@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/boundary"
 )
@@ -119,6 +120,30 @@ func TestStartsNewSession(t *testing.T) {
 			!strings.Contains((*calls)[0], "new-session -d -P -F #{pane_id} -s "+p.Session+" -c /h/agentflow -e "+boundary.SessionEnv+"=/h/agentflow/.git codex "+p.Message) ||
 			(*calls)[1] != "set-option -p -t %42 "+PaneOption+" /h/agentflow/.git" {
 			t.Fatalf("calls %v", *calls)
+		}
+	}
+}
+
+func TestSessionNameIsStableForTheSameRequest(t *testing.T) {
+	fakeTmux(t, "")
+	build := func(task, agent string) *Plan {
+		t.Helper()
+		p, err := Build(t.Context(), home, target, "/h/agentflow", Request{Task: task, Agent: agent, Start: true}, false, resolve)
+		if err != nil || p.Status != StatusStart {
+			t.Fatalf("plan %+v %v", p, err)
+		}
+		return p
+	}
+	first := build("fix it", "claude")
+	// The confirmed apply builds the plan again, later: the name must not move.
+	time.Sleep(1100 * time.Millisecond)
+	again := build("fix it", "claude")
+	if first.Session != again.Session || !slices.Equal(first.Commands, again.Commands) || first.Next != again.Next {
+		t.Fatalf("plan changed between builds:\n%+v\n%+v", first, again)
+	}
+	for _, other := range []*Plan{build("fix it differently", "claude"), build("fix it", "codex")} {
+		if other.Session == first.Session {
+			t.Errorf("different request reused session name %s", first.Session)
 		}
 	}
 }

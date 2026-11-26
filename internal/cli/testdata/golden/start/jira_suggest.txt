@@ -1,0 +1,4 @@
+$ agentflow start PLAT-1 --worktree
+--- stdout
+autonomy.remote sets start to suggest. Run it yourself
+  git switch -c PLAT-1-reach-qa origin/main

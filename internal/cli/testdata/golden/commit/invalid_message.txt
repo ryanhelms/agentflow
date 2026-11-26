@@ -1,0 +1,5 @@
+$ agentflow commit -m "added a widget" --yes
+--- stdout
+✖ subject must look like: feat(scope): add quota API, or feat(PLAT-123): ...
+--- error
+invalid message

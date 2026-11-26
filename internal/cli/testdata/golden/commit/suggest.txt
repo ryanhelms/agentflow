@@ -1,0 +1,5 @@
+$ agentflow commit -m "feat: add widget" --path widget.txt
+--- stdout
+autonomy.local sets commit to suggest. Run it yourself
+  git add -- 'widget.txt' && git commit -m 'feat: add widget
+' -- 'widget.txt'

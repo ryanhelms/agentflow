@@ -1,0 +1,9 @@
+{
+  "issues": [
+    {
+      "code": "format",
+      "message": "subject must look like: feat(scope): add quota API, or feat(PLAT-123): ..."
+    }
+  ],
+  "status": "invalid"
+}

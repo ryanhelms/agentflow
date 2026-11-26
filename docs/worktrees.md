@@ -4,6 +4,10 @@ Each task gets one GitHub issue, one linked Git worktree and one pull request in
 integration branch (`develop`). A coordinator merges the PR. The worktree and its branches
 are removed after the merge. `main` only receives release promotions.
 
+The agentflow repository itself uses a `develop` integration branch while the ACP platform
+program runs ([plans/acp-platform/](plans/acp-platform/)). Program PRs target `develop`,
+only the coordinator merges them, and the owner runs `agentflow promote`.
+
 ## The lifecycle
 
 | Step | Who | Command |
