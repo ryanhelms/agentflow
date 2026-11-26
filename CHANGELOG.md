@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.56.1](https://github.com/ryanhelms/agentflow/compare/v0.56.0...v0.56.1) - 2026-11-26
+
+### Fixes
+
+- keep delegate plans stable between preview and apply (#30) ([b6ced0c](https://github.com/ryanhelms/agentflow/commit/b6ced0c4ef900025b3ee58cca34d1713d6f49f4d))
+
 ## [0.56.0](https://github.com/ryanhelms/agentflow/compare/v0.55.1...v0.56.0) - 2026-11-26
 
 ### Features

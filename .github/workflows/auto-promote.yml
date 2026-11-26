@@ -1,0 +1,242 @@
+# Phase-gate promotion for the ACP platform program: develop -> main without a human merge.
+#
+# The coordinator tags a develop commit `develop-pN` when phase N passes its gate. This
+# workflow then checks the commit and, if every guard passes, merges it into main with a
+# merge commit (not a squash, so main keeps each PR's commit and its type) and dispatches
+# release.yml on main. The merge is made with GITHUB_TOKEN, and pushes made with
+# GITHUB_TOKEN don't trigger workflows, so release.yml would not start on its own;
+# workflow_dispatch does start it.
+#
+# Guards (any failure stops the run before anything is written):
+#   1. The commit is on origin/develop.
+#   2. ci.yml has a successful push run on develop for exactly that commit (waits up to
+#      30 minutes while it is still running).
+#   3. No commit in origin/main..SHA is breaking (`!` or a BREAKING CHANGE footer).
+#      Breaking changes need the owner: they run `agentflow promote` themselves.
+#   4. main has nothing SHA lacks except release.yml's "chore(release): vX.Y.Z" commits and
+#      earlier promotion merges. Anything else on main (a hotfix, a manual commit) stops it.
+#   5. A trial merge of SHA into main is clean.
+# Guards 3 and 4 live in scripts/promote-guard.sh (tests: scripts/test-promote-guard.sh).
+#
+# Interaction with release.yml: each release commits CHANGELOG.md, the README version
+# marker and the plugin manifest versions to main as "chore(release): vX.Y.Z". develop
+# never gets those commits, which is why guard 4 allows them. develop must not edit
+# CHANGELOG.md, the README `agentflow:version` marker or the manifests' "version" fields,
+# so the next merge doesn't conflict; guard 5 stops the run if it would.
+#
+# This workflow file runs from the tagged commit, so develop must contain it.
+#
+# To stop auto-promotion, disable this workflow in the Actions tab, or don't push
+# develop-p* tags. Nothing needs deleting.
+#
+# Dry run: gh workflow run auto-promote.yml -f ref=<tag or sha> -f dry_run=true
+# runs every guard and prints what it would merge and the version release.yml would give.
+name: auto-promote
+
+on:
+  push:
+    tags: ['develop-p*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag or commit SHA on develop to promote
+        required: true
+        type: string
+      dry_run:
+        description: Run the guards and print the plan without merging
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.repository == 'ryanhelms/agentflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write # merge into main
+      actions: write # dispatch release.yml; also covers reading ci.yml runs
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - id: target
+        name: Resolve the commit to promote
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSHED_TAG: ${{ github.ref_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = push ]; then
+            ref=$PUSHED_TAG
+            dry_run=false
+          else
+            ref=$INPUT_REF
+            dry_run=${INPUT_DRY_RUN:-true}
+          fi
+          if ! [[ "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]; then
+            echo "::error::ref '$ref' is not a tag name or commit SHA"
+            exit 1
+          fi
+          git fetch --quiet --force --tags origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/heads/develop:refs/remotes/origin/develop'
+          if ! sha=$(git rev-parse --verify --quiet "$ref^{commit}"); then
+            echo "::error::$ref is not a commit in this repository"
+            exit 1
+          fi
+          {
+            echo "ref=$ref"
+            echo "sha=$sha"
+            echo "dry_run=$dry_run"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::Promoting $ref ($sha), dry_run=$dry_run"
+
+      - name: "Guard 1: the commit is on develop"
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$SHA" origin/develop; then
+            echo "::error::$REF ($SHA) is not reachable from origin/develop. Nothing was merged."
+            exit 1
+          fi
+
+      - name: "Guard 2: ci passed on develop for this commit"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 30 * 60 ))
+          while :; do
+            runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch develop \
+              --commit "$SHA" --event push --limit 20 --json status,conclusion,url)
+            if jq -e 'any(.[]; .conclusion == "success")' <<<"$runs" >/dev/null; then
+              echo "::notice::ci passed: $(jq -r '[.[] | select(.conclusion == "success")][0].url' <<<"$runs")"
+              exit 0
+            fi
+            pending=$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")
+            total=$(jq 'length' <<<"$runs")
+            if [ "$total" -gt 0 ] && [ "$pending" = 0 ]; then
+              echo "::error::ci did not succeed for $SHA on develop: $(jq -c '[.[] | {conclusion, url}]' <<<"$runs"). Nothing was merged."
+              exit 1
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::No finished successful ci push run on develop for $SHA after 30 minutes. Nothing was merged."
+              exit 1
+            fi
+            echo "Waiting for ci on $SHA ($total runs, $pending still running)"
+            sleep 30
+          done
+
+      - name: "Guard 3: no breaking changes"
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! breaking=$(scripts/promote-guard.sh breaking "origin/main..$SHA"); then
+            echo "::error::Breaking changes need the owner; run agentflow promote by hand. Nothing was merged."
+            printf '%s\n' "$breaking"
+            exit 1
+          fi
+
+      - name: "Guard 4: main has only release commits that develop lacks"
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! extra=$(scripts/promote-guard.sh main-extra "$SHA" origin/main); then
+            echo "::error::main has commits that are not on develop and are not release commits. Nothing was merged."
+            printf '%s\n' "$extra"
+            exit 1
+          fi
+
+      - id: plan
+        name: "Guard 5: trial merge and next version"
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git rev-list "origin/main..$SHA")" ]; then
+            echo "::notice::main already contains $SHA; nothing to merge"
+            echo "merge=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "merge=true" >> "$GITHUB_OUTPUT"
+          echo "Commits to merge into main:"
+          git log --oneline "origin/main..$SHA"
+          git checkout --quiet --detach origin/main
+          if ! git -c user.name=auto-promote -c user.email=auto-promote@invalid \
+              merge --quiet --no-ff --no-edit -m "chore(release): promote develop to main ($REF)" "$SHA"; then
+            echo "::error::$SHA does not merge cleanly into main. Nothing was merged."
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+          version=$(bin/next-version.sh --path . --prefix v --branch main --default-branch main)
+          echo "::notice::After the merge, release.yml would publish v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Merge into main
+        if: steps.target.outputs.dry_run != 'true' && steps.plan.outputs.merge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ steps.target.outputs.ref }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          merge=$(gh api --method POST "repos/$GITHUB_REPOSITORY/merges" \
+            -f base=main -f head="$SHA" \
+            -f commit_message="chore(release): promote develop to main ($REF)")
+          if [ -n "$merge" ]; then
+            echo "::notice::Merged $REF into main as $(jq -r .sha <<<"$merge")"
+          else
+            echo "::notice::main already contained $REF; nothing merged"
+          fi
+
+      - name: Dispatch the release
+        if: steps.target.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          for _ in $(seq 1 12); do
+            url=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml --event workflow_dispatch \
+              --branch main --limit 5 --json url,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$started\")][0].url // empty")
+            if [ -n "$url" ]; then
+              echo "::notice::release run: $url"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::release.yml was dispatched; find the run in the Actions tab"
+
+      - name: Dry run summary
+        if: steps.target.outputs.dry_run == 'true'
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+          SHA: ${{ steps.target.outputs.sha }}
+          MERGE: ${{ steps.plan.outputs.merge }}
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$MERGE" = true ]; then
+            echo "::notice::Dry run: all guards passed. Would merge $REF ($SHA) into main and release v$VERSION."
+          else
+            echo "::notice::Dry run: all guards passed. main already contains $REF; would only dispatch release.yml."
+          fi

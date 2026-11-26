@@ -186,14 +186,23 @@ func TestEventRuntimeOwnsStoreAndRoutesEvents(t *testing.T) {
 	if head, _ := ev.store.Head(ctx); head[ev.id] != 1 {
 		t.Fatalf("store head = %v", head)
 	}
-	select {
-	case u := <-l.ch:
-		// git.head.changed also recomputes the repository's activity.
-		if u.event.Seq != 1 || len(u.states) != 2 || u.states[0].Projection != "overview" || !strings.Contains(string(u.states[0].State), `"branch":"main"`) || u.states[1].Projection != ProjectionActivity {
-			t.Fatalf("update = %+v", u)
+	deadline := time.After(5 * time.Second)
+	for got := false; !got; {
+		select {
+		case u := <-l.ch:
+			// The runtime's GitHub poller may report its health first; skip that
+			// transient event and wait for the one published above.
+			if u.event.Type != bus.TypeGitHeadChanged {
+				continue
+			}
+			// git.head.changed also recomputes the repository's activity.
+			if u.event.Seq != 1 || len(u.states) != 2 || u.states[0].Projection != "overview" || !strings.Contains(string(u.states[0].State), `"branch":"main"`) || u.states[1].Projection != ProjectionActivity {
+				t.Fatalf("update = %+v", u)
+			}
+			got = true
+		case <-deadline:
+			t.Fatal("no projector update")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("no projector update")
 	}
 	if _, err := rt.bus.Publish(ctx, bus.Event{Type: bus.TypeGitHeadChanged, Source: "test", Repo: repoB, Worktree: "main"}); err == nil {
 		t.Fatal("an event for a repository without a store was accepted")
