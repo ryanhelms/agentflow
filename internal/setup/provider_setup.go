@@ -12,14 +12,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/managedcli"
-	"github.com/nscaledev/agentflow/internal/managedgh"
-	"github.com/nscaledev/agentflow/internal/managedmcp"
-	"github.com/nscaledev/agentflow/internal/provider/asana"
-	"github.com/nscaledev/agentflow/internal/provider/devopsfixture"
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/managedcli"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/managedmcp"
+	"github.com/ryanhelms/agentflow/internal/provider/asana"
+	"github.com/ryanhelms/agentflow/internal/provider/devopsfixture"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 type ProviderRequirement struct {

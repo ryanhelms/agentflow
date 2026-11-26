@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

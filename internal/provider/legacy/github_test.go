@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/gh"
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 type githubMock struct {

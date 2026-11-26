@@ -8,7 +8,7 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 type boundTransport struct {

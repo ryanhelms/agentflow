@@ -16,9 +16,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/mcpserver"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/mcpserver"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 // Start the real CLI dispatcher and an MCP client in the same isolated

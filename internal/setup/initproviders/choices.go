@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/templates"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/templates"
 	"gopkg.in/yaml.v3"
 )
 

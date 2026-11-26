@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 func TestDocumentEditorUsesCurrentSourceAndDoesNotWriteIt(t *testing.T) {

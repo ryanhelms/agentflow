@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/setup"
-	"github.com/nscaledev/agentflow/internal/version"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/version"
 )
 
 type item struct {

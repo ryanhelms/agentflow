@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 func TestConnectionDetailsOmitPrivateProviderData(t *testing.T) {

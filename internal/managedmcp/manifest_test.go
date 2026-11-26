@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision"
 )
 
 func TestTrustedMCPManifest(t *testing.T) {

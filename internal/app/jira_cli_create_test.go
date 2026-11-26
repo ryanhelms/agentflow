@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 func TestJiraCreateStopsOnMCPFailure(t *testing.T) {

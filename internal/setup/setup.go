@@ -14,10 +14,10 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/nscaledev/agentflow/adapters"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/version"
-	"github.com/nscaledev/agentflow/templates"
+	"github.com/ryanhelms/agentflow/adapters"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/version"
+	"github.com/ryanhelms/agentflow/templates"
 )
 
 // Result lists what a setup step did.

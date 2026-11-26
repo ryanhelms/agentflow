@@ -13,9 +13,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/notifications"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/notifications"
 )
 
 var slackWorkspace = regexp.MustCompile(`^T[A-Z0-9]{8,31}$`)

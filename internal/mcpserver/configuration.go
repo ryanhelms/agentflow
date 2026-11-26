@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/configconsole"
 )
 
 // Keep the preparation tool read-only even for hosts which approve all reads.

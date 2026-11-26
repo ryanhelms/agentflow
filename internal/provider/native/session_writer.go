@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/nscaledev/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 const (

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/gh"
 )
 
 type pullBranch struct {

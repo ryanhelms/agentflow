@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/githubissues"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/githubissues"
 )
 
 func TestSecOpsTriageReconcilesAmbiguousIssueCreate(t *testing.T) {

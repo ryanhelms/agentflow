@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/event"
+	"github.com/ryanhelms/agentflow/internal/event"
 )
 
 type GitHubTaskEventResult struct {

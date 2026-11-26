@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/setup"
 )
 
 // InitResult is what `agentflow init` wrote: repo files, then the release setup.

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/nscaledev/agentflow/internal/configconsole"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
-	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 type edit struct {

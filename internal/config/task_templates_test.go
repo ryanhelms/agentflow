@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 )
 
 func TestTaskTemplateSettings(t *testing.T) {

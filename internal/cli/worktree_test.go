@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/worktree"
+	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
 func TestWorktreeCommands(t *testing.T) {

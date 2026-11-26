@@ -14,9 +14,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nscaledev/agentflow/adapters"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/templates"
+	"github.com/ryanhelms/agentflow/adapters"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/templates"
 )
 
 // RemoveOptions control Remove.

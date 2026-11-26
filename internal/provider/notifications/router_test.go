@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

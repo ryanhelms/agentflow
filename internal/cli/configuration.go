@@ -10,8 +10,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/configconsole"
 	"golang.org/x/term"
 )
 

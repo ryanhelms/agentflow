@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
 )
 
 func (e *enrollment) metadata(ctx context.Context, address string, out any) error {

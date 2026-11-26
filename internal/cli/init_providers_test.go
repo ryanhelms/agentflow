@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/setup"
-	"github.com/nscaledev/agentflow/internal/setup/initproviders"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/setup"
+	"github.com/ryanhelms/agentflow/internal/setup/initproviders"
 )
 
 func TestGuidedInitCLI(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/provider/nativeoauth"
+	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
 )
 
 // OpenResult can safely be returned through chat. The browser alone receives

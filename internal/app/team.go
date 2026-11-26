@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/commit"
-	"github.com/nscaledev/agentflow/internal/policy"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/filesystem"
-	"github.com/nscaledev/agentflow/internal/provider/legacy"
-	"github.com/nscaledev/agentflow/internal/provider/repository"
+	"github.com/ryanhelms/agentflow/internal/commit"
+	"github.com/ryanhelms/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/filesystem"
+	"github.com/ryanhelms/agentflow/internal/provider/legacy"
+	"github.com/ryanhelms/agentflow/internal/provider/repository"
 )
 
 // Collisions describes other work on the same ticket or files.

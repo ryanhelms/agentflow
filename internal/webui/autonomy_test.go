@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/consolecfg"
 )
 
 func TestPersonalAutonomySave(t *testing.T) {

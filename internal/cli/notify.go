@@ -7,7 +7,7 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/app"
 )
 
 func runNotify(ctx context.Context, args []string) error {

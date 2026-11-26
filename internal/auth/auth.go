@@ -14,7 +14,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/nscaledev/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
 )
 
 const (

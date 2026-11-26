@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/config"
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 // Run probes without stdin, a pager, or printing the command's response. In

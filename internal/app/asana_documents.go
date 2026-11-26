@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/atlassian"
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/filesystem"
-	"github.com/nscaledev/agentflow/internal/provider/githubissues"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/nativemap"
-	"github.com/nscaledev/agentflow/internal/provider/repository"
-	"github.com/nscaledev/agentflow/internal/provider/twg"
+	"github.com/ryanhelms/agentflow/internal/atlassian"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/filesystem"
+	"github.com/ryanhelms/agentflow/internal/provider/githubissues"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/nativemap"
+	"github.com/ryanhelms/agentflow/internal/provider/repository"
+	"github.com/ryanhelms/agentflow/internal/provider/twg"
 )
 
 func (a *App) addTaskDocuments(ctx context.Context, tc *TicketContext, task provider.Task) error {

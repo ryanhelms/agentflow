@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider"
-	"github.com/nscaledev/agentflow/internal/provider/okf"
+	"github.com/ryanhelms/agentflow/internal/provider"
+	"github.com/ryanhelms/agentflow/internal/provider/okf"
 )
 
 func writer(t *testing.T, dir, format string) *Knowledge {

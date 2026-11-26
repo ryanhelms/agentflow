@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/nscaledev/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
 // Automatic init modes (~/.agentflow/config.yml init.auto). The AI-client plugins' session

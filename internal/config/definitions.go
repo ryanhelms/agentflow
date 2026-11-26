@@ -18,7 +18,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/nscaledev/agentflow/internal/contract"
+	"github.com/ryanhelms/agentflow/internal/contract"
 )
 
 // Provider definitions are layered YAML files. Later layers win, except

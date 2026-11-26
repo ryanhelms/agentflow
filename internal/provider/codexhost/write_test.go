@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
 const writeInventory = `{"id":3,"method":"mcpServerStatus/list","params":{"threadId":"scratch","serverName":"slack","detail":"toolsAndAuthOnly"}}`

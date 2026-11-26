@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nscaledev/agentflow/internal/tasktemplate"
+	"github.com/ryanhelms/agentflow/internal/tasktemplate"
 )
 
 // TaskTemplateSettings applies to task management independently of the provider.

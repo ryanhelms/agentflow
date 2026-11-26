@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/nscaledev/agentflow/internal/app"
-	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/app"
+	"github.com/ryanhelms/agentflow/internal/gh"
 )
 
 // The commands in this file give the MCP tools that had no terminal

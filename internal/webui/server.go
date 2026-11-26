@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/configconsole"
-	"github.com/nscaledev/agentflow/internal/gitx"
-	"github.com/nscaledev/agentflow/internal/policy"
+	"github.com/ryanhelms/agentflow/internal/configconsole"
+	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 //go:embed static

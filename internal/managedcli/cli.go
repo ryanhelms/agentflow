@@ -10,10 +10,10 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/nscaledev/agentflow/internal/managedgh"
-	"github.com/nscaledev/agentflow/internal/provision"
-	"github.com/nscaledev/agentflow/internal/provision/local"
-	"github.com/nscaledev/agentflow/internal/provision/user"
+	"github.com/ryanhelms/agentflow/internal/managedgh"
+	"github.com/ryanhelms/agentflow/internal/provision"
+	"github.com/ryanhelms/agentflow/internal/provision/local"
+	"github.com/ryanhelms/agentflow/internal/provision/user"
 )
 
 type Tool struct {

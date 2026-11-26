@@ -5,8 +5,8 @@ import (
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/nscaledev/agentflow/internal/provider/native"
-	"github.com/nscaledev/agentflow/internal/provider/nativemap"
+	"github.com/ryanhelms/agentflow/internal/provider/native"
+	"github.com/ryanhelms/agentflow/internal/provider/nativemap"
 )
 
 var timestamp = regexp.MustCompile(`^[0-9]{1,16}\.[0-9]{6}$`)

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nscaledev/agentflow/internal/gh"
+	"github.com/ryanhelms/agentflow/internal/gh"
 )
 
 func TestLatestStableReleaseConstraints(t *testing.T) {
