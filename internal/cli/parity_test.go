@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,14 +17,17 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/mcpserver"
 	"github.com/ryanhelms/agentflow/internal/provider/native"
 )
 
-// mcpToCLI maps every statically registered MCP tool to the CLI command that
-// runs the same internal/app operation. A new static tool must add a CLI
-// command and a row here.
-var mcpToCLI = map[string]string{
+// legacyMCPToCLI maps every MCP tool not yet in the command registry to the
+// CLI command that runs the same internal/app operation. Registered
+// operations get their row from command.Default.ParityRows (see mcpToCLI),
+// so a migration never edits this map; the phase 3 cleanup deletes the dead
+// rows.
+var legacyMCPToCLI = map[string]string{
 	"agentflow_ui_open":               "ui",
 	"agentflow_config":                "config",
 	"agentflow_config_apply":          "config publish",
@@ -61,6 +66,7 @@ var mcpToCLI = map[string]string{
 	"agentflow_review_reply":          "review reply",
 	"agentflow_ship_status":           "status",
 	"agentflow_standup":               "standup",
+	"agentflow_events":                "events",
 	"agentflow_eod_post":              "eod post",
 	"agentflow_docs_get":              "docs get",
 	"agentflow_docs_search":           "docs search",
@@ -74,6 +80,15 @@ var mcpToCLI = map[string]string{
 	"agentflow_setup_apply":           "setup apply",
 }
 
+// mcpToCLI maps every statically registered MCP tool to its CLI command: the
+// registry's rows, then the legacy rows for tools the registry does not
+// have. Registry rows win.
+var mcpToCLI = func() map[string]string {
+	rows := maps.Clone(legacyMCPToCLI)
+	maps.Copy(rows, command.Default.ParityRows())
+	return rows
+}()
+
 // definitionTool reports whether a tool was generated at runtime from a
 // provider definition rather than registered statically. Such tools get their
 // CLI command from the same definition and are checked separately, not
@@ -81,6 +96,16 @@ var mcpToCLI = map[string]string{
 func definitionTool(string) bool { return false }
 
 func registeredTools(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, tool := range registeredToolList(t) {
+		names = append(names, tool.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func registeredToolList(t *testing.T) []*mcp.Tool {
 	t.Helper()
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
@@ -102,12 +127,62 @@ func registeredTools(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var names []string
-	for _, tool := range res.Tools {
-		names = append(names, tool.Name)
+	return res.Tools
+}
+
+// eventsToolInputs maps each input of agentflow_events to the flag of
+// `agentflow events` that does the same. The flags --all-repos, --follow and
+// --json have no tool input: agents work in one repository, poll with the
+// cursor and always get JSON.
+var eventsToolInputs = map[string]string{"since": "--since", "types": "--type", "topics": "--topic", "limit": "--limit"}
+
+func TestEventsToolInputsAreCLIFlags(t *testing.T) {
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	var schema map[string]any
+	for _, tool := range registeredToolList(t) {
+		if tool.Name == "agentflow_events" {
+			raw, err := json.Marshal(tool.InputSchema)
+			if err != nil || json.Unmarshal(raw, &schema) != nil {
+				t.Fatalf("input schema: %v", err)
+			}
+		}
 	}
-	sort.Strings(names)
-	return names
+	properties, _ := schema["properties"].(map[string]any)
+	if len(properties) == 0 {
+		t.Fatal("agentflow_events has no inputs")
+	}
+	entry := usageEntry("events")
+	if !strings.Contains(entry, "--all-repos") {
+		t.Fatalf("usage entry of events not found or incomplete:\n%s", entry)
+	}
+	for input := range properties {
+		flagName, ok := eventsToolInputs[input]
+		switch {
+		case !ok:
+			t.Errorf("agentflow_events input %q has no CLI flag: add the flag and a row in eventsToolInputs", input)
+		case !strings.Contains(entry, flagName):
+			t.Errorf("the usage text of events does not list %s:\n%s", flagName, entry)
+		}
+	}
+}
+
+// usageEntry returns the usage text of one command: its line and the lines
+// that continue it.
+func usageEntry(command string) string {
+	var out []string
+	for _, line := range strings.Split(usage, "\n") {
+		switch {
+		case strings.HasPrefix(line, "  "+command+" "):
+			out = append(out, line)
+		case len(out) > 0 && strings.HasPrefix(line, strings.Repeat(" ", 20)):
+			out = append(out, line)
+		case len(out) > 0:
+			return strings.Join(out, "\n")
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 func TestEveryMCPToolHasCLICommand(t *testing.T) {

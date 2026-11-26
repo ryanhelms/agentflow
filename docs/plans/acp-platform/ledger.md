@@ -4,27 +4,37 @@ One row per lane in [plan.md](plan.md). The coordinator updates this table when 
 
 Models: O = Opus 5.5, S = Sonnet 5.5, F = Fable 5.2.
 
+Phase gates:
+
+| Phase | Integration PR | Tag | Demo | Status |
+| --- | --- | --- | --- | --- |
+| 1 | #31 | `develop-p1` at `5cf3e6d` | the live event pipeline end to end | done |
+| 2 | #51 | `develop-p2` at `a5648e3` | approvals, the commit hook, config, client settings and tabs live; MCP reload | done |
+| 3 | #59 (contract, issue #52) | | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | in integration |
+
+Lanes:
+
 | Lane | Work | Model | Issue | PR | Status |
 | --- | --- | --- | --- | --- | --- |
 | 0.1 | Create `develop`. PR into `main` (you merge it): `policy.coordinator_merge: true`, CI on `push` to `develop`, the `AGENTS.md` "Active program" section, `docs/plans/acp-platform/{goal,plan,ledger}.md`, and a README/`docs/worktrees.md` note | O | #12 | | in progress |
 | 0.2 | Golden tests that pin today's `Pending` JSON and CLI `--json` output for about 10 operations | S | #13 | | in progress |
 | 1.0 | Phase 1 contract ADR | O | #14 | | in progress |
-| 1.1 | Bus: Pub-Sub, Point-to-Point, Wire Tap to `policy.Gate.Audit`, Dead Letter, bounded buffers | O | | | pending |
-| 1.2 | Message store: JSONL, rotation, 7 days / 50 MB retention, replay from cursor, single-writer rule | O | | | pending |
-| 1.3 | Watcher, git and repo config only: HEAD, index, refs, worktrees, rebase state, `.agentflow/*`; fsnotify with polling fallback; debounce (Aggregator) | O | | | pending |
-| 1.4 | SSE endpoint `/api/events`: snapshot + delta, `Last-Event-ID` replay, resync; overview projection; `agentflow events` CLI and `agentflow_events` MCP | O | | | pending |
-| 1.5 | Browser event client: one SharedWorker stream, snapshot store, connection and resync states; overview panel driven by it | F | | | pending |
-| 2.1 | Watcher, more sources: approvals journal, `~/.agentflow/**`, client settings files | S | | | pending |
-| 2.2 | Hook → daemon local socket (Unix socket; loopback with token on Windows); hooks publish `hook.*` and `commit.created` | S | | | pending |
-| 2.3 | GitHub poller with ETags and rate-limit backoff, publishing `gh.*` | S | | | pending |
-| 2.4 | Activity, approvals and tabs projections; `tabHub` moved onto the stream; old tab stream retired | O | | | pending |
-| 2.5 | UI: activity, approvals and handoff panels driven by events; resync control; live "changed" highlights | F | | | pending |
-| 2.6 | MCP server reloads config on `config.changed` | S | | | pending |
-| 3.1 | Command registry and Invoker; CLI dispatch, MCP tools, usage and parity derived from it; 3 operations moved as examples | O | | | pending |
-| 3.2 | Move commit, PR, push and review (after 3.1) | S | | | pending |
-| 3.3 | Move task, transition, comment, ticket, AC and scope (after 3.1) | S | | | pending |
-| 3.4 | Move docs, release, notify, setup, worktree and secops (after 3.1) | S | | | pending |
-| 3.5 | Timeline UI: live operation feed, filters, links to issue, PR and audit entry | F | | | pending |
+| 1.1 | Bus: Pub-Sub, Point-to-Point, Wire Tap to `policy.Gate.Audit`, Dead Letter, bounded buffers | O | | #31 | done |
+| 1.2 | Message store: JSONL, rotation, 7 days / 50 MB retention, replay from cursor, single-writer rule | O | | #31 | done |
+| 1.3 | Watcher, git and repo config only: HEAD, index, refs, worktrees, rebase state, `.agentflow/*`; fsnotify with polling fallback; debounce (Aggregator) | O | | #31 | done |
+| 1.4 | SSE endpoint `/api/events`: snapshot + delta, `Last-Event-ID` replay, resync; overview projection; `agentflow events` CLI and `agentflow_events` MCP | O | | #31 | done |
+| 1.5 | Browser event client: one SharedWorker stream, snapshot store, connection and resync states; overview panel driven by it | F | | #31 | done |
+| 2.1 | Watcher, more sources: approvals journal, `~/.agentflow/**`, client settings files | S | | #51 | done |
+| 2.2 | Hook → daemon local socket (Unix socket; loopback with token on Windows); hooks publish `hook.*` and `commit.created` | S | | #51 | done |
+| 2.3 | GitHub poller with ETags and rate-limit backoff, publishing `gh.*` | S | | #51 | done |
+| 2.4 | Activity, approvals and tabs projections; `tabHub` moved onto the stream; old tab stream retired | O | | #51 | done |
+| 2.5 | UI: activity, approvals and handoff panels driven by events; resync control; live "changed" highlights | F | | #51 | done |
+| 2.6 | MCP server reloads config on `config.changed` | S | | #51 | done |
+| 3.1 | Command registry and Invoker; CLI dispatch, MCP tools, usage and parity derived from it; 3 operations moved as examples | O | #53 | #61 (in #59) | in integration |
+| 3.2 | Move commit, PR, push and review (after 3.1) | S | #54 | #63 (in #59) | in integration |
+| 3.3 | Move task, transition, comment, ticket, AC and scope (after 3.1) | S | #55 | #62 (in #59) | in integration |
+| 3.4 | Move docs, release, notify, setup, worktree and secops (after 3.1) | S | #56 | #64 (in #59) | in integration |
+| 3.5 | Timeline UI: live operation feed, filters, links to issue, PR and audit entry | F | #57 | #60 (in #59) | in integration |
 | 4.1 | `Field` metadata (label, description, group, widget, applies, sensitive, source) and `TestEveryConfigFieldHasControl` | S | | | pending |
 | 4.2 | Settings backend as Commands: change set, live checks, preview, atomic save, personal layer applied at once, repo layer written to the worktree and published as a PR, undo last save; `agentflow config set A=1 B=2` | O | | | pending |
 | 4.3 | Settings UI: controls for every field type, Save bar, preview, conflict warnings, undo, search, "modified" filter | F | | | pending |

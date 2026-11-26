@@ -29,6 +29,7 @@ let session = "";
 let authAttempt = 0;
 let state = null;
 let activity = null;
+let commanderNote = "";
 let roleID = "";
 let filePath = "";
 let review = null;
@@ -111,23 +112,31 @@ function clearCommanderActivity() {
   if (state) renderActivity();
 }
 
+// Worker requests are the one part of the overview the event stream does not
+// carry yet. They load with the checkout and again on Resync, and only for a
+// console that an Agent Commander session opened.
+async function loadCommanderActivity() {
+  if (!commanderContext) return;
+  try { activity = await request("api/activity"); }
+  catch (e) { commanderNote = e.message; }
+  if (state) renderActivity();
+}
+
 function setCommanderContext(value) {
   const previous = commanderContext;
   commanderContext = typeof value === "string" ? value : "";
+  if (commanderContext) commanderNote = "";
   try {
     if (commanderContext) sessionStorage.setItem(commanderKey,commanderContext);
     else sessionStorage.removeItem(commanderKey);
   } catch { /* Use the context only in this page. */ }
   clearCommanderActivity();
-  if (commanderContext !== previous && state && !$("console-shell").hidden) {
-    tabs.stop();
-    if (session) tabs.start();
-  }
+  // The console scopes a tab by the capability it attached with.
+  if (commanderContext !== previous && state && !$("console-shell").hidden && session) tabs.refresh();
 }
 
 function acceptSession(data, freshLaunch = false) {
   if (typeof data.session !== "string" || !data.session) throw new Error("The local console could not start this session.");
-  if (freshLaunch) tabs.stop();
   session = data.session;
   if (freshLaunch) setCommanderContext(data.commander);
   try { sessionStorage.setItem(sessionKey,session); } catch { /* Keep this worktree session in memory. */ }
@@ -187,13 +196,12 @@ async function request(path, body, retried = false) {
   catch { throw new Error("Cannot reach the local agentflow process. Check that agentflow ui is still running."); }
   const data = await response.json().catch(() => ({}));
   if (commanderRequest) {
-    if (epoch !== commanderEpoch) throw new Error("The Commander session changed. Check activity again.");
+    if (epoch !== commanderEpoch) throw new Error("The Commander session changed. Use Resync to load its worker requests.");
     if (data.commander_reconnect === true) {
       setCommanderContext("");
-      if (path === "api/reply") {
-        $("activity-note").textContent = data.error || reconnectCommander;
-        throw new Error(data.error || reconnectCommander);
-      }
+      commanderNote = data.error || data.warning || reconnectCommander;
+      if (state) renderActivity();
+      if (path === "api/reply") throw new Error(data.error || reconnectCommander);
     }
   }
   if (!response.ok) {
@@ -202,7 +210,7 @@ async function request(path, body, retried = false) {
       error.status = response.status;
       if (!bootstrap) {
         if (!retried && await resumeSession(credential)) {
-          if (commanderRequest && epoch !== commanderEpoch) throw new Error("The Commander session changed. Check activity again.");
+          if (commanderRequest && epoch !== commanderEpoch) throw new Error("The Commander session changed. Use Resync to load its worker requests.");
           return request(path,body,true);
         }
         expireSession(credential);
@@ -262,6 +270,7 @@ function showConnection(message) {
     if ($("setting-dialog").open) rememberedModal = modalSnapshot();
   }
   tabs.stop();
+  live.stop();
   $("console-shell").hidden = true;
   if ($("setting-dialog").open) $("setting-dialog").close();
 
@@ -426,13 +435,15 @@ function hideSettingForNavigation() {
   }
 }
 
+async function renewSession(previous) {
+  if (await resumeSession(previous)) return true;
+  expireSession(previous);
+  return false;
+}
+
 const tabs = consoleTabs({
   credential: () => session, commander: () => commanderContext, request,
-  async unauthorized(previous) {
-    if (await resumeSession(previous)) return true;
-    expireSession(previous);
-    return false;
-  },
+  unauthorized: renewSession,
   navigate({screen,role="",target}) {
     if (!views.includes(screen) || (role && (screen !== "providers" || !Object.hasOwn(roleNames,role)))) return null;
     let next;
@@ -441,6 +452,8 @@ const tabs = consoleTabs({
       if (next.origin !== location.origin || next.username || next.password || next.search || !/^\/w\/[a-z0-9][a-z0-9-]{0,62}\/$/.test(next.pathname)) return null;
     }
     window.focus();
+    // A navigation may come from another session: drop this tab's worker requests.
+    if ((activity?.attention || []).some(commanderItem)) commanderNote = "Worker requests were cleared when this tab was asked to navigate. Use Resync to load them again.";
     clearCommanderActivity();
     const current = destination();
     if (!next && current.screen === screen && (!role || roleID === role)) return {handled:true};
@@ -467,38 +480,287 @@ const tabs = consoleTabs({
     }};
   }
 });
-window.addEventListener("pagehide",() => tabs.stop());
+window.addEventListener("pagehide",() => { tabs.stop(); live.stop(); });
 window.addEventListener("pageshow",event => {
   leavingForWorktree = false;
   if (!$("console-shell").hidden) {
     if (event.persisted) {
       clearCommanderActivity();
       loadState();
-    } else tabs.start();
+    } else { tabs.start(); live.start(); }
   }
 });
 
-function renderOverview() {
+// Live overview (docs/design/ui/live-stream.md). The event stream keeps the
+// checkout facts current; api/state supplies them until the first snapshot.
+const worktreeID = /^\/w\/([a-z0-9][a-z0-9-]{0,62})\/$/.exec(location.pathname)?.[1] || "*";
+const streamLabels = {idle: "Connecting", connecting: "Connecting", live: "Live", reconnecting: "Reconnecting", resyncing: "Resyncing", offline: "Offline"};
+const offlineNotes = {
+  unsupported: "This console does not serve live updates. Use Resync to reload the checkout.",
+  forbidden: "The console refused the live stream for this worktree. Use Resync to try again.",
+  busy: "Too many live streams are open for this console. Close another console tab, or use Resync.",
+  unavailable: "Live updates are not available for this worktree yet. The console keeps retrying."
+};
+const operationNames = {rebase: "Rebase", merge: "Merge", "cherry-pick": "Cherry-pick", revert: "Revert", bisect: "Bisect"};
+const shownFacts = new Map();
+const flashTimers = new WeakMap();
+let liveOverview = null;
+let liveStatus = {state: "connecting", reason: ""};
+let liveReady = false;
+let loadedAt = null;
+let configTimer;
+
+// The overview follows its own worktree; activity and approvals are states of
+// the whole repository; the tabs state carries navigation for this tab.
+const liveTopics = ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**",
+  "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**"];
+const live = AgentflowEvents.connect({
+  endpoint: new URL("api/events",location.href).href,
+  credential: () => session,
+  topics: () => liveTopics,
+  tab: () => tabs.id,
+  unauthorized: renewSession,
+  onStatus(status) {
+    const previous = liveStatus.state;
+    liveStatus = status;
+    if (status.state === "offline" && previous !== "offline") announce("Live updates are offline. The overview shows the last loaded values.");
+    if (status.state === "live" && previous === "offline") announce("Live updates restored.");
+    renderStream();
+  },
+  onSnapshot({states}) {
+    liveReady = true;
+    showLive(states.find(ownOverview)?.state ?? null);
+    showRepository("activity",states.find(repositoryState("activity"))?.state ?? null);
+    showRepository("approvals",states.find(repositoryState("approvals"))?.state ?? null);
+    showRepository("timeline",states.find(repositoryState("timeline"))?.state ?? null);
+    tabs.receive(states.find(ownTabs)?.state ?? null);
+  },
+  onDelta({states,event}) {
+    const own = states.find(ownOverview);
+    if (own) showLive(own.state);
+    for (const name of ["activity","approvals","timeline"]) {
+      const next = states.find(repositoryState(name));
+      if (next) showRepository(name,next.state);
+    }
+    const mine = states.find(ownTabs);
+    if (mine) tabs.receive(mine.state);
+    if (event?.type === "config.layer.changed" && (!event.worktree || event.worktree === worktreeID)) {
+      clearTimeout(configTimer);
+      configTimer = setTimeout(configChangedOnDisk,300);
+    }
+  }
+});
+
+function ownOverview(entry) {
+  return entry.projection === "overview" && (worktreeID === "*" || entry.worktree === worktreeID);
+}
+function ownTabs(entry) {
+  return entry.projection === "tabs" && entry.worktree === worktreeID;
+}
+// A stream serves one repository, so a state without a worktree is this one's.
+function repositoryState(name) {
+  return entry => entry.projection === name && !entry.worktree;
+}
+
+// Activity and approvals (docs/design/ui/live-stream.md, "Live panels").
+// liveRepository holds the raw state last received; the panels keep the last
+// values on screen when the stream has none.
+const liveRepository = {activity: null, approvals: null, timeline: null};
+const panels = AgentflowPanels.createPanels({
+  root: document, worktree: worktreeID, announce,
+  actionName: action => commonActions[action]
+});
+// The operation timeline (docs/design/ui/live-stream.md, "Timeline").
+const timeline = AgentflowTimeline.createTimeline({
+  root: document, worktree: worktreeID, announce,
+  actionName: action => commonActions[action]
+});
+
+function showRepository(name, raw) {
+  const previous = liveRepository[name];
+  liveRepository[name] = raw;
+  if (!state || $("console-shell").hidden) return;
+  renderRepository(name,Boolean(previous && raw));
+}
+
+function renderRepository(name, flash = false) {
+  if (name === "activity") {
+    panels.showActivity(liveRepository.activity,flash);
+    renderHandoff(flash);
+  } else if (name === "timeline") timeline.show(liveRepository.timeline,flash);
+  else panels.showApprovals(liveRepository.approvals,flash);
+  renderStream();
+}
+
+// The overview projection's state (OverviewState in projection_overview.go).
+// head is the short OID, "" before the first commit; upstream is
+// {name, ahead, behind} and absent when the branch has none. Unknown fields
+// are ignored and missing ones read as empty, so the shape can grow.
+function overviewState(raw) {
+  if (raw === null || typeof raw !== "object") return null;
+  const text = value => typeof value === "string" ? value : "";
+  const count = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
+  const config = raw.config !== null && typeof raw.config === "object" ? raw.config : {};
+  const problems = Array.isArray(config.problems) ? config.problems.filter(issue => typeof issue === "string" && issue) : [];
+  if (config.valid === false && !problems.length) problems.push("The repository configuration is not valid.");
+  const upstream = raw.upstream !== null && typeof raw.upstream === "object"
+    ? {name: text(raw.upstream.name), ahead: count(raw.upstream.ahead), behind: count(raw.upstream.behind)} : null;
+  const staged = count(raw.staged), unstaged = count(raw.unstaged), untracked = count(raw.untracked);
+  return {
+    branch: text(raw.branch), head: text(raw.head), oid: text(raw.oid), detached: raw.detached === true, upstream,
+    changed: count(raw.changed) || staged + unstaged + untracked, staged, unstaged, untracked,
+    operation: text(raw.operation), task: text(raw.task), problems
+  };
+}
+
+// One polite sentence group per update. Messages from the same update are
+// joined, so one screen's change does not replace another's.
+let announcements = [];
+function announce(message) {
+  announcements.push(message);
+  if (announcements.length > 1) return;
+  // Clearing first makes a repeated message audible again.
+  $("live-announcer").textContent = "";
+  requestAnimationFrame(() => {
+    $("live-announcer").textContent = announcements.join(" ");
+    announcements = [];
+  });
+}
+
+function showLive(raw) {
+  const previous = liveOverview;
+  liveOverview = overviewState(raw);
+  if (!state || $("console-shell").hidden) return;
+  const changed = renderOverview(Boolean(previous && liveOverview));
+  if (changed.length) announce(changed.join(". ") + ".");
+}
+
+function configChangedOnDisk() {
+  if (!state || !session || $("console-shell").hidden) return;
+  if (publishing || autonomySaving || autonomyForms.size || hasPendingEdits()) {
+    notice("status","The configuration changed on disk. Save or discard your edits, then use Resync to load it.");
+    return;
+  }
+  loadState();
+}
+
+function clock(date) {
+  return date.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+}
+
+function renderStream() {
+  const name = Object.hasOwn(streamLabels,liveStatus.state) ? liveStatus.state : "connecting";
+  $("stream-state").dataset.state = name;
+  $("stream-label").textContent = streamLabels[name];
+  let note = "";
+  const since = loadedAt ? " The overview shows the values loaded at " + clock(loadedAt) + "." : "";
+  if (name === "offline") note = offlineNotes[liveStatus.reason] || "Live updates are offline." + (liveOverview ? " The overview shows the last values it received." : since) + " The console keeps retrying.";
+  else if (name === "live" && liveReady && !liveOverview) note = "The live stream has no data for this worktree yet." + since;
+  $("live-note").textContent = note;
+  $("live-note").hidden = !note;
+  // The repository panels: say when their values may be stale or are missing.
+  const retrying = " The console keeps retrying.";
+  for (const [key,label,empty] of [["activity","Activity","The live stream has no activity for this repository yet."],["approvals","Approvals","The live stream has no approvals for this repository yet."]]) {
+    const shown = Boolean(panels[key]);
+    let text = "";
+    if (name === "offline") text = offlineNotes[liveStatus.reason] || "Live updates are offline. " + (shown ? label + " shows the last values it received." : label + " appears when they return.") + retrying;
+    else if (name === "live" && liveReady && !liveRepository[key]) text = empty;
+    const prefix = key === "activity" ? "activity-live" : "approvals";
+    $(prefix + "-note").textContent = text;
+    $(prefix + "-note").hidden = !text;
+    $(key + "-wait").hidden = shown || Boolean(text);
+  }
+  timeline.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.timeline)});
+  const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
+  $("handoff-note").textContent = stale;
+  $("handoff-note").hidden = !stale;
+}
+
+// Show one overview value. With flash set, a value that differs from the one
+// on screen is highlighted; the caller announces it.
+function showFact(node, key, text, flash) {
+  const previous = shownFacts.get(key);
+  shownFacts.set(key,text);
+  if (node.textContent !== text) node.textContent = text;
+  if (!flash || previous === undefined || previous === text) return false;
+  clearTimeout(flashTimers.get(node));
+  node.classList.remove("live-changed");
+  void node.offsetWidth; // restart the highlight when a value changes twice in a row
+  node.classList.add("live-changed");
+  flashTimers.set(node,setTimeout(() => node.classList.remove("live-changed"),2000));
+  return true;
+}
+
+function plural(count, one, many = one + "s") {
+  return count + " " + (count === 1 ? one : many);
+}
+
+// The checkout facts on screen: live when the stream has them, else as loaded.
+function checkoutFacts() {
+  const now = liveOverview;
+  if (!now) {
+    const count = state.dirty_count || 0;
+    return {branch: state.branch || "", head: state.head || "", dirty: Boolean(state.dirty), operation: "",
+      branchText: state.branch || "Detached HEAD", changes: count ? plural(count,"changed path") : state.dirty ? "Uncommitted changes" : "None"};
+  }
+  const parts = [[now.staged,"staged"],[now.unstaged,"unstaged"],[now.untracked,"untracked"]].filter(([count]) => count).map(([count,label]) => count + " " + label);
+  const up = now.upstream;
+  const sync = up ? [up.ahead && up.ahead + " ahead", up.behind && up.behind + " behind"].filter(Boolean).join(", ") : "";
+  const branch = now.detached ? "" : now.branch;
+  return {branch, head: now.head, dirty: now.changed > 0, operation: now.operation,
+    branchText: (branch || "Detached HEAD") + (sync ? " · " + sync + (up.name ? " " + up.name : "") : ""),
+    changes: parts.join(" · ") || (now.changed ? plural(now.changed,"changed path") : "None")};
+}
+
+// Configuration problems and uncommitted work follow the stream; every other
+// item (pins, pull requests) stays as the last load reported it.
+function checkoutAttention() {
+  const loaded = state?.attention || [];
+  if (!liveOverview) return loaded;
+  const followed = ["Configuration needs attention","Uncommitted work"];
+  const fresh = liveOverview.problems.map(detail => ({title: followed[0], detail}));
+  const facts = checkoutFacts();
+  if (facts.dirty) fresh.push({title: followed[1], detail: facts.changes.replaceAll(" · ",", ") + " in this worktree. Publication uses only the reviewed configuration file."});
+  return [...fresh,...loaded.filter(entry => !followed.includes(entry.title))];
+}
+
+function renderOverview(flash = false) {
+  const changed = [];
+  const facts = checkoutFacts();
   const name = state.repository || state.root?.split(/[\\/]/).pop() || "Local checkout";
   $("top-repo").textContent = name;
   const branch = $("context-branch");
-  branch.textContent = state.branch || (state.head ? state.head.slice(0, 12) : "");
+  showFact(branch,"context-branch",facts.branch || facts.head.slice(0,12),flash);
   branch.hidden = !branch.textContent;
-  branch.title = state.branch || "Detached HEAD";
+  branch.title = facts.branch || "Detached HEAD";
   $("checkout-name").textContent = name;
   $("root-path").textContent = state.root || "Worktree path unavailable";
   $("rail-version").textContent = state.version || "";
   document.title = name + " · agentflow";
-  const dirty = Boolean(state.dirty);
-  $("working-state").textContent = dirty ? "Uncommitted changes" : "Clean worktree";
-  $("working-state").classList.toggle("changed", dirty);
+  if (showFact($("working-state"),"working-state",facts.dirty ? "Uncommitted changes" : "Clean worktree",flash)) changed.push(facts.dirty ? "The worktree has uncommitted changes" : "The worktree is clean");
+  $("working-state").classList.toggle("changed", facts.dirty);
+  const operation = $("git-operation");
+  const running = facts.operation ? (operationNames[facts.operation] || facts.operation) + " in progress" : "";
+  if (showFact(operation,"git-operation",running,flash)) changed.push(running || "The git operation finished");
+  operation.hidden = !running;
   const metadata = $("repo-metadata");
-  metadata.replaceChildren();
-  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["Running CLI",state.version], ["Workflow pin",state.pin]]) {
-    const group = element("div");
-    group.append(element("dt",label),element("dd",value || "Unavailable"));
-    metadata.append(group);
+  for (const [key, label, value, follows] of [["branch","Branch",facts.branchText,true], ["revision","Revision",facts.head.slice(0,12) || "No commits yet",true], ["changes","Changes",facts.changes,true], ["cli","Running CLI",state.version], ["pin","Workflow pin",state.pin]]) {
+    let field = metadata.querySelector('[data-field="' + key + '"]');
+    if (!field) {
+      field = element("dd");
+      field.dataset.field = key;
+      const group = element("div");
+      group.append(element("dt",label),field);
+      metadata.append(group);
+    }
+    if (showFact(field,key,value || "Unavailable",flash && follows)) changed.push(label + " changed to " + (value || "unavailable"));
   }
+  const issues = liveOverview ? liveOverview.problems.length : null;
+  if (flash && issues !== null && shownFacts.get("problems") !== undefined && shownFacts.get("problems") !== issues) {
+    changed.push(issues ? "The configuration has " + plural(issues,"problem") : "The configuration problems are resolved");
+  }
+  if (issues !== null) shownFacts.set("problems",issues);
+  renderStream();
   const routing = $("routing-list");
   routing.replaceChildren();
   for (const item of checkoutRoles()) {
@@ -511,10 +773,30 @@ function renderOverview() {
   }
   if (!checkoutRoles().length) routing.append(element("li","No resolved provider roles are available.","muted"));
   renderActivity();
+  return changed;
+}
+
+// Pull requests come from the stream; api/activity adds only what belongs to
+// the Commander session.
+function commanderItem(entry) {
+  return Boolean(entry.run_id || entry.request_id) || entry.title === "Agent Commander unavailable";
+}
+
+// The brief: the checkout, open worker requests and the live pull requests.
+function renderHandoff(flash = false) {
+  const requests = commanderContext ? (activity?.attention || []).filter(commanderItem).map(entry => [entry.title,"—",entry.detail,entry.url].filter(Boolean).join(" ")) : [];
+  const brief = [state?.handoff,requests.join("\n"),panels.activity?.handoff].map(part => (part || "").trim()).filter(Boolean).join("\n");
+  const changed = showFact($("handoff-text"),"handoff",brief || "No handoff is available for this checkout.",flash);
+  $("copy-handoff").disabled = !brief;
+  if (changed) {
+    $("handoff-updated").textContent = "Updated live at " + clock(new Date()) + ".";
+    $("handoff-updated").hidden = false;
+    if (!$("page-handoff").hidden) announce("The repository brief changed.");
+  }
 }
 
 function renderActivity() {
-  const entries = [...(state?.attention || []), ...(activity?.attention || [])];
+  const entries = [...checkoutAttention(), ...(activity?.attention || []).filter(commanderItem)];
   const target = $("attention-list");
   target.replaceChildren();
   for (const entry of entries) {
@@ -529,12 +811,10 @@ function renderActivity() {
     if (entry.run_id && entry.request_id) li.append(replyForm(entry));
     target.append(li);
   }
-  $("activity-note").textContent = activity
-    ? (activity.warning || (!entries.length ? "No outstanding items reported." : "Latest activity for this checkout."))
-    : "Check activity to include remote pull requests and blockers.";
-  const brief = [state?.handoff,activity?.handoff].filter(Boolean).join("\n");
-  $("handoff-text").textContent = brief || "No handoff is available for this checkout.";
-  $("copy-handoff").disabled = !brief;
+  const note = commanderNote || (target.childElementCount ? "" : "Nothing in this checkout needs attention.");
+  $("activity-note").textContent = note;
+  $("activity-note").hidden = !note;
+  renderHandoff();
 }
 
 async function loadState() {
@@ -549,6 +829,7 @@ async function loadState() {
     }
     if (!state) restoreDrafts(next);
     state = next;
+    loadedAt = new Date();
     activity = null;
     connectionSequence++;
     $("check-connections").disabled = !next.config?.providers;
@@ -556,16 +837,20 @@ async function loadState() {
     $("connection-list").replaceChildren();
     $("connection-status").textContent = "Check the providers selected in the configuration on disk.";
     invalidateReview();
-    $("activity").disabled = false;
     const reconnecting = !$("connection-options").hidden && $("console-shell").hidden;
     renderOverview();
+    renderRepository("activity");
+    renderRepository("approvals");
+    renderRepository("timeline");
     $("connection").hidden = true;
     $("connection-options").hidden = true;
     $("connection-feedback").textContent = "";
     $("console-shell").hidden = false;
     showPage(reconnecting);
     tabs.start();
+    live.start();
     notice("status");
+    loadCommanderActivity();
   } catch (e) {
     if (!session || revision !== loadSequence) return;
     if ($("console-shell").hidden) showConnection(e.message);
@@ -573,7 +858,16 @@ async function loadState() {
   }
   finally { $("refresh").disabled = !session; }
 }
-$("refresh").addEventListener("click", loadState);
+// Resync reloads the checkout and asks the stream for a fresh snapshot.
+$("refresh").addEventListener("click", () => {
+  liveOverview = null;
+  liveRepository.activity = null;
+  liveRepository.approvals = null;
+  liveRepository.timeline = null;
+  liveReady = false;
+  live.resync();
+  loadState();
+});
 
 function settingsFrom(value = {}) {
   const settings = { local: value.local || "", remote: value.remote || "", window: value.window || "",
@@ -785,15 +1079,6 @@ $("autonomy-form").addEventListener("submit", async (event) => {
   finally { autonomySaving = false; renderAutonomy(); }
 });
 
-async function loadActivity() {
-  $("activity").disabled = true;
-  $("activity-note").textContent = "Checking repository activity…";
-  try { activity = await request("api/activity"); renderActivity(); }
-  catch (e) { $("activity-note").textContent = e.message; }
-  finally { $("activity").disabled = false; }
-}
-$("activity").addEventListener("click",loadActivity);
-
 function replyForm(entry) {
   const form = element("form","","reply-form");
   const label = element("label","Reply to this worker");
@@ -828,8 +1113,8 @@ function replyForm(entry) {
         message.textContent = approvalExplanation(result);
       } else if (result.state === "answered") {
         message.textContent = "Reply delivered.";
-        await loadActivity();
-      } else { throw new Error(result.reason || "The reply has no confirmed delivery status. Check activity."); }
+        await loadCommanderActivity();
+      } else { throw new Error(result.reason || "The reply has no confirmed delivery status. Use Resync to check."); }
     } catch (e) {
       approval = "";
       send.textContent = "Review reply";
@@ -1318,7 +1603,6 @@ window.addEventListener("beforeunload",(event) => {
 });
 
 $("refresh").disabled = true;
-$("activity").disabled = true;
 $("copy-handoff").disabled = true;
 connect();
 

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/gitx"
 )
 
@@ -40,6 +41,7 @@ type workspace struct {
 type cloneConsole struct {
 	commander   commanderScope
 	tabs        tabHub
+	streams     streamLimit // event streams share the clone's origin
 	mu          sync.Mutex
 	awaitingTab time.Time
 }
@@ -55,6 +57,22 @@ type daemon struct {
 	live        map[string]*workspace
 	controlMu   sync.Mutex
 	usedControl map[string]int64
+	events      *eventRuntime // nil until startEvents
+}
+
+// startEvents starts the daemon's bus, watcher and per-repository stores.
+// The daemon is the only process that opens a store as store.RoleOwner.
+func (d *daemon) startEvents(ctx context.Context) func() {
+	rt, stop, err := startEventRuntime(ctx)
+	if err != nil {
+		// Without events the console still works; only the stream is off.
+		fmt.Fprintln(os.Stderr, "agentflow: live events unavailable:", err)
+		return func() {}
+	}
+	d.mu.Lock()
+	d.events = rt
+	d.mu.Unlock()
+	return stop
 }
 
 var routeLabel = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -142,12 +160,38 @@ func inspectWorktree(ctx context.Context, dir string) (registeredWorktree, strin
 	if err != nil {
 		return registeredWorktree{}, "", err
 	}
-	id := "main"
-	if gitDir != common {
-		hash := sha256.Sum256([]byte(adminID))
-		id = dnsLabel(filepath.Base(gitDir)) + fmt.Sprintf("-%x", hash[:4])
+	id := worktreeID(common, gitDir, adminID)
+	return registeredWorktree{ID: string(id), Root: root, Common: common, GitDir: gitDir, CloneID: cloneID, AdminID: adminID, RootID: rootID}, dnsLabel(base), nil
+}
+
+// worktreeID is the console's ID of a worktree and its bus.WorktreeID:
+// "main" for the primary checkout, otherwise "<dns-label>-<8 hex>" from the
+// name and file identity of its administrative git dir. It never contains a
+// path, so it is safe in URLs, topics and events.
+func worktreeID(common, gitDir, adminID string) bus.WorktreeID {
+	if gitDir == common {
+		return "main"
 	}
-	return registeredWorktree{ID: id, Root: root, Common: common, GitDir: gitDir, CloneID: cloneID, AdminID: adminID, RootID: rootID}, dnsLabel(base), nil
+	hash := sha256.Sum256([]byte(adminID))
+	return bus.WorktreeID(dnsLabel(filepath.Base(gitDir)) + fmt.Sprintf("-%x", hash[:4]))
+}
+
+// WorktreeIdentity is where a worktree's events belong.
+type WorktreeIdentity struct {
+	Worktree  bus.WorktreeID
+	Root      string
+	GitDir    string
+	CommonDir string
+}
+
+// IdentifyWorktree computes the worktree ID of the checkout containing dir
+// without a running daemon, as the console and the event stream name it.
+func IdentifyWorktree(ctx context.Context, dir string) (WorktreeIdentity, error) {
+	r, _, err := inspectWorktree(ctx, dir)
+	if err != nil {
+		return WorktreeIdentity{}, err
+	}
+	return WorktreeIdentity{Worktree: bus.WorktreeID(r.ID), Root: r.Root, GitDir: r.GitDir, CommonDir: r.Common}, nil
 }
 
 func loadDaemon(prefix string, i instance, identity string, cancel context.CancelFunc) (*daemon, error) {
@@ -242,7 +286,16 @@ func (d *daemon) activate(r registeredWorktree) *workspace {
 	}
 	origin := "http://" + d.publicHost(r.Host)
 	s := &server{commander: &clone.commander, repo: &gitx.Repo{Dir: r.Root}, origin: origin, instanceKey: signature(d.Key, "workspace/v1", key),
-		rememberKey: signature(d.identity, "remember/v1", r.CloneID+"\x00"+origin), session: randomKey(), tabs: &clone.tabs, worktreePath: "/w/" + r.ID + "/"}
+		rememberKey: signature(d.identity, "remember/v1", r.CloneID+"\x00"+origin), session: randomKey(), tabs: &clone.tabs, worktreePath: "/w/" + r.ID + "/",
+		streams: &clone.streams}
+	if d.events != nil {
+		// Without a store the console still works; only the stream is off.
+		if events, err := d.events.attach(r); err == nil {
+			s.events = events
+		} else {
+			fmt.Fprintf(os.Stderr, "agentflow: live events unavailable for %s: %v\n", r.ID, err)
+		}
+	}
 	ws := &workspace{server: s, clone: clone, handler: http.StripPrefix("/w/"+r.ID, s.handler())}
 	d.live[key] = ws
 	return ws

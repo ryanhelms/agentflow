@@ -294,3 +294,88 @@ dialog::backdrop { background: var(--scrim); }
   .rail nav a[aria-current=page], .role-list button[aria-pressed=true] { outline: 2px solid Highlight; outline-offset: -2px; }
   .local-mark { border: 1px solid currentColor; }
 }
+
+/* Live updates: stream state, change highlight and stream notes (docs/design/ui/live-stream.md). */
+.nscale-ui { --live-flash: var(--info-bg); --live-mark: var(--accent); }
+.checkout { --live-flash: color-mix(in srgb, var(--brand-spearmint) 34%, transparent); --live-mark: var(--brand-spearmint); }
+.stream { display: inline-flex; align-items: center; gap: var(--s-2); }
+.stream-state { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-muted); font: 550 var(--fs-xs)/1.45 var(--font); white-space: nowrap; }
+.stream-mark { flex: none; width: .5rem; height: .5rem; border: 1.5px solid currentColor; border-radius: 50%; }
+/* Each state has its own mark shape, so it never depends on colour alone. */
+.stream-state[data-state=live] { color: var(--ok); }
+.stream-state[data-state=live] .stream-mark { background: currentColor; }
+.stream-state[data-state=connecting] .stream-mark,
+.stream-state[data-state=reconnecting] .stream-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.stream-state[data-state=reconnecting], .stream-state[data-state=resyncing] { color: var(--warn); }
+.stream-state[data-state=resyncing] .stream-mark { background: linear-gradient(to right, currentColor 50%, transparent 50%); animation: stream-turn 1s linear infinite; }
+.stream-state[data-state=offline] { color: var(--bad); }
+.stream-state[data-state=offline] .stream-mark { border-radius: 0; }
+@keyframes stream-pulse { from { opacity: 1; } to { opacity: .3; } }
+@keyframes stream-turn { to { transform: rotate(360deg); } }
+.checkout-pills { display: inline-flex; flex-wrap: wrap; justify-content: end; gap: var(--s-2); }
+.metadata { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, 1fr)); }
+.metadata dd { width: fit-content; max-width: 100%; }
+.live-changed { animation: live-flash 1.6s var(--ease-out); }
+@keyframes live-flash { from { background-color: var(--live-flash); box-shadow: 0 0 0 .3rem var(--live-flash); } }
+.live-note { margin-top: var(--s-4); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); color: var(--text); background: var(--warn-bg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+@media (max-width: 65rem) {
+  .metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stream-mark { animation: none !important; }
+  .live-changed { animation: none; outline: 1px solid var(--live-mark); outline-offset: 2px; }
+}
+@media (forced-colors: active) {
+  .live-changed { outline: 1px solid Highlight; outline-offset: 2px; }
+  .stream-state[data-state=live] .stream-mark { background: CanvasText; }
+}
+
+/* Live panels: activity, approvals and handoff (docs/design/ui/live-stream.md, "Live panels"). */
+.activity-panel, .roles-panel { margin-top: var(--s-4); }
+.activity-panel .section-heading, #approvals-panel .section-heading { margin-bottom: var(--s-3); }
+.activity-columns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s-5); }
+.activity-columns h3, #approvals-body h3 { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-1); color: var(--text-muted); font: 600 var(--fs-sm)/1.4 var(--font); letter-spacing: 0; }
+#approvals-body h3 + ul + h3 { margin-top: var(--s-4); }
+.panel > .live-note { margin: 0 0 var(--s-3); }
+#github-note { margin-bottom: var(--s-3); font-size: var(--fs-sm); }
+.panel-hint { margin-top: var(--s-3); font-size: var(--fs-xs); }
+.live-list li { padding: var(--s-2) 0; }
+.live-empty { font-size: var(--fs-sm); }
+.row-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-1) var(--s-3); }
+.row-head > .tag, .row-head > .row-time { flex: none; white-space: nowrap; }
+.row-title { min-width: 0; font-size: var(--fs-md); font-weight: 600; overflow-wrap: anywhere; }
+a.row-title:not([href]) { color: var(--text); }
+.row-number { color: var(--text-muted); font: var(--fs-sm)/1.4 var(--mono); }
+.row-time { color: var(--text-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.row-facts { display: flex; flex-wrap: wrap; gap: .1rem var(--s-3); margin-top: .15rem; color: var(--text-muted); font-size: var(--fs-sm); }
+.row-facts code { font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.row-note { margin-top: .15rem; color: var(--bad); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.fact, .health { display: inline-flex; align-items: baseline; gap: .4rem; min-width: 0; overflow-wrap: anywhere; }
+.health { color: var(--text-muted); font: 550 var(--fs-xs)/1.45 var(--font); }
+.tag[data-state=good] { color: var(--ok); background: var(--ok-bg); }
+.tag[data-state=warn] { color: var(--warn); background: var(--warn-bg); }
+.tag[data-state=bad] { color: var(--bad); background: var(--bad-bg); }
+/* A mark's shape carries the state; colour repeats it. Circle: fine or neutral. Hollow: waiting. Square: stopped. */
+.state-mark { flex: none; align-self: center; width: .5rem; height: .5rem; border: 1.5px solid currentColor; border-radius: 50%; color: var(--text-muted); }
+[data-state=success] > .state-mark, [data-state=ok] > .state-mark { color: var(--ok); background: currentColor; }
+[data-state=commit] > .state-mark { background: currentColor; }
+[data-state=pending] > .state-mark, [data-state=waiting] > .state-mark, [data-state=blocked] > .state-mark { color: var(--warn); }
+[data-state=pending] > .state-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+[data-state=rate_limited] > .state-mark, [data-state=soon] > .state-mark { color: var(--warn); background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+[data-state=failure] > .state-mark, [data-state=failed] > .state-mark, [data-state=unavailable] > .state-mark { color: var(--bad); background: currentColor; border-radius: 0; }
+[data-state=blocked] > .state-mark { border-radius: 0; }
+.fact[data-state=soon], .health[data-state=rate_limited] { color: var(--warn); }
+.fact[data-state=failure], .health[data-state=unavailable] { color: var(--bad); }
+.fact[data-fact=expiry] { font-variant-numeric: tabular-nums; }
+.roles-panel .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr)); column-gap: var(--s-5); }
+.roles-panel .rows li, .roles-panel .rows li:last-child { padding: var(--s-2) 0; border-top: var(--keyline) solid var(--border); }
+#handoff-updated { margin-top: var(--s-2); font-size: var(--fs-xs); }
+@media (max-width: 65rem) {
+  .activity-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .state-mark { animation: none !important; }
+}
+@media (forced-colors: active) {
+  .state-mark { color: CanvasText; }
+}

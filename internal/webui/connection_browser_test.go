@@ -30,7 +30,7 @@ func TestConsoleConnectionBrowser(t *testing.T) {
 		worktree := http.NewServeMux()
 		scoped := http.StripPrefix("/w/first", worktree)
 		mux.Handle("/w/first/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("X-Agentflow-Commander") != "" && r.URL.Path != "/w/first/api/activity" && r.URL.Path != "/w/first/api/reply" && r.URL.Path != "/w/first/api/tabs/events" {
+			if r.Header.Get("X-Agentflow-Commander") != "" && r.URL.Path != "/w/first/api/activity" && r.URL.Path != "/w/first/api/reply" && r.URL.Path != "/w/first/api/tabs/attach" {
 				t.Errorf("Commander credential sent to %s", r.URL.Path)
 			}
 			scoped.ServeHTTP(w, r)
@@ -38,6 +38,12 @@ func TestConsoleConnectionBrowser(t *testing.T) {
 		mux.Handle("/w/second/", http.StripPrefix("/w/second", secondRoutes))
 		worktree.Handle("/", handler)
 		installBrowserCommanderFixture(t, worktree, handler)
+		// These servers have no event runtime: serve the hub's tabs state
+		// on the stream, as the daemon does.
+		stream := newTabsStream(s.tabRoutes(), "first", "second")
+		s.tabsStreamed, second.tabsStreamed = true, true
+		worktree.HandleFunc("GET /api/events", stream.events(s.authorized))
+		secondRoutes.HandleFunc("GET /api/events", stream.events(second.authorized))
 		page, err := assets.ReadFile("static/index.html")
 		if err != nil {
 			t.Fatal(err)
@@ -154,9 +160,9 @@ func installBrowserCommanderFixture(t *testing.T, routes *http.ServeMux, handler
 		}
 		reply(w, http.StatusOK, data)
 	})
-	routes.HandleFunc("GET /api/tabs/events", func(w http.ResponseWriter, r *http.Request) {
+	routes.HandleFunc("POST /api/tabs/attach", func(w http.ResponseWriter, r *http.Request) {
 		if issued.Load() == 1 && !reviewed.Load() && r.Header.Get("X-Agentflow-Commander") != key {
-			t.Error("the scoped tab stream is missing its launch context")
+			t.Error("the scoped tab is missing its launch context")
 		}
 		handler.ServeHTTP(w, r)
 	})

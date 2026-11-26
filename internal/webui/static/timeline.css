@@ -1,0 +1,55 @@
+/* The operation timeline (docs/design/ui/live-stream.md, "Timeline"). Tokens only: light and dark share these rules. */
+.timeline-panel { margin-top: var(--s-4); }
+.timeline-panel .section-heading { margin-bottom: var(--s-3); }
+.timeline-filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-2) var(--s-3); }
+.timeline-filters label { flex: 0 1 13rem; min-width: min(100%, 9rem); color: var(--text-muted); font-size: var(--fs-xs); }
+.timeline-filters select { padding: .34rem .5rem; font-size: var(--fs-sm); color: var(--text); }
+.timeline-summary { margin-top: var(--s-2); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.timeline-list { margin-top: var(--s-2); }
+.timeline-list > li { padding: var(--s-3) 0; }
+.timeline-subject { margin-top: .1rem; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.timeline-row .row-note { color: var(--text-muted); }
+.timeline-row .row-note[data-tone=bad] { color: var(--bad); }
+.timeline-approval { margin-top: var(--s-1); padding: var(--s-1) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.timeline-row[data-state=approved] .timeline-approval { border-inline-start-color: var(--ok); background: var(--ok-bg); }
+/* A text button: it moves within the page or copies, so it is not a link. */
+.timeline-jump { padding: .1rem .2rem; border: 0; color: var(--accent); background: none; font-size: inherit; font-weight: 550; text-decoration: underline; text-underline-offset: .15em; }
+.timeline-jump:hover { text-decoration-thickness: 2px; }
+
+/* Steps read left to right, oldest first, and wrap. A short rule joins one step to the next. */
+.timeline-steps { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem 0; margin: var(--s-2) 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--fs-xs); }
+.timeline-steps > li, .timeline-list .timeline-steps > li:last-child { display: inline-flex; align-items: baseline; gap: .4rem; padding: 0; border: 0; }
+.timeline-steps > li + li::before { content: ""; align-self: center; width: .9rem; margin-inline: .5rem; border-top: var(--keyline) solid var(--border-strong); }
+.timeline-steps .fact { color: var(--text); font-weight: 550; }
+.timeline-steps time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.timeline-links { display: flex; flex-wrap: wrap; gap: .1rem var(--s-3); margin: var(--s-1) 0 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+.timeline-links > li, .timeline-list .timeline-links > li:last-child { padding: 0; border: 0; }
+.timeline-audit { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .4rem; margin-top: var(--s-1); color: var(--text-muted); font-size: var(--fs-xs); }
+.timeline-audit code { font-size: var(--fs-xs); overflow-wrap: anywhere; }
+#timeline-more { margin-top: var(--s-3); }
+#timeline-empty { margin-top: var(--s-3); }
+
+/* The mark's shape carries the state, as in the other live panels: filled is done, hollow waits, a square has stopped. */
+.timeline-panel [data-state=requested] > .state-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.timeline-steps [data-state=requested] > .state-mark { animation: none; }
+.timeline-panel [data-state=awaiting_approval] > .state-mark { color: var(--warn); }
+.timeline-panel [data-state=approved] > .state-mark, .timeline-panel [data-state=prepared] > .state-mark { color: var(--ok); }
+.timeline-panel [data-state=applied] > .state-mark { color: var(--ok); background: currentColor; }
+.timeline-panel [data-state=consumed] > .state-mark { background: currentColor; }
+.timeline-panel [data-state=suggested] > .state-mark, .timeline-panel [data-state=cancelled] > .state-mark, .timeline-panel [data-state=unknown] > .state-mark { border-radius: 0; }
+.timeline-panel [data-state=expired] > .state-mark { color: var(--bad); border-radius: 0; }
+
+@media (max-width: 38rem) {
+  .timeline-filters label { flex: 1 1 100%; }
+  .timeline-row .row-head { flex-wrap: wrap; }
+  /* One step per line: a wrapped row of steps loses its order at this width. */
+  .timeline-steps { flex-direction: column; align-items: start; }
+  .timeline-steps > li + li::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timeline-panel .state-mark { animation: none !important; }
+}
+@media (forced-colors: active) {
+  .timeline-approval { border-inline-start-color: CanvasText; }
+  .timeline-jump { color: LinkText; }
+}

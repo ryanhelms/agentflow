@@ -7,7 +7,7 @@ DATE    ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG     := github.com/ryanhelms/agentflow/internal/version
 LDFLAGS := -s -w -X $(PKG).Version=$(VERSION) -X $(PKG).Commit=$(COMMIT) -X $(PKG).Date=$(DATE)
 
-SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/claude-pre-bash \
+SHELL_SCRIPTS := install.sh $(wildcard bin/*.sh) $(wildcard scripts/*.sh) .githooks/commit-msg .githooks/pre-push .githooks/post-commit .githooks/claude-pre-bash \
 	templates/repo/.agentflow/bin/agentflow \
 	templates/repo/.githooks/commit-msg templates/repo/.githooks/pre-commit templates/repo/.githooks/pre-push \
 	adapters/claude-code/bin/launch adapters/claude-code/bin/agentflow
