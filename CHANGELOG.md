@@ -14,6 +14,7 @@ docs, tests, CI and chores are not.
 ### Fixes
 
 - install and update agentflow from ryanhelms/agentflow (#1) ([34422dd](https://github.com/ryanhelms/agentflow/commit/34422dd7b25da9c8e2b0038cd2a27aaafe4d1a2e))
+- **release:** skip build attestation while the repo is private (#4) ([bdb8317](https://github.com/ryanhelms/agentflow/commit/bdb8317c8ed821528ea44ebef0cee3ac72154a5d))
 
 ## [0.53.0](https://github.com/nscaledev/agentflow/compare/v0.52.2...v0.53.0) - 2026-11-25
 
