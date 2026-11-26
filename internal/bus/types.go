@@ -27,7 +27,23 @@ type TypeInfo struct {
 	Transient bool
 	// Phase is the program phase that introduced the type.
 	Phase int
+	// Global says whether the type may, or must, use GlobalRepo. Events in
+	// GlobalRepo never carry a Worktree.
+	Global GlobalRule
 }
+
+// GlobalRule says where a type's events may live.
+type GlobalRule int
+
+const (
+	// GlobalNever: the event belongs to one repository (the zero value).
+	GlobalNever GlobalRule = iota
+	// GlobalAllowed: the event belongs to a repository or to GlobalRepo,
+	// for example config.layer.changed (layer "repo" or "personal").
+	GlobalAllowed
+	// GlobalOnly: the event always belongs to GlobalRepo.
+	GlobalOnly
+)
 
 // Phase 1 event types. Payload shapes are in the ADR, section "Event types".
 // New types are added by amending the ADR first, then this list.
@@ -53,16 +69,14 @@ const (
 )
 
 // Reserved families. Their concrete types are added by the ADR amendment of
-// the phase that introduces them; until then Publish rejects them.
+// the phase that introduces them; until then Publish rejects them. The
+// phase 2 families (approval, hook, commit, gh, client, ui) are registered
+// in types_phase2.go.
 var ReservedFamilies = []string{
-	"approval", // phase 2: approval requested, decided, expired
-	"hook",     // phase 2: client hook ran (hook.*)
-	"commit",   // phase 2: commit.created
-	"gh",       // phase 2: pull request, check and review state
-	"op",       // phase 3: operation requested, awaiting approval, applied, failed
-	"plugin",   // phase 5: plugin lifecycle and health
-	"harness",  // phase 6: harness detected, changed, removed
-	"ai",       // phase 7: ai.session.*
+	"op",      // phase 3: operation requested, awaiting approval, applied, failed
+	"plugin",  // phase 5: plugin lifecycle and health
+	"harness", // phase 6: harness detected, changed, removed
+	"ai",      // phase 7: ai.session.*
 }
 
 var registry = map[Type]TypeInfo{
@@ -71,8 +85,14 @@ var registry = map[Type]TypeInfo{
 	TypeGitRefsChanged:      {Type: TypeGitRefsChanged, Scope: ScopeRepo, Phase: 1},
 	TypeGitWorktreesChanged: {Type: TypeGitWorktreesChanged, Scope: ScopeRepo, Phase: 1},
 	TypeGitOperationChanged: {Type: TypeGitOperationChanged, Scope: ScopeWorktree, Phase: 1},
-	TypeConfigLayerChanged:  {Type: TypeConfigLayerChanged, Scope: ScopeAny, Phase: 1},
-	TypeStreamOverflow:      {Type: TypeStreamOverflow, Scope: ScopeAny, Transient: true, Phase: 1},
+	TypeConfigLayerChanged:  {Type: TypeConfigLayerChanged, Scope: ScopeAny, Phase: 1, Global: GlobalAllowed},
+	TypeStreamOverflow:      {Type: TypeStreamOverflow, Scope: ScopeAny, Transient: true, Phase: 1, Global: GlobalAllowed},
+}
+
+func init() {
+	for _, info := range phase2Types {
+		registry[info.Type] = info
+	}
 }
 
 // Lookup returns the registration of t.
@@ -141,12 +161,14 @@ type GitOperationChanged struct {
 // ConfigLayer names a configuration layer.
 type ConfigLayer string
 
-// Configuration layers. Phase 1 watches only LayerRepo; phase 2 adds the
-// others.
+// Configuration layers. LayerRepo events belong to a repository and
+// worktree; LayerPersonal events belong to GlobalRepo.
 const (
 	LayerRepo     ConfigLayer = "repo"     // <worktree>/.agentflow/*
-	LayerPersonal ConfigLayer = "personal" // ~/.agentflow/** (phase 2, repo "global")
-	LayerClient   ConfigLayer = "client"   // client settings files (phase 2)
+	LayerPersonal ConfigLayer = "personal" // ~/.agentflow/config.yml and providers (repo "global")
+	// LayerClient is reserved and unused: client settings files have their
+	// own type, client.settings.changed (phase 2 amendment).
+	LayerClient ConfigLayer = "client"
 )
 
 // ConfigLayerChanged is the payload of config.layer.changed.

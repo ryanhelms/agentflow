@@ -105,6 +105,12 @@ func (e Event) Validate() error {
 		return fmt.Errorf("%w: repo %q", ErrInvalidEnvelope, e.Repo)
 	case !info.Transient && !e.Repo.Valid():
 		return fmt.Errorf("%w: repo %q", ErrInvalidEnvelope, e.Repo)
+	case e.Repo == GlobalRepo && info.Global == GlobalNever:
+		return fmt.Errorf("%w: %s cannot belong to %s", ErrInvalidEnvelope, e.Type, GlobalRepo)
+	case info.Global == GlobalOnly && e.Repo != GlobalRepo:
+		return fmt.Errorf("%w: %s belongs to %s", ErrInvalidEnvelope, e.Type, GlobalRepo)
+	case e.Repo == GlobalRepo && e.Worktree != "":
+		return fmt.Errorf("%w: %s events have no worktree", ErrInvalidEnvelope, GlobalRepo)
 	case info.Scope == ScopeWorktree && e.Worktree == "":
 		return fmt.Errorf("%w: %s needs a worktree", ErrInvalidEnvelope, e.Type)
 	case info.Scope == ScopeRepo && e.Worktree != "":

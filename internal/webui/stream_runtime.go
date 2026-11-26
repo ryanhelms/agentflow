@@ -34,6 +34,26 @@ var (
 	}
 )
 
+// runtimeExtension is a phase 2 source or sink that runs with the event
+// runtime: the user-level watcher and approval translator (lane 2.1), the
+// notify socket (lane 2.2) and the GitHub poller (lane 2.3). Each lane
+// registers a factory in runtimeExtensions from its own file's init, so
+// lanes never edit this file to start their part. See the ADR, "Phase 2,
+// File ownership".
+type runtimeExtension interface {
+	// start runs once, after the bus exists and before any worktree is
+	// attached. Long-running work uses rt.ctx and rt.wg.
+	start(rt *eventRuntime) error
+	// attached is called after w joined repository r (a new repository or
+	// a new worktree of a known one), outside rt.mu.
+	attached(r *repoEvents, w registeredWorktree)
+	// stop runs once, before the bus closes, in reverse start order.
+	stop()
+}
+
+// runtimeExtensions are the factories startEventRuntime starts, in order.
+var runtimeExtensions []func() runtimeExtension
+
 // eventRuntime is the daemon's event plumbing: one bus, one store per
 // repository opened as store.RoleOwner, one projector per repository and
 // one watcher for every registered worktree.
@@ -42,6 +62,7 @@ type eventRuntime struct {
 	bus     bus.Bus
 	watcher watch.Watcher
 	wg      sync.WaitGroup
+	exts    []runtimeExtension
 
 	mu    sync.Mutex
 	repos map[string]*repoEvents // by registeredWorktree.CloneID
@@ -63,7 +84,20 @@ func startEventRuntime(ctx context.Context) (*eventRuntime, func(), error) {
 			fmt.Fprintln(os.Stderr, "agentflow: event watcher stopped:", err)
 		}
 	}()
+	for _, factory := range runtimeExtensions {
+		ext := factory()
+		// A failed extension costs only its own events; the console and
+		// the git and configuration events keep working.
+		if err := ext.start(rt); err != nil {
+			fmt.Fprintln(os.Stderr, "agentflow: event source:", err)
+			continue
+		}
+		rt.exts = append(rt.exts, ext)
+	}
 	return rt, func() {
+		for i := len(rt.exts) - 1; i >= 0; i-- {
+			rt.exts[i].stop()
+		}
 		cancel()
 		_ = rt.bus.Close()
 		rt.wg.Wait()
@@ -119,6 +153,9 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 	target := watch.Target{Repo: r.id, Worktree: bus.WorktreeID(w.ID), Root: w.Root, GitDir: w.GitDir, CommonDir: w.Common}
 	if err := rt.watcher.Add(target); err != nil {
 		fmt.Fprintf(os.Stderr, "agentflow: cannot watch worktree %s: %v\n", w.ID, err)
+	}
+	for _, ext := range rt.exts {
+		ext.attached(r, w)
 	}
 	return r, nil
 }
