@@ -25,6 +25,7 @@ import (
 // "Phase 3"). It walks the command registry; the three lists below name what
 // the registry does not carry yet, each with the reason, so the phase 3
 // cleanup PR can empty them (the test fails when an entry is no longer true).
+// The same holds for directCalls and auditExempt.
 
 // registeredWriteLegacyCLI lists the registered writes of this lane whose
 // command line still runs the legacy code in internal/cli, so a call from the
@@ -72,33 +73,18 @@ var directCalls = map[string]string{
 
 // auditExempt lists registered writes that neither set AuditByInvoker nor write
 // an audit line on every path, each with the reason.
-var auditExempt = map[string]string{
-	"ac.update": "ticking a criterion writes no audit line; --post audits through comment (class remote, action comment)",
+var auditExempt = map[string]string{}
+
+// toolInputs gives the tools whose smallest input is a dry run the input
+// that makes them write, so checkTool sees their events.
+var toolInputs = map[string]map[string]any{
+	"agentflow_commit_context": {"paths": []any{"a.txt"}}, // no paths only reads the staged index
 }
 
 // legacyOnlyTools lists the write tools of the MCP server that the registry
 // cannot provide yet.
 var legacyOnlyTools = map[string]string{
 	"agentflow_config_apply": "its input schema is built from configconsole.ApplyRequest with an enum on operation; command.MCP has no custom schema, so a Spec would change the schema the tool golden file pins",
-}
-
-// otherLaneTools lists the write tools that phase 3 lanes 3.2 (commit, PR,
-// push, review) and 3.3 (task, transition, comment, ticket, AC) move into the
-// registry. They are not registered until those lanes merge; the test accepts
-// them either way.
-var otherLaneTools = map[string]string{
-	"agentflow_commit_context":   "lane 3.2",
-	"agentflow_commit":           "lane 3.2",
-	"agentflow_push":             "lane 3.2",
-	"agentflow_pr_open":          "lane 3.2",
-	"agentflow_pr_mark_ready":    "lane 3.2",
-	"agentflow_review_reply":     "lane 3.2",
-	"agentflow_start":            "lane 3.3",
-	"agentflow_ticket_create":    "lane 3.3",
-	"agentflow_transition":       "lane 3.3",
-	"agentflow_comment":          "lane 3.3",
-	"agentflow_ac_update":        "lane 3.3",
-	"agentflow_jira_remote_link": "lane 3.3",
 }
 
 func isWrite(m command.Meta) bool { return m.Class == policy.Local || m.Class == policy.Remote }
@@ -291,6 +277,9 @@ func checkTool(t *testing.T, a *app.App, c command.Command) {
 	call := func(extra map[string]any) {
 		t.Helper()
 		in := sampleObject(root)
+		for k, v := range toolInputs[tool.Name] {
+			in[k] = v
+		}
 		for k, v := range extra {
 			in[k] = v
 		}
@@ -424,7 +413,7 @@ func sampleValue(schema map[string]any) any {
 // registered write of the lane that has no CLI binding is listed.
 func checkLegacyOnly(t *testing.T, dir string) {
 	t.Helper()
-	for what, lists := range map[string]map[string]string{"legacyOnlyTools": legacyOnlyTools, "otherLaneTools": otherLaneTools,
+	for what, lists := range map[string]map[string]string{"legacyOnlyTools": legacyOnlyTools,
 		"unregisteredWrites": unregisteredWrites, "registeredWriteLegacyCLI": registeredWriteLegacyCLI,
 		"directCalls": directCalls, "auditExempt": auditExempt} {
 		for name, reason := range lists {
@@ -455,9 +444,8 @@ func checkLegacyOnly(t *testing.T, dir string) {
 		readOnly := tool.Annotations != nil && tool.Annotations.ReadOnlyHint
 		_, registered := command.Default.Tool(tool.Name)
 		_, legacy := legacyOnlyTools[tool.Name]
-		_, other := otherLaneTools[tool.Name]
 		switch {
-		case readOnly || registered || other:
+		case readOnly || registered:
 		case !legacy:
 			t.Errorf("write tool %s is neither a registered command nor listed in legacyOnlyTools", tool.Name)
 		}
@@ -470,6 +458,17 @@ func checkLegacyOnly(t *testing.T, dir string) {
 			t.Errorf("legacyOnlyTools lists %s, which the server does not offer: remove the entry", name)
 		}
 	}
+
+	for name := range auditExempt {
+		c, ok := command.Default.Lookup(name)
+		switch {
+		case !ok || !isWrite(c.Meta()):
+			t.Errorf("auditExempt lists %s, which is not a registered write: remove the entry", name)
+		case c.Meta().Gate != command.GateNone || c.Meta().AuditByInvoker:
+			t.Errorf("auditExempt lists %s, which is now gated or audited by the Invoker: remove the entry", name)
+		}
+	}
+	checkDirectCalls(t)
 
 	for path := range unregisteredWrites {
 		if _, _, ok := command.Default.Dispatch(strings.Fields(path)); ok {
@@ -490,6 +489,37 @@ func checkLegacyOnly(t *testing.T, dir string) {
 	for name := range registeredWriteLegacyCLI {
 		if !slices.Contains(laneWrites, name) {
 			t.Errorf("registeredWriteLegacyCLI lists %s, which is not in laneWrites", name)
+		}
+	}
+}
+
+// checkDirectCalls holds directCalls to the truth: each command is
+// registered, still declares its flag and, run with it, still calls its app
+// method directly instead of the Invoker. The CI environment is cleared so the
+// GitHub event mode stops before it reads an event.
+func checkDirectCalls(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{"GITHUB_REPOSITORY_ID", "GITHUB_EVENT_PATH", "GITHUB_EVENT_NAME"} {
+		t.Setenv(k, "")
+	}
+	for path := range directCalls {
+		args := strings.Fields(path)
+		run, rest, ok := command.Default.Dispatch(args)
+		if !ok || len(rest) == len(args) {
+			t.Errorf("directCalls lists %q, whose command is not registered: remove the entry", path)
+			continue
+		}
+		invoked := false
+		inv := command.InvokerFunc(func(context.Context, *command.Call) (any, error) {
+			invoked = true
+			return nil, errors.New("invoked")
+		})
+		err := run(t.Context(), &commandtest.Env{}, inv, rest)
+		switch {
+		case err != nil && strings.Contains(err.Error(), "flag provided but not defined"):
+			t.Errorf("directCalls lists %q, whose flag the command no longer has: remove the entry", path)
+		case invoked:
+			t.Errorf("directCalls lists %q, which now runs through the Invoker: remove the entry", path)
 		}
 	}
 }
