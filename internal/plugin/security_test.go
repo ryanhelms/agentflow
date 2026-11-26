@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
@@ -183,11 +184,22 @@ func TestPluginInvokesOnlyAllowedCommandsWithoutTokens(t *testing.T) {
 	if strings.Contains(string(raw), "cf_") || strings.Contains(string(raw), "token") {
 		t.Fatalf("a token reached the plugin: %s", raw)
 	}
-	// Resuming before a person approved keeps waiting.
-	again, err := invoke(plugin.InvokeRequest{Command: "notify", Cause: cause.ID, Input: json.RawMessage(`{"signal":"s"}`), Resume: res.ApprovalID})
-	if err != nil || again.Outcome != "awaiting_approval" || again.ApprovalID != res.ApprovalID {
-		t.Fatalf("resume before approval: %+v %v", again, err)
+	// Resuming before a person approved keeps waiting, and publishes
+	// nothing: a plugin polling must not feed op.* events to itself.
+	// The cause (op.failed), then the call's op.requested and op.awaiting_approval.
+	f.eventually("the first call's events", func() bool { return len(f.ops) == 3 })
+	for i := 0; i < 2; i++ { // within the rate limit's burst
+		again, err := invoke(plugin.InvokeRequest{Command: "notify", Cause: cause.ID, Input: json.RawMessage(`{"signal":"s"}`), Resume: res.ApprovalID})
+		if err != nil || again.Outcome != "awaiting_approval" || again.ApprovalID != res.ApprovalID || again.ExpiresAt == nil {
+			t.Fatalf("resume before approval: %+v %v", again, err)
+		}
 	}
+	time.Sleep(50 * time.Millisecond)
+	f.mu.Lock()
+	if len(f.ops) != 3 {
+		t.Errorf("a pending resume published %d op events", len(f.ops)-3)
+	}
+	f.mu.Unlock()
 	select {
 	case in := <-f.ran:
 		t.Fatalf("the write ran without a person: %+v", in)

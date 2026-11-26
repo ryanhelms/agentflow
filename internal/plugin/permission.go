@@ -3,11 +3,15 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 )
 
@@ -40,6 +44,10 @@ type PermissionStage struct {
 	// result means no plugins are installed.
 	Source func() manifest.Source
 	Layers func() Layers
+	// RegistryPath and ConfigPath name the files a refusal asks the person
+	// to fix; nil means the agentflow home's installed.json and config.yml.
+	RegistryPath func() string
+	ConfigPath   func() string
 
 	mu    sync.Mutex
 	key   string
@@ -64,8 +72,9 @@ func (s *PermissionStage) Handle(ctx context.Context, c *command.Call, next comm
 	}
 	rules, err := s.load(ctx)
 	if err != nil {
-		// The rules cannot be read: refuse rather than drop a deny.
-		return nil, &DeniedError{Plugin: "*", Rule: "*", Message: "plugin permission rules could not be read; run agentflow plugin list"}
+		// The rules cannot be read: refuse rather than drop a deny, and say
+		// which file to fix.
+		return nil, &DeniedError{Plugin: "*", Rule: "*", Message: s.unreadable(err)}
 	}
 	for _, r := range rules {
 		if matchRule(r.rule.Match, c) {
@@ -84,7 +93,7 @@ func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
 	}
 	personal, err := layers.Personal(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &rulesError{config: true, err: err}
 	}
 	enabled := map[string]bool{}
 	for id, p := range personal {
@@ -101,7 +110,7 @@ func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
 	}
 	installed, err := src.Installed(ctx)
 	if err != nil {
-		return nil, err
+		return nil, &rulesError{err: err}
 	}
 	var rules []compiledRule
 	for _, p := range installed {
@@ -137,4 +146,45 @@ func globs(patterns []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// rulesError says which file kept the rules from being read.
+type rulesError struct {
+	config bool // the personal layer, else the registry
+	err    error
+}
+
+func (e *rulesError) Error() string { return e.err.Error() }
+func (e *rulesError) Unwrap() error { return e.err }
+
+// unreadable is the refusal's message: the file and how to fix it.
+func (s *PermissionStage) unreadable(err error) string {
+	var re *rulesError
+	if errors.As(err, &re) && re.config {
+		return fmt.Sprintf("plugin permission rules could not be read because %s is not valid. Fix that file, then check it with agentflow config.", pathOr(s.ConfigPath, defaultConfigPath))
+	}
+	return fmt.Sprintf("plugin permission rules could not be read because %s is not a valid plugin registry. Fix or restore that file, then check it with agentflow plugin list.", pathOr(s.RegistryPath, defaultRegistryPath))
+}
+
+func pathOr(f, fallback func() string) string {
+	if f != nil {
+		return f()
+	}
+	return fallback()
+}
+
+func defaultRegistryPath() string {
+	home, err := config.HomeDir()
+	if err != nil {
+		return filepath.Join("~", ".agentflow", manifest.PluginsDir, manifest.RegistryFile)
+	}
+	return filepath.Join(home, manifest.PluginsDir, manifest.RegistryFile)
+}
+
+func defaultConfigPath() string {
+	home, err := config.Home()
+	if err != nil {
+		return filepath.Join("~", ".agentflow", "config.yml")
+	}
+	return filepath.Join(home, "config.yml")
 }

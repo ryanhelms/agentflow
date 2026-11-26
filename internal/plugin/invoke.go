@@ -50,6 +50,19 @@ func (e *env) Invoke(ctx context.Context, r InvokeRequest) (InvokeResult, error)
 		return InvokeResult{Outcome: string(command.OutcomeFailed), Code: command.ErrorCode(err)}, nil
 	}
 	a = a.WithAutonomyCeiling(config.Confirm)
+	if r.Resume != "" && a.Gate != nil {
+		// Still waiting for a person: answer without running the call, so
+		// a poll publishes nothing (no op.requested, no op.failed for a
+		// plugin to react to).
+		if ap, err := a.Gate.Status(r.Resume); err == nil && ap.State == approvalPending {
+			out := InvokeResult{OperationID: r.Resume, Outcome: string(command.OutcomeAwaitingApproval), ApprovalID: r.Resume}
+			if !ap.ExpiresAt.IsZero() {
+				t := ap.ExpiresAt.UTC()
+				out.ExpiresAt = &t
+			}
+			return out, nil
+		}
+	}
 	origin := command.Origin{Source: client, Client: client}
 	if ce != nil {
 		origin.Cause = ce.ID
@@ -64,6 +77,9 @@ func (e *env) Invoke(ctx context.Context, r InvokeRequest) (InvokeResult, error)
 	e.r.h.update(e.id, func(st *Status) { st.Invocations++ })
 	return invokeResult(res, r.Resume), nil
 }
+
+// approvalPending is the state of an approval record no person answered.
+const approvalPending = "pending"
 
 // invokeResult turns the Invoker's result into what the plugin sees: no
 // confirm token, no approval fingerprint, no error text.
