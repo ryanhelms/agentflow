@@ -11,12 +11,15 @@
   <link rel="stylesheet" href="typed-editor.css">
   <link rel="stylesheet" href="document-editor.css">
   <link rel="stylesheet" href="timeline.css">
+  <link rel="stylesheet" href="settings.css">
   <script src="typed-editor.js" defer></script>
   <script src="document-editor.js" defer></script>
   <script src="tab-navigation.js" defer></script>
   <script src="event-worker.js" defer></script>
   <script src="live-panels.js" defer></script>
   <script src="timeline.js" defer></script>
+  <script src="settings-widgets.js" defer></script>
+  <script src="settings.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -54,8 +57,9 @@
       <div class="product"><span class="brand-mark" aria-hidden="true"></span><span>agentflow</span></div>
       <nav aria-label="Repository console">
         <a href="#overview" data-page="overview" aria-current="page"><span class="nav-icon ico-grid" aria-hidden="true"></span>Overview</a>
-        <a href="#providers" data-page="providers"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
-        <a href="#autonomy" data-page="autonomy"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
+        <a href="#settings" data-page="settings"><span class="nav-icon ico-settings" aria-hidden="true"></span>Settings</a>
+        <a href="#providers" data-page="providers" class="nav-sub"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
+        <a href="#autonomy" data-page="autonomy" class="nav-sub"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
         <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
         <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
       </nav>
@@ -153,65 +157,44 @@
             <ul class="rows" id="routing-list"></ul>
           </section>
         </section>
-        <section id="page-providers" aria-labelledby="providers-title" hidden>
-          <div class="page-heading"><h1 id="providers-title">Providers</h1><p>Choose a provider for each role and trace its settings to their source.</p></div>
-          <p id="provider-error" class="notice error" role="status" hidden></p>
-          <div class="provider-layout">
-            <div class="panel role-panel"><div class="section-heading"><h2 id="roles-heading">Provider roles</h2><span id="role-count" class="tag"></span></div><div role="group" aria-labelledby="roles-heading" id="roles" class="role-list"></div></div>
-            <div class="panel provider-main">
-              <div class="section-heading"><div><h2 id="role-title">Provider</h2><span class="muted code wrap" id="role-contract"></span></div></div>
-              <div id="role-detail" hidden>
-                <form id="select-provider" class="form-row">
-                  <label>Selected provider<select id="provider-choice"></select></label>
-                  <button type="submit" id="stage-provider" class="button secondary">Stage switch</button>
-                </form>
-                <p id="switch-note" class="notice" hidden>Switching replaces inline settings for this role. Existing records stay with their current provider.</p>
-                <div class="settings-heading"><h3>Effective settings</h3><label class="search"><span class="sr-only">Filter effective settings</span><input type="search" id="setting-filter" placeholder="Filter settings"></label></div>
-                <div id="settings-list" class="settings"></div>
+        <section id="page-settings" aria-labelledby="settings-title" hidden>
+          <div class="page-heading"><h1 id="settings-title" tabindex="-1">Settings</h1><p>Change any Agentflow option. Edits are checked as you make them and saved together, after a review.</p></div>
+          <p id="settings-note" class="live-note" hidden></p>
+          <div id="settings-error" class="notice error" role="status" hidden><span id="settings-error-text"></span> <button id="settings-retry" class="button secondary small" type="button">Try again</button></div>
+          <p id="settings-wait" class="muted">Waiting for live updates…</p>
+          <div id="settings-body" hidden>
+            <div id="settings-problems" class="notice error" hidden><strong>The configuration on disk has problems</strong><ul id="settings-problem-list" class="st-diagnostics"></ul></div>
+            <form id="settings-tools" class="st-tools" role="search" aria-label="Find settings">
+              <label class="st-search">Search settings<input type="search" id="settings-search" placeholder="Name, description or ID" autocomplete="off"></label>
+              <label class="st-check"><input type="checkbox" id="settings-modified">Modified only</label>
+              <label class="st-check"><input type="checkbox" id="settings-advanced">Show advanced</label>
+              <button id="settings-clear" class="button secondary small" type="button" hidden>Clear filters</button>
+            </form>
+            <p class="st-summary muted"><span id="settings-summary"></span> <button id="settings-all" class="st-link" type="button" hidden>Show all groups</button></p>
+            <div class="st-layout">
+              <nav id="settings-groups" class="st-nav" aria-label="Settings groups"></nav>
+              <div class="st-main">
+                <div id="settings-fields" class="st-groups"></div>
+                <p id="settings-empty" class="muted" hidden></p>
+                <section class="panel st-connections" aria-labelledby="connections-title">
+                  <div class="section-heading"><h2 id="connections-title">Checkout connections</h2><button id="check-connections" class="button secondary small" type="button" disabled>Check connections</button></div>
+                  <p id="connection-status" class="muted" role="status">Check the providers selected in the configuration on disk.</p>
+                  <details id="connection-results" hidden><summary>Connection details</summary><ul class="rows" id="connection-list"></ul></details>
+                </section>
               </div>
-              <p id="compose-message" class="notice error" role="status" hidden></p>
-              <p id="role-empty" class="muted">No provider data available.</p>
             </div>
           </div>
-          <section class="panel" aria-labelledby="connections-title">
-            <div class="section-heading"><h2 id="connections-title">Checkout connections</h2><button id="check-connections" class="button secondary small" type="button" disabled>Check connections</button></div>
-            <p id="connection-status" class="muted" role="status">Check the providers selected in the configuration on disk.</p>
-            <details id="connection-results" hidden><summary>Connection details</summary><ul class="rows" id="connection-list"></ul></details>
-          </section>
-        </section>
-        <section id="page-autonomy" aria-labelledby="autonomy-title" hidden>
-          <div class="page-heading"><h1 id="autonomy-title">Autonomy</h1><p>Choose which actions Agentflow can take and how long an approval stays valid.</p></div>
-          <p id="autonomy-status" class="notice" role="status" hidden></p>
-          <form id="autonomy-form">
-            <fieldset id="autonomy-controls" disabled>
-              <div class="panel">
-                <div class="section-heading"><h2>Approval settings</h2><span id="autonomy-state" class="tag"></span></div>
-                <label class="scope-field">Editing<select id="autonomy-scope"><option value="personal">Personal preferences</option><option value="repository">Repository ceilings</option></select></label>
-                <p id="autonomy-scope-help" class="muted"></p>
-                <div class="autonomy-fields">
-                  <label>Local writes<select id="autonomy-local"></select></label>
-                  <label>Remote writes<select id="autonomy-remote"></select></label>
-                  <label>Approval window<input type="text" id="autonomy-window" placeholder="Inherit" aria-describedby="autonomy-window-help" autocomplete="off"></label>
-                </div>
-                <p id="autonomy-window-help" class="muted">Enter a duration from 1m to 1h. Clear the field to inherit.</p>
-                <div id="autonomy-publication-policy" hidden>
-                  <label><input type="checkbox" id="autonomy-publication" aria-describedby="autonomy-publication-help">Allow automatic PR publication</label>
-                  <p id="autonomy-publication-help" class="muted">Allow a draft or ready PR and its branch push to run automatically under a remote ceiling of “Ask for confirmation”. Personal preferences and action ceilings must allow both actions. Adding reviewers or labels uses the usual remote ceiling.</p>
-                </div>
-                <p id="autonomy-reason" class="notice" role="status" hidden></p>
-              </div>
-              <div class="panel autonomy-actions">
-                <div class="settings-heading"><h2>Actions</h2><label class="search"><span class="sr-only">Find an action</span><input type="search" id="autonomy-filter" placeholder="Find an action"></label></div>
-                <p id="autonomy-rules-source" class="muted"></p>
-                <div id="autonomy-actions"></div>
-              </div>
-              <div class="actions autonomy-toolbar">
-                <button type="submit" id="save-autonomy" class="button primary" disabled>Save preferences</button>
-                <button type="button" id="reset-autonomy" class="button secondary" disabled>Discard form edits</button>
-                <a id="review-autonomy" href="#configuration" hidden>Review staged configuration</a>
-              </div>
-            </fieldset>
-          </form>
+          <div id="settings-bar" class="st-bar" role="region" aria-label="Save settings" hidden>
+            <p id="settings-storage" class="st-bar-note" data-tone="bad" hidden></p>
+            <div id="settings-bar-draft" class="st-bar-row" hidden>
+              <p class="st-bar-facts"><strong id="settings-bar-count"></strong><span id="settings-bar-checks" class="st-bar-checks"></span><span id="settings-bar-where" class="muted"></span></p>
+              <div class="st-bar-actions"><button id="settings-discard" class="button secondary" type="button">Discard</button><button id="settings-review-open" class="button primary" type="button">Review and save</button></div>
+            </div>
+            <div id="settings-bar-last" class="st-bar-row st-bar-last" hidden>
+              <p class="st-bar-facts"><span id="settings-last-text"></span><span id="settings-last-link"></span><span id="settings-undo-why" class="muted"></span></p>
+              <div class="st-bar-actions"><button id="settings-undo" class="button secondary small" type="button">Undo</button></div>
+            </div>
+          </div>
         </section>
         <section id="page-configuration" aria-labelledby="configuration-title" hidden>
           <div class="page-heading"><h1 id="configuration-title">Configuration</h1><p>Edit a repository file and preview its effect before publishing.</p></div>
@@ -296,14 +279,43 @@
       </main>
     </div>
   </div>
-  <dialog id="setting-dialog" aria-labelledby="setting-dialog-title">
-    <form id="setting-form" novalidate>
-      <div class="section-heading"><h2 id="setting-dialog-title" tabindex="-1">Edit setting</h2><button class="button secondary small" type="button" id="close-setting">Close</button></div>
-      <p id="setting-name" class="code wrap"></p>
-      <div id="typed-control"></div>
-      <p id="setting-storage-error" class="notice error" role="status" hidden></p>
-      <p id="setting-help" class="muted"></p><p id="setting-message" class="notice error" role="status" hidden></p>
-      <div class="actions"><button id="stage-setting" type="submit" class="button primary">Stage value</button><button id="inherit-setting" class="button secondary" type="button">Remove inline override</button></div>
+  <dialog id="settings-review" class="st-review" aria-labelledby="settings-review-title">
+    <form id="settings-review-form" novalidate>
+      <div class="section-heading"><h2 id="settings-review-title" tabindex="-1">Review and save</h2><span id="settings-review-count" class="tag"></span></div>
+      <p id="settings-review-status" class="notice" role="status" hidden></p>
+      <section aria-labelledby="settings-review-changes-title">
+        <h3 id="settings-review-changes-title">Changes</h3>
+        <ul id="settings-review-changes" class="st-changes"></ul>
+      </section>
+      <section id="settings-review-effects-section" aria-labelledby="settings-review-effects-title" hidden>
+        <h3 id="settings-review-effects-title">Other settings this changes</h3>
+        <ul id="settings-review-effects" class="st-changes"></ul>
+      </section>
+      <section id="settings-review-repo" aria-labelledby="settings-review-repo-title" hidden>
+        <h3 id="settings-review-repo-title">Repository changes</h3>
+        <fieldset id="settings-review-modes" class="st-modes">
+          <legend>Save repository changes as</legend>
+          <label><input type="radio" name="settings-mode" value="draft" checked><span><strong>A draft pull request</strong><small>The team reviews the change. This worktree's file is not touched.</small></span></label>
+          <label><input type="radio" name="settings-mode" value="worktree"><span><strong>A file change in this worktree</strong><small>Agentflow writes .agentflow/config.yml here. You commit it with your task.</small></span></label>
+          <label><input type="radio" name="settings-mode" value="direct"><span><strong>A change on the default branch</strong><small>Applied at once through the repository's publication rules.</small></span></label>
+          <p id="settings-mode-protected" class="muted" hidden></p>
+        </fieldset>
+        <div id="settings-review-publication" class="fields">
+          <label>PR and commit title<input type="text" id="settings-review-commit" autocomplete="off" maxlength="64"></label>
+          <label>Task reference (optional)<input type="text" id="settings-review-task" autocomplete="off"></label>
+        </div>
+        <p id="settings-review-destination" class="st-destination"></p>
+        <details id="settings-review-diff" open hidden><summary>Repository file diff</summary><pre id="settings-review-diff-text" class="brief st-diff" tabindex="0" aria-label="Diff of .agentflow/config.yml"></pre></details>
+      </section>
+      <p id="settings-review-personal" class="muted st-personal" hidden>Personal settings are saved to ~/.agentflow/config.yml on this computer. The file's contents are never shown here.</p>
+      <ul id="settings-review-diagnostics" class="st-diagnostics" hidden></ul>
+      <p id="settings-review-confirm" class="st-confirm" role="status" hidden></p>
+      <div class="actions">
+        <button id="settings-save" class="button primary" type="button">Save</button>
+        <button id="settings-undo-skip" class="button primary" type="button" hidden>Undo the other settings</button>
+        <button id="settings-review-close" class="button secondary" type="button">Back to settings</button>
+        <span id="settings-save-why" class="muted" hidden></span>
+      </div>
     </form>
   </dialog>
 </body>
