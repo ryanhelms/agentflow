@@ -97,8 +97,9 @@ hex>"}` under its worktree session. It stays attached while a stream of the orig
 it in `tab=`, and for 10 seconds after the last such stream closes. A navigation appears
 in the `tabs` state of the tab's worktree; only the tab whose ID matches acts on it and
 acknowledges with `POST /api/tabs/ack`. The daemon clears it on the acknowledgement or
-after 2 seconds. `POST /api/tabs/leave` detaches the tab at once. The older
-`GET /api/tabs/events` stream still works until the browser switches over.
+after 2 seconds. `POST /api/tabs/leave` detaches the tab at once. A tab that the
+console no longer lists attaches again. The browser no longer opens the older
+`GET /api/tabs/events` stream.
 
 The browser shares one stream per console origin through a `SharedWorker` loaded from
 `/_agentflow/event-worker.js`.

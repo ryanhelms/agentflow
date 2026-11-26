@@ -466,9 +466,14 @@ An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 
 The overview is live: a branch switch, a commit, staging or an edit under
-`.agentflow/` shows without a refresh. All tabs of a clone share one event
-stream. If the overview looks out of date, press **Resync** to discard it and
-load a fresh snapshot. `agentflow events --follow` prints the same events in a
+`.agentflow/` shows without a refresh. So do the repository's open pull
+requests with their checks, review and merge readiness, the issues bound to
+its worktrees, recent commits and blocked or failed hooks, approvals with the
+time each has left, and the handoff brief. The **Activity** panel also shows
+when GitHub is unavailable or rate limited and when Agentflow retries. All
+tabs of a clone share one event stream, which also carries requests to show a
+screen in an open tab. If the overview looks out of date, press **Resync** to
+discard it and load a fresh snapshot. `agentflow events --follow` prints the same events in a
 terminal; see [docs/events.md](docs/events.md). The daemon records events
 while it runs, in the repository's git dir under `agentflow/events/`.
 
