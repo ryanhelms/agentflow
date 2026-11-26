@@ -104,3 +104,32 @@ func TestInvokeJSONDecodesStrictly(t *testing.T) {
 		t.Fatalf("resume of a command without a token: %+v", r)
 	}
 }
+
+func TestLegacyCLIPathsRunTheRegisteredStages(t *testing.T) {
+	r := command.NewRegistry()
+	run := func(context.Context, *app.App, fakeIn) (any, error) { return nil, nil }
+	for _, s := range []command.Spec[fakeIn, fakeOut]{
+		{Name: "stage-denied", CLIPath: []string{"setup", "apply"}, Policy: command.Policy{Class: policy.Local, Action: "setup"}, Run: run},
+		{Name: "setup.plan", CLIPath: []string{"setup"}, Policy: command.Policy{Class: policy.Read}, Run: run},
+	} {
+		if err := r.Add(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, ok := r.Legacy([]string{"setup", "apply", "--yes"})
+	if !ok || m.Name != "stage-denied" {
+		t.Fatalf("longest legacy path: %+v %v", m, ok)
+	}
+	if err := command.CheckStages(context.Background(), m, command.Origin{Source: "cli"}, command.Detail{}); !errors.Is(err, errStageDenied) {
+		t.Fatalf("legacy path skipped the registered stage: %v", err)
+	}
+	if m, _ = r.Legacy([]string{"setup", "plan"}); m.Name != "setup.plan" {
+		t.Fatalf("shorter path: %+v", m)
+	}
+	if err := command.CheckStages(context.Background(), m, command.Origin{Source: "cli"}, command.Detail{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Legacy([]string{"other"}); ok {
+		t.Fatal("an unregistered path matched")
+	}
+}

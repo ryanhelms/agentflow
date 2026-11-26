@@ -76,7 +76,17 @@ type approvalRecord struct {
 	Related           []string  `json:"related,omitempty"`
 	Forced            bool      `json:"forced,omitempty"`
 	Source            string    `json:"source"`
+	// RequestedBy is the client whose call created the record. A plugin
+	// client (PluginClientPrefix) may redeem only records it created.
+	RequestedBy string `json:"requested_by,omitempty"`
 }
+
+// PluginClientPrefix starts the client name of a plugin's calls.
+const PluginClientPrefix = "plugin:"
+
+// ErrNotRequester: a plugin tried to redeem an approval another client
+// requested.
+var ErrNotRequester = fmt.Errorf("%w: this approval was requested by another client", ErrToken)
 
 const (
 	pending   = "pending"
@@ -393,7 +403,7 @@ func (g *Gate) prepare(d *Decision, class Class, action string, related []string
 	}
 	now := g.now().UTC()
 	r := approvalRecord{Approval: Approval{OperationID: "op_" + hex.EncodeToString(uid[:]), Class: class, Action: action, ExpiresAt: now.Add(d.Policy.Window)},
-		IssuedAt: now, Fingerprint: digest, Related: related, Forced: force, Source: d.Policy.Source}
+		IssuedAt: now, Fingerprint: digest, Related: related, Forced: force, Source: d.Policy.Source, RequestedBy: g.Client}
 	if !deadline.IsZero() && deadline.Before(r.ExpiresAt) {
 		r.ExpiresAt = deadline.UTC()
 	}
@@ -470,6 +480,9 @@ func (g *Gate) consume(d *Decision, credential, digest string) error {
 	d.Approval = &r.Approval
 	if err = stateError(r.State); err != nil {
 		return err
+	}
+	if strings.HasPrefix(g.Client, PluginClientPrefix) && r.RequestedBy != g.Client {
+		return ErrNotRequester
 	}
 	if r.Fingerprint != digest || r.State == prepared && d.Policy.Level != config.Auto {
 		g.logEvent(&r, "operation_changed")
