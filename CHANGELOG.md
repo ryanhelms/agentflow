@@ -5,6 +5,14 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.58.0](https://github.com/ryanhelms/agentflow/compare/v0.57.0...v0.58.0) - 2026-11-26
+
+### Features
+
+- describe every config field for structured controls (#73) ([6202a27](https://github.com/ryanhelms/agentflow/commit/6202a277cce54b5ac76f5a52941eddacb651c23a))
+- save settings as one previewed change set (#74) ([f70669b](https://github.com/ryanhelms/agentflow/commit/f70669b344f5d9a596b4a7fa5e7c3b8f26a5af68))
+- edit every setting with controls and one Save bar (#76) ([33f5ffd](https://github.com/ryanhelms/agentflow/commit/33f5ffd9c89233d3c808afb9859dce0e69b71fcd))
+
 ## [0.57.0](https://github.com/ryanhelms/agentflow/compare/v0.56.1...v0.57.0) - 2026-11-26
 
 ### Features
