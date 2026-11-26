@@ -103,10 +103,29 @@ jobs:
             cp "$RUNNER_TEMP/plugin-manifest.json" "$manifest"
           done
           git add CHANGELOG.md README.md "${plugin_manifests[@]}"
-          git commit -m "chore(release): v$VERSION"
+          # A re-run after a failed tag push finds the release commit already on
+          # the branch: tag that commit instead of making an empty one.
+          if git diff --cached --quiet; then
+            echo "::notice::chore(release): v$VERSION is already on ${GITHUB_REF_NAME}"
+          else
+            git commit -m "chore(release): v$VERSION"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+          if git ls-remote --exit-code --tags release "refs/tags/v$VERSION" >/dev/null; then
+            echo "::notice::v$VERSION already exists on the remote"
+            git fetch --force release "refs/tags/v$VERSION:refs/tags/v$VERSION"
+            exit 0
+          fi
           git tag -a "v$VERSION" -m "agentflow v$VERSION"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          git push release "refs/tags/v$VERSION"
+          # GitHub sometimes rejects a ref push without a reason; retry before failing.
+          for attempt in 1 2 3; do
+            if git push release "refs/tags/v$VERSION"; then
+              exit 0
+            fi
+            echo "::warning::tag push attempt $attempt failed"
+            sleep $((attempt * 10))
+          done
+          exit 1
 
       - name: Build and upload the draft GitHub Release
         if: steps.version.outputs.release == 'true'
