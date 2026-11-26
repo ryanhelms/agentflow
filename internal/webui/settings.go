@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -88,7 +92,7 @@ func (s *server) settingsCatalog(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) settingsPreview(w http.ResponseWriter, r *http.Request) {
 	var cs settings.ChangeSet
-	if !read(w, r, &cs) {
+	if !readSettings(w, r, &cs) {
 		return
 	}
 	s.settingsReply(w, r, func(b SettingsBackend) (any, error) { return b.Preview(r.Context(), s.settingsCall(), cs) })
@@ -96,7 +100,7 @@ func (s *server) settingsPreview(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) settingsSave(w http.ResponseWriter, r *http.Request) {
 	var in settingsSave
-	if !read(w, r, &in) {
+	if !readSettings(w, r, &in) {
 		return
 	}
 	s.writeMu.Lock()
@@ -108,7 +112,7 @@ func (s *server) settingsSave(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) settingsUndo(w http.ResponseWriter, r *http.Request) {
 	var in settingsUndo
-	if !read(w, r, &in) {
+	if !readSettings(w, r, &in) {
 		return
 	}
 	s.writeMu.Lock()
@@ -118,10 +122,55 @@ func (s *server) settingsUndo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// MaxSettingsBody is the largest settings request body (ADR: 1 MiB, the
+// ChangeSet limit).
+const MaxSettingsBody = 1 << 20
+
+// settingsLog receives the detail of a failed settings call, which the
+// browser never sees.
+var settingsLog io.Writer = os.Stderr
+
+// readSettings decodes a settings request body: application/json (415
+// otherwise), at most MaxSettingsBody (413), one JSON value with no unknown
+// fields (400).
+func readSettings(w http.ResponseWriter, r *http.Request, v any) bool {
+	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || media != "application/json" {
+		problem(w, 415, "expected application/json")
+		return false
+	}
+	if r.ContentLength > MaxSettingsBody {
+		problem(w, 413, "the request body exceeds 1 MiB")
+		return false
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxSettingsBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			problem(w, 413, "the request body exceeds 1 MiB")
+		} else {
+			problem(w, 400, "invalid request body")
+		}
+		return false
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		problem(w, 400, "expected a single request")
+		return false
+	}
+	return true
+}
+
+// CodeSettingsFailed is the code of a 422 answer: the call failed for a
+// reason other than a policy decision. Its detail (a publisher or YAML
+// error, which can name paths or provider responses) goes to the daemon's
+// log only.
+const CodeSettingsFailed = "settings_failed"
+
 // settingsReply runs fn and encodes its answer: a Pending carries its token
 // as "approval", the name the browser uses for its bearer; a policy failure
-// is 409 with its code; other failures are 422.
-func (s *server) settingsReply(w http.ResponseWriter, _ *http.Request, fn func(SettingsBackend) (any, error)) {
+// is 409 with its code; other failures are 422 with a fixed message.
+func (s *server) settingsReply(w http.ResponseWriter, r *http.Request, fn func(SettingsBackend) (any, error)) {
 	b := currentSettingsBackend()
 	if b == nil {
 		problem(w, 503, "settings are not available in this console")
@@ -136,7 +185,8 @@ func (s *server) settingsReply(w http.ResponseWriter, _ *http.Request, fn func(S
 		reply(w, 409, map[string]string{"error": err.Error(), "code": policy.ErrorCode(err)})
 		return
 	case err != nil:
-		problem(w, 422, err.Error())
+		fmt.Fprintf(settingsLog, "agentflow: settings %s %s failed: %v\n", r.Method, r.URL.Path, err)
+		reply(w, 422, map[string]string{"error": "The settings request failed. The console log has the details.", "code": CodeSettingsFailed})
 		return
 	}
 	if p, ok := out.(*app.Pending); ok {

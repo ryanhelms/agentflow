@@ -23,6 +23,7 @@ import (
 type fakePublisher struct {
 	published []string
 	state     string
+	stateErr  error
 	fail      error
 }
 
@@ -43,7 +44,7 @@ func (f *fakePublisher) Publish(_ context.Context, _ *gitx.Repo, _ configconsole
 }
 
 func (f *fakePublisher) State(context.Context, *gitx.Repo, settings.Publication) (string, error) {
-	return f.state, nil
+	return f.state, f.stateErr
 }
 
 type fixture struct {
@@ -394,7 +395,8 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 		}
 	}
 	f.svc.Catalog = consolecfg.NewCatalog(fields)
-	pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("repo:flow_map", "acme/private@v1:flow.yml")}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}})
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:flow_map", "acme/private@v1:flow.yml")}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	pv, err := f.svc.Preview(t.Context(), cs)
 	if err != nil || len(pv.Changes) != 1 {
 		t.Fatalf("%v %+v", err, pv)
 	}
@@ -404,9 +406,274 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 	if c := pv.Changes[0]; !c.After.Redacted || c.After.JSON != nil || c.After.Digest == "" {
 		t.Errorf("change %+v", c)
 	}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := json.Marshal(out.(*app.Pending).Summary); strings.Contains(string(raw), "private@v1") {
+		t.Errorf("the approval summary carries a sensitive value: %s", raw)
+	}
+	// Once the file sets it, editing another field must not show it as a
+	// context line of the diff, in the preview or the approval summary.
+	if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte("flow_map: acme/private@v1:secret.yml\n"+repoConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	pv, err = f.svc.Preview(t.Context(), other)
+	if err != nil || len(pv.Changes) != 1 {
+		t.Fatalf("%v %+v", err, pv)
+	}
+	out, err = f.svc.Save(t.Context(), other, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{"preview": pv, "summary": out.(*app.Pending).Summary} {
+		if raw, _ := json.Marshal(v); strings.Contains(string(raw), "secret.yml") {
+			t.Errorf("the %s shows a sensitive value through the diff: %s", name, raw)
+		}
+	}
 	st, _ := f.svc.State(t.Context())
 	raw, _ := json.Marshal(st)
 	if strings.Contains(string(raw), "ryanhelms/agentflow@v0") {
 		t.Errorf("state carries a sensitive default: %s", raw)
+	}
+}
+
+// A personal approval change answers to console.autonomy as well: suggest
+// there, personal or as the repository ceiling, wins over console.settings.
+func TestApprovalChangesAnswerToConsoleAutonomy(t *testing.T) {
+	for name, tc := range map[string]struct{ personal, repo string }{
+		"personal suggest":   {personal: "autonomy:\n  actions:\n    console.autonomy: suggest\n", repo: repoConfig},
+		"repository ceiling": {repo: repoConfig + "    actions:\n      console.autonomy: suggest\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, "task-1")
+			if tc.personal != "" {
+				if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(tc.personal), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte(tc.repo), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.reopen(t)
+			before := f.personal(t)
+			for _, cs := range []settings.ChangeSet{
+				{Edits: []settings.Edit{set("personal:autonomy.local", "auto")}},
+				{Edits: []settings.Edit{set("personal:approval_window", "10m")}},
+				{Edits: []settings.Edit{set("personal:autonomy.local", "auto"), set("repo:commit.subject_max", 60)}},
+			} {
+				out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p, ok := out.(*app.Pending)
+				if !ok || p.Status != "suggest" || p.ConfirmToken != "" {
+					t.Fatalf("save %v returned %#v, want suggest", cs.Edits, out)
+				}
+			}
+			if f.personal(t) != before || len(f.pub.published) != 0 {
+				t.Errorf("a suggest-only save wrote something")
+			}
+			// Other personal fields still save under console.settings.
+			res := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:atlassian.email", "me@example.com")}})
+			if res.Status != settings.StatusSaved {
+				t.Errorf("unrelated field: %+v", res)
+			}
+		})
+	}
+}
+
+// last_save.undoable follows the pull request: false while it is open, true
+// once the cache says it merged, and the journal keeps the newer state.
+func TestUndoableAfterMerge(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}})
+	rec, _ := f.svc.Journal(t.Context())
+	if f.svc.Summary(t.Context(), rec).Undoable {
+		t.Fatal("undoable while the pull request is open")
+	}
+	// The merge reaches the worktree.
+	b, _ := os.ReadFile(filepath.Join(f.dir, ".agentflow", "config.yml"))
+	if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte(strings.Replace(string(b), "commit:\n", "commit:\n  subject_max: 60\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.PullState = func(n int) (string, bool) { return "merged", n == 7 }
+	sum := f.svc.Summary(t.Context(), rec)
+	if !sum.Undoable || sum.Publication.State != "merged" {
+		t.Fatalf("summary after merge %+v", sum)
+	}
+	if rec, _ := f.svc.Journal(t.Context()); rec.Publication.State != "merged" {
+		t.Errorf("journal state %q, want merged", rec.Publication.State)
+	}
+	f.svc.PullState = nil
+	f.pub.state = "merged"
+	if pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{}); err != nil || pv.Status != settings.StatusOK {
+		t.Fatalf("undo preview %s %v %v", pv.Status, codes(pv), err)
+	}
+}
+
+// A save whose journal cannot be written must not leave the previous
+// record to be undone over it.
+func TestJournalFailureDropsTheStaleRecord(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "suggest")}})
+	restore := settings.FailJournalWrites(errors.New("disk full"))
+	second := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:approval_window", "10m")}})
+	restore()
+	if second.Status != settings.StatusSaved || second.Undo {
+		t.Fatalf("second save %+v", second)
+	}
+	if rec, err := f.svc.Journal(t.Context()); err != nil || rec != nil {
+		t.Fatalf("journal %+v %v, want none", rec, err)
+	}
+	if _, err := f.svc.Undo(t.Context(), settings.UndoRequest{}, "", f.app.GateOperation); !errors.Is(err, settings.ErrNothingToUndo) {
+		t.Errorf("undo: %v", err)
+	}
+	// A journal directory that cannot be written refuses the save up front.
+	dir := filepath.Dir(f.svc.JournalPath(t.Context()))
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	before := f.personal(t)
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("personal:approval_window", "20m")}}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Save(t.Context(), cs, out.(*app.Pending).ConfirmToken, f.app.GateOperation); err == nil || f.personal(t) != before {
+		t.Errorf("save with an unwritable journal: %v, file %q", err, f.personal(t))
+	}
+}
+
+// A save whose repository part was published but whose personal write
+// failed is a PartialResult, audited as failed with code partial under the
+// class it was gated with.
+func TestPartialSaveIsAFailure(t *testing.T) {
+	f := newFixture(t, "task-1")
+	var audits []policy.OperationAudit
+	f.svc.Audit = func(o policy.OperationAudit) { audits = append(audits, o) }
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60), set("personal:autonomy.remote", "suggest")}}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore := settings.FailPersonalWrites(errors.New("read-only"))
+	out, err = f.svc.Save(t.Context(), cs, out.(*app.Pending).ConfirmToken, f.app.GateOperation)
+	restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := out.(settings.PartialResult)
+	if !ok || r.Status != settings.StatusPartial || len(f.pub.published) != 1 || f.personal(t) != "" {
+		t.Fatalf("result %#v", out)
+	}
+	if raw, _ := json.Marshal(r); !strings.Contains(string(raw), `"status":"partial"`) || strings.Contains(string(raw), "SaveResult") {
+		t.Errorf("JSON %s", raw)
+	}
+	if len(audits) != 2 || audits[0].Outcome != "awaiting_approval" || audits[1].Outcome != "failed" || audits[1].Code != "partial" ||
+		audits[1].Class != policy.Remote || audits[1].Action != "console.publish" || audits[1].OperationID != audits[0].OperationID {
+		t.Errorf("audits %+v", audits)
+	}
+	// The journal records only the published repository edit.
+	if rec, _ := f.svc.Journal(t.Context()); rec == nil || len(rec.Edits) != 1 || rec.Edits[0].ID != "repo:commit.subject_max" {
+		t.Errorf("journal %+v", rec)
+	}
+}
+
+// A symlinked personal file is followed to a regular file the user owns,
+// and saves write through the link. A link the editor cannot use refuses
+// personal edits only: repository edits and the page still work.
+func TestPersonalSymlink(t *testing.T) {
+	f := newFixture(t, "task-1")
+	dotfiles := filepath.Join(t.TempDir(), "agentflow.yml")
+	if err := os.WriteFile(dotfiles, []byte("approval_window: 5m\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.home, "config.yml")
+	if err := os.Symlink(dotfiles, link); err != nil {
+		t.Fatal(err)
+	}
+	st, err := f.svc.State(t.Context())
+	if err != nil || st.Revisions.Personal == settings.RevisionAbsent {
+		t.Fatalf("state through a link: %+v %v", st.Revisions, err)
+	}
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "suggest")}})
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the save replaced the link: %v", err)
+	}
+	if b, _ := os.ReadFile(dotfiles); !strings.Contains(string(b), "suggest") || !strings.Contains(string(b), "5m") {
+		t.Errorf("target file %q", b)
+	}
+
+	// A dangling link: personal edits fail, everything else works.
+	if err := os.Remove(dotfiles); err != nil {
+		t.Fatal(err)
+	}
+	st, err = f.svc.State(t.Context())
+	if err != nil || len(st.Problems) == 0 || st.Revisions.Repo == "" {
+		t.Fatalf("state with a dangling link: %+v %v", st, err)
+	}
+	if _, err := f.svc.Fields(t.Context(), settings.FieldsRequest{}); err != nil {
+		t.Fatalf("fields: %v", err)
+	}
+	pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "auto")}})
+	if err != nil || pv.Status != settings.StatusInvalid || !has(codes(pv), "error:config") {
+		t.Fatalf("personal edit through a dangling link: %s %v %v", pv.Status, codes(pv), err)
+	}
+	res := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}})
+	if res.Status != settings.StatusSaved {
+		t.Errorf("repository save: %+v", res)
+	}
+	// A link to a directory is refused the same way.
+	if err := os.Mkdir(dotfiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if pv, _ := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{set("personal:autonomy.remote", "auto")}}); pv.Status != settings.StatusInvalid {
+		t.Errorf("link to a directory: %s", pv.Status)
+	}
+}
+
+// Without GitHub, an undo still reverts the personal part and says the
+// repository part stayed.
+func TestUndoWithoutGitHubRevertsPersonalPart(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60), set("personal:autonomy.remote", "suggest")}})
+	f.pub.stateErr = errors.New("dial tcp: no route to host")
+	pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{})
+	if err != nil || pv.Status != settings.StatusOK || !has(codes(pv), "warning:reference") || len(pv.Changes) != 1 || pv.Changes[0].ID != "personal:autonomy.remote" {
+		t.Fatalf("preview %s %v %+v %v", pv.Status, codes(pv), pv.Changes, err)
+	}
+	res, ok := f.undo(t, settings.UndoRequest{}).(settings.SaveResult)
+	if !ok || res.Status != settings.StatusSaved || !strings.Contains(res.Error, "Only the personal settings were undone") || strings.Contains(f.personal(t), "suggest") {
+		t.Fatalf("undo %+v, personal %q", res, f.personal(t))
+	}
+	if len(f.pub.published) != 1 {
+		t.Errorf("the undo published %d times", len(f.pub.published)-1)
+	}
+}
+
+// A worktree-mode save is undone only from the worktree (branch) that wrote
+// it: the journal is shared by every worktree of the clone.
+func TestUndoRefusesFromAnotherWorktree(t *testing.T) {
+	f := newFixture(t, "task-1")
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60)}, Repo: settings.RepoTarget{Mode: settings.RepoWorktree}}
+	f.save(t, cs)
+	git(t, f.dir, "stash", "-q")
+	git(t, f.dir, "switch", "-q", "-c", "task-2")
+	git(t, f.dir, "stash", "pop", "-q")
+	pv, err := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{})
+	if err != nil || pv.Status != settings.StatusInvalid || !has(codes(pv), "error:reference") {
+		t.Fatalf("undo from task-2: %s %v %v", pv.Status, codes(pv), err)
+	}
+	if !strings.Contains(pv.Diagnostics[0].Message, "task-1") {
+		t.Errorf("message %q", pv.Diagnostics[0].Message)
+	}
+	git(t, f.dir, "stash", "-q")
+	git(t, f.dir, "switch", "-q", "task-1")
+	git(t, f.dir, "stash", "pop", "-q")
+	if pv, _ := f.svc.PreviewUndo(t.Context(), settings.UndoRequest{}); pv.Status != settings.StatusOK {
+		t.Errorf("undo from task-1: %s %v", pv.Status, codes(pv))
 	}
 }

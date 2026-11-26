@@ -197,7 +197,7 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 			rt.mu.Unlock()
 			return nil, err
 		}
-		r = &repoEvents{id: s.Repo(), common: w.Common, store: s, global: rt.global, bus: rt.bus, worktrees: map[bus.WorktreeID]registeredWorktree{}}
+		r = &repoEvents{id: s.Repo(), common: w.Common, store: s, global: rt.global, bus: rt.bus, github: rt.githubCache, worktrees: map[bus.WorktreeID]registeredWorktree{}}
 		r.projector = newProjector(r.id, repoProjections(r, rt.githubCache, rt.approvalSource))
 		topics := append([]bus.Topic{{Repo: r.id, Worktree: bus.Any, Types: "**"}}, globalTopics...)
 		sub, err := rt.bus.Subscribe(bus.SubscribeOptions{Name: "projector/" + string(r.id)}, topics...)
@@ -258,6 +258,9 @@ type repoEvents struct {
 	global    store.Store
 	bus       bus.Publisher
 	projector *projector
+	// github is the GitHub poller's cache, for projections registered
+	// through projectionExtensions; nil, or a nil result, without a poller.
+	github func() watch.GitHubCache
 
 	mu        sync.Mutex
 	worktrees map[bus.WorktreeID]registeredWorktree

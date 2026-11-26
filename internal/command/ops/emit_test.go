@@ -119,6 +119,7 @@ var selfAuditing = map[string]bool{
 	"eod.post": true, "docs.publish": true, "adr.draft": true, "release.publish": true, "notify": true,
 	"setup.apply": true, "finish": true, "sweep": true, "delegate": true, "promote": true, "secops.triage": true,
 	"config.apply": true, // configconsole.Review and PersonalAutonomy audit their writes
+	"config.set": true, "config.undo": true, // settings.Service audits under the class it gated with
 }
 
 // checkWriteRules applies the rules that need only the Spec's metadata.

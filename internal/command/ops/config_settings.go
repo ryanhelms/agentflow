@@ -140,7 +140,8 @@ var (
 		CLIPath: []string{"config", "set"},
 		MCP: &command.MCP{Tool: "agentflow_config_set", Annotations: command.RemoteWrite, InputSchema: changeSetSchema[configSetIn](true),
 			Description: "Save a change set of settings edits as one change: all layers or none. Every save needs an explicit confirmation, even under auto: the first call returns needs_confirmation with a summary that lists loosening edits first; after the user agrees, call again with the same edits and confirm_token. Personal edits apply at once; repository edits open a draft pull request by default, or apply directly, or write the worktree file (mode worktree, refused on a protected branch)."},
-		Policy:   command.Policy{Class: policy.Remote, Action: "console.settings", AuditByInvoker: true},
+		// Run audits itself: the class and action depend on the edits.
+		Policy:   command.Policy{Class: policy.Remote, Action: "console.settings"},
 		Events:   command.ScopeWorktree,
 		Token:    func(in *configSetIn) *string { return &in.ConfirmToken },
 		Describe: func(in configSetIn) command.Detail { return command.Detail{Subject: describeEdits("save", in.Edits)} },
@@ -155,7 +156,8 @@ var (
 		CLIPath: []string{"config", "undo"},
 		MCP: &command.MCP{Tool: "agentflow_config_undo", Annotations: command.RemoteWrite, InputSchema: undoSchema,
 			Description: "Reverse the last settings save in this repository through the same checks and confirmation as agentflow_config_set; a second undo redoes it. Fields changed since the save conflict unless skip_conflicts. Fields whose pull request is still open cannot be undone: close the pull request instead."},
-		Policy:   command.Policy{Class: policy.Remote, Action: "console.settings", AuditByInvoker: true},
+		// Run audits itself, like config.set.
+		Policy:   command.Policy{Class: policy.Remote, Action: "console.settings"},
 		Events:   command.ScopeWorktree,
 		Token:    func(in *configUndoIn) *string { return &in.ConfirmToken },
 		Describe: func(configUndoIn) command.Detail { return command.Detail{Subject: "undo the last settings save"} },
@@ -411,6 +413,9 @@ func confirmText(yes bool, call func(token string) (any, error)) error {
 	switch r := out.(type) {
 	case settings.SaveResult:
 		printResult(os.Stdout, r)
+	case settings.PartialResult:
+		printResult(os.Stdout, r.SaveResult)
+		return errors.New("saved in part: " + r.Error)
 	case settings.Preview:
 		printPreview(os.Stdout, r)
 		return fmt.Errorf("not saved: %s", r.Status)

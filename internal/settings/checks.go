@@ -120,6 +120,10 @@ func syntaxLink(c *check) {
 			continue
 		}
 		e.layer, e.keys = layer, keys
+		if layer == config.FieldPersonal && c.files.personalErr != nil {
+			c.add(SeverityError, e, CodeConfig, "Cannot change personal settings: "+c.files.personalErr.Error()+".")
+			continue
+		}
 		switch {
 		case len(e.Value) > MaxValueBytes || len(e.Expect) > MaxValueBytes:
 			c.add(SeverityError, e, CodeSyntax, "A value is at most 64 KiB.")

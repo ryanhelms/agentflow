@@ -136,6 +136,11 @@ agentflow config undo
 - A save is checked again, gated once and always confirmed, also under `auto`.
   Loosening edits (a higher autonomy level, a longer approval window, automatic
   PR publication, coordinator merges, fewer protected branches) are listed first.
+- A save that changes `autonomy.*` or `approval_window`, or loosens policy, is
+  gated by `console.autonomy` as well as `console.settings`; the stricter rule
+  wins.
+- The repository diff is left out while any sensitive field is set in the
+  file, before or after the save.
 - All layers are written or none. If a layer file changes between the
   confirmation and the save, the save fails with `operation_changed`; preview
   again.
@@ -149,7 +154,9 @@ agentflow config undo
 - `agentflow config undo` reverses the last save in this repository; fields
   changed since conflict unless you pass `--skip-conflicts`. A field whose pull
   request is still open cannot be undone: close the pull request. A second undo
-  redoes the save.
+  redoes the save. A `--mode worktree` save is undone only from the worktree
+  that wrote it. When GitHub cannot be reached to check the pull request, the
+  undo reverts the personal part alone and says so.
 - Personal YAML never leaves your machine: previews and the console show field
   values only.
 
@@ -158,7 +165,9 @@ Agents use `agentflow_config_fields`, `agentflow_config_preview`,
 console's Settings page calls the same commands through
 `GET /api/settings/catalog`, `POST /api/settings/preview`, `POST /api/settings/save`
 and `POST /api/settings/undo`, and gets live values from the `settings` stream
-projection.
+projection. Request bodies are JSON of at most 1 MiB. A policy refusal answers
+409 with its `code`; any other failure answers 422 with code `settings_failed`
+and a fixed message, and the detail goes to the console's log.
 
 ### Change a personal preference
 

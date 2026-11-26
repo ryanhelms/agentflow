@@ -66,7 +66,25 @@ func (s *Service) writeJournal(ctx context.Context, rec JournalRecord) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(s.JournalPath(ctx), string(data)+"\n", 0o600)
+	return writeJournalFile(s.JournalPath(ctx), string(data)+"\n")
+}
+
+// writeJournalFile writes a journal file; tests replace it to fail.
+var writeJournalFile = func(path, content string) error { return writeAtomic(path, content, 0o600) }
+
+// journalWritable checks that a new journal record can be written.
+func (s *Service) journalWritable() error {
+	dir := filepath.Join(s.Home, JournalDir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".agentflow-settings-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	_ = f.Close()
+	return os.Remove(name)
 }
 
 // openStates are publication states whose pull request may still be open.
@@ -87,7 +105,15 @@ func (s *Service) Summary(ctx context.Context, rec *JournalRecord) *SaveSummary 
 	if err != nil {
 		return out
 	}
-	pending := rec.Publication != nil && rec.Publication.Mode != RepoWorktree && openStates[rec.Publication.State]
+	if pub := rec.Publication; pub != nil && pub.Mode != RepoWorktree && openStates[pub.State] && s.PullState != nil && pub.Number > 0 {
+		if state, ok := s.PullState(pub.Number); ok && state != "open" {
+			cp := *pub
+			cp.State = state
+			out.Publication = &cp
+			s.refreshPublication(ctx, rec, state)
+		}
+	}
+	pending := out.Publication != nil && out.Publication.Mode != RepoWorktree && openStates[out.Publication.State]
 	for _, e := range rec.Edits {
 		l, keys, err := fieldKeys(e.ID)
 		if err != nil {
@@ -113,4 +139,25 @@ func journalHolds(l layer, keys []string, after json.RawMessage) bool {
 	}
 	wantSet := !bytes.Equal(bytes.TrimSpace(after), []byte("null"))
 	return set == wantSet && (!set || bytes.Equal(canonical(got), canonical(after)))
+}
+
+// refreshPublication records a pull request's newer state in the journal,
+// so the record shows it after the daemon restarts. It only replaces the
+// record it read: a newer save is never overwritten. Best effort: the
+// record stays as it was when the write fails.
+func (s *Service) refreshPublication(ctx context.Context, rec *JournalRecord, state string) {
+	if rec.Publication == nil || rec.Publication.State == state {
+		return
+	}
+	unlock, err := s.lock()
+	if err != nil {
+		return
+	}
+	defer unlock()
+	now, err := s.Journal(ctx)
+	if err != nil || now == nil || now.Operation != rec.Operation || now.Publication == nil || now.Publication.URL != rec.Publication.URL {
+		return
+	}
+	now.Publication.State = state
+	_ = s.writeJournal(ctx, *now)
 }

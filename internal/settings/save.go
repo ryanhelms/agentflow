@@ -109,21 +109,67 @@ func (s *Service) Save(ctx context.Context, cs ChangeSet, token string, gate Gat
 }
 
 // commit gates a checked plan and applies it.
+//
+// It writes its own audit line, with the class and action it gated under,
+// for every outcome but a refusal before the gate (which an audit line of
+// the Invoker never had either).
 func (s *Service) commit(ctx context.Context, p *plan, operation, undoOf, token string, gate Gate) (any, error) {
 	if p.preview.Status != StatusOK {
 		return p.preview, nil
 	}
 	class, action, related := p.gate()
+	id, _ := policy.OperationIDOf(token)
+	audit := func(outcome, code string) {
+		if s.Audit != nil {
+			s.Audit(policy.OperationAudit{Class: class, Action: action, Operation: operation, OperationID: id, Outcome: outcome, Code: code})
+		}
+	}
 	pend, err := gate(app.OperationGate{Class: class, Action: action, Related: related, Summary: p.summary(operation),
 		Token: token, RequireConfirmation: true, Commands: []string{"agentflow ui"}})
 	if err != nil {
+		audit("failed", errorCode(err))
 		return nil, err
 	}
 	if pend != nil {
+		if pend.Approval != nil {
+			id = pend.Approval.OperationID
+		}
+		switch policy.Outcome(pend.Status) {
+		case policy.SuggestOnly:
+			audit("suggested", "")
+		case policy.Prepared:
+			audit("prepared", "")
+		default:
+			audit("awaiting_approval", "")
+		}
 		return pend, nil
 	}
-	id, _ := policy.OperationIDOf(token)
-	return s.apply(ctx, p, id, undoOf)
+	out, err := s.apply(ctx, p, id, undoOf)
+	switch r := out.(type) {
+	case nil:
+		audit("failed", errorCode(err))
+	case PartialResult:
+		audit("failed", string(r.Status))
+	default:
+		audit("applied", "")
+	}
+	return out, err
+}
+
+// PartialResult is a save whose repository part was published while the
+// personal write failed (status partial). It is a distinct type so that the
+// command Invoker reports the call as op.failed with code partial, not
+// op.applied; its JSON is the SaveResult's.
+type PartialResult struct {
+	SaveResult
+}
+
+// errorCode is the fixed audit code of err: a policy error code or "error".
+func errorCode(err error) string {
+	if code := policy.ErrorCode(err); code != "" {
+		return code
+	}
+	return "error"
 }
 
 // mode is the repository mode of the plan.
@@ -135,15 +181,51 @@ func (p *plan) mode() RepoMode {
 }
 
 // gate resolves the class and action of the save (ADR, "Phase 4 save").
+//
+// A save that changes personal approval settings (autonomy.* or
+// approval_window) or loosens policy anywhere also answers to
+// console.autonomy, the action agentflow_config_apply gates personal
+// approval changes with: the strictest of the related rules wins, so
+// console.autonomy: suggest, personal or as a repository ceiling, cannot
+// be bypassed through the settings editor.
 func (p *plan) gate() (policy.Class, string, []string) {
+	var related []string
 	if p.touches(config.FieldRepo) && p.mode() != RepoWorktree {
-		var related []string
 		if p.touches(config.FieldPersonal) {
-			related = []string{"console.settings"}
+			related = append(related, "console.settings")
+		}
+		if p.approvalChange() {
+			related = append(related, "console.autonomy")
 		}
 		return policy.Remote, "console.publish", related
 	}
-	return policy.Local, "console.settings", nil
+	if p.approvalChange() {
+		related = append(related, "console.autonomy")
+	}
+	return policy.Local, "console.settings", related
+}
+
+// approvalChange reports whether the plan changes a personal approval
+// setting or loosens policy.
+func (p *plan) approvalChange() bool {
+	if len(p.preview.Confirm) > 0 {
+		return true
+	}
+	for _, c := range p.preview.Changes {
+		if approvalField(c.ID) {
+			return true
+		}
+	}
+	return false
+}
+
+// approvalField reports whether id is a personal approval setting.
+func approvalField(id string) bool {
+	path, ok := strings.CutPrefix(id, "personal:")
+	if !ok {
+		return false
+	}
+	return path == "approval_window" || path == "autonomy" || strings.HasPrefix(path, "autonomy.")
 }
 
 // gateSummary is the payload bound into the approval: any difference
@@ -201,17 +283,11 @@ func (p *plan) summary(operation string) gateSummary {
 // by the review must still hold; the repository half publishes or writes the
 // worktree file first, then the personal file, then the journal.
 func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, error) {
-	if err := os.MkdirAll(s.Home, 0o700); err != nil {
-		return nil, errors.New("cannot open the agentflow settings directory")
-	}
-	lock, err := os.OpenFile(filepath.Join(s.Home, "config.yml.autonomy.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	unlock, err := s.lock()
 	if err != nil {
-		return nil, errors.New("cannot lock the personal settings")
+		return nil, err
 	}
-	defer lock.Close()
-	if err := filelock.Exclusive(lock); err != nil {
-		return nil, errors.New("cannot lock the personal settings")
-	}
+	defer unlock()
 	now, err := s.read()
 	if err != nil {
 		return nil, err
@@ -219,7 +295,12 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 	if now.revisions() != p.files.revisions() {
 		return nil, fmt.Errorf("a settings file changed after the review: %w", policy.ErrChanged)
 	}
-	res := SaveResult{Status: StatusSaved, Operation: id, Changes: p.preview.Changes, Restart: p.preview.Restart}
+	// A save that cannot be journaled would leave the previous record to
+	// be undone over it: refuse before writing anything.
+	if err := s.journalWritable(); err != nil {
+		return nil, errors.New("cannot write the settings journal, so nothing was saved")
+	}
+	res := SaveResult{Status: StatusSaved, Operation: id, Changes: p.preview.Changes, Restart: p.preview.Restart, Error: p.note}
 	var pub *Publication
 	repoDone := false
 	if p.touches(config.FieldRepo) {
@@ -248,7 +329,7 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 	}
 	personalDone := false
 	if p.touches(config.FieldPersonal) {
-		if err := writeAtomic(now.personal.abs, p.next[0], 0o600); err != nil {
+		if err := writePersonalFile(now.personal.abs, p.next[0]); err != nil {
 			if !repoDone {
 				return nil, errors.New("could not write the personal settings")
 			}
@@ -273,10 +354,39 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 		rec.Edits = append(rec.Edits, JournalEdit{ID: e.ID, Before: orNull(e.before, e.beforeSet), After: orNull(e.after, e.afterSet)})
 	}
 	if len(rec.Edits) > 0 {
-		res.Undo = s.writeJournal(ctx, rec) == nil
+		if err := s.writeJournal(ctx, rec); err != nil {
+			// Never leave the previous save's record: undo would revert it
+			// over this one.
+			_ = os.Remove(s.JournalPath(ctx))
+		} else {
+			res.Undo = true
+		}
+	}
+	if res.Status == StatusPartial {
+		return PartialResult{res}, nil
 	}
 	return res, nil
 }
+
+// lock takes the personal settings lock, the one agentflow_config_apply
+// holds for personal approval saves. The journal is written under it too.
+func (s *Service) lock() (func(), error) {
+	if err := os.MkdirAll(s.Home, 0o700); err != nil {
+		return nil, errors.New("cannot open the agentflow settings directory")
+	}
+	f, err := os.OpenFile(filepath.Join(s.Home, "config.yml.autonomy.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, errors.New("cannot lock the personal settings")
+	}
+	if err := filelock.Exclusive(f); err != nil {
+		_ = f.Close()
+		return nil, errors.New("cannot lock the personal settings")
+	}
+	return func() { _ = f.Close() }, nil
+}
+
+// writePersonalFile writes the personal layer; tests replace it to fail.
+var writePersonalFile = func(path, content string) error { return writeAtomic(path, content, 0o600) }
 
 func orNull(raw json.RawMessage, set bool) json.RawMessage {
 	if !set {
