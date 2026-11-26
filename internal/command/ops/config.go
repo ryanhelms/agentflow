@@ -25,7 +25,7 @@ import (
 // commands"). Their names, input schemas and output are a compatibility
 // contract: the schemas are built exactly as internal/mcpserver/configuration.go
 // builds them (recovery mode still serves those), and the config Verb parses
-// exactly as the legacy runConfig did.
+// exactly as the former internal/cli command did.
 
 const configUsage = "agentflow config OP [--input FILE|-]\nOperations: list, read, compose, autonomy, stage_autonomy, preview_personal, preview, readiness, save_personal, publish"
 
@@ -103,7 +103,7 @@ func init() {
 	})
 }
 
-// runConfig is `config OP [--input FILE|-]`, exactly as the legacy command:
+// runConfig is `config OP [--input FILE|-]`, as the former CLI command was:
 // the request is read from the file or standard input, and a configuration
 // that does not load opens in recovery mode.
 func runConfig(ctx context.Context, env command.CLIEnv, inv command.Invoker, args []string) error {
