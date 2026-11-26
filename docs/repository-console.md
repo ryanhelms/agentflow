@@ -165,7 +165,9 @@ Agents use `agentflow_config_fields`, `agentflow_config_preview`,
 console's Settings page calls the same commands through
 `GET /api/settings/catalog`, `POST /api/settings/preview`, `POST /api/settings/save`
 and `POST /api/settings/undo`, and gets live values from the `settings` stream
-projection.
+projection. Request bodies are JSON of at most 1 MiB. A policy refusal answers
+409 with its `code`; any other failure answers 422 with code `settings_failed`
+and a fixed message, and the detail goes to the console's log.
 
 ### Change a personal preference
 

@@ -1,13 +1,17 @@
 package webui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -150,5 +154,85 @@ func TestSettingsProjection(t *testing.T) {
 		if got := len(p.Keys(tc.e)); got != tc.keys {
 			t.Errorf("%s %s: %d keys, want %d", tc.e.Type, tc.e.Repo, got, tc.keys)
 		}
+	}
+}
+
+// rawSettingsRequest sends body as is, with the session and origin, and the
+// given headers.
+func rawSettingsRequest(t *testing.T, s *server, path string, body []byte, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("POST", s.origin+path, bytes.NewReader(body))
+	req.Header.Set("Origin", s.origin)
+	req.Header.Set("Authorization", "Bearer "+grantToken(s.session, "tab/v1", time.Now().Add(time.Hour)))
+	for k, v := range headers {
+		if v == "" {
+			req.Header.Del(k)
+		} else {
+			req.Header.Set(k, v)
+		}
+	}
+	w := httptest.NewRecorder()
+	s.handler().ServeHTTP(w, req)
+	return w
+}
+
+func TestSettingsEndpointLimits(t *testing.T) {
+	s := testServer(t)
+	s.worktreePath = "/w/main/"
+	fake := &fakeSettings{}
+	RegisterSettingsBackend(fake)
+	t.Cleanup(func() { RegisterSettingsBackend(nil) })
+	body := []byte(`{"edits":[{"id":"personal:autonomy.local","op":"set","value":"auto"}]}`)
+	console := map[string]string{"Content-Type": "application/json", "X-Agentflow-Request": "console"}
+	with := func(k, v string) map[string]string {
+		h := map[string]string{}
+		for a, b := range console {
+			h[a] = b
+		}
+		h[k] = v
+		return h
+	}
+	if w := rawSettingsRequest(t, s, "/api/settings/preview", body, console); w.Code != 200 {
+		t.Fatalf("well-formed request: %d %s", w.Code, w.Body)
+	}
+	if w := rawSettingsRequest(t, s, "/api/settings/save", body, with("X-Agentflow-Request", "")); w.Code != 403 {
+		t.Errorf("missing X-Agentflow-Request: %d", w.Code)
+	}
+	if w := rawSettingsRequest(t, s, "/api/settings/preview", body, with("Content-Type", "text/plain")); w.Code != 415 {
+		t.Errorf("wrong content type: %d", w.Code)
+	}
+	big := []byte(`{"edits":[{"id":"personal:autonomy.local","op":"set","value":"` + strings.Repeat("a", MaxSettingsBody) + `"}]}`)
+	if w := rawSettingsRequest(t, s, "/api/settings/preview", big, console); w.Code != 413 {
+		t.Errorf("oversized body: %d", w.Code)
+	}
+	// Without a length the limit still holds while reading.
+	req := httptest.NewRequest("POST", s.origin+"/api/settings/save", io.MultiReader(bytes.NewReader(big)))
+	req.ContentLength = -1
+	req.Header.Set("Origin", s.origin)
+	req.Header.Set("Authorization", "Bearer "+grantToken(s.session, "tab/v1", time.Now().Add(time.Hour)))
+	for k, v := range console {
+		req.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	s.handler().ServeHTTP(w, req)
+	if w.Code != 413 {
+		t.Errorf("oversized body without a length: %d", w.Code)
+	}
+	if len(fake.calls) != 1 {
+		t.Errorf("refused requests reached the backend: %v", fake.calls)
+	}
+
+	// A failure is a fixed code and message; the detail goes to the log.
+	var log bytes.Buffer
+	old := settingsLog
+	settingsLog = &log
+	t.Cleanup(func() { settingsLog = old })
+	fake.err = errors.New("yaml: line 3: mapping values are not allowed in /home/me/.agentflow/config.yml")
+	w = rawSettingsRequest(t, s, "/api/settings/preview", body, console)
+	if w.Code != 422 || strings.Contains(w.Body.String(), "yaml") || !strings.Contains(w.Body.String(), CodeSettingsFailed) {
+		t.Errorf("failure: %d %s", w.Code, w.Body)
+	}
+	if !strings.Contains(log.String(), "mapping values") {
+		t.Errorf("log %q", log.String())
 	}
 }
