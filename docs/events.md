@@ -45,7 +45,46 @@ The MCP tool `agentflow_events` takes `since`, `types`, `topics` and `limit` and
 | `git.refs.changed` | a ref or `packed-refs` changes |
 | `git.worktrees.changed` | a linked worktree is added or removed |
 | `git.operation.changed` | a rebase, merge, cherry-pick, revert or bisect starts or ends |
-| `config.layer.changed` | a file in `.agentflow/` or `.agentflow/providers/` changes |
+| `config.layer.changed` | a file in `.agentflow/` or `.agentflow/providers/` changes (layer `repo`), or `config.yml` or `providers/*.yml` in your agentflow home changes (layer `personal`, in `global`) |
+| `client.settings.changed` | an AI client's settings file changes: in your home directory (scope `user`, in `global`) or in a worktree (scope `repo`) |
+| `approval.requested` | an operation starts waiting for a person's approval |
+| `approval.resolved` | a waiting or approved operation is approved, cancelled or used |
+| `approval.expired` | a waiting or approved operation passes its expiry unused |
+
+## Approvals, personal configuration and client settings
+
+Besides each worktree, the daemon watches a few directories in your own home. It watches
+each non-recursively, only when you own it and it is not a symbolic link, and polls
+where notifications are unavailable.
+
+| Where | Files | Event |
+| --- | --- | --- |
+| the agentflow home (`AGENTFLOW_HOME`, normally `~/.agentflow`) | `config.yml` | `config.layer.changed`, layer `personal` |
+| `<home>/providers` | `*.yml`, `*.yaml` | `config.layer.changed`, layer `personal` |
+| `<home>/approvals` | one record per operation | `approval.*`, in the record's repository |
+| `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini`, `~/.grok` | the client's user settings file (`settings.json`, `config.toml` or `mcp.json`) | `client.settings.changed`, scope `user` |
+| each worktree root and its `.claude`, `.codex`, `.cursor`, `.gemini`, `.grok` and `.vscode` | the files `agentflow init` writes (`.mcp.json`, `settings.json`, `settings.local.json`, `config.toml`, `mcp.json`) | `client.settings.changed`, scope `repo`, in the worktree |
+
+Events name files, never their content. Paths are relative to the home, the agentflow home
+or the worktree, and a payload carries at most 20 of them. The daemon compares file
+content, so saving a file without a change reports nothing.
+
+**Approvals.** A record's name carries the repository it belongs to, so each event goes to
+that repository only; the daemon ignores records of repositories it does not serve. When
+the daemon starts to serve a repository it reads the existing records silently: an
+approval that was already waiting shows in the console's approvals list, and its later
+changes arrive as events. The events carry the operation, its action and class, the client
+that owns the prompt, and the issue and expiry times. They never carry the approval token,
+the request fingerprint or the prompt owner's session.
+
+The journal marks an approval expired only when a process next touches it. The daemon does
+not wait for that: when an open approval passes its expiry it publishes `approval.expired`
+with `observed: true`, and the journal's own later write adds nothing.
+
+**One agentflow home.** The daemon watches the `AGENTFLOW_HOME` it was started with. An
+agent that runs with another home writes its approvals there, and they never reach the
+console. Start the console from a shell that uses the same home as your agents. The daemon
+holds a lock on `console.lock` in the home it watches, and releases it when it stops.
 
 ## The console's event stream
 
