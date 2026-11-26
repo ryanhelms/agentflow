@@ -25,3 +25,8 @@ commit:
   subject_max: 72
   ai_trailer: false
   require_key: false
+
+# The ACP platform program (docs/plans/acp-platform/) merges lane PRs into develop.
+# The coordinator may merge those PRs, never into main.
+policy:
+  coordinator_merge: true
