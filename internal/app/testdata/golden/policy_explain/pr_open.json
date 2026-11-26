@@ -1,0 +1,41 @@
+[
+  {
+    "action": "pr_open",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "pr_open",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "push",
+        "level": "suggest",
+        "source": "autonomy.actions.push",
+        "user_class": "auto",
+        "user_class_default": false,
+        "user_action": "suggest",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false,
+    "includes": [
+      "push"
+    ]
+  }
+]

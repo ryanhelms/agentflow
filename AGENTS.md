@@ -85,6 +85,7 @@ make check        # everything CI runs (vet, test, lint, shellcheck, actionlint,
 make install-hooks   # build ./agentflow and check your commit messages locally
 make snapshot     # local multi-platform GoReleaser build, no publish
 make e2e          # drives the Claude Code plugin with `claude -p` (uses your Claude account)
+go test ./internal/app ./internal/cli -run Golden -update   # rewrite golden files after an intended output change
 scripts/build-blueprint.sh   # rebuild docs/blueprint.html from docs/artifact/
 ```
 
@@ -105,6 +106,7 @@ internal/release/            deployable units, release-please config, version ma
 internal/policy/             autonomy gate, single-use confirm tokens, never-list, audit
 internal/update/             self-update: channel/track, checksum + attestation, rollback
 internal/atlassian, gh/      Jira v3 + Confluence v2 and GitHub REST/GraphQL clients
+internal/goldentest/         golden-file helper for tests: normalises output, compares, -update
 internal/setup/              agentflow init/remove (templates/repo), install (adapters/), auto-init
 adapters/                    per-client files; adapters/claude-code is the plugin
 templates/repo/              files written into consuming repos (dotfiles included)
@@ -135,6 +137,16 @@ for the reader of the changelog.
 - Tests sit beside the code (`*_test.go`), use `t.TempDir()` and real `git` in temp repos,
   and never call real Jira, Confluence or GitHub. Use `httptest` for clients.
 - Keep golangci-lint at 0 issues; justify any `//nolint` inline.
+
+**Golden files.** `internal/app/testdata/golden/` and `internal/cli/testdata/golden/` pin
+the output of write operations: the `Pending` JSON that gated operations return, the result
+once they are applied, and what each command prints (stdout, stderr and the error). They
+change only when the output changes. If a test fails on a golden file and the new output
+is intended, run the package's tests with `-update`, review the diff and commit it with the
+change. Never edit a golden file by hand. Add a scenario to the same test file when you add
+a write operation or change its output. Times, confirmation tokens, approval IDs, prompt
+owners, object IDs and temporary paths are replaced by placeholders in
+`internal/goldentest`; add a rule there rather than a one-off replacement in a test.
 
 **Shell.** `#!/usr/bin/env bash`, `set -euo pipefail`, shellcheck-clean, quote everything,
 and stay compatible with bash 3.2 (macOS), so use `${arr[@]+"${arr[@]}"}` for possibly

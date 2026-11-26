@@ -1,0 +1,50 @@
+$ agentflow config preview --input -
+--- stdin
+{"base_digest":"<digest-1>","content":"agentflow: 1\ncommit: {require_key: false, subject_max: 60}\ntask_management: {provider: github-issues}\n","path":".agentflow/config.yml","title":"chore: adjust the commit rules"}
+--- stdout
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets console.publish (remote) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "cli/<owner>",
+    "action": "console.publish",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "console.publish",
+    "level": "confirm",
+    "source": "autonomy.remote",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": true,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  },
+  "plan": {
+    "path": ".agentflow/config.yml",
+    "base_digest": "<digest-1>",
+    "changes": [
+      {
+        "role": "repository",
+        "path": "commit.subject_max",
+        "before": 72,
+        "after": 60
+      }
+    ],
+    "diff": "--- a/.agentflow/config.yml\n+++ b/.agentflow/config.yml\n@@ -1,3 +1,3 @@\n agentflow: 1\n-commit: {require_key: false}\n+commit: {require_key: false, subject_max: 60}\n task_management: {provider: github-issues}\n",
+    "providers": "<elided>"
+  },
+  "before": "agentflow: 1\ncommit: {require_key: false}\ntask_management: {provider: github-issues}\n",
+  "after": "agentflow: 1\ncommit: {require_key: false, subject_max: 60}\ntask_management: {provider: github-issues}\n",
+  "title": "chore: adjust the commit rules",
+  "draft": true,
+  "ci": "Creating the proposal branch can trigger automation before the configuration commit. At publication, Agentflow checks both the default and proposal branches. It adds [skip actions] to the proposal and squash commit bodies only if GitHub confirms Actions is enabled, the branches are unprotected and no applicable rules exist. Otherwise normal checks run. The marker covers push and pull_request. Merge queues, pull_request_target, external CI and downstream automation can still run.\nNo local GitHub Actions workflow directory was found.",
+  "destination": "example/console"
+}

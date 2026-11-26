@@ -1,0 +1,37 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.local sets commit to suggest. Run it yourself",
+  "summary": {
+    "branch": "PLAT-1-quota",
+    "files": [
+      "new.txt"
+    ],
+    "git_dir": "<repo>/.git",
+    "jira_effects": null,
+    "message": "fix(PLAT-1): bound quota\n",
+    "parent": "<object-1>",
+    "parents": "<object-1>",
+    "ref": "refs/heads/PLAT-1-quota",
+    "repository": "<repo>",
+    "selected_paths": [
+      "new.txt"
+    ],
+    "tree": "<object-2>"
+  },
+  "commands": [
+    "git add -- 'new.txt' \u0026\u0026 git commit -m 'fix(PLAT-1): bound quota\n' -- 'new.txt'"
+  ],
+  "policy": {
+    "class": "local",
+    "action": "commit",
+    "level": "suggest",
+    "source": "autonomy.local",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

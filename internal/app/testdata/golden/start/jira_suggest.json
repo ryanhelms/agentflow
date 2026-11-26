@@ -1,0 +1,36 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.remote sets start to suggest. Run it yourself",
+  "summary": {
+    "assign_to_me": true,
+    "branch": "PLAT-1-reach-qa",
+    "key": "PLAT-1",
+    "repo": "<repo>",
+    "site": "https://tasks.example",
+    "transition": {
+      "key": "PLAT-1",
+      "event": "branch.created",
+      "from": "",
+      "applied": false,
+      "note": "no mapping for this project; nothing happens"
+    },
+    "worktree": true,
+    "worktree_path": "<worktrees>/PLAT-1-reach-qa"
+  },
+  "commands": [
+    "git switch -c PLAT-1-reach-qa origin/main"
+  ],
+  "policy": {
+    "class": "remote",
+    "action": "start",
+    "level": "suggest",
+    "source": "autonomy.remote",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

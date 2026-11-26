@@ -1,0 +1,7 @@
+{
+  "key": "PLAT-1",
+  "branch": "PLAT-1-reach-qa",
+  "worktree": "<worktrees>/PLAT-1-reach-qa",
+  "assigned": true,
+  "next": "Start your agent in the worktree: cd '<worktrees>/PLAT-1-reach-qa'"
+}

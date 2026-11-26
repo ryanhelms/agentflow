@@ -16,3 +16,7 @@ indent_style = tab
 
 [*.md]
 trim_trailing_whitespace = false
+
+# Golden files record exact command output, including a prompt's trailing space.
+[**/testdata/golden/**]
+trim_trailing_whitespace = false

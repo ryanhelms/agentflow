@@ -1,0 +1,28 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.remote sets transition to suggest. Run it yourself",
+  "summary": {
+    "key": "PLAT-1",
+    "event": "pr.merged",
+    "from": "Open",
+    "to": "QA",
+    "applied": false,
+    "site": "https://tasks.example"
+  },
+  "commands": [
+    "agentflow transition PLAT-1 'pr.merged'"
+  ],
+  "policy": {
+    "class": "remote",
+    "action": "transition",
+    "level": "suggest",
+    "source": "autonomy.remote",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

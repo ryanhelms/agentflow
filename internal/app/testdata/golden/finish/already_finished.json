@@ -1,0 +1,8 @@
+{
+  "repo": "<repo-name>",
+  "branch": "issue-42-0efd766f81d9",
+  "state": "already_finished",
+  "detail": "no worktree, local branch or remote branch",
+  "primary": "<repo>",
+  "next": "cd '<repo>'"
+}
