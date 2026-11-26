@@ -183,6 +183,7 @@ func serveRegistered(ctx context.Context, registry string, port int, op daemonRe
 	if err != nil {
 		return err
 	}
+	defer d.startEvents(ctx)()
 	launch, err := d.register(ctx, op)
 	if err != nil {
 		return err

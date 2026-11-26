@@ -13,6 +13,7 @@
   <script src="typed-editor.js" defer></script>
   <script src="document-editor.js" defer></script>
   <script src="tab-navigation.js" defer></script>
+  <script src="event-worker.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -66,19 +67,24 @@
               <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
             </select>
           </label>
-          <button id="refresh" class="button secondary" type="button">Refresh checkout</button>
+          <div class="stream" role="group" aria-label="Live updates">
+            <span id="stream-state" class="stream-state" data-state="connecting"><span class="stream-mark" aria-hidden="true"></span><span id="stream-label">Connecting</span></span>
+            <button id="refresh" class="button secondary small" type="button" aria-describedby="stream-state" title="Reload this checkout and restart live updates">Resync</button>
+          </div>
         </div>
       </header>
       <main id="main" tabindex="-1">
         <p id="workspace-save-error" class="notice error" role="status" hidden>Browser storage is full or unavailable. Keep this tab open and save your edits locally before switching worktrees.</p>
         <p id="status" class="notice" role="status">Opening the checkout…</p>
+        <p id="live-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></p>
         <section id="page-overview" aria-labelledby="overview-title">
           <div class="page-heading"><h1 id="overview-title">Overview</h1></div>
           <section class="checkout" aria-labelledby="checkout-title">
-            <div class="section-heading"><h2 id="checkout-title">Checkout</h2><span class="pill" id="working-state">Loading…</span></div>
+            <div class="section-heading"><h2 id="checkout-title">Checkout</h2><span class="checkout-pills"><span class="pill changed" id="git-operation" hidden></span><span class="pill" id="working-state">Loading…</span></span></div>
             <div class="checkout-name" id="checkout-name">—</div>
             <code class="root-path" id="root-path">—</code>
             <dl id="repo-metadata" class="metadata"></dl>
+            <p id="live-note" class="live-note" hidden></p>
           </section>
           <div class="overview-grid">
             <section class="panel" aria-labelledby="attention-title">
