@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -49,9 +50,25 @@ func (s *server) streamLimiter() *streamLimit {
 	return s.streams
 }
 
+// maxStreamTabs caps the tab= parameters of one stream (ADR, "Tabs on the
+// stream").
+const maxStreamTabs = 16
+
+// globalStreamFamilies are the only event families a stream may follow in
+// bus.GlobalRepo (ADR, "Phase 2 scoping", rule 2).
+var globalStreamFamilies = []string{"config", "client"}
+
+// globalPatternAllowed reports whether p selects only events of
+// globalStreamFamilies: its first segment names one of them literally.
+func globalPatternAllowed(p bus.Pattern) bool {
+	first, _, _ := strings.Cut(string(p), ".")
+	return slices.Contains(globalStreamFamilies, first)
+}
+
 // streamTopics parses the topic= parameters of a stream for repository
-// repo. A malformed topic is a 400; a topic naming any other repository,
-// including "global", is a 403. No topic means every event of repo.
+// repo. A malformed topic is a 400. A topic naming any other repository is
+// a 403, and so is a "global" topic outside config.** and client.**. No
+// topic means every event of repo.
 func streamTopics(raw []string, repo bus.RepoID) ([]bus.Topic, int, error) {
 	if len(raw) > MaxStreamTopics {
 		return nil, http.StatusBadRequest, fmt.Errorf("at most %d topics", MaxStreamTopics)
@@ -68,6 +85,16 @@ func streamTopics(raw []string, repo bus.RepoID) ([]bus.Topic, int, error) {
 		if t.Repo == bus.Any {
 			t.Repo = repo
 		}
+		if t.Repo == bus.GlobalRepo {
+			if !globalPatternAllowed(t.Types) {
+				return nil, http.StatusForbidden, errors.New("global topics may follow only config.** and client.**")
+			}
+			if t.Worktree != bus.Any {
+				return nil, http.StatusBadRequest, errors.New("global topics have no worktree")
+			}
+			topics = append(topics, t)
+			continue
+		}
 		if t.Repo != repo {
 			return nil, http.StatusForbidden, errors.New("topic outside this console's repository")
 		}
@@ -77,19 +104,37 @@ func streamTopics(raw []string, repo bus.RepoID) ([]bus.Topic, int, error) {
 }
 
 // streamCursor parses Last-Event-ID. A cursor with an entry for any other
-// repository is a 403: it would otherwise reveal or widen another
-// repository's position.
+// repository than repo and "global" is a 403: it would otherwise reveal or
+// widen another repository's position.
 func streamCursor(raw string, repo bus.RepoID) (bus.Cursor, int, error) {
 	c, err := bus.ParseCursor(strings.TrimSpace(raw))
 	if err != nil {
 		return nil, http.StatusBadRequest, errors.New("invalid Last-Event-ID")
 	}
 	for r := range c {
-		if r != repo {
+		if r != repo && r != bus.GlobalRepo {
 			return nil, http.StatusForbidden, errors.New("Last-Event-ID outside this console's repository")
 		}
 	}
 	return c, 0, nil
+}
+
+// streamTabs parses the tab= parameters: the tabs of the browser that this
+// stream keeps attached.
+func streamTabs(raw []string) ([]string, error) {
+	if len(raw) > maxStreamTabs {
+		return nil, fmt.Errorf("at most %d tabs", maxStreamTabs)
+	}
+	tabs := make([]string, 0, len(raw))
+	for _, id := range raw {
+		if !validTabID(id) {
+			return nil, errors.New("invalid tab id")
+		}
+		if !slices.Contains(tabs, id) {
+			tabs = append(tabs, id)
+		}
+	}
+	return tabs, nil
 }
 
 // eventStream serves GET <prefix>/api/events: the SSE stream of the ADR
@@ -111,6 +156,11 @@ func (s *server) eventStream(w http.ResponseWriter, r *http.Request) {
 		problem(w, status, err.Error())
 		return
 	}
+	tabs, err := streamTabs(r.URL.Query()["tab"])
+	if err != nil {
+		problem(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	until, _ := grantDeadline(token, s.session, "tab/v1", time.Now(), tabSessionFor)
 	limit := s.streamLimiter()
@@ -119,6 +169,11 @@ func (s *server) eventStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer limit.release()
+	if len(tabs) > 0 {
+		// The listed tabs stay attached while this stream is open, and for
+		// TabGrace after it closes.
+		defer s.tabRoutes().hold(tabs)()
+	}
 
 	// Subscribe before reading the store head, so nothing falls between the
 	// snapshot and the first delta.
@@ -198,15 +253,41 @@ func (st *sseStream) frame(name string, id *bus.Cursor, data any) error {
 	return st.raw(f.String())
 }
 
-// head returns this repository's store head, and nothing of any other.
-func (st *sseStream) head(ctx context.Context) (bus.Cursor, error) {
-	h, err := st.ev.store.Head(ctx)
-	if err != nil {
-		return nil, err
+// followsGlobal reports whether the stream names bus.GlobalRepo in a
+// topic. Only then does its cursor carry a global entry.
+func (st *sseStream) followsGlobal() bool {
+	for _, t := range st.topics {
+		if t.Repo == bus.GlobalRepo {
+			return true
+		}
 	}
+	return false
+}
+
+// globalStore is the store whose events the stream may replay besides its
+// repository's: the global one, when the stream follows it.
+func (st *sseStream) globalStore() store.Store {
+	if st.ev.global == nil || !st.followsGlobal() {
+		return nil
+	}
+	return st.ev.global
+}
+
+// head returns the store heads of this repository and, when the stream
+// follows it, of "global"; nothing of any other repository.
+func (st *sseStream) head(ctx context.Context) (bus.Cursor, error) {
 	c := bus.Cursor{}
-	if seq := h[st.ev.id]; seq > 0 {
-		c[st.ev.id] = seq
+	for repo, s := range map[bus.RepoID]store.Store{st.ev.id: st.ev.store, bus.GlobalRepo: st.globalStore()} {
+		if s == nil {
+			continue
+		}
+		h, err := s.Head(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if seq := h[repo]; seq > 0 {
+			c[repo] = seq
+		}
 	}
 	return c, nil
 }
@@ -217,8 +298,15 @@ func (st *sseStream) start(ctx context.Context, last bus.Cursor) error {
 	if err != nil {
 		return err
 	}
-	if seen := last[st.ev.id]; seen > 0 {
-		reason, err := st.replay(ctx, last, head)
+	cursor := last.Clone()
+	for _, part := range []struct {
+		repo bus.RepoID
+		s    store.Store
+	}{{st.ev.id, st.ev.store}, {bus.GlobalRepo, st.globalStore()}} {
+		if part.s == nil || last[part.repo] == 0 {
+			continue
+		}
+		reason, err := st.replay(ctx, part.s, part.repo, last, head, cursor)
 		if err != nil {
 			return err
 		}
@@ -229,32 +317,34 @@ func (st *sseStream) start(ctx context.Context, last bus.Cursor) error {
 	return st.snapshot(ctx, head)
 }
 
-// replay sends the stored events after last, up to head, as deltas without
-// states. It returns a resync reason when it cannot.
-func (st *sseStream) replay(ctx context.Context, last, head bus.Cursor) (ResyncReason, error) {
-	seen, newest := last[st.ev.id], head[st.ev.id]
+// replay sends the stored events of repo after last, up to head, as deltas
+// without states. cursor starts as last and advances with each event, so
+// each delta's id covers every store replayed so far. It returns a resync reason
+// when it cannot.
+func (st *sseStream) replay(ctx context.Context, s store.Reader, repo bus.RepoID, last, head, cursor bus.Cursor) (ResyncReason, error) {
+	seen, newest := last[repo], head[repo]
 	switch {
 	case seen > newest:
 		return ResyncCursorExpired, nil // the store was reset since
 	case newest-seen > store.MaxReplay:
 		return ResyncReplayLimit, nil
 	}
-	cursor := last.Clone()
-	for e, err := range st.ev.store.ReadFrom(ctx, last) {
+	for e, err := range s.ReadFrom(ctx, bus.Cursor{repo: seen}) {
 		if errors.Is(err, store.ErrCursorExpired) {
 			return ResyncCursorExpired, nil
 		}
 		if err != nil {
 			return "", err
 		}
-		if e.Seq > newest {
+		if e.Repo != repo || e.Seq > newest {
 			break
 		}
-		cursor = cursor.Advance(e)
-		if e.Repo != st.ev.id || !bus.MatchAny(st.topics, e) {
+		cursor[repo] = e.Seq
+		if !bus.MatchAny(st.topics, e) {
 			continue
 		}
-		if err := st.frame(FrameDelta, &cursor, DeltaFrame{Event: e, States: []ProjectionState{}}); err != nil {
+		id := cursor.Clone()
+		if err := st.frame(FrameDelta, &id, DeltaFrame{Event: e, States: []ProjectionState{}}); err != nil {
 			return "", err
 		}
 	}
@@ -316,16 +406,18 @@ func (st *sseStream) apply(ctx context.Context, u streamUpdate) error {
 		return st.resync(ctx, ResyncOverflow)
 	}
 	e := u.event
-	if e.Repo != "" && e.Repo != st.ev.id {
+	global := e.Repo == bus.GlobalRepo
+	if e.Repo != "" && e.Repo != st.ev.id && !global {
 		return nil // never another repository's event
 	}
-	if e.Seq > 0 {
+	if e.Seq > 0 && (!global || st.followsGlobal()) {
 		if st.cursor.Seen(e) {
 			return nil // the snapshot already reflects it
 		}
 		st.cursor = st.cursor.Advance(e)
 	}
-	if !bus.MatchAny(st.topics, e) {
+	matched := bus.MatchAny(st.topics, e)
+	if !matched && !global {
 		return nil
 	}
 	states := []ProjectionState{}
@@ -340,6 +432,12 @@ func (st *sseStream) apply(ctx context.Context, u streamUpdate) error {
 		}
 		st.remember(s)
 		states = append(states, s)
+	}
+	if !matched && len(states) == 0 {
+		// A global event the stream does not follow is sent only for the
+		// repository states it changed, such as overview.config after a
+		// personal-layer edit.
+		return nil
 	}
 	id := st.cursor
 	return st.frame(FrameDelta, &id, DeltaFrame{Event: e, States: states})

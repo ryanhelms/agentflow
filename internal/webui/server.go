@@ -57,6 +57,11 @@ func Serve(ctx context.Context, dir string, port int, ready func(string)) error 
 
 func (s *server) handler() http.Handler {
 	files, _ := fs.Sub(assets, "static")
+	if s.events != nil {
+		// The tabs projection reads this clone's hub, which publishes
+		// ui.tabs.changed to the repository's stream.
+		s.events.bindTabs(s.tabRoutes())
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(files))
 	mux.HandleFunc("POST /api/session", s.exchange)
@@ -64,6 +69,7 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("GET /api/state", s.state)
 	mux.HandleFunc("GET /api/tabs/events", s.tabEvents)
 	mux.HandleFunc("GET "+EventStreamPath, s.eventStream)
+	mux.HandleFunc("POST /api/tabs/attach", s.tabAttach)
 	mux.HandleFunc("POST /api/tabs/ack", s.tabAck)
 	mux.HandleFunc("POST /api/tabs/leave", s.tabLeave)
 	mux.HandleFunc("GET /api/activity", s.activity)
