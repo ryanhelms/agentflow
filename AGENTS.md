@@ -75,7 +75,14 @@ While the program is active:
 
 - PRs for program lanes target `develop`, not `main`.
 - Only the coordinator merges into `develop`.
-- The owner runs `agentflow promote` to release `develop` to `main`. No agent runs it.
+- At a passing phase gate the coordinator tags the `develop` commit `develop-pN`. CI
+  (`.github/workflows/auto-promote.yml`) then checks it and merges it into `main` and
+  releases. The goal's "ask the owner to run `agentflow promote`" still applies to
+  breaking changes and to anything the workflow refuses.
+- Agents never merge into or push to `main` and never run `agentflow promote`. CI does
+  the promotion. Don't edit `CHANGELOG.md`, the README version marker or the plugin
+  manifest versions on `develop`: releases write them on `main`, and an edit on `develop`
+  makes the next promotion conflict.
 
 ## Two things that are easy to confuse
 

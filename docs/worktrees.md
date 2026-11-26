@@ -6,7 +6,10 @@ are removed after the merge. `main` only receives release promotions.
 
 The agentflow repository itself uses a `develop` integration branch while the ACP platform
 program runs ([plans/acp-platform/](plans/acp-platform/)). Program PRs target `develop`,
-only the coordinator merges them, and the owner runs `agentflow promote`.
+only the coordinator merges them. At a passing phase gate the coordinator tags the
+`develop` commit `develop-pN`, and the `auto-promote` workflow merges it into `main` and
+releases it if CI passed and nothing is breaking. Breaking changes still wait for the owner
+to run `agentflow promote`.
 
 ## The lifecycle
 
