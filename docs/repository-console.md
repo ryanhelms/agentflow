@@ -218,6 +218,12 @@ request requires a fresh preview. [Approval handoff](operations.md#prepare-and-a
 
 ## Follow an effective setting back to its source
 
+> **Providers** and **Autonomy** are now groups of the **Settings** page
+> ([design](design/ui/settings.md)): each setting has its own control, edits are
+> saved together from one Save bar, and **Check connections** is at the end of
+> that page. The staging steps in this section and the next describe the earlier
+> pages and are being replaced with the settings commands.
+
 Open **Providers**, select a role, then select a setting. For example, open
 task management to see which provider receives task operations, what its search
 limit is, and which source supplied it. Agentflow uses the same resolver as the

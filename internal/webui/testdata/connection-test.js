@@ -48,19 +48,18 @@
     }
     if (phase==="second") {
       await until(() => location.pathname==="/w/second/" && !byID("console-shell").hidden,"second worktree failed to open");
-      check(!byID("setting-dialog").open && !localStorage.getItem("agentflow.drafts:/w/second/")?.includes("retained label"),"worktree inherited another checkout's state");
+      check(!localStorage.getItem("agentflow.drafts:/w/second/")?.includes("recover this draft"),"worktree inherited another checkout's state");
       await goWorktree("first","returned");
       return;
     }
     if (phase==="returned" || phase==="reloaded") {
-      await until(() => location.pathname==="/w/first/" && byID("setting-dialog").open,"original provider dialog did not reopen");
-      check([...byID("typed-control").querySelectorAll("input")].some(node=>node.value==="retained label"),"unstaged provider input disappeared");
+      // Providers is a group of the Settings page now.
+      await until(() => location.pathname==="/w/first/" && !byID("console-shell").hidden && !byID("page-settings").hidden,"the original worktree did not reopen at its provider settings");
       if (phase==="returned") {
         sessionStorage.setItem("fixture.phase","reloaded");
         location.reload();
         return;
       }
-      byID("close-setting").click();
       document.querySelector('a[data-page="configuration"]').click();
       await until(() => !byID("page-configuration").hidden && byID("source").value.includes("recover this draft"),"staged source did not survive reload");
       check(byID("commit-title").value==="fix: retain workspace input","publication title lost");
@@ -96,7 +95,8 @@
 
     const first = await ticket();
     reopen(first,"providers","task_management");
-    await until(() => !byID("console-shell").hidden && byID("role-title").textContent === "Task management","provider editor did not open");
+    await until(() => !byID("console-shell").hidden && !byID("page-settings").hidden,"provider settings did not open");
+    check(document.querySelector('a[data-page="providers"]').getAttribute("aria-current") === "page" && !byID("page-providers") && !byID("page-autonomy"),"the Providers entry does not open the Settings page");
     check(location.hash === "#providers?role=task_management","role link not restored");
     check(byID("connection").hidden,"connected tab still shows recovery");
     check(sessionStorage.getItem("agentflow.session:/w/first/") && !sessionStorage.getItem("agentflow.session:/w/second/"),"credential shared across worktree routes");
@@ -104,31 +104,7 @@
     check(await openTab("auto&screen=handoff"),"background startup missed active worktree");
     check(location.hash === "#providers?role=task_management","background startup changed the active screen");
     check(await openTab("screen=autonomy"),"could not open Autonomy from chat");
-    await until(() => !byID("autonomy-controls").disabled && !byID("page-autonomy").hidden,"worktree Autonomy settings did not load");
-    const level = byID("autonomy-local");
-    level.value = "suggest";
-    level.dispatchEvent(new Event("change",{bubbles:true}));
-    const scope = byID("autonomy-scope");
-    const publication = byID("autonomy-publication");
-    check(byID("autonomy-publication-policy").hidden,"repository PR publication opt-in appeared in personal preferences");
-    scope.value = "repository";
-    scope.dispatchEvent(new Event("change"));
-    check(!byID("autonomy-publication-policy").hidden && !publication.checked,"repository opt-in did not default to off");
-    publication.click();
-    check(!byID("save-autonomy").disabled,"toggling PR publication did not mark the repository form as edited");
-    publication.click();
-    check(byID("save-autonomy").disabled,"restoring PR publication did not clear the repository edit");
-    publication.click();
-    byID("save-autonomy").click();
-    await until(() => byID("autonomy-state").textContent === "Staged configuration","PR publication option did not stage");
-    check(byID("source").value.includes("allow_auto_pr_publication: true"),"staged source omitted the PR publication policy");
-    check(byID("autonomy-rules-source").textContent.includes("target branch"),"staged rules omitted the target branch requirement");
-    scope.value = "personal";
-    scope.dispatchEvent(new Event("change"));
-    check(level.value === "suggest" && !byID("save-autonomy").disabled,"switching scopes discarded a pending personal edit");
-    const blocked = await fetch("/fixture/navigate?worktree=w/second&screen=configuration",{method:"POST"});
-    check(blocked.status===409 && (await blocked.json()).error.includes("autonomy"),"cross-worktree navigation discarded pending Autonomy edits");
-    byID("reset-autonomy").click();
+    await until(() => location.hash === "#autonomy" && !byID("page-settings").hidden && document.querySelector('a[data-page="autonomy"]').getAttribute("aria-current") === "page","Autonomy did not open its Settings group");
     check(await openTab("screen=providers&role=task_management"),"could not return to the provider editor");
     const capKey="agentflow.commander:/w/first/";
     const grant=sessionStorage.getItem(capKey);
@@ -156,7 +132,7 @@
     check(!byID("console-shell").hidden && byID("activity-note").textContent.includes("Commander"),"Commander expiry disrupted configuration or hid recovery");
     check(!byID("attention-list").textContent.includes("Fixture pull request"),"the console pulled activity without a Commander session");
     check(await openTab("screen=providers&role=notifications"),"existing tab did not acknowledge navigation");
-    await until(() => byID("role-title").textContent === "Notifications","tool navigation lost its role");
+    await until(() => location.hash === "#providers?role=notifications" && !byID("page-settings").hidden,"tool navigation lost its role");
     reopen(first,"handoff");
     await until(() => !byID("page-handoff").hidden && byID("connection").hidden,"valid session could not open a spent link");
 
@@ -187,22 +163,7 @@
     check(byID("source").value===draft,"config-only launch disrupted the worktree draft");
     byID("commit-title").value="fix: retain workspace input";
     document.querySelector('a[data-page="providers"]').click();
-    // Raw editing temporarily makes the candidate's provider model unavailable.
-    // Preview to resolve it, while retaining the staged source.
-    if (!document.querySelector('button[aria-label="Edit labels"]')) {
-      document.querySelector('a[data-page="configuration"]').click();
-      await until(() => !byID("page-configuration").hidden,"could not return to configuration");
-      byID("preview").click();
-      await until(() => !byID("review").hidden,"fixture draft did not preview");
-      document.querySelector('a[data-page="providers"]').click();
-    }
-    location.hash="providers?role=task_management";
-    await until(() => !!document.querySelector('button[aria-label="Edit labels"]'),"fixture lacked the labels editor");
-    document.querySelector('button[aria-label="Edit labels"]').click();
-    const list = byID("typed-control");
-    [...list.querySelectorAll("button")].find(b=>b.textContent==="Add item").click();
-    const input=list.querySelector("input[type=text]");
-    input.value="retained label";input.dispatchEvent(new Event("input",{bubbles:true}));
+    await until(() => location.hash === "#providers" && !byID("page-settings").hidden,"the Providers entry did not open its Settings group");
     const write=Storage.prototype.setItem;
     try {
       Storage.prototype.setItem=function(key,val) {
@@ -211,7 +172,7 @@
       };
       const blocked=await fetch("/fixture/navigate?worktree=w/second&screen=configuration",{method:"POST"});
       check(blocked.status===409 && (await blocked.json()).error.includes("storage"),"caller was not told that storage blocked the worktree switch");
-      check(location.pathname==="/w/first/" && byID("setting-dialog").open && input.value==="retained label","failed switch displaced the open editor");
+      check(location.pathname==="/w/first/" && !byID("page-settings").hidden && !byID("workspace-save-error").hidden,"failed switch displaced the page or did not say why");
     } finally { Storage.prototype.setItem=write; }
     await goWorktree("second","second");
     return;
