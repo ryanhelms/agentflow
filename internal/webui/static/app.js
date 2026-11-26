@@ -262,6 +262,7 @@ function showConnection(message) {
     if ($("setting-dialog").open) rememberedModal = modalSnapshot();
   }
   tabs.stop();
+  live.stop();
   $("console-shell").hidden = true;
   if ($("setting-dialog").open) $("setting-dialog").close();
 
@@ -426,13 +427,15 @@ function hideSettingForNavigation() {
   }
 }
 
+async function renewSession(previous) {
+  if (await resumeSession(previous)) return true;
+  expireSession(previous);
+  return false;
+}
+
 const tabs = consoleTabs({
   credential: () => session, commander: () => commanderContext, request,
-  async unauthorized(previous) {
-    if (await resumeSession(previous)) return true;
-    expireSession(previous);
-    return false;
-  },
+  unauthorized: renewSession,
   navigate({screen,role="",target}) {
     if (!views.includes(screen) || (role && (screen !== "providers" || !Object.hasOwn(roleNames,role)))) return null;
     let next;
@@ -467,38 +470,204 @@ const tabs = consoleTabs({
     }};
   }
 });
-window.addEventListener("pagehide",() => tabs.stop());
+window.addEventListener("pagehide",() => { tabs.stop(); live.stop(); });
 window.addEventListener("pageshow",event => {
   leavingForWorktree = false;
   if (!$("console-shell").hidden) {
     if (event.persisted) {
       clearCommanderActivity();
       loadState();
-    } else tabs.start();
+    } else { tabs.start(); live.start(); }
   }
 });
 
-function renderOverview() {
+// Live overview (docs/design/ui/live-stream.md). The event stream keeps the
+// checkout facts current; api/state supplies them until the first snapshot.
+const worktreeID = /^\/w\/([a-z0-9][a-z0-9-]{0,62})\/$/.exec(location.pathname)?.[1] || "*";
+const streamLabels = {idle: "Connecting", connecting: "Connecting", live: "Live", reconnecting: "Reconnecting", resyncing: "Resyncing", offline: "Offline"};
+const offlineNotes = {
+  unsupported: "This console does not serve live updates. Use Resync to reload the checkout.",
+  forbidden: "The console refused the live stream for this worktree. Use Resync to try again.",
+  busy: "Too many live streams are open for this console. Close another console tab, or use Resync."
+};
+const operationNames = {rebase: "Rebase", merge: "Merge", "cherry-pick": "Cherry-pick", revert: "Revert", bisect: "Bisect"};
+const shownFacts = new Map();
+const flashTimers = new WeakMap();
+let liveOverview = null;
+let liveStatus = {state: "connecting", reason: ""};
+let liveReady = false;
+let loadedAt = null;
+let configTimer;
+
+const live = AgentflowEvents.connect({
+  endpoint: new URL("api/events",location.href).href,
+  credential: () => session,
+  topics: () => ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**"],
+  unauthorized: renewSession,
+  onStatus(status) {
+    const previous = liveStatus.state;
+    liveStatus = status;
+    if (status.state === "offline" && previous !== "offline") announce("Live updates are offline. The overview shows the last loaded values.");
+    if (status.state === "live" && previous === "offline") announce("Live updates restored.");
+    renderStream();
+  },
+  onSnapshot({states}) {
+    liveReady = true;
+    showLive(states.find(ownOverview)?.state ?? null);
+  },
+  onDelta({states,event}) {
+    const own = states.find(ownOverview);
+    if (own) showLive(own.state);
+    if (event?.type === "config.layer.changed" && (!event.worktree || event.worktree === worktreeID)) {
+      clearTimeout(configTimer);
+      configTimer = setTimeout(configChangedOnDisk,300);
+    }
+  }
+});
+
+function ownOverview(entry) {
+  return entry.projection === "overview" && (worktreeID === "*" || entry.worktree === worktreeID);
+}
+
+// The overview projection's state (lane 1.4, projection_overview.go). Unknown
+// fields are ignored and missing ones read as empty, so the shape can grow.
+function overviewState(raw) {
+  if (raw === null || typeof raw !== "object") return null;
+  const text = value => typeof value === "string" ? value : "";
+  const count = value => Number.isSafeInteger(value) && value > 0 ? value : 0;
+  const config = raw.config !== null && typeof raw.config === "object" ? raw.config : {};
+  const problems = Array.isArray(config.problems) ? config.problems.filter(issue => typeof issue === "string" && issue) : [];
+  if (config.valid === false && !problems.length) problems.push("The repository configuration is not valid.");
+  return {
+    branch: text(raw.branch), head: text(raw.head), detached: raw.detached === true,
+    ahead: count(raw.upstream?.ahead), behind: count(raw.upstream?.behind),
+    staged: count(raw.staged), unstaged: count(raw.unstaged), untracked: count(raw.untracked),
+    operation: text(raw.operation), problems
+  };
+}
+
+function announce(message) {
+  // Clearing first makes a repeated message audible again.
+  $("live-announcer").textContent = "";
+  requestAnimationFrame(() => { $("live-announcer").textContent = message; });
+}
+
+function showLive(raw) {
+  const previous = liveOverview;
+  liveOverview = overviewState(raw);
+  if (!state || $("console-shell").hidden) return;
+  const changed = renderOverview(Boolean(previous && liveOverview));
+  if (changed.length) announce(changed.join(". ") + ".");
+}
+
+function configChangedOnDisk() {
+  if (!state || !session || $("console-shell").hidden) return;
+  if (publishing || autonomySaving || autonomyForms.size || hasPendingEdits()) {
+    notice("status","The configuration changed on disk. Save or discard your edits, then use Resync to load it.");
+    return;
+  }
+  loadState();
+}
+
+function clock(date) {
+  return date.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+}
+
+function renderStream() {
+  const name = Object.hasOwn(streamLabels,liveStatus.state) ? liveStatus.state : "connecting";
+  $("stream-state").dataset.state = name;
+  $("stream-label").textContent = streamLabels[name];
+  let note = "";
+  const since = loadedAt ? " The overview shows the values loaded at " + clock(loadedAt) + "." : "";
+  if (name === "offline") note = offlineNotes[liveStatus.reason] || "Live updates are offline." + (liveOverview ? " The overview shows the last values it received." : since) + " The console keeps retrying.";
+  else if (name === "live" && liveReady && !liveOverview) note = "The live stream has no data for this worktree yet." + since;
+  $("live-note").textContent = note;
+  $("live-note").hidden = !note;
+}
+
+// Show one overview value. With flash set, a value that differs from the one
+// on screen is highlighted; the caller announces it.
+function showFact(node, key, text, flash) {
+  const previous = shownFacts.get(key);
+  shownFacts.set(key,text);
+  if (node.textContent !== text) node.textContent = text;
+  if (!flash || previous === undefined || previous === text) return false;
+  clearTimeout(flashTimers.get(node));
+  node.classList.remove("live-changed");
+  void node.offsetWidth; // restart the highlight when a value changes twice in a row
+  node.classList.add("live-changed");
+  flashTimers.set(node,setTimeout(() => node.classList.remove("live-changed"),2000));
+  return true;
+}
+
+function plural(count, one, many = one + "s") {
+  return count + " " + (count === 1 ? one : many);
+}
+
+// The checkout facts on screen: live when the stream has them, else as loaded.
+function checkoutFacts() {
+  const now = liveOverview;
+  if (!now) {
+    const count = state.dirty_count || 0;
+    return {branch: state.branch || "", head: state.head || "", dirty: Boolean(state.dirty), operation: "",
+      branchText: state.branch || "Detached HEAD", changes: count ? plural(count,"changed path") : state.dirty ? "Uncommitted changes" : "None"};
+  }
+  const parts = [[now.staged,"staged"],[now.unstaged,"unstaged"],[now.untracked,"untracked"]].filter(([count]) => count).map(([count,label]) => count + " " + label);
+  const sync = [now.ahead && now.ahead + " ahead", now.behind && now.behind + " behind"].filter(Boolean).join(", ");
+  const branch = now.detached ? "" : now.branch;
+  return {branch, head: now.head.slice(0,Math.max(7,state.head?.length || 12)), dirty: parts.length > 0, operation: now.operation,
+    branchText: (branch || "Detached HEAD") + (sync ? " · " + sync : ""), changes: parts.join(" · ") || "None"};
+}
+
+// Configuration problems and uncommitted work follow the stream; every other
+// item (pins, pull requests) stays as the last load reported it.
+function checkoutAttention() {
+  const loaded = state?.attention || [];
+  if (!liveOverview) return loaded;
+  const followed = ["Configuration needs attention","Uncommitted work"];
+  const fresh = liveOverview.problems.map(detail => ({title: followed[0], detail}));
+  const facts = checkoutFacts();
+  if (facts.dirty) fresh.push({title: followed[1], detail: facts.changes.replaceAll(" · ",", ") + " in this worktree. Publication uses only the reviewed configuration file."});
+  return [...fresh,...loaded.filter(entry => !followed.includes(entry.title))];
+}
+
+function renderOverview(flash = false) {
+  const changed = [];
+  const facts = checkoutFacts();
   const name = state.repository || state.root?.split(/[\\/]/).pop() || "Local checkout";
   $("top-repo").textContent = name;
   const branch = $("context-branch");
-  branch.textContent = state.branch || (state.head ? state.head.slice(0, 12) : "");
+  showFact(branch,"context-branch",facts.branch || facts.head.slice(0,12),flash);
   branch.hidden = !branch.textContent;
-  branch.title = state.branch || "Detached HEAD";
+  branch.title = facts.branch || "Detached HEAD";
   $("checkout-name").textContent = name;
   $("root-path").textContent = state.root || "Worktree path unavailable";
   $("rail-version").textContent = state.version || "";
   document.title = name + " · agentflow";
-  const dirty = Boolean(state.dirty);
-  $("working-state").textContent = dirty ? "Uncommitted changes" : "Clean worktree";
-  $("working-state").classList.toggle("changed", dirty);
+  if (showFact($("working-state"),"working-state",facts.dirty ? "Uncommitted changes" : "Clean worktree",flash)) changed.push(facts.dirty ? "The worktree has uncommitted changes" : "The worktree is clean");
+  $("working-state").classList.toggle("changed", facts.dirty);
+  const operation = $("git-operation");
+  const running = facts.operation ? (operationNames[facts.operation] || facts.operation) + " in progress" : "";
+  if (showFact(operation,"git-operation",running,flash)) changed.push(running || "The git operation finished");
+  operation.hidden = !running;
   const metadata = $("repo-metadata");
-  metadata.replaceChildren();
-  for (const [label, value] of [["Branch",state.branch || "Detached HEAD"], ["Revision",state.head?.slice(0,12)], ["Running CLI",state.version], ["Workflow pin",state.pin]]) {
-    const group = element("div");
-    group.append(element("dt",label),element("dd",value || "Unavailable"));
-    metadata.append(group);
+  for (const [key, label, value, follows] of [["branch","Branch",facts.branchText,true], ["revision","Revision",facts.head.slice(0,12),true], ["changes","Changes",facts.changes,true], ["cli","Running CLI",state.version], ["pin","Workflow pin",state.pin]]) {
+    let field = metadata.querySelector('[data-field="' + key + '"]');
+    if (!field) {
+      field = element("dd");
+      field.dataset.field = key;
+      const group = element("div");
+      group.append(element("dt",label),field);
+      metadata.append(group);
+    }
+    if (showFact(field,key,value || "Unavailable",flash && follows)) changed.push(label + " changed to " + (value || "unavailable"));
   }
+  const issues = liveOverview ? liveOverview.problems.length : null;
+  if (flash && issues !== null && shownFacts.get("problems") !== undefined && shownFacts.get("problems") !== issues) {
+    changed.push(issues ? "The configuration has " + plural(issues,"problem") : "The configuration problems are resolved");
+  }
+  if (issues !== null) shownFacts.set("problems",issues);
+  renderStream();
   const routing = $("routing-list");
   routing.replaceChildren();
   for (const item of checkoutRoles()) {
@@ -511,10 +680,11 @@ function renderOverview() {
   }
   if (!checkoutRoles().length) routing.append(element("li","No resolved provider roles are available.","muted"));
   renderActivity();
+  return changed;
 }
 
 function renderActivity() {
-  const entries = [...(state?.attention || []), ...(activity?.attention || [])];
+  const entries = [...checkoutAttention(), ...(activity?.attention || [])];
   const target = $("attention-list");
   target.replaceChildren();
   for (const entry of entries) {
@@ -549,6 +719,7 @@ async function loadState() {
     }
     if (!state) restoreDrafts(next);
     state = next;
+    loadedAt = new Date();
     activity = null;
     connectionSequence++;
     $("check-connections").disabled = !next.config?.providers;
@@ -565,6 +736,7 @@ async function loadState() {
     $("console-shell").hidden = false;
     showPage(reconnecting);
     tabs.start();
+    live.start();
     notice("status");
   } catch (e) {
     if (!session || revision !== loadSequence) return;
@@ -573,7 +745,13 @@ async function loadState() {
   }
   finally { $("refresh").disabled = !session; }
 }
-$("refresh").addEventListener("click", loadState);
+// Resync reloads the checkout and asks the stream for a fresh snapshot.
+$("refresh").addEventListener("click", () => {
+  liveOverview = null;
+  liveReady = false;
+  live.resync();
+  loadState();
+});
 
 function settingsFrom(value = {}) {
   const settings = { local: value.local || "", remote: value.remote || "", window: value.window || "",
