@@ -1780,7 +1780,7 @@ Memory and CPU are not limited in phase 5: the standard library cannot set a chi
 
 ### Phase 5 Dead Letter Channel
 
-The host's persistent Dead Letter Channel (`bus.DeadLetter`, as phase 1 promised) is `<home>/plugins/deadletter.jsonl`, mode 0600, the last 1000 letters, rewritten atomically when it passes 1 MiB.
+The host's persistent Dead Letter Channel (`bus.DeadLetter`, as phase 1 promised) is `<home>/plugins/deadletter.jsonl`, mode 0600, the last 1000 letters, rewritten atomically when it passes 1 MiB. A rewrite keeps only the newest letters that fit in 256 KiB, so rewrites stay rare. A stored letter's payload over 4 KiB becomes `{"dropped_bytes": N}` (its event ID and type still name it), and its reason is cut to 1 KiB.
 
 - A letter is `bus.Letter{event, consumer: "plugin:<id>", reason: <code>, time}`. The reason is a code (`timeout`, `crashed`, `exited`, `protocol`, `action`, `rpc_error`), never the plugin's own error text.
 - An event goes there when its delivery returns an error, times out, or is in flight when the plugin dies.
