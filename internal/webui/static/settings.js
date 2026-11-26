@@ -1048,9 +1048,9 @@
     // Read the console's own sentence about a confirmation.
     function explanation(raw) {
       const rule = record(raw.policy);
-      const reason = text(raw.reason);
-      if (!rule) return reason;
-      return [text(rule.action) && text(rule.level) ? text(rule.action) + " requires " + rule.level + (text(rule.source) ? " under " + rule.source : "") + "." : "", reason].filter(Boolean).join(" ");
+      // The reason is written for an agent session; the rule says it in one sentence.
+      if (rule && text(rule.action) && text(rule.level)) return text(rule.action) + " requires " + rule.level + (text(rule.source) ? " under " + rule.source : "") + ".";
+      return text(raw.reason);
     }
 
     function finish(raw, undo) {
@@ -1098,7 +1098,12 @@
         if (status_ === "ok") reviewError = "The console did not save the changes. Try again.";
         return;
       }
-      reviewError = explanation(raw) || "The console did not save the changes" + (status_ ? " (" + status_.replaceAll("_", " ") + ")." : ".");
+      // The policy does not let the console save: a suggestion, or an approval someone else owns.
+      const commands = list(raw.commands).filter(item => typeof item === "string");
+      const reason = text(raw.reason);
+      reviewError = status_ === "suggest" ? "Nothing was saved: your autonomy level only suggests this change." + (reason ? " " + reason + "." : "")
+        : (reason ? reason + "." : "The console did not save the changes" + (status_ ? " (" + status_.replaceAll("_", " ") + ")." : "."));
+      if (commands.length && status_ !== "suggest") reviewError += " Run: " + commands.join("; ");
     }
 
     async function submit() {
@@ -1134,7 +1139,16 @@
       try {
         answer(await options.request("api/settings/undo", {undo: body}), body, true);
         undoBusy = false;
-        if (dialogMode === "undo" && (pending || undoView)) openReview("undo");
+        if (dialogMode === "undo" && (pending || undoView)) {
+          const why = reviewError;
+          openReview("undo");
+          reviewError = why;
+          renderReview();
+        } else if (reviewError) {
+          // Refused without anything to review: say why next to the button.
+          undoError = reviewError; reviewError = ""; dialogMode = "";
+          options.announce("The save was not undone. " + undoError);
+        }
         if (pending) find("settings-save").focus();
       } catch (error) {
         undoBusy = false; dialogMode = "";

@@ -340,6 +340,14 @@
     await until(() => shownText("settings-last-text").startsWith("Last undo:") && byID("settings-undo").textContent === "Redo","an undone save does not offer Redo");
     check(byID("settings-undo").disabled && shownText("settings-undo-why").includes("pull request #12"),"a save that waits in a pull request can be undone, or the reason is missing");
 
+    // A policy that only suggests refuses the undo, and the bar says why.
+    await post("emit",frame("delta",6,{event:{id:"e6",type:"op.applied",repo,seq:6},states:[entry(state(values,{revisions:{personal:"sha256:p3",repo:"sha256:r5"},last_save:{...lastSave,operation_id:"op_undo1",undo_of:"op_save1",publication:null,undoable:true}}))]}));
+    await until(() => !byID("settings-undo").disabled,"Redo is not offered for an undoable record");
+    await answer("undo",{status:"suggest",reason:"autonomy.local sets console.settings to suggest. Run it yourself",commands:["agentflow ui"],summary:{}});
+    byID("settings-undo").click();
+    await until(() => shownText("settings-undo-why").startsWith("Nothing was saved: your autonomy level only suggests this change."),"a suggest-only policy is not explained: " + shownText("settings-undo-why"));
+    check(!dialog.open && byID("settings-undo-why").dataset.tone === "bad","the refused undo opened a review or is not marked");
+
     // A refused save comes back as a preview with its diagnostics.
     await answer("preview",previewOf([{id:"repo:commit.subject_max",edit:0,applies:"next-run",before:set(80),after:set(81)}],{repo:{mode:"worktree",branch:"issue-71"}}));
     control("repo:commit.subject_max|","button:last-child").click();

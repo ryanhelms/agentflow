@@ -526,8 +526,7 @@ diff, and asks you to tick each change that loosens the policy. **Undo** reverse
 the last save. A change made outside the page shows at once, with a choice to keep
 your edit or take the new value. You can search by name, description or ID and
 show only modified settings. **Providers** and **Autonomy** open their groups of
-this page. The page needs the settings endpoints of the console, which arrive
-with the settings commands. [Settings page design](docs/design/ui/settings.md)
+this page. [Settings page design](docs/design/ui/settings.md)
 
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder

@@ -16,9 +16,9 @@ import (
 // endpoints: controls for every widget kind, the Save bar, live checks, the
 // review, conflicts, undo, search and the draft that survives a reload.
 //
-// The endpoints of lane 4.2 (internal/webui/settings.go) are faked here by
+// The settings endpoints (internal/webui/settings.go) are replaced here by
 // settingsFixture, with the routes and bodies of the ADR, section "Phase 4
-// console endpoints".
+// console endpoints", so the test scripts every answer.
 func TestSettingsBrowser(t *testing.T) {
 	runBrowserFixture(t, "/w/first/", func(mux *http.ServeMux, origin string) {
 		settingsConsoleFixture(t, mux, origin, "testdata/settings/settings-test.js")
