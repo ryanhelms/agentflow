@@ -95,6 +95,13 @@ and preview it. Present the scope and exact change. Use `agentflow_config_apply`
 to save personal preferences or publish a repository file after approval.
 The config skill describes both workflows.
 
+### Plugins
+
+Use `agentflow_plugin_list` to see the installed plugins and their state. You cannot
+add, remove or turn on a plugin: that is the user's decision at their terminal. Give
+them the command (`agentflow plugin add PATH`, `agentflow plugin remove ID`) and stop.
+The plugin skill and `docs/plugins.md` have the details.
+
 ### Configured provider setup
 
 Use `agentflow_setup_providers` to list the providers each role accepts and
