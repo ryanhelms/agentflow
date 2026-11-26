@@ -543,6 +543,12 @@ func VerifyAttestation(ctx context.Context, file string) error {
 	if os.Getenv("AGENTFLOW_INSECURE_SKIP_ATTESTATION") == "1" {
 		return nil // tests and air-gapped mirrors only
 	}
+	// GitHub has no attestations for private repositories owned by a user, so a private
+	// release is installed on its checksum alone. A failed lookup still verifies.
+	if privateRepo(ctx) {
+		fmt.Fprintln(os.Stderr, "agentflow: private release, skipping build attestation (checksum verified)")
+		return nil
+	}
 	cmd := exec.CommandContext(ctx, "gh", "attestation", "verify", file, "--repo", Repo, "--signer-workflow", SignerWorkflow)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
@@ -550,6 +556,12 @@ func VerifyAttestation(ctx context.Context, file string) error {
 		return fmt.Errorf("attestation verification failed (needs a recent gh CLI): %s", strings.TrimSpace(out.String()))
 	}
 	return nil
+}
+
+// privateRepo reports whether gh can see that the agentflow repo is private.
+var privateRepo = func(ctx context.Context) bool {
+	out, err := exec.CommandContext(ctx, "gh", "repo", "view", Repo, "--json", "visibility", "-q", ".visibility").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "PRIVATE"
 }
 
 func extract(archive, dest string) error {

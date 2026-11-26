@@ -18,7 +18,10 @@ To stop a bad release from running anywhere, follow
   provenance attestation. The launcher and the self-updater install a build only when
   both the SHA-256 and `gh attestation verify --repo ryanhelms/agentflow --signer-workflow
   ryanhelms/agentflow/.github/workflows/release.yml` pass, so a build from any other workflow
-  in the repo is rejected.
+  in the repo is rejected. While the repo is private, GitHub cannot attest builds for a
+  repository owned by a user. The release workflow then skips the attestation, and the
+  launcher and self-updater install on the SHA-256 alone, with a warning. If the visibility
+  lookup fails, they still require the attestation.
 - **Credentials.** Developer tokens are stored in the OS keychain (macOS Keychain, Secret
   Service, Windows Credential Manager). They are never written to config files, logs or
   MCP responses.
