@@ -35,6 +35,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/setup/initproviders"
 	"github.com/ryanhelms/agentflow/internal/update"
 	"github.com/ryanhelms/agentflow/internal/version"
+	"github.com/ryanhelms/agentflow/internal/watch"
 	"github.com/ryanhelms/agentflow/internal/webui"
 )
 
@@ -1295,6 +1296,7 @@ func runDoctor(ctx context.Context, args []string) error {
 		}
 		report(len(missing) == 0, "flow map", a.Cfg.FlowMap+map[bool]string{true: "", false: " (no block for " + strings.Join(missing, ",") + ")"}[len(missing) == 0])
 	}
+	printDaemonHome(os.Stdout, checkDaemonHome(ctx))
 	clients := setup.Detect()
 	sort.Strings(clients)
 	report(true, "AI clients on PATH", strings.Join(clients, ", "))
@@ -1302,6 +1304,24 @@ func runDoctor(ctx context.Context, args []string) error {
 		return &hooks.ExitError{Code: 1, Msg: "doctor found problems"}
 	}
 	return nil
+}
+
+// checkDaemonHome asks whether the console daemon watches this process's
+// agentflow home. Tests replace it.
+var checkDaemonHome = webui.CheckDaemonHome
+
+// printDaemonHome prints the doctor line for the console daemon's home: a
+// warning (!) when the daemon watches another AGENTFLOW_HOME, which does not
+// fail doctor, and nothing when no daemon runs.
+func printDaemonHome(w io.Writer, c watch.HomeCheck) {
+	if !c.Checked {
+		return
+	}
+	mark := "✓"
+	if c.Warn {
+		mark = "!" // a warning does not clear ok
+	}
+	fmt.Fprintf(w, "%s %-26s %s\n", mark, "console daemon home", c.Detail)
 }
 
 func runRelease(ctx context.Context, args []string) error {

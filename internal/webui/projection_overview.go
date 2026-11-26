@@ -57,10 +57,15 @@ func (o *overviewProjection) Topics() []bus.Topic {
 	return []bus.Topic{
 		{Repo: o.repo.id, Worktree: bus.Any, Types: "git.**"},
 		{Repo: o.repo.id, Worktree: bus.Any, Types: "config.**"},
+		// The personal layer changes every worktree's configuration.
+		{Repo: bus.GlobalRepo, Worktree: bus.Any, Types: bus.Pattern(bus.TypeConfigLayerChanged)},
 	}
 }
 
 func (o *overviewProjection) Keys(e bus.Event) []ProjectionKey {
+	if e.Repo == bus.GlobalRepo && e.Type == bus.TypeConfigLayerChanged {
+		return o.AllKeys()
+	}
 	if e.Repo != o.repo.id || !bus.MatchAny(o.Topics(), e) {
 		return nil
 	}

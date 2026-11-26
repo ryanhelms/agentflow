@@ -470,7 +470,13 @@ The overview is live: a branch switch, a commit, staging or an edit under
 stream. If the overview looks out of date, press **Resync** to discard it and
 load a fresh snapshot. `agentflow events --follow` prints the same events in a
 terminal; see [docs/events.md](docs/events.md). The daemon records events
-while it runs, in the repository's git dir under `agentflow/events/`.
+while it runs, in the repository's git dir under `agentflow/events/`. Approval
+requests and their outcomes (`approval.requested`, `approval.resolved`,
+`approval.expired`) and changes to a worktree's AI client settings files
+(`client.settings.changed`) are events too. Approval records are read from the
+`AGENTFLOW_HOME` the daemon started with, so start the console from a shell that
+uses the same home as your agents; `agentflow doctor` warns when the console
+daemon uses a different `AGENTFLOW_HOME`.
 Agentflow's hooks record a `hook.ran` event each time they run (`pre-bash` only
 when it blocks a command) and hand it to a running daemon over a private local
 socket.

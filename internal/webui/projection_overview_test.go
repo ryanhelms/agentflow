@@ -188,7 +188,8 @@ func TestEventRuntimeOwnsStoreAndRoutesEvents(t *testing.T) {
 	}
 	select {
 	case u := <-l.ch:
-		if u.event.Seq != 1 || len(u.states) != 1 || !strings.Contains(string(u.states[0].State), `"branch":"main"`) {
+		// git.head.changed also recomputes the repository's activity.
+		if u.event.Seq != 1 || len(u.states) != 2 || u.states[0].Projection != "overview" || !strings.Contains(string(u.states[0].State), `"branch":"main"`) || u.states[1].Projection != ProjectionActivity {
 			t.Fatalf("update = %+v", u)
 		}
 	case <-time.After(5 * time.Second):
