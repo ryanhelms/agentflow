@@ -125,6 +125,8 @@ jobs:
             adapters/claude-code/bin/agentflow
       - name: Test project installer
         run: bash scripts/test-install-sh.sh
+      - name: Test changelog generator
+        run: bash scripts/test-changelog.sh
       - uses: $/actions/setup
         with:
           binary: true

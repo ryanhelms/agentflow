@@ -37,6 +37,7 @@ agent-docs: ## CLAUDE.md files must only contain @AGENTS.md
 
 check: vet test lint shellcheck actionlint agent-docs ## Everything CI runs locally
 	bash scripts/test-install-sh.sh
+	bash scripts/test-changelog.sh
 	bash scripts/test-workflow-trust.sh
 	@if command -v pwsh >/dev/null; then pwsh -NoProfile -File scripts/test-install-ps1.ps1; fi
 
