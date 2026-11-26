@@ -1,4 +1,4 @@
-$ agentflow plugin remove never-added --yes
+$ agentflow plugin remove never-added
 --- stdout
 --- error
 plugin not installed: never-added

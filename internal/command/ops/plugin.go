@@ -15,6 +15,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/plugin/install"
 	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/settings"
+	"golang.org/x/term"
 )
 
 // The plugin commands (ADR "Phase 5 commands"). plugin list is read-only and
@@ -22,6 +23,14 @@ import (
 // terminal: they have no tool (ADR phase 5 decision 3), they always ask,
 // and they change the user's home, not a repository, so they publish no op.*
 // events (ScopeNone) and the Invoker writes their audit line.
+//
+// They are also meant for a person only (requirePerson): they refuse inside an
+// AI agent and without a terminal on standard input, and --yes does not skip
+// the question. The pre-bash never-list (internal/policy) blocks agents from
+// running them too. Installing runs a program as the user, and removing a
+// plugin can end a rule that denies operations. These checks stop mistakes
+// and ordinary automation, not a process that runs as the user and sets out
+// to get around them.
 
 type pluginListIn struct {
 	asJSON bool
@@ -67,7 +76,7 @@ var (
 		CLIPath: []string{"plugin", "add"},
 		CLI: &command.CLI[pluginAddIn]{
 			Flags: func(fs *flag.FlagSet, in *pluginAddIn) {
-				fs.BoolVar(&in.yes, "yes", false, "skip the confirmation prompt")
+				fs.BoolVar(&in.yes, "yes", false, "ignored: plugin add always asks you")
 				fs.BoolVar(&in.asJSON, "json", false, "print JSON")
 			},
 			Args: func(in *pluginAddIn, args []string) error {
@@ -84,12 +93,14 @@ var (
 					next.ConfirmToken = token
 					return call.Invoke(ctx, next)
 				}
+				// The question is always asked: --yes never reaches the flow.
+				ignoredYes(in.yes, "plugin add")
 				if in.asJSON {
-					return call.Env.Confirm(in.yes, run)
+					return call.Env.Confirm(false, run)
 				}
-				return confirmPlugin(in.yes, run, printAdded)
+				return confirmPlugin(run, printAdded)
 			},
-			Usage:   "  plugin add PATH [--yes] [--json]\n                                 install a plugin from a local directory or YAML file, turned off",
+			Usage:   "  plugin add PATH [--json]       install a plugin from a local directory or YAML file, turned off\n                                 run it yourself at a terminal: it always asks; --yes is ignored",
 			Section: command.SectionWork,
 			Order:   4020,
 		},
@@ -100,6 +111,9 @@ var (
 		Events: command.ScopeNone,
 		Token:  func(in *pluginAddIn) *string { return &in.ConfirmToken },
 		Run: func(ctx context.Context, a *app.App, in pluginAddIn) (any, error) {
+			if err := requirePerson("plugin add", pluginAddWhy); err != nil {
+				return nil, err
+			}
 			return a.PluginAdd(ctx, in.Path, in.ConfirmToken)
 		},
 	}
@@ -109,7 +123,7 @@ var (
 		CLIPath: []string{"plugin", "remove"},
 		CLI: &command.CLI[pluginRemoveIn]{
 			Flags: func(fs *flag.FlagSet, in *pluginRemoveIn) {
-				fs.BoolVar(&in.yes, "yes", false, "skip the confirmation prompt")
+				fs.BoolVar(&in.yes, "yes", false, "ignored: plugin remove always asks you")
 				fs.BoolVar(&in.asJSON, "json", false, "print JSON")
 			},
 			Args: func(in *pluginRemoveIn, args []string) error {
@@ -126,12 +140,14 @@ var (
 					next.ConfirmToken = token
 					return call.Invoke(ctx, next)
 				}
+				// The question is always asked: --yes never reaches the flow.
+				ignoredYes(in.yes, "plugin remove")
 				if in.asJSON {
-					return call.Env.Confirm(in.yes, run)
+					return call.Env.Confirm(false, run)
 				}
-				return confirmPlugin(in.yes, run, printRemoved)
+				return confirmPlugin(run, printRemoved)
 			},
-			Usage:   "  plugin remove ID [--yes] [--json]\n                                 delete a plugin, its data and its settings",
+			Usage:   "  plugin remove ID [--json]      delete a plugin, its data and its settings\n                                 run it yourself at a terminal: it always asks; --yes is ignored",
 			Section: command.SectionWork,
 			Order:   4030,
 		},
@@ -139,15 +155,56 @@ var (
 		Events: command.ScopeNone,
 		Token:  func(in *pluginRemoveIn) *string { return &in.ConfirmToken },
 		Run: func(ctx context.Context, a *app.App, in pluginRemoveIn) (any, error) {
+			if err := requirePerson("plugin remove", pluginRemoveWhy); err != nil {
+				return nil, err
+			}
 			return a.PluginRemove(ctx, in.ID, in.ConfirmToken, settings.New(a).ClearPlugin)
 		},
 	}
 )
 
 const (
-	pluginAddUsage    = "usage: agentflow plugin add PATH [--yes] [--json]"
-	pluginRemoveUsage = "usage: agentflow plugin remove ID [--yes] [--json]"
+	pluginAddUsage    = "usage: agentflow plugin add PATH [--json]"
+	pluginRemoveUsage = "usage: agentflow plugin remove ID [--json]"
 )
+
+// StdinIsTerminal reports whether standard input is a terminal. plugin add
+// and plugin remove need one, because a person answers their question there.
+// Only tests assign to it: a test run has no terminal.
+var StdinIsTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
+
+// requirePerson refuses plugin add and plugin remove from an agent session or
+// a non-interactive shell. Neither check reads a flag:
+//
+//   - the environment of an AI agent (app.AgentEnvironment, the check promote
+//     uses), which a process can clear;
+//   - a standard input that is not a terminal, which a process can fake, for
+//     example with script(1).
+//
+// The question is then always asked: --yes is accepted for old scripts and
+// ignored. why says what the command does that needs a person.
+func requirePerson(command, why string) error {
+	if name := app.AgentEnvironment(); name != "" {
+		return fmt.Errorf("%s %s, so an AI agent may not run it (%s is set): run this in your own terminal", command, why, name)
+	}
+	if !StdinIsTerminal() {
+		return fmt.Errorf("%s %s, so it asks you at a terminal, and --yes does not skip that: run this in your own terminal", command, why)
+	}
+	return nil
+}
+
+const (
+	pluginAddWhy    = "installs a program that runs as you"
+	pluginRemoveWhy = "can end a rule that denies operations"
+)
+
+// ignoredYes says that --yes has no effect, so a script that passes it sees
+// why the question appears.
+func ignoredYes(yes bool, command string) {
+	if yes {
+		fmt.Fprintf(os.Stderr, "--yes is ignored: %s always asks you.\n", command)
+	}
+}
 
 func init() {
 	command.Register(pluginListSpec)
@@ -200,9 +257,9 @@ func printPluginList(w io.Writer, list app.PluginList) {
 
 // confirmPlugin is the confirmation flow of the CLI (cli.confirmLoop) with a
 // readable summary: on needs_confirmation it shows what will be installed or
-// removed, asks (unless yes) and runs again with the token, then hands the
-// result to show.
-func confirmPlugin(yes bool, call func(token string) (any, error), show func(io.Writer, any)) error {
+// removed, asks and runs again with the token, then hands the result to show.
+// It always asks: plugin add and plugin remove have no way to skip the question.
+func confirmPlugin(call func(token string) (any, error), show func(io.Writer, any)) error {
 	out, err := call("")
 	if err != nil {
 		return err
@@ -216,15 +273,13 @@ func confirmPlugin(yes bool, call func(token string) (any, error), show func(io.
 			}
 			return nil
 		case "needs_confirmation":
-			if !yes {
-				release, err := p.OpenPrompt()
-				if err != nil {
-					return err
-				}
-				defer release()
+			release, err := p.OpenPrompt()
+			if err != nil {
+				return err
 			}
+			defer release()
 			printPluginSummary(os.Stderr, p)
-			if !yes && !strings.HasPrefix(strings.ToLower(ask(os.Stdin, "Proceed? [y/N]: ")), "y") {
+			if !strings.HasPrefix(strings.ToLower(ask(os.Stdin, "Proceed? [y/N]: ")), "y") {
 				return errors.Join(errors.New("cancelled"), p.Cancel())
 			}
 			if out, err = call(p.ConfirmToken); err != nil {

@@ -11,9 +11,95 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/command/ops"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
+
+// unsetAgentEnvironment removes every variable that tells agentflow an AI
+// agent runs it. goldentest.Isolate gives each test a fixed agent session.
+func unsetAgentEnvironment(t *testing.T) {
+	t.Helper()
+	names := []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "AGENTFLOW_CODEX_HOST_ACTIVE"}
+	for _, kv := range os.Environ() {
+		if name, _, _ := strings.Cut(kv, "="); strings.HasPrefix(name, "CODEX_") && name != "CODEX_HOME" {
+			names = append(names, name)
+		}
+	}
+	for _, name := range names {
+		// Setenv registers the restore; the unset leaves the variable absent.
+		t.Setenv(name, "")
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if name := app.AgentEnvironment(); name != "" {
+		t.Fatalf("%s is still set", name)
+	}
+}
+
+// setTerminal makes ops see (or not see) a terminal on standard input. A test
+// run has none, so a test that runs plugin add or plugin remove sets it.
+func setTerminal(t *testing.T, isTerminal bool) {
+	t.Helper()
+	previous := ops.StdinIsTerminal
+	ops.StdinIsTerminal = func() bool { return isTerminal }
+	t.Cleanup(func() { ops.StdinIsTerminal = previous })
+}
+
+// asPerson makes the rest of the test a person at a terminal: no agent in the
+// environment and a terminal on standard input.
+func asPerson(t *testing.T) {
+	t.Helper()
+	unsetAgentEnvironment(t)
+	setTerminal(t, true)
+}
+
+// newPluginRepo is newOpsRepo for a person at a terminal.
+func newPluginRepo(t *testing.T, repoConfig, userConfig string) *opsRepo {
+	t.Helper()
+	r := newOpsRepo(t, repoConfig, userConfig)
+	asPerson(t)
+	return r
+}
+
+// stdinText makes text the standard input for the rest of the test.
+func stdinText(t *testing.T, text string) {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(text); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdin
+	os.Stdin = f
+	t.Cleanup(func() { os.Stdin = previous; f.Close() })
+}
+
+// stderrText sends standard error to a file for the rest of the test and
+// returns what was written so far.
+func stderrText(t *testing.T) func() string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stderr
+	os.Stderr = f
+	t.Cleanup(func() { os.Stderr = previous; f.Close() })
+	return func() string {
+		b, err := os.ReadFile(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+}
 
 const pluginYAML = `schema: 1
 id: ci-notify
@@ -88,7 +174,7 @@ func lastAudit(t *testing.T, r *opsRepo, n int) []map[string]any {
 }
 
 func TestPluginAddAlwaysAsksInstallsTurnedOffAndAuditsOnce(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", autoEverything)
+	r := newPluginRepo(t, "agentflow: 1\n", autoEverything)
 	cleanPluginHome(t, r.home)
 	src := pluginSource(t, map[string]string{"README.md": "notes\n"})
 	personal := func() string { b, _ := os.ReadFile(filepath.Join(r.home, "config.yml")); return string(b) }
@@ -156,24 +242,140 @@ func TestPluginAddAlwaysAsksInstallsTurnedOffAndAuditsOnce(t *testing.T) {
 	}
 }
 
-func TestPluginAddTextOutputWithYes(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+func TestPluginAddTextOutputAsksOnStandardInput(t *testing.T) {
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
 	cleanPluginHome(t, r.home)
 	out := quietStdout(t)
-	if _, _, err := r.cli(t, false, "plugin", "add", pluginSource(t, nil), "--yes"); err != nil {
+	errOut := stderrText(t)
+	stdinText(t, "y\n")
+	if _, _, err := r.cli(t, false, "plugin", "add", pluginSource(t, nil)); err != nil {
 		t.Fatal(err)
+	}
+	if shown := errOut(); !strings.Contains(shown, "Add plugin ci-notify 0.1.0") || !strings.Contains(shown, "Proceed? [y/N]: ") {
+		t.Fatalf("question:\n%s", shown)
 	}
 	text := out()
 	if !strings.Contains(text, "Added ci-notify 0.1.0 (sha256:") || !strings.Contains(text, "plugins.ci-notify.enabled=true") {
 		t.Fatalf("output:\n%s", text)
 	}
-	if _, _, err := r.cli(t, false, "plugin", "add", "--yes"); err == nil || !strings.Contains(err.Error(), "usage: agentflow plugin add PATH") {
+	if _, _, err := r.cli(t, false, "plugin", "add"); err == nil || !strings.Contains(err.Error(), "usage: agentflow plugin add PATH") {
 		t.Errorf("no path: %v", err)
 	}
 }
 
+// --yes is accepted and ignored: the question still appears, and its answer
+// decides, in the text and the JSON flow.
+func TestPluginYesDoesNotSkipTheQuestion(t *testing.T) {
+	r := newPluginRepo(t, "agentflow: 1\n", autoEverything)
+	cleanPluginHome(t, r.home)
+	src := pluginSource(t, nil)
+	quietStdout(t)
+	errOut := stderrText(t)
+
+	stdinText(t, "n\n")
+	if _, _, err := r.cli(t, false, "plugin", "add", src, "--yes"); err == nil || err.Error() != "cancelled" {
+		t.Fatalf("--yes with the answer no: %v", err)
+	}
+	if shown := errOut(); !strings.Contains(shown, "--yes is ignored: plugin add always asks you.") || !strings.Contains(shown, "Proceed? [y/N]: ") {
+		t.Fatalf("question:\n%s", shown)
+	}
+	if _, _, err := r.cli(t, false, "plugin", "add", src, "--yes", "--json"); err == nil || err.Error() != "cancelled" {
+		t.Fatalf("--yes --json without an answer: %v", err)
+	}
+	if got := installedPlugins(t, r.home); len(got) != 0 {
+		t.Fatalf("--yes installed %+v", got)
+	}
+
+	if _, _, err := r.cli(t, true, "plugin", "add", src, "--json"); err != nil {
+		t.Fatal(err)
+	}
+	r.reopen(t, "agentflow: 1\n")
+	stdinText(t, "\n") // the default answer is no
+	if _, _, err := r.cli(t, false, "plugin", "remove", "ci-notify", "--yes"); err == nil || err.Error() != "cancelled" {
+		t.Fatalf("remove --yes with the default answer: %v", err)
+	}
+	if _, _, err := r.cli(t, false, "plugin", "remove", "ci-notify", "--yes", "--json"); err == nil || err.Error() != "cancelled" {
+		t.Fatalf("remove --yes --json without an answer: %v", err)
+	}
+	if got := installedPlugins(t, r.home); len(got) != 1 {
+		t.Fatalf("--yes removed the plugin: %+v", got)
+	}
+}
+
+// wantRefused runs plugin add and plugin remove, with and without --yes and
+// --json, and fails unless every one refuses with want and changes nothing.
+func wantRefused(t *testing.T, r *opsRepo, src, want string) {
+	t.Helper()
+	before := installedPlugins(t, r.home)
+	personal, _ := os.ReadFile(filepath.Join(r.home, "config.yml"))
+	for _, args := range [][]string{
+		{"plugin", "add", src},
+		{"plugin", "add", src, "--yes"},
+		{"plugin", "add", src, "--yes", "--json"},
+		{"plugin", "remove", "ci-notify"},
+		{"plugin", "remove", "ci-notify", "--yes"},
+		{"plugin", "remove", "ci-notify", "--yes", "--json"},
+	} {
+		stdinText(t, "y\n")
+		audit := len(r.auditLines(t))
+		em, _, err := r.cli(t, true, args...)
+		if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "run this in your own terminal") {
+			t.Errorf("%v: %v, want %q and to run it in your own terminal", args, err, want)
+		}
+		wantOpTypes(t, em)
+		if lines := r.auditLines(t)[audit:]; len(lines) != 1 || lines[0]["result"] != "failed" || lines[0]["action"] != "plugin.install" {
+			t.Errorf("%v: audit lines %v", args, lines)
+		}
+	}
+	if got := installedPlugins(t, r.home); len(got) != len(before) || len(got) == 1 && got[0].Hash != before[0].Hash {
+		t.Errorf("a refused command changed the registry from %+v to %+v", before, got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(r.home, "config.yml")); string(got) != string(personal) {
+		t.Errorf("a refused command changed the personal settings:\n%s", got)
+	}
+}
+
+// installedForRefusal installs ci-notify as a person and returns a source of
+// a newer version, so both a refused add and a refused remove would change
+// something.
+func installedForRefusal(t *testing.T) (*opsRepo, string) {
+	t.Helper()
+	r := newPluginRepo(t, "agentflow: 1\n", autoEverything+"plugins:\n  ci-notify: {enabled: true}\n")
+	cleanPluginHome(t, r.home)
+	src := pluginSource(t, nil)
+	if _, _, err := r.cli(t, true, "plugin", "add", src, "--json"); err != nil {
+		t.Fatal(err)
+	}
+	r.reopen(t, "agentflow: 1\n")
+	writeOpsFile(t, filepath.Join(src, manifest.FileName), strings.Replace(pluginYAML, "version: 0.1.0", "version: 0.2.0", 1))
+	quietStdout(t)
+	quietStderr(t)
+	return r, src
+}
+
+func TestPluginAddAndRemoveRefuseAnAIAgent(t *testing.T) {
+	for _, name := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "AGENTFLOW_CODEX_HOST_ACTIVE"} {
+		t.Run(name, func(t *testing.T) {
+			r, src := installedForRefusal(t)
+			// A terminal on standard input does not help an agent, and the
+			// override that promote accepts does not apply here.
+			t.Setenv(name, "1")
+			t.Setenv("AGENTFLOW_ALLOW_PROMOTE", "1")
+			wantRefused(t, r, src, "an AI agent may not run it ("+name+" is set)")
+		})
+	}
+}
+
+func TestPluginAddAndRemoveNeedATerminalAndYesDoesNotReplaceIt(t *testing.T) {
+	r, src := installedForRefusal(t)
+	// With no agent variable set, a script, pipe or CI job still has no
+	// terminal.
+	setTerminal(t, false)
+	wantRefused(t, r, src, "asks you at a terminal, and --yes does not skip that")
+}
+
 func TestPluginAddTokenIsBoundToTheFilesThatWereReviewed(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
 	cleanPluginHome(t, r.home)
 	src := pluginSource(t, map[string]string{"README.md": "reviewed\n"})
 	out, err := r.app.PluginAdd(t.Context(), src, "")
@@ -207,7 +409,7 @@ func TestPluginAddTokenIsBoundToTheFilesThatWereReviewed(t *testing.T) {
 }
 
 func TestPluginAddSuggestOnlyInstallsNothing(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", "autonomy: {local: suggest, remote: suggest}\n")
+	r := newPluginRepo(t, "agentflow: 1\n", "autonomy: {local: suggest, remote: suggest}\n")
 	src := pluginSource(t, nil)
 	out, err := r.app.PluginAdd(t.Context(), src, "")
 	pend, ok := out.(*app.Pending)
@@ -220,7 +422,7 @@ func TestPluginAddSuggestOnlyInstallsNothing(t *testing.T) {
 }
 
 func TestPluginAddRefusesWhatItMustAndWritesNothing(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
 	outside := t.TempDir()
 	writeOpsFile(t, filepath.Join(outside, "secret.txt"), "private\n")
 	linked := pluginSource(t, nil)
@@ -250,7 +452,7 @@ func TestPluginAddRefusesWhatItMustAndWritesNothing(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			before := len(r.auditLines(t))
-			em, _, err := r.cli(t, true, "plugin", "add", c.path, "--yes")
+			em, _, err := r.cli(t, true, "plugin", "add", c.path)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("error %v, want it to contain %q", err, c.want)
 			}
@@ -272,10 +474,10 @@ func TestPluginAddRefusesWhatItMustAndWritesNothing(t *testing.T) {
 
 func TestPluginUpgradeThenRemoveClearsEverythingAndKeepsTheRestOfTheSettings(t *testing.T) {
 	personalText := "# my settings\nautonomy: {local: confirm, remote: confirm}\nplugins:\n  ci-notify:\n    enabled: true\n    settings:\n      signal: ci.failed\nupdate:\n  auto: false\n"
-	r := newOpsRepo(t, "agentflow: 1\n", personalText)
+	r := newPluginRepo(t, "agentflow: 1\n", personalText)
 	cleanPluginHome(t, r.home)
 	src := pluginSource(t, nil)
-	if _, _, err := r.cli(t, true, "plugin", "add", src, "--yes", "--json"); err != nil {
+	if _, _, err := r.cli(t, true, "plugin", "add", src, "--json"); err != nil {
 		t.Fatal(err)
 	}
 	first := installedPlugins(t, r.home)[0]
@@ -343,16 +545,16 @@ func TestPluginUpgradeThenRemoveClearsEverythingAndKeepsTheRestOfTheSettings(t *
 
 	// Removing it again, or something that was never there, is an error.
 	for _, id := range []string{"ci-notify", "never-added", "../etc"} {
-		if _, _, err := r.cli(t, true, "plugin", "remove", id, "--yes"); err == nil {
+		if _, _, err := r.cli(t, true, "plugin", "remove", id); err == nil {
 			t.Errorf("plugin remove %s succeeded", id)
 		}
 	}
 }
 
 func TestPluginRemoveNeverTouchesAPathFromTheRegistry(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
 	cleanPluginHome(t, r.home)
-	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--yes", "--json"); err != nil {
+	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--json"); err != nil {
 		t.Fatal(err)
 	}
 	victim := t.TempDir()
@@ -363,7 +565,7 @@ func TestPluginRemoveNeverTouchesAPathFromTheRegistry(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.cli(t, true, "plugin", "remove", "ci-notify", "--yes", "--json"); err != nil {
+	if _, _, err := r.cli(t, true, "plugin", "remove", "ci-notify", "--json"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(victim, "precious")); err != nil {
@@ -372,7 +574,7 @@ func TestPluginRemoveNeverTouchesAPathFromTheRegistry(t *testing.T) {
 }
 
 func TestPluginListTextJSONAndToolAgree(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\nplugins: {disabled: [ci-notify]}\n", "autonomy: {local: confirm, remote: confirm}\nplugins:\n  ci-notify: {enabled: true}\n")
+	r := newPluginRepo(t, "agentflow: 1\nplugins: {disabled: [ci-notify]}\n", "autonomy: {local: confirm, remote: confirm}\nplugins:\n  ci-notify: {enabled: true}\n")
 	cleanPluginHome(t, r.home)
 	out := quietStdout(t)
 	if _, _, err := r.cli(t, false, "plugin", "list"); err != nil {
@@ -381,7 +583,7 @@ func TestPluginListTextJSONAndToolAgree(t *testing.T) {
 	if text := out(); !strings.Contains(text, "No plugins are installed") {
 		t.Fatalf("empty list:\n%s", text)
 	}
-	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--yes", "--json"); err != nil {
+	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--json"); err != nil {
 		t.Fatal(err)
 	}
 	r.reopen(t, "agentflow: 1\nplugins: {disabled: [ci-notify]}\n")
@@ -429,9 +631,9 @@ func TestPluginHasOnlyAListTool(t *testing.T) {
 }
 
 func TestPluginListTextCountsUndeliveredEvents(t *testing.T) {
-	r := newOpsRepo(t, "agentflow: 1\n", confirmEverything)
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
 	cleanPluginHome(t, r.home)
-	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--yes", "--json"); err != nil {
+	if _, _, err := r.cli(t, true, "plugin", "add", pluginSource(t, nil), "--json"); err != nil {
 		t.Fatal(err)
 	}
 	letter := `{"event":{"id":"evt-1","type":"gh.ci.updated","repo":"repo-1","payload":{}},"consumer":"plugin:ci-notify","reason":"timeout","time":"2026-11-26T09:00:00Z"}` + "\n"
@@ -442,5 +644,45 @@ func TestPluginListTextCountsUndeliveredEvents(t *testing.T) {
 	}
 	if text := out(); text != "ci-notify 0.1.0  declarative  turned off, 2 events not delivered\n" {
 		t.Fatalf("list text = %q", text)
+	}
+}
+
+const denyPushYAML = `schema: 1
+id: no-push
+name: No pushes
+version: 0.1.0
+tier: declarative
+extensions:
+  permission_rule:
+    - name: no-push
+      match: {operation: [push]}
+      deny: Pushes are paused.
+`
+
+// config.set does not let an agent turn a deny rule off while
+// console.autonomy says suggest: it gets the suggestion and no token.
+func TestAgentCannotTurnOffADenyRuleThroughConfigSet(t *testing.T) {
+	personal := "autonomy:\n  actions:\n    console.autonomy: suggest\nplugins:\n  no-push: {enabled: true}\n"
+	r := newOpsRepo(t, "agentflow: 1\n", personal) // an agent session, as goldentest.Isolate sets it
+	m, err := manifest.Load([]byte(denyPushYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manifest.UpdateRegistry(r.home, func(reg *manifest.Registry) error {
+		reg.Plugins = append(reg.Plugins, manifest.Installed{ID: m.ID, Version: m.Version, Tier: m.Tier, Manifest: m})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const id = "personal:plugins.no-push.enabled"
+	for _, edit := range []map[string]any{{"id": id, "op": "set", "value": false}, {"id": id, "op": "unset"}} {
+		_, text, isErr := r.tool(t, "config.set", map[string]any{"edits": []any{edit}})
+		var p app.Pending
+		if err := json.Unmarshal([]byte(text), &p); isErr || err != nil || p.Status != "suggest" || p.ConfirmToken != "" {
+			t.Fatalf("config.set %v = %s", edit, text)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(r.home, "config.yml")); string(b) != personal {
+		t.Errorf("the personal settings changed:\n%s", b)
 	}
 }

@@ -97,10 +97,12 @@ The config skill describes both workflows.
 
 ### Plugins
 
-Use `agentflow_plugin_list` to see the installed plugins and their state. You cannot
-add, remove or turn on a plugin: that is the user's decision at their terminal. Give
-them the command (`agentflow plugin add PATH`, `agentflow plugin remove ID`) and stop.
-The plugin skill and `docs/plugins.md` have the details.
+Use `agentflow_plugin_list` to see the installed plugins and their state. Do not
+add, remove or turn on a plugin: that is the user's decision at their terminal.
+Agentflow refuses `plugin add` and `plugin remove` from agent sessions, and the
+pre-bash hook blocks them. Give the user the command (`agentflow plugin add PATH`,
+`agentflow plugin remove ID`) and stop. Do not work around a refusal. The plugin
+skill and `docs/plugins.md` have the details.
 
 ### Configured provider setup
 

@@ -1,4 +1,4 @@
-$ agentflow plugin add <plugin-src>/missing --yes
+$ agentflow plugin add <plugin-src>/missing
 --- stdout
 --- error
 plugin add: lstat <plugin-src>/missing: no such file or directory

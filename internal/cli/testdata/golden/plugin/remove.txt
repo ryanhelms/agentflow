@@ -1,4 +1,6 @@
-$ agentflow plugin remove ci-notify --yes
+$ agentflow plugin remove ci-notify
+--- stdin
+y
 --- stdout
 Removed ci-notify 0.2.0.
 Deleted plugins.ci-notify from your personal settings.
@@ -11,3 +13,4 @@ Remove plugin ci-notify 0.2.0: "CI failure notifications"
     the plugin's data directory, and everything the plugin stored in it
     plugins.ci-notify in your personal settings: whether it was enabled and its settings
 ! A running plugin is stopped when the console sees the change. Removing cannot be undone: add the plugin again to get it back.
+Proceed? [y/N]: 

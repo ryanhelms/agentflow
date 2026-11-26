@@ -451,8 +451,8 @@ Deployments and release lookup also support local JSON fixtures.
 | Mark an existing draft ready for review | `agentflow pr mark-ready` | `agentflow_pr_mark_ready` |
 | Explain an approval | `agentflow policy explain ACTION` | `agentflow_policy_explain` |
 | List installed plugins | `agentflow plugin list [--json]` | `agentflow_plugin_list` or `/agentflow:plugin` |
-| Add a plugin from a local path (you, not an agent) | `agentflow plugin add PATH` | – |
-| Remove a plugin, its data and its settings (you, not an agent) | `agentflow plugin remove ID` | – |
+| Add a plugin from a local path (you, at a terminal) | `agentflow plugin add PATH` | – |
+| Remove a plugin, its data and its settings (you, at a terminal) | `agentflow plugin remove ID` | – |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -672,11 +672,17 @@ agentflow config set plugins.ci-notify.enabled=true
 
 `plugin add` reads a local directory or YAML file and never downloads anything. It
 asks under every approval setting, installs the plugin turned off, and checks the
-installed files against their hash before each start. Turning a plugin on is a
-loosening change in the Save review. A repository can turn a plugin off for itself
-with `plugins.disabled`, and can never install or turn one on. No AI tool adds,
-removes or turns on a plugin. **A program plugin runs as you and is not sandboxed:
-add only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
+installed files against their hash before each start.
+
+**Run `plugin add` and `plugin remove` yourself.** Agentflow refuses them from
+agent sessions and non-interactive shells, its Claude Code hook blocks agents from
+running them, and `--yes` does not skip their question. A process that runs as you
+could still get around these checks on purpose. Turning a plugin on is a loosening
+change in the Save review, and so is turning off a plugin that has a permission
+rule. A repository can turn a plugin off for itself with
+`plugins.disabled`, and can never install or turn one on. No AI tool adds, removes
+or turns on a plugin. **A program plugin runs as you and is not sandboxed: add
+only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
 permissions and how to write your own, and `examples/plugins/` has two samples.
 
 ## Commit convention
@@ -769,7 +775,8 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.
 - **Never list.** At every autonomy level agentflow refuses force-pushes, pushes to protected
-  branches, PR merges, remote branch deletes and acting as another user. With
+  branches, PR merges, remote branch deletes and acting as another user. Its Claude Code
+  hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`. With
   `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
   `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
@@ -783,7 +790,11 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   `agentflow delegate` hands the work to a session in the other repository.
   [Repository boundary](docs/repo-boundary.md)
 - **Plugins.** A plugin is installed only from a local path, after a confirmation that
-  lists every permission and that no approval setting can skip. It starts turned off,
+  lists every permission and that neither an approval setting nor `--yes` skips.
+  Agentflow refuses `plugin add` and `plugin remove` from agent sessions and
+  non-interactive shells, and its Claude Code hook blocks agents from running them.
+  A process running as you could still get around this on purpose. Turning off a
+  plugin with a deny rule counts as loosening. A plugin starts turned off,
   its files are checked against their hash before every start, and a repository can
   turn it off but never install or enable it. A plugin never holds a confirmation
   token: its writes wait for you. A program plugin gets a clean environment, which is

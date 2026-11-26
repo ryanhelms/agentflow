@@ -1,0 +1,8 @@
+$ agentflow plugin add <plugin-src> --yes
+--- stdin
+y
+--- stdout
+--- stderr
+--yes is ignored: plugin add always asks you.
+--- error
+plugin add installs a program that runs as you, so it asks you at a terminal, and --yes does not skip that: run this in your own terminal

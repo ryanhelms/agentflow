@@ -31,6 +31,9 @@ code.
 
 What agentflow does guarantee, for every plugin:
 
+- It refuses to install or remove one from an agent session or a
+  non-interactive shell. See [Add and remove plugins
+  yourself](#add-and-remove-plugins-yourself) for what that does not stop.
 - It never downloads anything. `plugin add` reads a local path.
 - It shows every permission before it installs, and always asks, whatever your
   approval settings say.
@@ -39,10 +42,34 @@ What agentflow does guarantee, for every plugin:
 - A plugin never sees a confirmation token. Its writes wait for you.
 - A plugin starts turned off.
 
+## Add and remove plugins yourself
+
+Run `plugin add` and `plugin remove` in your own terminal. Installing a program
+plugin lets it run as you, and removing a plugin can end a rule that denies
+operations. Agentflow therefore does three things:
+
+- Both commands refuse an agent session: one that sets `CLAUDECODE`,
+  `CLAUDE_CODE_SESSION_ID`, `AGENTFLOW_CODEX_HOST_ACTIVE` or a `CODEX_` variable
+  other than `CODEX_HOME`.
+- Both commands refuse a non-interactive shell, with no terminal on standard
+  input, such as a script, a pipe or a CI job.
+- The Claude Code pre-bash hook blocks an agent from running them, however the
+  binary is invoked. It also blocks `agentflow plugin approve`, the name kept for
+  approving a plugin's writes. The hook's never-list is off in
+  `--convention-only` mode, and Codex has no such hook.
+
+The refusals say `run this in your own terminal`. There is no override flag or
+variable. `--yes` is accepted and ignored: the question is always asked.
+
+These checks stop mistakes and ordinary automation. They are not a security
+boundary: a process that runs as you can still get around them on purpose, for
+example by clearing the variables and creating its own terminal, or by writing the
+files in your agentflow home directly.
+
 ## Add a plugin
 
 ```text
-agentflow plugin add PATH [--yes] [--json]
+agentflow plugin add PATH [--json]
 ```
 
 Run the plugin commands from inside a Git repository: agentflow opens it to read
@@ -59,9 +86,8 @@ The command reads the files once and shows:
   receive, the events it may publish and the commands it may run;
 - the version it replaces, for an upgrade.
 
-Type `y` to install. With `--yes` the command skips the question, but still
-shows the summary. Your approval settings cannot turn this question off:
-`plugin.install` asks even when your autonomy is `auto`.
+Type `y` to install. Neither `--yes` nor your approval settings skip this
+question: `plugin.install` asks even when your autonomy is `auto`.
 
 The confirmation is tied to the files you were shown. If a file changes between
 the preview and your answer, the install fails with `operation_changed`: run
@@ -107,6 +133,11 @@ Turning a plugin on loosens what runs on your machine, so the Save review lists
 it and asks for your tick, like any other loosening change. To turn it off, set
 the same field to `false`.
 
+Turning off a plugin that has a [permission rule](#permission-rules) loosens too,
+because the operations it denied are allowed again. The Save review asks for your
+tick, and the save answers to `console.autonomy`: with `console.autonomy: suggest`,
+agentflow only suggests the change and does not save it.
+
 A repository can turn plugins off for itself in `.agentflow/config.yml`:
 
 ```yaml
@@ -115,7 +146,9 @@ plugins:
 ```
 
 This turns off the plugin's handlers in that repository. It never removes a
-permission rule that you installed.
+permission rule that you installed. Saving it from Agentflow for a plugin with a
+permission rule installed on your machine still counts as loosening, and asks for
+your tick.
 
 A plugin's own settings appear on the Settings page in a group named after the
 plugin. They are saved in your personal settings, under
@@ -155,8 +188,10 @@ could not start or stopped.
 ## Remove a plugin
 
 ```text
-agentflow plugin remove ID [--yes] [--json]
+agentflow plugin remove ID [--json]
 ```
+
+[Run it yourself](#add-and-remove-plugins-yourself): it always asks.
 
 After one confirmation, this deletes the plugin's entry, its installed copy, its
 data directory and the `plugins.<id>` block in your personal settings. The console

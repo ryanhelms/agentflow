@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ryanhelms/agentflow/internal/command/ops"
 )
 
 const goldenPluginManifest = `schema: 1
@@ -37,11 +39,38 @@ settings:
     description: The notification signal to send.
 `
 
+// goldenPerson makes the test a person at a terminal, which plugin add and
+// plugin remove need: goldentest.Isolate gives every test an agent session,
+// and a test run has no terminal. It returns a function that says whether
+// standard input is a terminal from then on.
+func goldenPerson(t *testing.T) (setTerminal func(bool)) {
+	t.Helper()
+	for _, name := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "AGENTFLOW_CODEX_HOST_ACTIVE"} {
+		t.Setenv(name, "")
+	}
+	for _, kv := range os.Environ() {
+		if name, _, _ := strings.Cut(kv, "="); strings.HasPrefix(name, "CODEX_") && name != "CODEX_HOME" {
+			// Setenv registers the restore; any CODEX_ name counts, even empty.
+			t.Setenv(name, "")
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	terminal := true
+	previous := ops.StdinIsTerminal
+	ops.StdinIsTerminal = func() bool { return terminal }
+	t.Cleanup(func() { ops.StdinIsTerminal = previous })
+	return func(is bool) { terminal = is }
+}
+
 // TestGoldenPlugin pins what the plugin commands print: list (empty and with
 // a plugin), add (the confirmation summary, the result, a second add that
-// changes nothing, an upgrade, a refusal) and remove.
+// changes nothing, an upgrade, a refusal) and remove, and the refusals that
+// keep add and remove for a person at a terminal.
 func TestGoldenPlugin(t *testing.T) {
 	g := goldenConfigRepo(t)
+	setTerminal := goldenPerson(t)
 	t.Cleanup(func() {
 		// An installed copy is read-only: make it deletable for the temporary directory.
 		_ = filepath.WalkDir(os.Getenv("AGENTFLOW_HOME"), func(p string, d os.DirEntry, err error) error {
@@ -58,10 +87,20 @@ func TestGoldenPlugin(t *testing.T) {
 	g.norm.Path("<plugin-src>", src)
 
 	g.check("plugin/list_empty.txt", g.run("", "plugin", "list"))
-	g.check("plugin/add_refused_address.txt", g.run("", "plugin", "add", "https://example.com/plugin", "--yes"))
-	g.check("plugin/add_refused_missing.txt", g.run("", "plugin", "add", filepath.Join(src, "missing"), "--yes"))
+	g.check("plugin/add_refused_address.txt", g.run("", "plugin", "add", "https://example.com/plugin"))
+	g.check("plugin/add_refused_missing.txt", g.run("", "plugin", "add", filepath.Join(src, "missing")))
+
+	// Only a person at a terminal: --yes replaces neither.
+	setTerminal(false)
+	g.check("plugin/add_refused_no_terminal.txt", g.run("y\n", "plugin", "add", src, "--yes"))
+	setTerminal(true)
+	t.Setenv("CLAUDECODE", "1")
+	g.check("plugin/add_refused_agent.txt", g.run("y\n", "plugin", "add", src, "--yes"))
+	t.Setenv("CLAUDECODE", "")
+
 	g.check("plugin/add_declined.txt", g.run("n\n", "plugin", "add", src))
-	g.check("plugin/add.txt", g.run("", "plugin", "add", src, "--yes"))
+	g.check("plugin/add_yes_ignored.txt", g.run("n\n", "plugin", "add", src, "--yes"))
+	g.check("plugin/add.txt", g.run("y\n", "plugin", "add", src))
 	g.check("plugin/add_unchanged_json.txt", g.run("", "plugin", "add", src, "--json"))
 	g.check("plugin/list.txt", g.run("", "plugin", "list"))
 	g.check("plugin/list_json.txt", g.run("", "plugin", "list", "--json"))
@@ -74,13 +113,19 @@ func TestGoldenPlugin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "agentflow-plugin.yml"), []byte(upgraded), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	g.check("plugin/add_upgrade.txt", g.run("", "plugin", "add", src, "--yes"))
+	g.check("plugin/add_upgrade.txt", g.run("y\n", "plugin", "add", src))
 
-	g.check("plugin/remove_unknown.txt", g.run("", "plugin", "remove", "never-added", "--yes"))
+	g.check("plugin/remove_unknown.txt", g.run("", "plugin", "remove", "never-added"))
 	g.check("plugin/remove_declined.txt", g.run("n\n", "plugin", "remove", "ci-notify"))
-	g.check("plugin/remove.txt", g.run("", "plugin", "remove", "ci-notify", "--yes"))
+	setTerminal(false)
+	g.check("plugin/remove_refused_no_terminal.txt", g.run("y\n", "plugin", "remove", "ci-notify", "--yes"))
+	setTerminal(true)
+	t.Setenv("CLAUDECODE", "1")
+	g.check("plugin/remove_refused_agent.txt", g.run("y\n", "plugin", "remove", "ci-notify", "--yes"))
+	t.Setenv("CLAUDECODE", "")
+	g.check("plugin/remove.txt", g.run("y\n", "plugin", "remove", "ci-notify"))
 	if b, err := os.ReadFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml")); err != nil || strings.Contains(string(b), "ci-notify") {
 		t.Errorf("plugin remove left plugins.ci-notify in the personal settings: %v\n%s", err, b)
 	}
-	g.check("plugin/remove_json_again.txt", g.run("", "plugin", "remove", "ci-notify", "--yes", "--json"))
+	g.check("plugin/remove_json_again.txt", g.run("", "plugin", "remove", "ci-notify", "--json"))
 }
