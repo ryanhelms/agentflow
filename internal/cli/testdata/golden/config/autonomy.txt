@@ -1,0 +1,19 @@
+$ agentflow config autonomy
+--- stdout
+{
+  "personal": {
+    "local": "",
+    "remote": "confirm",
+    "window": "",
+    "actions": null
+  },
+  "repository": {
+    "local": "",
+    "remote": "",
+    "window": "",
+    "actions": null,
+    "allow_auto_pr_publication": false
+  },
+  "user_revision": "<digest-1>",
+  "actions": "<elided>"
+}

@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Private repository owned by Ryan Helms. It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. |
+| **Status** | Private repository owned by Ryan Helms. It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. The ACP platform program is running: its PRs merge into the `develop` integration branch ([docs/plans/acp-platform/](docs/plans/acp-platform/)). |
 | **Current release** | <!-- agentflow:version -->`v0.56.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
@@ -705,6 +705,12 @@ Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
 This section is about the agentflow repository's own releases, not the release tooling
 agentflow offers other repos.
+
+> **`develop` integration branch.** While the ACP platform program runs
+> ([docs/plans/acp-platform/](docs/plans/acp-platform/)), program PRs target `develop`,
+> CI also runs on pushes to `develop`, and the coordinator merges them there. Releases
+> still come only from `main`: the owner runs `agentflow promote` to move `develop` to
+> `main`.
 
 - **Single branch.** Every push to `main` derives the next version from the commit types
   since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the

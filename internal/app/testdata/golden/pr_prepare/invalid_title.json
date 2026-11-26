@@ -1,0 +1,10 @@
+{
+  "issues": [
+    {
+      "code": "format",
+      "message": "subject must look like: feat(PLAT-123): add quota API",
+      "fix": "feat(PLAT-1): quota check"
+    }
+  ],
+  "status": "invalid_title"
+}

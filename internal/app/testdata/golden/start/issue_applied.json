@@ -1,0 +1,7 @@
+{
+  "key": "org/repo#42",
+  "branch": "issue-42-0efd766f81d9",
+  "worktree": "<worktrees>/issue-42-0efd766f81d9",
+  "assigned": true,
+  "next": "Start your agent in the worktree: cd '<worktrees>/issue-42-0efd766f81d9'"
+}

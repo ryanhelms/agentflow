@@ -1,0 +1,59 @@
+# ACP platform program: ledger
+
+One row per lane in [plan.md](plan.md). The coordinator updates this table when a lane's issue, PR or status changes.
+
+Models: O = Opus 5.5, S = Sonnet 5.5, F = Fable 5.2.
+
+| Lane | Work | Model | Issue | PR | Status |
+| --- | --- | --- | --- | --- | --- |
+| 0.1 | Create `develop`. PR into `main` (you merge it): `policy.coordinator_merge: true`, CI on `push` to `develop`, the `AGENTS.md` "Active program" section, `docs/plans/acp-platform/{goal,plan,ledger}.md`, and a README/`docs/worktrees.md` note | O | #12 | | in progress |
+| 0.2 | Golden tests that pin today's `Pending` JSON and CLI `--json` output for about 10 operations | S | #13 | | in progress |
+| 1.0 | Phase 1 contract ADR | O | #14 | | in progress |
+| 1.1 | Bus: Pub-Sub, Point-to-Point, Wire Tap to `policy.Gate.Audit`, Dead Letter, bounded buffers | O | | | pending |
+| 1.2 | Message store: JSONL, rotation, 7 days / 50 MB retention, replay from cursor, single-writer rule | O | | | pending |
+| 1.3 | Watcher, git and repo config only: HEAD, index, refs, worktrees, rebase state, `.agentflow/*`; fsnotify with polling fallback; debounce (Aggregator) | O | | | pending |
+| 1.4 | SSE endpoint `/api/events`: snapshot + delta, `Last-Event-ID` replay, resync; overview projection; `agentflow events` CLI and `agentflow_events` MCP | O | | | pending |
+| 1.5 | Browser event client: one SharedWorker stream, snapshot store, connection and resync states; overview panel driven by it | F | | | pending |
+| 2.1 | Watcher, more sources: approvals journal, `~/.agentflow/**`, client settings files | S | | | pending |
+| 2.2 | Hook → daemon local socket (Unix socket; loopback with token on Windows); hooks publish `hook.*` and `commit.created` | S | | | pending |
+| 2.3 | GitHub poller with ETags and rate-limit backoff, publishing `gh.*` | S | | | pending |
+| 2.4 | Activity, approvals and tabs projections; `tabHub` moved onto the stream; old tab stream retired | O | | | pending |
+| 2.5 | UI: activity, approvals and handoff panels driven by events; resync control; live "changed" highlights | F | | | pending |
+| 2.6 | MCP server reloads config on `config.changed` | S | | | pending |
+| 3.1 | Command registry and Invoker; CLI dispatch, MCP tools, usage and parity derived from it; 3 operations moved as examples | O | | | pending |
+| 3.2 | Move commit, PR, push and review (after 3.1) | S | | | pending |
+| 3.3 | Move task, transition, comment, ticket, AC and scope (after 3.1) | S | | | pending |
+| 3.4 | Move docs, release, notify, setup, worktree and secops (after 3.1) | S | | | pending |
+| 3.5 | Timeline UI: live operation feed, filters, links to issue, PR and audit entry | F | | | pending |
+| 4.1 | `Field` metadata (label, description, group, widget, applies, sensitive, source) and `TestEveryConfigFieldHasControl` | S | | | pending |
+| 4.2 | Settings backend as Commands: change set, live checks, preview, atomic save, personal layer applied at once, repo layer written to the worktree and published as a PR, undo last save; `agentflow config set A=1 B=2` | O | | | pending |
+| 4.3 | Settings UI: controls for every field type, Save bar, preview, conflict warnings, undo, search, "modified" filter | F | | | pending |
+| 5.1 | Shared stdio JSON-RPC framing (from `codexhost/stdio.go`, which stays as it is) and scrubbed-environment launcher | O | | | pending |
+| 5.2 | Plugin host: three tiers, registry (Abstract Factory), lifecycle, crash isolation into Dead Letter | O | | | pending |
+| 5.3 | Plugin commands, the two sample plugins, docs (`docs/plugins.md`) | S | | | pending |
+| 5.4 | Plugins page: installed plugins, status, what each adds, live health | F | | | pending |
+| 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | | | pending |
+| 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | | | pending |
+| 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | | | pending |
+| 6.4 | Harnesses page: states, fixes, sign-in guidance | F | | | pending |
+| 7.1 | ACP v1 client and fake ACP agent for tests | O | | | pending |
+| 7.2 | Background sessions (Process Manager), session store, permission chain, worktree-only file and terminal access | O | | | pending |
+| 7.3 | `ai run/status/respond/cancel` commands; agentflow's own MCP server passed to the harness, with a guard against starting sessions without limit | S | | | pending |
+| 7.4 | AI panel: streaming output, tool calls, plan view, permission prompts | F | | | pending |
+| 8.1 | Feature framework, routing settings (`ai.features.<name>.harness`), prompt context as data | O | | | pending |
+| 8.2 | Commit and PR drafting; acceptance-criteria check (after 8.1) | S | | | pending |
+| 8.3 | Ticket from text; review-thread replies (after 8.1) | S | | | pending |
+| 8.4 | "Draft with AI" controls and draft review UI | F | | | pending |
+| 9.1 | ACP transport for `delegate`; agents come from the harness registry | O | | | pending |
+| 9.2 | Second opinion | O | | | pending |
+| 9.3 | Fan-out comparison | O | | | pending |
+| 9.4 | Compare view and delegated session view | F | | | pending |
+| 10.1 | Standup and EOD summaries | S | | | pending |
+| 10.2 | CI failure triage | O | | | pending |
+| 10.3 | Session history and resume (`session/load`, Memento) | S | | | pending |
+| 10.4 | Harness definition sharing; usage recorded in audit | S | | | pending |
+| 10.5 | History, reports and usage views | F | | | pending |
+| 11.1 | Soak tests: retention, overflow, many worktrees, fsnotify limits and polling fallback, concurrent writers | O | | | pending |
+| 11.2 | `make e2e` coverage for the new MCP tools, hooks socket and AI commands against the fake agent | S | | | pending |
+| 11.3 | README, `docs/`, blueprint capability table and skills audit; `TestEveryUIPanelIsEventDriven` | S | | | pending |
+| 11.4 | Full UI review across every page: consistency, accessibility, light and dark | F | | | pending |

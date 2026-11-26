@@ -1,0 +1,48 @@
+$ agentflow pr --prepare --draft --reviewer team:platform --label quota --title "feat: publish the branch" --body "Exercise the publication policy."
+--- stdout
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets pr_open_draft (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "base": "main",
+    "body": "Exercise the publication policy.",
+    "draft": true,
+    "head": "feature/pr",
+    "head_sha": "<object-1>",
+    "jira_effects": null,
+    "labels": [
+      "quota"
+    ],
+    "repo": "team/app",
+    "repository": "<repo>",
+    "reviewers": [
+      "team:platform"
+    ],
+    "source_remote": "origin",
+    "source_repo": "team/app",
+    "target_remote": "origin",
+    "title": "feat: publish the branch"
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "cli/<owner>",
+    "action": "pr_open_draft",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "pr_open_draft",
+    "level": "confirm",
+    "source": "autonomy.remote",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "confirm",
+    "repo_class_default": false,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

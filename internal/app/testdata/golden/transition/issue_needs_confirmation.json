@@ -1,0 +1,34 @@
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets transition (remote) to confirm. test/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "key": "org/repo#42",
+    "event": "pr.merged",
+    "from": "open",
+    "to": "closed",
+    "applied": false,
+    "task_ref": "github-issues/org%2Frepo/42"
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "test/<owner>",
+    "action": "transition",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "transition",
+    "level": "confirm",
+    "source": "autonomy.remote",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

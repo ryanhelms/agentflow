@@ -1,0 +1,9 @@
+$ agentflow transition PLAT-1 pr.merged --dry-run
+--- stdout
+{
+  "key": "PLAT-1",
+  "event": "pr.merged",
+  "from": "Open",
+  "to": "QA",
+  "applied": false
+}

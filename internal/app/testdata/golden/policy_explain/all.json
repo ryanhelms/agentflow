@@ -1,0 +1,703 @@
+[
+  {
+    "action": "adr_draft",
+    "rules": [
+      {
+        "class": "local",
+        "action": "adr_draft",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "comment",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "comment",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Some provider routes require confirmation.",
+    "mandatory": false
+  },
+  {
+    "action": "commit",
+    "rules": [
+      {
+        "class": "local",
+        "action": "commit",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "console.autonomy",
+    "rules": [
+      {
+        "class": "local",
+        "action": "console.autonomy",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Agent changes to personal approval settings require confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "console.publish",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "console.publish",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Repository console publication requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "console.reply",
+    "rules": [
+      {
+        "class": "local",
+        "action": "console.reply",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Repository console replies require confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "delegate",
+    "rules": [
+      {
+        "class": "local",
+        "action": "delegate",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Sends a task to, or starts, an agent session in another repository.",
+    "mandatory": false
+  },
+  {
+    "action": "docs_publish",
+    "rules": [
+      {
+        "class": "local",
+        "action": "docs_publish",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "docs_publish",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Publication can require confirmation for the selected provider route.",
+    "mandatory": false
+  },
+  {
+    "action": "eod",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "eod",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "finish",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "finish",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Removes the worktree and deletes the local and remote branch.",
+    "mandatory": false
+  },
+  {
+    "action": "jira_remote_link",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "jira_remote_link",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "notify",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "notify",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "pr_open",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "pr_open",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "push",
+        "level": "suggest",
+        "source": "autonomy.actions.push",
+        "user_class": "auto",
+        "user_class_default": false,
+        "user_action": "suggest",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false,
+    "includes": [
+      "push"
+    ]
+  },
+  {
+    "action": "pr_open_draft",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "pr_open_draft",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "push",
+        "level": "suggest",
+        "source": "autonomy.actions.push",
+        "user_class": "auto",
+        "user_class_default": false,
+        "user_action": "suggest",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false,
+    "includes": [
+      "push"
+    ]
+  },
+  {
+    "action": "pr_ready_for_review",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "pr_ready_for_review",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "promote",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "promote",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "push",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "push",
+        "level": "suggest",
+        "source": "autonomy.actions.push",
+        "user_class": "auto",
+        "user_class_default": false,
+        "user_action": "suggest",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "release_publish",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "release_publish",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Release publication requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "review_reply",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "review_reply",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false
+  },
+  {
+    "action": "setup.install_gh",
+    "rules": [
+      {
+        "class": "local",
+        "action": "setup.install_gh",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Installation requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "setup.install_mcp",
+    "rules": [
+      {
+        "class": "local",
+        "action": "setup.install_mcp",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Installation requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "setup.register_client",
+    "rules": [
+      {
+        "class": "local",
+        "action": "setup.register_client",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Registration requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "setup.register_mcp",
+    "rules": [
+      {
+        "class": "local",
+        "action": "setup.register_mcp",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Registration requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "start",
+    "rules": [
+      {
+        "class": "local",
+        "action": "start",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "start",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Some provider routes require confirmation.",
+    "mandatory": false
+  },
+  {
+    "action": "sweep",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "sweep",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Finishes every merged worktree.",
+    "mandatory": false
+  },
+  {
+    "action": "ticket_create",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ticket_create",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "ticket_create",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Task creation requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "transition",
+    "rules": [
+      {
+        "class": "local",
+        "action": "transition",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "transition",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Some provider routes require confirmation.",
+    "mandatory": false
+  }
+]

@@ -1,0 +1,14 @@
+$ agentflow comment PLAT-1 "Quota check is in review." --yes
+--- stdout
+{
+  "comment": "Quota check is in review.",
+  "key": "PLAT-1",
+  "site": "https://tasks.example"
+}
+{
+  "commented": true,
+  "key": "PLAT-1"
+}
+--- stderr
+Agentflow comment: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets comment (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it

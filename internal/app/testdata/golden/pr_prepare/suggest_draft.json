@@ -1,0 +1,48 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.remote sets pr_open_draft to suggest. Run it yourself",
+  "summary": {
+    "base": "main",
+    "body": "Adds the quota check.",
+    "draft": true,
+    "head": "PLAT-1-quota",
+    "head_sha": "<object-1>",
+    "jira_effects": [
+      {
+        "key": "PLAT-1",
+        "when": "on pr.merged",
+        "from": "Open",
+        "to": "QA"
+      }
+    ],
+    "labels": [
+      "quota"
+    ],
+    "repo": "team/app",
+    "repository": "<repo>",
+    "reviewers": [
+      "team:platform"
+    ],
+    "source_remote": "origin",
+    "source_repo": "team/app",
+    "target_remote": "origin",
+    "title": "feat(PLAT-1): bound quota"
+  },
+  "commands": [
+    "git push --no-follow-tags --recurse-submodules=no -- 'origin' '<object-1>:refs/heads/PLAT-1-quota'",
+    "gh pr create --repo 'team/app' --head 'PLAT-1-quota' --base 'main' --title 'feat(PLAT-1): bound quota' --body 'Adds the quota check.' --draft --reviewer 'platform' --label 'quota'"
+  ],
+  "policy": {
+    "class": "remote",
+    "action": "pr_open_draft",
+    "level": "suggest",
+    "source": "autonomy.remote",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}
