@@ -160,12 +160,6 @@ func classify(err error) (bus.HookOutcome, string) {
 	return bus.HookFailed, ReasonError
 }
 
-// fromHookCommand reports whether this process runs as `agentflow hook
-// ...`. CommitMsg also serves `agentflow lint-msg`, which the pre-push
-// hook and CI run for every commit and which is not a hook invocation.
-// Tests replace it.
-var fromHookCommand = func() bool { return len(os.Args) > 1 && os.Args[1] == "hook" }
-
 // truncate cuts s to at most n bytes on a rune boundary.
 func truncate(s string, n int) string {
 	if len(s) <= n {

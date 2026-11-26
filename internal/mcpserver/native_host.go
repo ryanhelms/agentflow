@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/managedcli"
 	"github.com/ryanhelms/agentflow/internal/provider/codexhost"
 	"github.com/ryanhelms/agentflow/internal/provider/native"
@@ -25,12 +26,12 @@ type nativeReadResponse struct {
 	SetupOffer  *connectorSetupOffer `json:"setup_offer,omitempty"`
 }
 
-func (s *Server) nativeReadResponse(req *native.Request) nativeReadResponse {
+func newNativeReadResponse(a *app.App, req *native.Request) nativeReadResponse {
 	response := nativeReadResponse{Request: req}
 	if tool, ok := managedcli.ForProvider(req.Provider); ok {
 		response.CLIFallback = tool.Command
 	}
-	if tool := setup.ProviderMCP(req.Provider, s.app.Client); tool.Name != "" {
+	if tool := setup.ProviderMCP(req.Provider, a.Client); tool.Name != "" {
 		response.SetupOffer = &connectorSetupOffer{
 			MCPTool:         tool,
 			PromptIfMissing: fmt.Sprintf("Would you like me to connect %s MCP in this client?", tool.Name),
@@ -39,8 +40,8 @@ func (s *Server) nativeReadResponse(req *native.Request) nativeReadResponse {
 	return response
 }
 
-func (s *Server) interactiveClient() bool {
-	switch s.app.Client {
+func interactiveClient(a *app.App) bool {
+	switch a.Client {
 	case "claude", "claude-desktop", "codex", "cursor", "gemini", "grok", "vscode":
 		return true
 	default:
@@ -48,13 +49,13 @@ func (s *Server) interactiveClient() bool {
 	}
 }
 
-func (s *Server) providerContext(ctx context.Context, input nativeReadIn) context.Context {
-	if !input.ProviderMCP && len(input.NativeResults) == 0 && !s.interactiveClient() {
+func providerContext(ctx context.Context, a *app.App, input nativeReadIn) context.Context {
+	if !input.ProviderMCP && len(input.NativeResults) == 0 && !interactiveClient(a) {
 		return ctx
 	}
 	client := native.Client{Replies: input.NativeResults}
-	if s.app.Client == "codex" {
-		client.Direct = codexProviderHost{dir: s.app.Repo.Dir}
+	if a.Client == "codex" {
+		client.Direct = codexProviderHost{dir: a.Repo.Dir}
 	}
 	return native.WithHost(ctx, client)
 }

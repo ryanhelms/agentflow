@@ -18,6 +18,7 @@ const eventsRepo bus.RepoID = "0123456789abcdef"
 
 func eventsApp(t *testing.T, st *storetest.Store) (*App, *[]store.Role) {
 	t.Helper()
+	noGlobalStore(t)
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, out)
@@ -90,7 +91,6 @@ func TestEventsRejectsBadQueries(t *testing.T) {
 		{Since: "bogus"},
 		{Types: []string{"Git.*"}},
 		{Topics: []string{"fedcba9876543210/*/**"}},
-		{Topics: []string{"global/*/**"}},
 		{Limit: MaxEventsLimit + 1},
 		{Limit: -1},
 	} {
@@ -148,4 +148,15 @@ func TestFollowEventsEnsuresDaemonAndStreams(t *testing.T) {
 	if err := a.FollowEvents(context.Background(), EventsQuery{}, func(context.Context) error { return failing }, nil); !errors.Is(err, failing) {
 		t.Fatalf("ensure failure = %v", err)
 	}
+}
+
+// noGlobalStore keeps a test from reading the global store of the machine it
+// runs on.
+func noGlobalStore(t *testing.T) {
+	t.Helper()
+	old := OpenGlobalEventStore
+	OpenGlobalEventStore = func(context.Context, store.Role) (store.Store, error) {
+		return nil, os.ErrNotExist
+	}
+	t.Cleanup(func() { OpenGlobalEventStore = old })
 }

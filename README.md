@@ -449,7 +449,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
-| See or follow git and configuration events | `agentflow events [--follow]` | `agentflow_events` or `/agentflow:events` |
+| See or follow git and configuration events | `agentflow events [--follow] [--all-repos]` | `agentflow_events` or `/agentflow:events` |
 | End-of-day task comments | `agentflow eod post KEY=NOTE` | `/agentflow:eod` |
 | Next release version | `agentflow release plan` | "what version will this ship as?" |
 
@@ -474,6 +474,10 @@ while it runs, in the repository's git dir under `agentflow/events/`.
 Agentflow's hooks record a `hook.ran` event each time they run (`pre-bash` only
 when it blocks a command) and hand it to a running daemon over a private local
 socket.
+`agentflow events` reads this repository's events and the user-level (`global`) ones, such as
+a change to `~/.agentflow/config.yml`. Add `--all-repos` to read every repository the
+daemon serves in one list. A running MCP server follows the same configuration events and
+reloads its configuration when `.agentflow/` or `~/.agentflow/` changes.
 
 Run `agentflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
@@ -538,8 +542,11 @@ through one hour, subject to the repo maximum.
 In `agentflow ui`, open **Autonomy** to inspect the effective rule for each action,
 save personal preferences or stage repository ceilings for review. Select
 **Inherit** to remove an override. Run `agentflow policy explain commit` in the
-affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. Restart
-a running Agentflow MCP server after editing the configuration. Host sandbox
+affected checkout to see which setting wins. Run `agentflow policy explain` to see the supported actions. A running
+Agentflow MCP server reloads the configuration after you edit it (see
+[MCP configuration reload](docs/events.md#mcp-configuration-reload)), so the next tool call uses
+the new settings. Restart the AI session after you change the selected providers, which changes the
+server's instructions, or to leave configuration recovery mode. Host sandbox
 permissions and provider sign-in prompts are controlled by their respective clients.
 
 Agentflow runs configured Git commit hooks, including native hooks on Windows.

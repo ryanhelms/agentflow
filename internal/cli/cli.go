@@ -116,9 +116,11 @@ Work
   review reply THREAD_ID BODY [--yes]   reply on a review thread
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
-  events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--follow] [--json]
-                                 git and configuration events recorded by the console daemon;
-                                 --follow starts the daemon and prints new events until interrupted
+  events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--all-repos] [--follow] [--json]
+                                 git, configuration and user-level events recorded by the console
+                                 daemon, for this repository and global; --all-repos reads every
+                                 repository the daemon serves; --follow starts the daemon and
+                                 prints new events until interrupted
   eod post KEY=NOTE [KEY=NOTE...] [--yes]   post end-of-day progress comments
   notify SIGNAL --operation-id ID [--title T] [--body TEXT] [--links JSON] [--dry-run] [--automation] [--yes]
   docs get REF [--json]          read one document by qualified reference
@@ -147,7 +149,7 @@ Runtime
   --native-client claude-desktop notify SIGNAL --operation-id ID
                                  use the separately enrolled Slack MCP connection
   mcp [--client NAME] [--ui-only] [--auto-open]  MCP server on stdio
-  hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop   [--client NAME]
+  hook commit-msg FILE | pre-push [REMOTE URL] | post-commit | session-start | pre-bash | stop   [--client NAME]
   update [--latest-stable | --rollback] [--quiet]  update the binary or restore its previous version
   version                        build, channel and update status
 `
@@ -416,7 +418,7 @@ func open(ctx context.Context) (*app.App, error) {
 
 func runHook(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: agentflow hook commit-msg FILE | pre-push [REMOTE URL] | session-start | pre-bash | stop")
+		return errors.New("usage: agentflow hook commit-msg FILE | pre-push [REMOTE URL] | post-commit | session-start | pre-bash | stop")
 	}
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
@@ -439,7 +441,11 @@ func runHook(ctx context.Context, args []string) error {
 		if len(positional) != 1 {
 			return errors.New("usage: agentflow hook commit-msg FILE")
 		}
-		return hooks.CommitMsg(ctx, positional[0], os.Stderr)
+		return hooks.CommitMsgHook(ctx, positional[0], os.Stderr)
+	case "post-commit":
+		// git has already made the commit: this hook only tells the console and must not fail it.
+		_ = hooks.PostCommit(ctx)
+		return nil
 	case "session-start":
 		notice := ""
 		if u, err := newUpdater(ctx); err == nil && u != nil {

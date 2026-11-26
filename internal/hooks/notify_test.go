@@ -142,24 +142,33 @@ func TestCommitMsgPublishesOnlyAsHook(t *testing.T) {
 	t.Chdir(dir)
 	rec := record(t)
 	f := filepath.Join(dir, "MSG")
+	// lint-msg (CommitMsg) validates every commit of a push or a PR and is not a hook run.
 	_ = os.WriteFile(f, []byte("feat: add x\n"), 0o644)
 	if err := CommitMsg(context.Background(), f, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rec.hookRuns(t); len(got) != 0 {
-		t.Fatalf("lint-msg published %+v", got)
-	}
-	old := fromHookCommand
-	fromHookCommand = func() bool { return true }
-	t.Cleanup(func() { fromHookCommand = old })
 	_ = os.WriteFile(f, []byte("updated stuff\n"), 0o644)
 	var ee *ExitError
 	if err := CommitMsg(context.Background(), f, &bytes.Buffer{}); !errors.As(err, &ee) {
 		t.Fatal(err)
 	}
+	if got := rec.hookRuns(t); len(got) != 0 {
+		t.Fatalf("lint-msg published %+v", got)
+	}
+	// The git hook publishes, whatever the process's arguments are.
+	if err := CommitMsgHook(context.Background(), f, &bytes.Buffer{}); !errors.As(err, &ee) {
+		t.Fatal(err)
+	}
 	got := rec.hookRuns(t)
 	if len(got) != 1 || got[0].Hook != "commit-msg" || got[0].Client != "git" || got[0].Outcome != bus.HookBlocked || got[0].Reason != ReasonConvention {
 		t.Fatalf("hook.ran = %+v", got)
+	}
+	_ = os.WriteFile(f, []byte("feat: add x\n"), 0o644)
+	if err := CommitMsgHook(context.Background(), f, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.hookRuns(t); len(got) != 2 || got[1].Outcome != bus.HookPassed {
+		t.Fatalf("hook.ran after a valid message = %+v", got)
 	}
 }
 
