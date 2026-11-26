@@ -12,7 +12,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 | | |
 | --- | --- |
 | **Status** | Private repository owned by Ryan Helms. It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. |
-| **Current release** | <!-- agentflow:version -->`v0.55.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.55.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |

@@ -5,6 +5,12 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.55.1](https://github.com/ryanhelms/agentflow/compare/v0.55.0...v0.55.1) - 2026-11-26
+
+### Fixes
+
+- list breaking changes once in the changelog (#5) ([bdd8cd6](https://github.com/ryanhelms/agentflow/commit/bdd8cd67ab445d9f17703a7d16ad978777a441ac))
+
 ## [0.55.0](https://github.com/ryanhelms/agentflow/compare/v0.54.0...v0.55.0) - 2026-11-26
 
 ### Breaking changes
