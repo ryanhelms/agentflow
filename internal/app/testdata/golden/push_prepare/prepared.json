@@ -1,0 +1,32 @@
+{
+  "status": "prepared",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets push (remote) to auto. Apply this exact snapshot before <time>",
+  "summary": {
+    "branch": "PLAT-1-quota",
+    "head_sha": "<object-1>",
+    "repository": "<repo>",
+    "source_remote": "origin",
+    "source_repo": "team/app"
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "prepared",
+    "action": "push",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "push",
+    "level": "auto",
+    "source": "autonomy.remote",
+    "user_class": "auto",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

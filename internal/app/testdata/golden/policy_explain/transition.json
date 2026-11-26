@@ -1,0 +1,39 @@
+[
+  {
+    "action": "transition",
+    "rules": [
+      {
+        "class": "local",
+        "action": "transition",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "transition",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local",
+      "remote"
+    ],
+    "confirmation": "Some provider routes require confirmation.",
+    "mandatory": false
+  }
+]

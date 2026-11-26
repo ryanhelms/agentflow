@@ -1,0 +1,33 @@
+$ agentflow finish PLAT-1-reach-qa --yes
+--- stdout
+{
+  "repo": "app",
+  "branch": "PLAT-1-reach-qa",
+  "path": "<worktrees>/PLAT-1-reach-qa",
+  "state": "would_finish",
+  "detail": "merged into origin/main",
+  "actions": [
+    "git worktree remove <worktrees>/PLAT-1-reach-qa",
+    "git branch -D PLAT-1-reach-qa",
+    "git worktree prune"
+  ],
+  "primary": "<repo>"
+}
+{
+  "repo": "app",
+  "branch": "PLAT-1-reach-qa",
+  "path": "<worktrees>/PLAT-1-reach-qa",
+  "state": "finished",
+  "detail": "merged into origin/main",
+  "actions": [
+    "git worktree remove <worktrees>/PLAT-1-reach-qa",
+    "git branch -D PLAT-1-reach-qa",
+    "git worktree prune"
+  ],
+  "primary": "<repo>",
+  "next": "cd '<repo>'"
+}
+--- stderr
+Agentflow finish: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets finish (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+Primary checkout: <repo>

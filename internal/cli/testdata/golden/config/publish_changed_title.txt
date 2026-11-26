@@ -1,0 +1,6 @@
+$ agentflow config publish --input -
+--- stdin
+{"base_digest":"<digest-1>","confirm_token":"<confirm-token>","content":"agentflow: 1\ncommit: {require_key: false, subject_max: 60}\ntask_management: {provider: github-issues}\n","path":".agentflow/config.yml","title":"chore: adjust the commit rules again"}
+--- stdout
+--- error
+confirmation token is invalid: request changed or policy tightened. Request a fresh preview

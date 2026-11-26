@@ -1,0 +1,7 @@
+{
+  "key": "PLAT-1",
+  "event": "pr.merged",
+  "from": "Open",
+  "to": "QA",
+  "applied": true
+}

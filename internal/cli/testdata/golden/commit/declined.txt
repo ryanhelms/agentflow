@@ -1,0 +1,25 @@
+$ agentflow commit -m "feat: add widget"
+--- stdin
+n
+--- stdout
+{
+  "branch": "feature/pr",
+  "files": [
+    "widget.txt"
+  ],
+  "git_dir": "<repo>/.git",
+  "jira_effects": null,
+  "message": "feat: add widget\n",
+  "parent": "<object-1>",
+  "parents": "<object-1>",
+  "ref": "refs/heads/feature/pr",
+  "repository": "<repo>",
+  "selected_paths": null,
+  "tree": "<object-2>"
+}
+Proceed? [y/N]: 
+--- stderr
+Agentflow commit: confirm (autonomy.local); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.local sets commit (local) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+--- error
+cancelled

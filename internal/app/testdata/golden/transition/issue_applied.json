@@ -1,0 +1,7 @@
+{
+  "key": "org/repo#42",
+  "event": "pr.merged",
+  "from": "open",
+  "to": "closed",
+  "applied": true
+}

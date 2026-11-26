@@ -1,0 +1,31 @@
+$ agentflow pr --title "feat: publish the branch" --body "Exercise the publication policy." --yes
+--- stdout
+✓ feature branch         feature/pr
+✓ commit messages        
+✓ working tree clean     commit or stash before opening a PR
+✓ no secrets in diff     
+{
+  "base": "main",
+  "body": "Exercise the publication policy.",
+  "draft": false,
+  "head": "feature/pr",
+  "head_sha": "<object-1>",
+  "jira_effects": null,
+  "labels": null,
+  "repo": "team/app",
+  "repository": "<repo>",
+  "reviewers": null,
+  "source_remote": "origin",
+  "source_repo": "team/app",
+  "target_remote": "origin",
+  "title": "feat: publish the branch"
+}
+{
+  "draft": false,
+  "number": 7,
+  "status": "opened",
+  "url": "https://github.com/team/app/pull/7"
+}
+--- stderr
+Agentflow pr_open: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets pr_open (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it

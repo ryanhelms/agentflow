@@ -1,0 +1,9 @@
+$ agentflow pr --title "feat: publish the branch" --body "Exercise the publication policy."
+--- stdout
+✓ feature branch         feature/pr
+✓ commit messages        
+✓ working tree clean     commit or stash before opening a PR
+✓ no secrets in diff     
+autonomy.remote sets pr_open to suggest. Run it yourself
+  git push --no-follow-tags --recurse-submodules=no -- 'origin' '<object-1>:refs/heads/feature/pr'
+  gh pr create --repo 'team/app' --head 'feature/pr' --base 'main' --title 'feat: publish the branch' --body 'Exercise the publication policy.'

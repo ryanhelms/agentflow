@@ -1,0 +1,49 @@
+$ agentflow config preview_personal --input -
+--- stdin
+{"patch":{"actions":{"commit":"auto"}},"user_revision":"<digest-1>"}
+--- stdout
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "default sets console.autonomy (local) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "scope": "personal",
+    "repository": "<repo>",
+    "user_revision": "<digest-1>",
+    "before": {
+      "local": "",
+      "remote": "confirm",
+      "window": "",
+      "actions": null
+    },
+    "after": {
+      "local": "",
+      "remote": "confirm",
+      "window": "",
+      "actions": {
+        "commit": "auto"
+      }
+    }
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "cli/<owner>",
+    "action": "console.autonomy",
+    "class": "local",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "local",
+    "action": "console.autonomy",
+    "level": "confirm",
+    "source": "default",
+    "user_class": "confirm",
+    "user_class_default": true,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": true,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

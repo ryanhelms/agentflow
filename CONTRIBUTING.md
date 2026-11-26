@@ -65,6 +65,11 @@ make check         # everything CI runs (needs golangci-lint, shellcheck, action
 make snapshot      # goreleaser --snapshot --clean
 ```
 
+Golden files in `internal/app/testdata/golden/` and `internal/cli/testdata/golden/` pin the
+output of write operations. After an intended output change, run
+`go test ./internal/app ./internal/cli -run Golden -update`, then review the diff and commit
+it with your change.
+
 ### Website
 
 From the repository root, start the launch and documentation website with

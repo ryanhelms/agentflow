@@ -1,0 +1,44 @@
+$ agentflow policy explain pr_open
+--- stdout
+[
+  {
+    "action": "pr_open",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "pr_open",
+        "level": "auto",
+        "source": "policy.allow_auto_pr_publication",
+        "user_class": "confirm",
+        "user_class_default": false,
+        "user_action": "auto",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      },
+      {
+        "class": "remote",
+        "action": "push",
+        "level": "auto",
+        "source": "policy.allow_auto_pr_publication",
+        "user_class": "confirm",
+        "user_class_default": false,
+        "user_action": "auto",
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "mandatory": false,
+    "includes": [
+      "push"
+    ]
+  }
+]
