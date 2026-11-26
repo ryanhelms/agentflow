@@ -14,6 +14,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/command/commandtest"
+	"github.com/ryanhelms/agentflow/internal/settings"
 )
 
 func dispatch(t *testing.T, env command.CLIEnv, inv command.Invoker, args ...string) error {
@@ -57,14 +58,19 @@ func TestConfigSetPublishesConfirmApplyAndRefusal(t *testing.T) {
 			t.Errorf("%s payload carries a value or the token: %s", ev.Type, ev.Payload)
 		}
 	}
-	audits := 0
+	var results []any
 	for _, line := range f.auditLines(t) {
-		if line["action"] == "console.settings" {
-			audits++
+		if line["action"] != "console.settings" {
+			continue
+		}
+		results = append(results, line["result"])
+		// A personal-only save is gated, and so audited, as local.
+		if line["class"] != "local" || line["operation"] != "config.set" || line["operation_id"] != evs[1].CorrelationID {
+			t.Errorf("audit line %v", line)
 		}
 	}
-	if audits != 2 { // one line per call: the request, then the confirmed save
-		t.Errorf("%d audit lines for the save, want 2", audits)
+	if !slices.Equal(results, []any{"awaiting_approval", "applied"}) { // one line per call
+		t.Errorf("audit results %v, want the request, then the confirmed save", results)
 	}
 
 	// A refusal is a result: op.failed with the status as code.
@@ -151,5 +157,17 @@ func TestConfigFieldsTool(t *testing.T) {
 		"edits": []any{map[string]any{"id": "personal:autonomy.actions", "op": "set", "value": map[string]any{"commit": "auto"}}}}})
 	if err != nil || res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, `"status":"ok"`) {
 		t.Fatalf("%v %+v", err, res)
+	}
+}
+
+// A partial save (repository published, personal write failed) is op.failed
+// with code partial, not op.applied.
+func TestPartialSaveClassifiesAsFailed(t *testing.T) {
+	out := command.Classify[settings.SaveResult](settings.PartialResult{SaveResult: settings.SaveResult{Status: settings.StatusPartial}}, nil, nil)
+	if out.Kind != command.OutcomeFailed || out.Code != "partial" {
+		t.Errorf("outcome %+v", out)
+	}
+	if out := command.Classify[settings.SaveResult](settings.SaveResult{Status: settings.StatusSaved}, nil, nil); out.Kind != command.OutcomeApplied {
+		t.Errorf("saved: %+v", out)
 	}
 }

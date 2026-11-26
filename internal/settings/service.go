@@ -15,6 +15,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/consolecfg"
 	"github.com/ryanhelms/agentflow/internal/gitx"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Display paths of the two layer files. Personal YAML never leaves the disk:
@@ -47,11 +48,18 @@ type Service struct {
 	// console sets it from the GitHub poller's cache, so the projection's
 	// undoable follows a merge. ok is false when the state is unknown.
 	PullState func(n int) (state string, ok bool)
+	// Audit writes the audit line of a save or undo, with the class and
+	// action the save was actually gated under (policy.Gate.AuditOperation).
+	// Nil audits nothing.
+	Audit func(policy.OperationAudit)
 }
 
 // New returns the Service of a's worktree.
 func New(a *app.App) *Service {
 	s := &Service{Home: a.Home, Client: a.Client, Publisher: DefaultPublisher, Now: time.Now}
+	if a.Gate != nil {
+		s.Audit = a.Gate.AuditOperation
+	}
 	if a.Repo != nil {
 		s.Root, s.Repo = a.Repo.Dir, a.Repo
 	}

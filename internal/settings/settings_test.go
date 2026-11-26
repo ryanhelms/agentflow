@@ -442,7 +442,7 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 // there, personal or as the repository ceiling, wins over console.settings.
 func TestApprovalChangesAnswerToConsoleAutonomy(t *testing.T) {
 	for name, tc := range map[string]struct{ personal, repo string }{
-		"personal suggest": {personal: "autonomy:\n  actions:\n    console.autonomy: suggest\n", repo: repoConfig},
+		"personal suggest":   {personal: "autonomy:\n  actions:\n    console.autonomy: suggest\n", repo: repoConfig},
 		"repository ceiling": {repo: repoConfig + "    actions:\n      console.autonomy: suggest\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -543,5 +543,40 @@ func TestJournalFailureDropsTheStaleRecord(t *testing.T) {
 	}
 	if _, err := f.svc.Save(t.Context(), cs, out.(*app.Pending).ConfirmToken, f.app.GateOperation); err == nil || f.personal(t) != before {
 		t.Errorf("save with an unwritable journal: %v, file %q", err, f.personal(t))
+	}
+}
+
+// A save whose repository part was published but whose personal write
+// failed is a PartialResult, audited as failed with code partial under the
+// class it was gated with.
+func TestPartialSaveIsAFailure(t *testing.T) {
+	f := newFixture(t, "task-1")
+	var audits []policy.OperationAudit
+	f.svc.Audit = func(o policy.OperationAudit) { audits = append(audits, o) }
+	cs := settings.ChangeSet{Edits: []settings.Edit{set("repo:commit.subject_max", 60), set("personal:autonomy.remote", "suggest")}}
+	out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restore := settings.FailPersonalWrites(errors.New("read-only"))
+	out, err = f.svc.Save(t.Context(), cs, out.(*app.Pending).ConfirmToken, f.app.GateOperation)
+	restore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := out.(settings.PartialResult)
+	if !ok || r.Status != settings.StatusPartial || len(f.pub.published) != 1 || f.personal(t) != "" {
+		t.Fatalf("result %#v", out)
+	}
+	if raw, _ := json.Marshal(r); !strings.Contains(string(raw), `"status":"partial"`) || strings.Contains(string(raw), "SaveResult") {
+		t.Errorf("JSON %s", raw)
+	}
+	if len(audits) != 2 || audits[0].Outcome != "awaiting_approval" || audits[1].Outcome != "failed" || audits[1].Code != "partial" ||
+		audits[1].Class != policy.Remote || audits[1].Action != "console.publish" || audits[1].OperationID != audits[0].OperationID {
+		t.Errorf("audits %+v", audits)
+	}
+	// The journal records only the published repository edit.
+	if rec, _ := f.svc.Journal(t.Context()); rec == nil || len(rec.Edits) != 1 || rec.Edits[0].ID != "repo:commit.subject_max" {
+		t.Errorf("journal %+v", rec)
 	}
 }
