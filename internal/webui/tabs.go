@@ -19,6 +19,13 @@ type tabHub struct {
 	mu       sync.Mutex
 	tabs     []*consoleTab
 	attached chan struct{} // closed when the first authenticated tab connects
+	// holds counts, per tab ID, the event streams whose tab= parameters
+	// list it. A live tab stays attached while it is held, plus TabGrace.
+	holds map[string]int
+	// notify publishes ui.tabs.changed; set by repoEvents.bindTabs.
+	notify func()
+	// dirty records a change made under mu; unlock publishes it.
+	dirty bool
 }
 
 type consoleTab struct {
@@ -31,6 +38,35 @@ type consoleTab struct {
 	pending map[string]chan tabOutcome // guarded by tabHub.mu
 	stream  chan struct{}              // closed when another connection takes over
 	retire  *time.Timer
+	// live tabs attached with POST /api/tabs/attach and receive navigation
+	// in the tabs projection over the event stream; the others use the
+	// old GET /api/tabs/events stream.
+	live       bool
+	attachedAt time.Time
+	retireGen  int            // invalidates an armed grace timer
+	nav        *TabNavigation // pending navigation of a live tab, guarded by tabHub.mu
+}
+
+// tabGrace is TabGrace; tests shorten it.
+var tabGrace = TabGrace
+
+// onChange sets the function that publishes ui.tabs.changed.
+func (h *tabHub) onChange(notify func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.notify = notify
+}
+
+// unlock releases mu and, when the tabs changed, publishes ui.tabs.changed
+// outside the lock: the tabs projection reads the hub again.
+func (h *tabHub) unlock() {
+	notify := h.notify
+	changed := h.dirty
+	h.dirty = false
+	h.mu.Unlock()
+	if changed && notify != nil {
+		notify()
+	}
 }
 
 type navigation struct {
@@ -108,12 +144,31 @@ func (h *tabHub) navigateTab(ctx context.Context, tab *consoleTab, d Destination
 	ack := make(chan tabOutcome, 1)
 	h.mu.Lock()
 	tab.pending[id] = ack
-	h.mu.Unlock()
+	if tab.live {
+		tab.nav = &TabNavigation{ID: id, Tab: tab.id, Destination: d, Target: event.Target}
+		h.dirty = true
+	}
+	h.unlock()
 	defer func() {
 		h.mu.Lock()
 		delete(tab.pending, id)
-		h.mu.Unlock()
+		if tab.nav != nil && tab.nav.ID == id {
+			tab.nav = nil
+			h.dirty = true
+		}
+		h.unlock()
 	}()
+	if tab.live {
+		// The navigation is in the tab's worktree's tabs state now.
+		select {
+		case handled := <-ack:
+			return handled
+		case <-tab.done:
+			return tabMissing
+		case <-ctx.Done():
+			return tabMissing
+		}
+	}
 	select {
 	case <-tab.done:
 		return tabMissing
@@ -138,6 +193,7 @@ func (h *tabHub) removeLocked(tab *consoleTab) {
 			tab.retire.Stop()
 		}
 		close(tab.done)
+		h.dirty = true
 	}
 }
 
@@ -175,9 +231,9 @@ func (h *tabHub) attach(id, origin, path string, scopeID ...string) (*consoleTab
 		scope = scopeID[0]
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	defer h.unlock()
 	for _, tab := range h.tabs {
-		if tab.id == id && tab.origin == origin && tab.path == path {
+		if tab.id == id && tab.origin == origin && tab.path == path && !tab.live {
 			if tab.scope != scope {
 				h.removeLocked(tab)
 				break
@@ -196,18 +252,108 @@ func (h *tabHub) attach(id, origin, path string, scopeID ...string) (*consoleTab
 	if len(h.tabs) >= 64 {
 		return nil, nil
 	}
-	tab := &consoleTab{id: id, scope: scope, origin: origin, path: path, events: make(chan navigation), done: make(chan struct{}), pending: make(map[string]chan tabOutcome), stream: make(chan struct{})}
+	tab := h.addLocked(id, origin, path, scope)
+	tab.stream = make(chan struct{})
+	return tab, tab.stream
+}
+
+func (h *tabHub) addLocked(id, origin, path, scope string) *consoleTab {
+	tab := &consoleTab{id: id, scope: scope, origin: origin, path: path, events: make(chan navigation), done: make(chan struct{}), pending: make(map[string]chan tabOutcome), attachedAt: time.Now()}
 	h.tabs = append(h.tabs, tab)
+	h.dirty = true
 	if h.attached != nil {
 		close(h.attached)
 		h.attached = nil
 	}
-	return tab, tab.stream
+	return tab
+}
+
+// attachLive attaches a tab that follows the event stream (POST
+// /api/tabs/attach). The same tab moving to another worktree replaces its
+// old entry. It reports false when the hub is full.
+func (h *tabHub) attachLive(id, origin, path, scope string) bool {
+	h.mu.Lock()
+	defer h.unlock()
+	for _, tab := range slices.Clone(h.tabs) {
+		if tab.id != id || tab.origin != origin {
+			continue
+		}
+		if tab.live && tab.path == path && tab.scope == scope {
+			h.armLocked(tab)
+			return true
+		}
+		if tab.live || tab.path == path {
+			h.removeLocked(tab)
+		}
+	}
+	if len(h.tabs) >= 64 {
+		return false
+	}
+	tab := h.addLocked(id, origin, path, scope)
+	tab.live = true
+	h.armLocked(tab)
+	return true
+}
+
+// armLocked starts a live tab's TabGrace timer unless a stream holds it.
+func (h *tabHub) armLocked(tab *consoleTab) {
+	tab.retireGen++
+	if tab.retire != nil {
+		tab.retire.Stop()
+		tab.retire = nil
+	}
+	if h.holds[tab.id] > 0 {
+		return
+	}
+	gen := tab.retireGen
+	tab.retire = time.AfterFunc(tabGrace, func() {
+		h.mu.Lock()
+		defer h.unlock()
+		if tab.retireGen == gen && h.holds[tab.id] == 0 {
+			h.removeLocked(tab)
+		}
+	})
+}
+
+// hold keeps the live tabs ids attached until the returned release runs,
+// and for TabGrace after it. An event stream holds the tabs of its tab=
+// parameters for as long as it is open.
+func (h *tabHub) hold(ids []string) (release func()) {
+	h.mu.Lock()
+	if h.holds == nil {
+		h.holds = map[string]int{}
+	}
+	for _, id := range ids {
+		h.holds[id]++
+	}
+	for _, tab := range h.tabs {
+		if tab.live && slices.Contains(ids, tab.id) {
+			h.armLocked(tab)
+		}
+	}
+	h.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			h.mu.Lock()
+			for _, id := range ids {
+				if h.holds[id]--; h.holds[id] <= 0 {
+					delete(h.holds, id)
+				}
+			}
+			for _, tab := range h.tabs {
+				if tab.live && slices.Contains(ids, tab.id) {
+					h.armLocked(tab)
+				}
+			}
+			h.mu.Unlock()
+		})
+	}
 }
 
 func (h *tabHub) detach(tab *consoleTab, stream chan struct{}, rotating bool) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	defer h.unlock()
 	if tab.stream != stream {
 		return
 	}
@@ -217,7 +363,7 @@ func (h *tabHub) detach(tab *consoleTab, stream chan struct{}, rotating bool) {
 	}
 	tab.retire = time.AfterFunc(3*time.Second, func() {
 		h.mu.Lock()
-		defer h.mu.Unlock()
+		defer h.unlock()
 		if tab.stream == stream {
 			h.removeLocked(tab)
 		}
@@ -240,10 +386,40 @@ func (s *server) tabRoutes() *tabHub {
 	return s.tabs
 }
 
+// validTabID reports whether id is a tab ID: 32 lowercase hex characters.
+func validTabID(id string) bool {
+	return len(id) == 32 && strings.Trim(id, "0123456789abcdef") == ""
+}
+
+// tabAttach serves POST /api/tabs/attach {tab}: the tab follows the event
+// stream from now on. It is checked like the old stream: under this
+// worktree's session and with the Commander scope of this request.
+func (s *server) tabAttach(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Tab string `json:"tab"`
+	}
+	if !read(w, r, &in) {
+		return
+	}
+	if !validTabID(in.Tab) {
+		problem(w, http.StatusBadRequest, "invalid tab id")
+		return
+	}
+	_, scope := s.commanderFor(r)
+	if !s.tabRoutes().attachLive(in.Tab, s.origin, s.worktreePath, scope) {
+		problem(w, http.StatusTooManyRequests, "too many connected tabs")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// tabEvents serves the old GET /api/tabs/events navigation stream. Lane
+// 2.5 moves the browser to POST /api/tabs/attach and the tabs projection;
+// a follow-up on issue #36 then removes this endpoint.
 func (s *server) tabEvents(w http.ResponseWriter, r *http.Request) {
 	h := s.tabRoutes()
 	id := r.URL.Query().Get("tab")
-	if len(id) != 32 || strings.Trim(id, "0123456789abcdef") != "" {
+	if !validTabID(id) {
 		problem(w, http.StatusBadRequest, "invalid tab id")
 		return
 	}
@@ -340,6 +516,6 @@ func (s *server) tabLeave(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	h.mu.Unlock()
+	h.unlock()
 	w.WriteHeader(http.StatusNoContent)
 }

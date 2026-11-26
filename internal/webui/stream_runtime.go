@@ -2,10 +2,12 @@ package webui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -32,7 +34,26 @@ var (
 	openEventStore = func(ctx context.Context, commonDir string, role store.Role) (store.Store, error) {
 		return app.OpenEventStore(ctx, commonDir, role)
 	}
+	// openGlobalStore opens the daemon's bus.GlobalRepo store as
+	// store.RoleOwner (ADR, "Phase 2 scoping": <registry>/<host-hash>.events/).
+	// internal/bus/store cannot open a store for bus.GlobalRepo yet, so the
+	// runtime starts without one: global events still reach projectors over
+	// the bus, but they are not stored and cannot be replayed.
+	openGlobalStore = func(context.Context) (store.Store, error) {
+		return nil, errNoGlobalStore
+	}
 )
+
+// errNoGlobalStore: internal/bus/store has no way to open the global store.
+var errNoGlobalStore = errors.New("the global event store is not available yet")
+
+// globalTopics are the bus.GlobalRepo events every repository's projector
+// follows (ADR, "Phase 2 scoping", rule 1). A stream may name GlobalRepo
+// only with these families (globalStreamFamilies).
+var globalTopics = []bus.Topic{
+	{Repo: bus.GlobalRepo, Worktree: bus.Any, Types: bus.Pattern(bus.TypeConfigLayerChanged)},
+	{Repo: bus.GlobalRepo, Worktree: bus.Any, Types: bus.Pattern(bus.TypeClientSettingsChanged)},
+}
 
 // runtimeExtension is a phase 2 source or sink that runs with the event
 // runtime: the user-level watcher and approval translator (lane 2.1), the
@@ -63,10 +84,46 @@ type eventRuntime struct {
 	watcher watch.Watcher
 	wg      sync.WaitGroup
 	exts    []runtimeExtension
+	// global is the bus.GlobalRepo store, nil while it cannot be opened.
+	global store.Store
 
 	mu    sync.Mutex
 	repos map[string]*repoEvents // by registeredWorktree.CloneID
 	byID  map[bus.RepoID]*repoEvents
+	// github and approvals are the read sides of the GitHub poller (lane
+	// 2.3) and the approval journal (lane 2.1). Their runtimeExtensions set
+	// them from start; until then the activity and approvals projections
+	// report GitHub as unavailable and no approvals.
+	github    watch.GitHubCache
+	approvals ApprovalSource
+}
+
+// setGitHubCache makes c the activity projection's GitHub source. Lane 2.3
+// calls it from its runtimeExtension's start.
+func (rt *eventRuntime) setGitHubCache(c watch.GitHubCache) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.github = c
+}
+
+// setApprovalSource makes src the approvals projection's source. Lane 2.1
+// calls it from its runtimeExtension's start.
+func (rt *eventRuntime) setApprovalSource(src ApprovalSource) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.approvals = src
+}
+
+func (rt *eventRuntime) githubCache() watch.GitHubCache {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.github
+}
+
+func (rt *eventRuntime) approvalSource() ApprovalSource {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.approvals
 }
 
 func startEventRuntime(ctx context.Context) (*eventRuntime, func(), error) {
@@ -76,6 +133,11 @@ func startEventRuntime(ctx context.Context) (*eventRuntime, func(), error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	rt := &eventRuntime{ctx: ctx, watcher: w, repos: map[string]*repoEvents{}, byID: map[bus.RepoID]*repoEvents{}}
+	if g, err := openGlobalStore(ctx); err == nil {
+		rt.global = g
+	} else if !errors.Is(err, errNoGlobalStore) {
+		fmt.Fprintln(os.Stderr, "agentflow: global event store:", err)
+	}
 	rt.bus = newEventBus(bus.Options{Interceptors: []bus.Interceptor{store.Interceptor(rt.store)}})
 	rt.wg.Add(1)
 	go func() {
@@ -106,10 +168,16 @@ func startEventRuntime(ctx context.Context) (*eventRuntime, func(), error) {
 		for _, r := range rt.repos {
 			_ = r.store.Close()
 		}
+		if rt.global != nil {
+			_ = rt.global.Close()
+		}
 	}, nil
 }
 
 func (rt *eventRuntime) store(id bus.RepoID) (store.Store, bool) {
+	if id == bus.GlobalRepo {
+		return rt.global, rt.global != nil
+	}
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	r := rt.byID[id]
@@ -130,9 +198,10 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 			rt.mu.Unlock()
 			return nil, err
 		}
-		r = &repoEvents{id: s.Repo(), common: w.Common, store: s, worktrees: map[bus.WorktreeID]registeredWorktree{}}
-		r.projector = newProjector(r.id, []Projection{&overviewProjection{repo: r}})
-		sub, err := rt.bus.Subscribe(bus.SubscribeOptions{Name: "projector/" + string(r.id)}, bus.Topic{Repo: r.id, Worktree: bus.Any, Types: "**"})
+		r = &repoEvents{id: s.Repo(), common: w.Common, store: s, global: rt.global, bus: rt.bus, worktrees: map[bus.WorktreeID]registeredWorktree{}}
+		r.projector = newProjector(r.id, repoProjections(r, rt.githubCache, rt.approvalSource))
+		topics := append([]bus.Topic{{Repo: r.id, Worktree: bus.Any, Types: "**"}}, globalTopics...)
+		sub, err := rt.bus.Subscribe(bus.SubscribeOptions{Name: "projector/" + string(r.id)}, topics...)
 		if err != nil {
 			_ = s.Close()
 			rt.mu.Unlock()
@@ -160,15 +229,53 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 	return r, nil
 }
 
+// repoProjections are the projections of one repository's projector.
+func repoProjections(r *repoEvents, github func() watch.GitHubCache, approvals func() ApprovalSource) []Projection {
+	return []Projection{
+		&overviewProjection{repo: r},
+		&activityProjection{repo: r, cache: github},
+		&approvalsProjection{repo: r, source: approvals, now: time.Now},
+		&tabsProjection{repo: r},
+	}
+}
+
 // repoEvents is one repository's share of the event runtime.
 type repoEvents struct {
-	id        bus.RepoID
-	common    string
-	store     store.Store
+	id     bus.RepoID
+	common string
+	store  store.Store
+	// global is the bus.GlobalRepo store, nil when the daemon has none.
+	global    store.Store
+	bus       bus.Publisher
 	projector *projector
 
 	mu        sync.Mutex
 	worktrees map[bus.WorktreeID]registeredWorktree
+	tabs      *tabHub // the clone's tab hub, bound by the first server
+}
+
+// bindTabs connects the clone's tab hub to this repository: the hub
+// publishes ui.tabs.changed here and the tabs projection reads it.
+func (r *repoEvents) bindTabs(h *tabHub) {
+	r.mu.Lock()
+	if r.tabs == h {
+		r.mu.Unlock()
+		return
+	}
+	r.tabs = h
+	r.mu.Unlock()
+	h.onChange(func() {
+		if r.bus == nil {
+			return
+		}
+		_, _ = r.bus.Publish(context.Background(), bus.Event{Type: bus.TypeUITabsChanged, Source: "daemon", Repo: r.id})
+	})
+}
+
+func (r *repoEvents) tabHub() *tabHub {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.tabs
 }
 
 // addWorktree records w and reports whether it is new.

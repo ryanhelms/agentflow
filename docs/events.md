@@ -50,19 +50,27 @@ The MCP tool `agentflow_events` takes `since`, `types`, `topics` and `limit` and
 ## The console's event stream
 
 Each worktree's console serves `GET /w/<id>/api/events` as Server-Sent Events. The
-request uses the tab's `Authorization: Bearer` session, repeated `topic=` parameters and,
-on reconnect, `Last-Event-ID`.
+request uses the tab's `Authorization: Bearer` session, repeated `topic=` parameters,
+up to 16 `tab=<32 hex>` parameters naming the browser's tabs, and, on reconnect,
+`Last-Event-ID`.
 
 | Rule | Result |
 | --- | --- |
 | No or expired session | 401 |
-| A malformed topic, more than 64 topics, or a malformed `Last-Event-ID` | 400 |
+| A malformed topic, more than 64 topics, a malformed `Last-Event-ID`, a malformed `tab=` or more than 16 | 400 |
 | A topic or `Last-Event-ID` naming another repository | 403 |
+| A `global` topic other than `config.**` or `client.**` (for example `global/*/**`) | 403 |
+| A `global` topic with a worktree other than `*` | 400 |
 | More than 8 streams on one console origin | 429 |
 | The console has no event store for its repository | 503; the browser keeps retrying |
 
 A stream carries only events, states and cursor entries of the repository the session
-belongs to. It may follow every worktree of that repository.
+belongs to, plus `global` when it asks for it. It may follow every worktree of that
+repository. `global` holds changes to user-level files: the personal configuration layer
+and user-level client settings. Every stream receives the repository states such a change
+alters (a personal-layer edit updates `overview.config`); only a stream with a
+`global/*/config.**` or `global/*/client.**` topic also receives the `global` events
+themselves and a `global=<seq>` entry in its cursor. `Last-Event-ID` may carry that entry.
 
 Frames: `snapshot` (replace all state), `delta` (one event and the states it changed;
 `null` removes a key), `resync` (discard state; a `snapshot` follows) and a `: ping`
@@ -71,6 +79,26 @@ overview projection's state per worktree (its `worktree` is the `<id>` of `/w/<i
 these fields: `branch`, `head`, `oid`, `detached`, `upstream` (`name`, `ahead`, `behind`;
 absent without an upstream), `changed`, `staged`, `unstaged`, `untracked`, `operation`,
 `task` and `config` (`valid`, `problems`).
+
+The other projections (JSON shapes in `internal/webui/projection_states.go`):
+
+| Projection | Key | Follows | State |
+| --- | --- | --- | --- |
+| `activity` | repository (no `worktree`) | `gh.**`, `commit.created`, `hook.ran`, `git.head.changed`, `git.worktrees.changed` | `pulls` (open, ready to merge first; each with `worktree`, `ci`, `failed`, `depends_on`), `issues` (bound issues with their `worktree`), `recent` (the 20 newest commits and blocked or failed hooks), `github` (`state`: `ok`, `disabled`, `unavailable` or `rate_limited`; `retry_at`) and `handoff` |
+| `approvals` | repository | `approval.**` | `open` (pending and approved, oldest first; `expired` once past `expires_at`) and `recent` (consumed, cancelled and expired from the last 24 hours, newest first, at most 10) |
+| `tabs` | worktree | `ui.tabs.changed` | `tabs` (`tab`, `attached`) and `navigation` (`id`, `tab`, `screen`, `role`, `target`, or `null`) |
+
+GitHub data comes from the daemon's poller cache, so a snapshot never calls GitHub.
+Approvals come from the approval records, not from the events alone. Answering an
+approval still uses the console's approve flow.
+
+**Tabs on the stream.** A tab attaches with `POST /w/<id>/api/tabs/attach {"tab": "<32
+hex>"}` under its worktree session. It stays attached while a stream of the origin lists
+it in `tab=`, and for 10 seconds after the last such stream closes. A navigation appears
+in the `tabs` state of the tab's worktree; only the tab whose ID matches acts on it and
+acknowledges with `POST /api/tabs/ack`. The daemon clears it on the acknowledgement or
+after 2 seconds. `POST /api/tabs/leave` detaches the tab at once. The older
+`GET /api/tabs/events` stream still works until the browser switches over.
 
 The browser shares one stream per console origin through a `SharedWorker` loaded from
 `/_agentflow/event-worker.js`.
