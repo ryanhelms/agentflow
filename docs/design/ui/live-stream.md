@@ -3,7 +3,8 @@
 Use these patterns for every console screen that shows data from the event stream
 (`GET /w/<id>/api/events`, [ADR](../../knowledge/engineering/decisions/event-driven-platform.md)).
 The overview's checkout card was the first to use them. The activity, approvals and
-handoff panels and tab navigation follow in "Live panels" and "Tab navigation" below.
+handoff panels, the operation timeline and tab navigation follow in "Live panels",
+"Timeline" and "Tab navigation" below.
 
 ## Use the shared stream, never open your own
 
@@ -205,6 +206,136 @@ Agent Commander's worker questions are not on the stream yet. They load from
 session opened, and only the Commander items of the answer are shown. A navigation request
 clears them; the note in **Needs attention** then says to use **Resync**.
 
+## Timeline
+
+`static/timeline.js` and `static/timeline.css` render one repository-wide state,
+`TimelineState` (`internal/webui/projection_timeline_state.go`). The `timeline` projection
+(`projection_timeline.go`) builds it from the repository's stored `op.*` and `approval.*`
+events. `app.js` adds `*/*/op.**` to its topics and passes the state to
+`timeline.show(raw, flash)` and the stream's state to `timeline.status(...)`; nothing else
+in `app.js` knows about the panel. The panel is on the Overview, full width, below **Activity**.
+
+### One operation, one row
+
+The server groups events by operation ID and orders operations newest first. The panel never
+reorders them. A row is keyed by the operation ID, so a step that arrives changes the row in
+place.
+
+| Part | Shows |
+| --- | --- |
+| Title and tag | The operation's name (the action's name from the Autonomy screen when it has one, otherwise the operation name in words), a state mark, and one state tag. |
+| Subject | The commit subject, PR title or task summary, as text. |
+| Facts | Origin ("From the command line", "From claude-code (agent)", "From the console"), worktree ("This worktree", "Worktree id", "Whole repository"), task, branch, "Started 14:02, last step 14:05", class. |
+| Reason | Only for **Failed** and **Suggested only**: one sentence in words (see "Failure codes"). |
+| Approval | Only while the operation waits or is approved but not applied: what it waits for, when the approval expires, and **Show in Approvals**. |
+| Steps | Every event of the operation, oldest first, each with a mark, a label and its time to the second. One line that wraps; one step per line below 38 rem. "Earlier steps are not shown." leads the list when the server cut it at 12. |
+| Links | What the operation touched: commit, branch, pull request, task, document, release. A link opens in a new tab only when the state carries an `https` address; otherwise the name is plain text. A task or branch that is linked is not repeated as a fact. |
+| Operation ID | The ID in full with **Copy ID**. The same ID is on the operation's line in `~/.agentflow/audit.log` and in `agentflow events`; a browser cannot open that file, so the panel gives the ID to search for. |
+
+### States
+
+`state` is the operation's latest state. Each has one tag and one mark; the mark follows the
+"State marks" rule above (filled is done, hollow waits, a square has stopped).
+
+| `state` | Tag | Tone | Mark | Filter group |
+| --- | --- | --- | --- | --- |
+| `requested` | In progress | neutral | hollow circle, pulsing, `--text-muted` | In progress |
+| `requested`, no result for 10 minutes | No result recorded | neutral | hollow circle | In progress |
+| `awaiting_approval` | Waiting for approval | warn | hollow circle, `--warn` | Waiting for approval |
+| `approved` | Approved, not applied yet | good | hollow circle, `--ok` | In progress |
+| `prepared` | Ready to apply | neutral | hollow circle, `--ok` | In progress |
+| `applied` | Applied | good | filled circle, `--ok` | Applied |
+| `failed` | Failed | bad | filled square, `--bad` | Failed |
+| `suggested` | Suggested only | neutral | hollow square | Suggested only |
+| `cancelled` | Cancelled | neutral | hollow square | Cancelled or expired |
+| `expired` | Approval expired | bad | hollow square, `--bad` | Cancelled or expired |
+| anything else | Unknown state | neutral | hollow square | none; shown only under "All states" |
+
+A cancellation reaches the timeline through `approval.resolved`, and an expiry through
+`approval.expired`. Approval events come from a file watcher and can arrive after the
+`op.*` event of the call that used the approval, so the projection lets them change the
+state only where they can still be true: they never undo **Applied**, and an approval
+granted after a failed call leaves it **Failed**.
+
+Step labels: Requested, Requested again (a call that resumes the operation), Waiting for
+approval (`op.awaiting_approval`), Approval requested (`approval.requested`), Approved,
+Approval used, Cancelled, Approval expired, Prepared, Applied, Suggested, not run, and
+"Failed: " with the short reason.
+
+### Failure codes
+
+`op.failed` and `op.suggested` carry a fixed code, never error text. The panel shows a
+sentence for each known code and its short form on the step ("Failed: request changed").
+An unknown code that looks like an identifier is shown as "Reason code: name."; anything
+else as "not readable". Add a sentence to `codes` in `timeline.js` when a lane adds a code.
+
+| Code | Sentence |
+| --- | --- |
+| `approval_expired` | The approval expired before the operation ran. Ask for a fresh preview. |
+| `operation_changed` | The request changed after it was approved, or the policy became stricter. Ask for a fresh preview. |
+| `approval_consumed` | The approval was already used. Check the earlier result before you retry. |
+| `approval_cancelled` | The approval was cancelled. |
+| `approval_pending` | The operation was resumed before a person approved it. |
+| `invalid_token` | The confirmation token was not valid. |
+| `cancelled`, `timeout` | The operation was cancelled before it finished. / The operation timed out. |
+| `native_read_required` | The agent has to read from its own provider connection first, then run the operation again. |
+| `invalid`, `blocked` | The input was not valid, so nothing ran. / A check blocked the operation, so nothing ran. |
+| `unexpected_result`, `unknown_status` | The operation returned a result (a status) Agentflow did not expect. |
+| `error` | The operation returned an error. The terminal or agent session that ran it shows the details. |
+
+### Filters
+
+Three selects sit above the list. They filter in the browser; the state carries every
+worktree's operations.
+
+| Filter | Choices | Default |
+| --- | --- | --- |
+| Worktree | This worktree (with operations of the whole repository), All worktrees, and each other worktree the state names | This worktree |
+| State | All states, and the filter groups of "States" | All states |
+| Origin | All origins, Command line, Agents (MCP), Console when the state has one, and each agent by name when there are several | All origins |
+
+- A filter change is not a live change: nothing is highlighted, and the result count is
+  announced once ("4 operations · 7 operations in the repository.").
+- **Clear filters** appears when a filter differs from its default and moves focus to the
+  first select.
+- The list shows 10 rows. **Show 10 more** adds the next 10; when the last rows are shown
+  the button goes and focus moves to the panel heading.
+- A choice that the state no longer names (a worktree that was removed) stays selected
+  until the reader changes it.
+
+### Show in Approvals
+
+A waiting operation is answered in the session that asked, and the Approvals panel holds
+its countdown, rule and ID. **Show in Approvals** is a button, not a link: the console's
+address fragment names the screen. It scrolls the request into view, highlights its row
+for 2 s, moves focus to the Approvals heading and announces "Approvals. The request is
+highlighted." When the request is no longer open it says so instead.
+
+### Live changes and announcements
+
+- A new operation is inserted at the top and its row is highlighted. A step that arrives
+  highlights the step and the values that changed (tag, reason), not the row.
+- The timeline announces results only, one sentence each, at most three per update:
+  "claude-code: Push a branch applied: Push issue-57.", "Command line: Create a local
+  commit failed: blocked by a check.", "… was suggested, not run." A request and its
+  approval are announced by the Approvals panel, so the timeline stays silent for them.
+- An operation that the filters hide is neither shown nor announced.
+- The first snapshot and a requested **Resync** are never highlighted or announced.
+- The pulsing mark stops under `prefers-reduced-motion: reduce`; highlights follow the
+  shared rule.
+
+### Timeline states of the panel
+
+| Case | What the panel shows |
+| --- | --- |
+| Before the first snapshot | "Waiting for live updates…" |
+| Live, no operations | "No operations recorded in the last 7 days. Run agentflow commit, agentflow pr or an agent tool, and its steps appear here." |
+| Filters match nothing | "No operations match these filters." and **Clear filters** |
+| More than 50 operations, or history older than the store's replay window | "Older operations are not shown. Run `agentflow events` to list them." |
+| Offline with values | the values and a `.live-note`: "Live updates are offline. The timeline shows the last operations it received. The console keeps retrying." |
+| Offline before any value | "Live updates are offline. The timeline appears when they return. …" |
+| Live, but no state for the repository | the last values and "The live stream has no timeline for this repository yet." |
+
 ## Tab navigation
 
 A console tab is asked to show a screen through the stream (`static/tab-navigation.js`).
@@ -231,6 +362,7 @@ deliver a navigation; a request for a screen then opens a new tab.
 `TestEventStreamBrowser` covers frame parsing, the store and the worker. `TestLiveOverviewBrowser`
 drives the overview. `TestLivePanelsBrowser` drives the activity, approvals and handoff panels
 through every state above. `TestTabFlowBrowser` covers attach, the stream's tab list,
-navigation, acknowledgement and leave. `TestConsoleConnectionBrowser` runs navigation against
-the real tab hub. All use the fixtures in `internal/webui/stream_fixture_test.go` and need
+navigation, acknowledgement and leave. `TestTimelineBrowser` drives the timeline: rows, steps,
+links, failure codes, filters, paging, the jump to Approvals and every panel state.
+`TestConsoleConnectionBrowser` runs navigation against the real tab hub. All use the fixtures in `internal/webui/stream_fixture_test.go` and need
 `AGENTFLOW_TEST_CHROME`.

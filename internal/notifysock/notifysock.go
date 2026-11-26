@@ -238,8 +238,9 @@ const (
 
 // socketTypes are the types a producer may send. Observations of git,
 // configuration, approvals and GitHub come only from the daemon's own
-// sources, so no process can forge them. Phase 3 adds "op.**".
-var socketTypes = []bus.Pattern{"hook.ran", "commit.created"}
+// sources, so no process can forge them. Phase 3 adds "op.**", which the
+// command Invoker of CLI and MCP processes publishes.
+var socketTypes = []bus.Pattern{"hook.ran", "commit.created", "op.**"}
 
 // Allowed reports whether t may be sent over the socket.
 func Allowed(t bus.Type) bool {

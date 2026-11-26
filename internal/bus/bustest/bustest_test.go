@@ -69,7 +69,7 @@ func TestPublishSubscribeFiltersAndChains(t *testing.T) {
 	if len(tapped) != 2 {
 		t.Fatalf("tap saw %v", tapped)
 	}
-	if _, err := b.Publish(ctx, bus.Event{Type: "op.applied", Source: "x", Repo: repo}); !errors.Is(err, bus.ErrUnknownType) {
+	if _, err := b.Publish(ctx, bus.Event{Type: "plugin.loaded", Source: "x", Repo: repo}); !errors.Is(err, bus.ErrUnknownType) {
 		t.Fatalf("unknown type err = %v", err)
 	}
 	sequenced := head("main")

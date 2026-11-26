@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -60,6 +61,17 @@ const (
 // Path returns the store directory of the repository whose common git dir
 // is commonDir.
 func Path(commonDir string) string { return filepath.Join(commonDir, filepath.FromSlash(Dir)) }
+
+// Exists reports whether the repository whose common git dir is commonDir
+// has an event store: its repo-id file exists. Only the daemon, as
+// RoleOwner, creates a store. Every other producer (hooks, and the command
+// Invoker's Emitter in CLI and MCP processes) checks Exists first and never
+// opens a store that does not exist, so agentflow commands add no files
+// under a consuming repository's .git (ADR, phase 3 decision 6).
+func Exists(commonDir string) bool {
+	_, err := os.Stat(filepath.Join(Path(commonDir), RepoIDFile))
+	return err == nil
+}
 
 // Errors returned by stores.
 var (

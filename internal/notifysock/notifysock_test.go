@@ -155,3 +155,16 @@ func TestAcceptorPublishesOnlyOwnedRepos(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOpEventsAreSocketTypes(t *testing.T) {
+	for _, typ := range []bus.Type{bus.TypeOpRequested, bus.TypeOpSuggested, bus.TypeOpAwaitingApproval, bus.TypeOpPrepared, bus.TypeOpApplied, bus.TypeOpFailed} {
+		if !notifysock.Allowed(typ) {
+			t.Errorf("%s is not a socket type", typ)
+		}
+	}
+	for _, typ := range []bus.Type{bus.TypeApprovalRequested, bus.TypeGitHeadChanged, bus.TypeGHPullUpdated} {
+		if notifysock.Allowed(typ) {
+			t.Errorf("%s must come only from the daemon's own sources", typ)
+		}
+	}
+}

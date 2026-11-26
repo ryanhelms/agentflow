@@ -43,6 +43,13 @@ const (
 //     stopping, or predates the socket), or rejects e, or times out, drop
 //     e and call warn once: Dropped.
 //
+// Every producer that is not the daemon (hooks, and the command Invoker's
+// Emitter in CLI and MCP processes) calls Deliver only when store.Exists:
+// it never creates a store, so agentflow commands add no files under a
+// consuming repository's .git. Without a store no daemon has owned the
+// repository, so the socket would refuse the event as unknown_repo; the
+// producer drops it without dialing (ADR, phase 3 decision 6).
+//
 // app may be nil when the store could not be opened (step 1 is skipped);
 // send may be nil when no Locator is available (step 2 drops). warn may be
 // nil: hooks pass nil, because git and agents read their output. Deliver

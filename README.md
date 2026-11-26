@@ -470,7 +470,12 @@ The overview is live: a branch switch, a commit, staging or an edit under
 requests with their checks, review and merge readiness, the issues bound to
 its worktrees, recent commits and blocked or failed hooks, approvals with the
 time each has left, and the handoff brief. The **Activity** panel also shows
-when GitHub is unavailable or rate limited and when Agentflow retries. All
+when GitHub is unavailable or rate limited and when Agentflow retries. The
+**Timeline** panel is a live feed of operations run from the command line,
+from agents and from the console: each shows its steps with times (requested,
+waiting for approval, applied or failed), who ran it, and links to its task,
+pull request and commit, and you can filter it by worktree, state and origin.
+It fills as Agentflow's commands start to record `op.*` events. All
 tabs of a clone share one event stream, which also carries requests to show a
 screen in an open tab. If the overview looks out of date, press **Resync** to
 discard it and load a fresh snapshot. `agentflow events --follow` prints the same events in a
@@ -481,7 +486,13 @@ settings) go to one store per OS user and host, `~/.agentflow-ui/<host-hash>.eve
 which must be a private directory owned by that user.
 Agentflow's hooks record a `hook.ran` event each time they run (`pre-bash` only
 when it blocks a command) and hand it to a running daemon over a private local
-socket. Approval requests and their outcomes (`approval.requested`,
+socket. Operations run through the command registry (so far `policy`, `eod post`,
+`commit`, `push`, `pr`, `pr mark-ready`, `review reply`, the task commands such as
+`start`, `transition`, `comment` and `ac done`, the document, release, notification and
+worktree commands, and `secops triage`; from the CLI or MCP, as `docs/events.md` lists)
+record `op.requested` and their outcome (`op.applied`, `op.failed`,
+`op.awaiting_approval`, ...) the same way, grouped by operation ID; like hooks, they
+never create a store. Approval requests and their outcomes (`approval.requested`,
 `approval.resolved`, `approval.expired`) and changes to a worktree's AI client
 settings files (`client.settings.changed`) are events too. Approval records are
 read from the `AGENTFLOW_HOME` the daemon started with, so start the console from

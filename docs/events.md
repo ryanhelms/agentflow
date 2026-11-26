@@ -161,7 +161,65 @@ prints nothing about it, because git and agents read hook output.
    local notify socket, and the daemon stores and publishes it.
 3. If the daemon is starting, stopping or refuses the event, the event is dropped.
 
-The notify socket accepts only `hook.ran` and `commit.created`, only from a process that
+## Events from operations
+
+Operations that run through agentflow's command registry record `op.*` events, from the
+CLI and from MCP tools alike. So far these are:
+
+| Commands | MCP tools |
+| --- | --- |
+| `policy explain`, `policy status`, `policy approve` | `agentflow_policy_explain`, `agentflow_approval_status`, `agentflow_approval_approve` |
+| `eod post` | `agentflow_eod_post` |
+| `commit` (also `--prepare` and `--split`), `preview` | `agentflow_commit`, `agentflow_commit_prepare`, `agentflow_commit_context`, `agentflow_commit_plan`, `agentflow_commit_preview`, `agentflow_commit_validate` |
+| `push` (also `--prepare`) | `agentflow_push`, `agentflow_push_prepare` |
+| `pr` (also `--prepare` and `--check`), `pr mark-ready` (also `--prepare`) | `agentflow_pr_open`, `agentflow_pr_prepare`, `agentflow_pr_ready`, `agentflow_pr_mark_ready`, `agentflow_pr_mark_ready_prepare` |
+| `review`, `review reply` | `agentflow_review_threads`, `agentflow_review_reply` |
+| `status`, `collisions` | `agentflow_ship_status`, `agentflow_collisions` |
+| `start`, `task create`, `task link` | `agentflow_start`, `agentflow_ticket_create`, `agentflow_jira_remote_link` |
+| `transition`, `comment` | `agentflow_transition`, `agentflow_comment` |
+| `ac` (also `done` and `undo`), `scope` | `agentflow_ac_checklist`, `agentflow_ac_update`, `agentflow_scope_check` |
+| `context`, `work`, `standup` | `agentflow_context`, `agentflow_my_work`, `agentflow_standup` |
+| `docs get`, `docs search`, `docs publish`, `adr new` | `agentflow_docs_get`, `agentflow_docs_search`, `agentflow_docs_publish`, `agentflow_adr_draft` |
+| `release plan`, `release preview`, `release publish`, `promote` | `agentflow_release_plan`, `agentflow_release_preview` |
+| `notify`, `secops triage` | `agentflow_notify` |
+| `finish`, `worktree go-work` | `agentflow_finish`, `agentflow_worktree_go_work` |
+
+`sweep`, `delegate` and `setup apply` record them when an MCP tool runs them
+(`agentflow_sweep`, `agentflow_delegate`, `agentflow_setup_apply`), and from the command
+line once their output moves into the registry; the other commands follow during phase 3.
+`transition --github-event` and `transition --shipped`, the CI modes, record nothing. A
+read, such as `policy explain`, `status`, `pr --check`, `docs get` or `release plan`,
+records nothing, and neither does a preview (`--dry-run`, `dry_run`). A write records:
+
+| Event | When |
+| --- | --- |
+| `op.requested` | the request passed validation and is about to be gated and run |
+| `op.awaiting_approval` | it waits for a confirmation or a shared approval |
+| `op.suggested` | the policy only suggests it; nothing ran |
+| `op.prepared` | a prepare-only request produced a candidate |
+| `op.applied` | it ran |
+| `op.failed` | it returned an error or a refusal, with a fixed code such as `invalid_token` |
+
+Every event of one operation has the operation ID (`op_` and 32 hex characters, the
+approval ID once the gate issues one) as its correlation ID, so a request, its
+confirmation and the resumed call group together. The payload names the operation, its
+policy action and class, the client, and a one-line subject. It never carries a confirm
+token, a message body, error text or a path.
+
+A command hands its events to the store like a hook: it appends them when the store
+exists and no daemon owns it, sends them over the notify socket while the daemon owns it,
+and otherwise drops them with one warning on standard error. It never creates a store.
+When the daemon has not registered the worktree yet, the event is sent again as a
+repository-wide event.
+
+`policy approve` and `worktree go-work` also write one line to `audit.log` with their
+operation and operation ID. So do the prepare commands, which write no line of their own
+(`commit --prepare`, `push --prepare`, `pr --prepare`, `pr mark-ready --prepare` and their
+tools), and `agentflow_commit_context` when it stages paths. Commands whose own code
+already writes an audit line, such as `eod post`, `commit`, `push`, `pr` and `review
+reply`, write no extra one.
+
+The notify socket accepts only `hook.ran`, `commit.created` and `op.*`, only from a process that
 proves it can read the daemon's private registry file (`~/.agentflow-ui/`), and only for
 repositories and worktrees the daemon serves. On Unix it is a socket file with mode
 0600 in that private directory, and the daemon also checks the connecting process's
@@ -267,10 +325,15 @@ The other projections (JSON shapes in `internal/webui/projection_states.go`):
 | `activity` | repository (no `worktree`) | `gh.**`, `commit.created`, `hook.ran`, `git.head.changed`, `git.worktrees.changed` | `pulls` (open, ready to merge first; each with `worktree`, `ci`, `failed`, `depends_on`), `issues` (bound issues with their `worktree`), `recent` (the 20 newest commits and blocked or failed hooks), `github` (`state`: `ok`, `disabled`, `unavailable` or `rate_limited`; `retry_at`) and `handoff` |
 | `approvals` | repository | `approval.**` | `open` (pending and approved, oldest first; `expired` once past `expires_at`) and `recent` (consumed, cancelled and expired from the last 24 hours, newest first, at most 10) |
 | `tabs` | worktree | `ui.tabs.changed` | `tabs` (`tab`, `attached`) and `navigation` (`id`, `tab`, `screen`, `role`, `target`, or `null`) |
+| `timeline` | repository | `op.**`, `approval.**` | `operations` (at most 50 from the last 7 days, newest first; each with `id`, `operation`, `client`, `worktree`, `subject`, `task`, `branch`, `state`, `code`, `approval`, `links` and up to 12 `steps`) and `truncated`. Shape in `internal/webui/projection_timeline_state.go` |
 
 GitHub data comes from the daemon's poller cache, so a snapshot never calls GitHub.
 Approvals come from the approval records, not from the events alone. Answering an
 approval still uses the console's approve flow.
+The timeline is rebuilt from the repository's stored events, at most the newest 1000. It
+groups `op.*` events by their correlation ID (the operation ID) and `approval.*` events by
+their operation ID. A stream gets timeline updates for the event types its topics name, so
+ask for both `op.**` and `approval.**`.
 
 **Tabs on the stream.** A tab attaches with `POST /w/<id>/api/tabs/attach {"tab": "<32
 hex>"}` under its worktree session. It stays attached while a stream of the origin lists

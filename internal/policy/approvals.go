@@ -228,6 +228,27 @@ func (g *Gate) credential(s string) (string, bool, error) {
 	return id, true, nil
 }
 
+// OperationIDOf returns the operation ID a confirm token or operation ID
+// names, without checking the bearer's MAC. It is a correlation hint for
+// events and the timeline only: it grants nothing, and the gate still
+// checks the token when the operation runs.
+func OperationIDOf(token string) (string, bool) {
+	if strings.HasPrefix(token, "op_") {
+		if _, err := parseID(token); err != nil {
+			return "", false
+		}
+		return token, true
+	}
+	if !strings.HasPrefix(token, "cf_") {
+		return "", false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token[3:])
+	if err != nil || len(raw) != 16+sha256.Size {
+		return "", false
+	}
+	return "op_" + hex.EncodeToString(raw[:16]), true
+}
+
 // ScopeKey is the file-name prefix of the approval records of the
 // repository whose common git dir is repository, after Configure resolved
 // its symbolic links: 32 lowercase hex characters. Records are named

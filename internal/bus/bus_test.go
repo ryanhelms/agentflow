@@ -144,7 +144,7 @@ func TestValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutate := map[string]func(*Event){
-		"unknown type":       func(e *Event) { e.Type = "op.applied" },
+		"unknown type":       func(e *Event) { e.Type = "plugin.loaded" },
 		"no source":          func(e *Event) { e.Source = "" },
 		"bad repo":           func(e *Event) { e.Repo = "nope" },
 		"missing worktree":   func(e *Event) { e.Worktree = "" },
