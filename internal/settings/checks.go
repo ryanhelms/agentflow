@@ -13,6 +13,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 )
 
 // The check chain (ADR, "Phase 4 diagnostics and the check chain"): a Chain
@@ -53,6 +54,8 @@ type check struct {
 	// next holds both files after every edit that passed.
 	next     [2]string
 	planDiff string
+	// rules caches rulePlugins.
+	rules map[string]bool
 }
 
 type link func(c *check)
@@ -508,7 +511,7 @@ func policyLink(c *check) {
 			continue
 		}
 		if e.field.Meta.Loosens != config.LoosensNone {
-			if msg := loosening(e.prior, e.next); msg != "" {
+			if msg := loosening(e.prior, e.next, c.rulePlugins()); msg != "" {
 				e.loosens = msg
 				c.add(SeverityInfo, e, CodeLoosens, msg)
 			}
@@ -568,8 +571,28 @@ func rank(l config.Level) int {
 	return 1
 }
 
+// rulePlugins are the installed plugins that carry a permission rule. A rule
+// only denies operations, so turning such a plugin off loosens policy. A
+// registry that cannot be read gives none: the catalog then has no plugin
+// fields either.
+func (c *check) rulePlugins() map[string]bool {
+	if c.rules == nil {
+		c.rules = map[string]bool{}
+		reg, err := manifest.ReadRegistry(c.s.Home)
+		if err == nil {
+			for _, p := range reg.Plugins {
+				if len(p.Manifest.Extensions.PermissionRule) > 0 {
+					c.rules[p.ID] = true
+				}
+			}
+		}
+	}
+	return c.rules
+}
+
 // loosening says how going from before to after loosens policy, or "".
-func loosening(before, after [2]string) string {
+// rules are the plugins that carry a permission rule.
+func loosening(before, after [2]string, rules map[string]bool) string {
 	a, b := policyOf(before), policyOf(after)
 	keys := make([]string, 0, len(a.levels))
 	for k := range a.levels {
@@ -613,6 +636,18 @@ func loosening(before, after [2]string) string {
 	for _, id := range a.disabled {
 		if !slices.Contains(b.disabled, id) {
 			return fmt.Sprintf("Lets the plugin %s run for this repository again.", id)
+		}
+	}
+	// A permission rule only denies, so turning its plugin off loosens too:
+	// for the person, and, conservatively, for a repository.
+	for _, id := range slices.Sorted(maps.Keys(a.plugins)) {
+		if rules[id] && a.plugins[id] && !b.plugins[id] {
+			return fmt.Sprintf("Turns off the plugin %s, which has a permission rule: operations it denies are allowed again.", id)
+		}
+	}
+	for _, id := range b.disabled {
+		if rules[id] && !slices.Contains(a.disabled, id) {
+			return fmt.Sprintf("Turns off the plugin %s for this repository, and it has a permission rule that denies operations.", id)
 		}
 	}
 	return ""
