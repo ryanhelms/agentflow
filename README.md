@@ -481,6 +481,11 @@ socket. Approval requests and their outcomes (`approval.requested`,
 settings files (`client.settings.changed`) are events too. Approval records are
 read from the `AGENTFLOW_HOME` the daemon started with, so start the console from
 a shell that uses the same home as your agents.
+It also polls GitHub for pull request, check and bound-issue changes of each
+repository with a GitHub remote, using your `gh` login, and records them as
+`gh.pr.updated`, `gh.ci.updated` and `gh.issue.updated` events. A quiet
+repository costs only conditional requests, which GitHub does not count against
+the rate limit, and polling slows down by itself as the limit runs low.
 
 Run `agentflow ui` from the worktree you want to manage. The standalone browser
 console shows the active provider for each role, where its settings came from,
