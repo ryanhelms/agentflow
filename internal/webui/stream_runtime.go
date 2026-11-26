@@ -9,33 +9,30 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
-	"github.com/ryanhelms/agentflow/internal/bus/bustest"
 	"github.com/ryanhelms/agentflow/internal/bus/store"
 	"github.com/ryanhelms/agentflow/internal/watch"
 )
 
-// Swap points for the phase 1 implementations that land in parallel lanes.
-// Each is one line to change; the event store's is app.OpenEventStore.
+// The daemon's event plumbing. Tests replace these to inject fakes.
 var (
-	// newEventBus builds the daemon's bus. Lane 1.1: return bus.New(opts).
-	newEventBus = func(opts bus.Options) bus.Bus { return bustest.New(opts) }
-	// newWatcher builds the daemon's watcher. Lane 1.3: return the watch
-	// package's Watcher (fsnotify with the polling fallback).
-	newWatcher = func() watch.Watcher { return idleWatcher{} }
-	// openEventStore opens a repository's store. Lane 1.2 swaps
-	// app.OpenEventStore, so the CLI and the daemon change together.
+	// newEventBus builds the daemon's in-process bus.
+	newEventBus = bus.New
+	// newWatcher builds the daemon's watcher: file notifications with the
+	// polling fallback, translating git and config changes into events.
+	newWatcher = func() (watch.Watcher, error) {
+		return watch.New(watch.Options{
+			Translator: watch.NewTranslator(),
+			OnError: func(err error) {
+				fmt.Fprintln(os.Stderr, "agentflow: event watcher:", err)
+			},
+		})
+	}
+	// openEventStore opens a repository's store, through the same
+	// app.OpenEventStore the CLI uses.
 	openEventStore = func(ctx context.Context, commonDir string, role store.Role) (store.Store, error) {
 		return app.OpenEventStore(ctx, commonDir, role)
 	}
 )
-
-// idleWatcher produces no events. It stands in until lane 1.3's watcher.
-type idleWatcher struct{}
-
-func (idleWatcher) Add(watch.Target) error                             { return nil }
-func (idleWatcher) Remove(bus.RepoID, bus.WorktreeID) error            { return nil }
-func (idleWatcher) Mode(bus.RepoID, bus.WorktreeID) (watch.Mode, bool) { return "", false }
-func (idleWatcher) Run(ctx context.Context, _ bus.Publisher) error     { <-ctx.Done(); return nil }
 
 // eventRuntime is the daemon's event plumbing: one bus, one store per
 // repository opened as store.RoleOwner, one projector per repository and
@@ -51,9 +48,13 @@ type eventRuntime struct {
 	byID  map[bus.RepoID]*repoEvents
 }
 
-func startEventRuntime(ctx context.Context) (*eventRuntime, func()) {
+func startEventRuntime(ctx context.Context) (*eventRuntime, func(), error) {
+	w, err := newWatcher()
+	if err != nil {
+		return nil, nil, fmt.Errorf("start event watcher: %w", err)
+	}
 	ctx, cancel := context.WithCancel(ctx)
-	rt := &eventRuntime{ctx: ctx, watcher: newWatcher(), repos: map[string]*repoEvents{}, byID: map[bus.RepoID]*repoEvents{}}
+	rt := &eventRuntime{ctx: ctx, watcher: w, repos: map[string]*repoEvents{}, byID: map[bus.RepoID]*repoEvents{}}
 	rt.bus = newEventBus(bus.Options{Interceptors: []bus.Interceptor{store.Interceptor(rt.store)}})
 	rt.wg.Add(1)
 	go func() {
@@ -71,7 +72,7 @@ func startEventRuntime(ctx context.Context) (*eventRuntime, func()) {
 		for _, r := range rt.repos {
 			_ = r.store.Close()
 		}
-	}
+	}, nil
 }
 
 func (rt *eventRuntime) store(id bus.RepoID) (store.Store, bool) {
@@ -112,7 +113,9 @@ func (rt *eventRuntime) attach(w registeredWorktree) (*repoEvents, error) {
 		}()
 	}
 	rt.mu.Unlock()
-	r.addWorktree(w)
+	if !r.addWorktree(w) {
+		return r, nil // already watched, for example under another host name
+	}
 	target := watch.Target{Repo: r.id, Worktree: bus.WorktreeID(w.ID), Root: w.Root, GitDir: w.GitDir, CommonDir: w.Common}
 	if err := rt.watcher.Add(target); err != nil {
 		fmt.Fprintf(os.Stderr, "agentflow: cannot watch worktree %s: %v\n", w.ID, err)
@@ -131,10 +134,13 @@ type repoEvents struct {
 	worktrees map[bus.WorktreeID]registeredWorktree
 }
 
-func (r *repoEvents) addWorktree(w registeredWorktree) {
+// addWorktree records w and reports whether it is new.
+func (r *repoEvents) addWorktree(w registeredWorktree) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	_, seen := r.worktrees[bus.WorktreeID(w.ID)]
 	r.worktrees[bus.WorktreeID(w.ID)] = w
+	return !seen
 }
 
 func (r *repoEvents) worktree(id bus.WorktreeID) (registeredWorktree, bool) {

@@ -6,10 +6,9 @@ changes as events in the repository's event store, under
 `agentflow_events` MCP tool all read those events. The contract is the ADR
 [Event bus, message store and event stream](knowledge/engineering/decisions/event-driven-platform.md).
 
-> **Phase 1 status.** The stream, projections, CLI and MCP tool are in place. The file
-> store, the bus and the watcher land in separate phase 1 changes. Until they do, the
-> daemon produces no events and keeps its store in memory, so `agentflow events` prints
-> no events.
+Events are recorded only while the daemon runs. `agentflow events` reads only the
+current repository's store; following several repositories with one cursor comes in a
+later phase.
 
 ## Read events from a terminal
 
@@ -60,6 +59,7 @@ on reconnect, `Last-Event-ID`.
 | A malformed topic, more than 64 topics, or a malformed `Last-Event-ID` | 400 |
 | A topic or `Last-Event-ID` naming another repository | 403 |
 | More than 8 streams on one console origin | 429 |
+| The console has no event store for its repository | 503; the browser keeps retrying |
 
 A stream carries only events, states and cursor entries of the repository the session
 belongs to. It may follow every worktree of that repository.
@@ -74,3 +74,6 @@ absent without an upstream), `changed`, `staged`, `unstaged`, `untracked`, `oper
 
 The browser shares one stream per console origin through a `SharedWorker` loaded from
 `/_agentflow/event-worker.js`.
+
+The watcher uses file notifications and falls back to polling per worktree when
+notifications are unavailable. Set `AGENTFLOW_WATCH=poll` to force polling.

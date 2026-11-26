@@ -63,7 +63,12 @@ type daemon struct {
 // startEvents starts the daemon's bus, watcher and per-repository stores.
 // The daemon is the only process that opens a store as store.RoleOwner.
 func (d *daemon) startEvents(ctx context.Context) func() {
-	rt, stop := startEventRuntime(ctx)
+	rt, stop, err := startEventRuntime(ctx)
+	if err != nil {
+		// Without events the console still works; only the stream is off.
+		fmt.Fprintln(os.Stderr, "agentflow: live events unavailable:", err)
+		return func() {}
+	}
 	d.mu.Lock()
 	d.events = rt
 	d.mu.Unlock()

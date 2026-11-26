@@ -245,6 +245,7 @@
             return;
           }
           if (response.status === 429) reason = "busy";
+          if (response.status === 503) reason = "unavailable"; // no event store yet: retry
           if (!response.ok || !response.body) throw new Error("stream unavailable");
           await receive(response, signal, connection);
         } catch {

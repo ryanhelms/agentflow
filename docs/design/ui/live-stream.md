@@ -40,7 +40,7 @@ Each state has a label, a colour and its own mark shape, so it never depends on 
 | `live` | Live | filled circle | `--ok` | a snapshot arrived on the current connection |
 | `reconnecting` | Reconnecting | hollow circle, pulsing | `--warn` | the stream dropped; fewer than 3 failed attempts |
 | `resyncing` | Resyncing | half-filled circle, turning | `--warn` | the server sent `resync`, or you pressed **Resync** |
-| `offline` | Offline | hollow square | `--bad` | 3 failed attempts, the browser is offline, or the server refused (404, 403, 429) |
+| `offline` | Offline | hollow square | `--bad` | 3 failed attempts, the browser is offline, the server refused (404, 403, 429), or it has no event store yet (503, keeps retrying) |
 
 Rules:
 
@@ -82,6 +82,7 @@ Rules:
 | Offline, values received earlier | The last values and "Live updates are offline. … The console keeps retrying." |
 | Endpoint missing (404) | "This console does not serve live updates. Use Resync to reload the checkout." Retrying stops. |
 | Too many streams (429) | "Too many live streams are open for this console. …" Retrying continues. |
+| No event store yet (503) | "Live updates are not available for this worktree yet. The console keeps retrying." Retrying continues. |
 | Session ended (401) | No stream state: the existing session flow renews the session or shows the reconnect screen. |
 | Configuration changed on disk while you have unsaved edits | A notice asks you to save or discard, then **Resync**. Without edits the console reloads by itself. |
 

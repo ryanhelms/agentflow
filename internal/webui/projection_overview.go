@@ -96,7 +96,9 @@ func (o *overviewProjection) State(ctx context.Context, key ProjectionKey) (json
 
 func overviewOf(ctx context.Context, root, gitDir string) (OverviewState, error) {
 	repo := &gitx.Repo{Dir: root}
-	out, err := repo.Git(ctx, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
+	// --no-optional-locks: refreshing the index would be seen by the
+	// watcher as git.index.changed and wake this projection again.
+	out, err := repo.Git(ctx, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
 	if err != nil {
 		return OverviewState{}, err
 	}

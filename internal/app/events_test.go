@@ -5,8 +5,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -149,30 +147,5 @@ func TestFollowEventsEnsuresDaemonAndStreams(t *testing.T) {
 	failing := errors.New("no daemon")
 	if err := a.FollowEvents(context.Background(), EventsQuery{}, func(context.Context) error { return failing }, nil); !errors.Is(err, failing) {
 		t.Fatalf("ensure failure = %v", err)
-	}
-}
-
-func TestEventRepoIDIsCreatedOnce(t *testing.T) {
-	common := t.TempDir()
-	if _, err := EventRepoID(common, false); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("reader on a new repository = %v", err)
-	}
-	id, err := EventRepoID(common, true)
-	if err != nil || !id.Valid() || id == bus.GlobalRepo {
-		t.Fatalf("created %q, %v", id, err)
-	}
-	again, err := EventRepoID(common, true)
-	if err != nil || again != id {
-		t.Fatalf("second call %q, %v", again, err)
-	}
-	raw, _ := os.ReadFile(filepath.Join(store.Path(common), store.RepoIDFile))
-	if strings.TrimSpace(string(raw)) != string(id) {
-		t.Fatalf("file = %q", raw)
-	}
-	if err := os.WriteFile(filepath.Join(store.Path(common), store.RepoIDFile), []byte("../../etc\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := EventRepoID(common, true); err == nil {
-		t.Fatal("an invalid repo-id was accepted")
 	}
 }

@@ -24,7 +24,7 @@ func TestEventStreamBrowser(t *testing.T) {
 		}
 		var token atomic.Value
 		token.Store("good")
-		stream := newStreamFixture(func(r *http.Request) bool {
+		stream := newScriptedStream(func(r *http.Request) bool {
 			return r.Header.Get("Authorization") == "Bearer "+token.Load().(string)
 		})
 		stream.install(mux)
@@ -56,7 +56,7 @@ func TestLiveOverviewBrowser(t *testing.T) {
 		worktree := http.NewServeMux()
 		mux.Handle("/w/first/", http.StripPrefix("/w/first", worktree))
 		worktree.Handle("/", handler)
-		stream := newStreamFixture(s.authorized)
+		stream := newScriptedStream(s.authorized)
 		stream.install(mux)
 		worktree.HandleFunc("GET /api/events", stream.events)
 		page, err := assets.ReadFile("static/index.html")

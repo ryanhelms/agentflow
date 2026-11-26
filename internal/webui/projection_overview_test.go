@@ -157,7 +157,10 @@ func TestEventRuntimeOwnsStoreAndRoutesEvents(t *testing.T) {
 		return app.OpenEventStore(ctx, common, role)
 	}
 	t.Cleanup(func() { openEventStore = old })
-	rt, stop := startEventRuntime(ctx)
+	rt, stop, err := startEventRuntime(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer stop()
 	ev, err := rt.attach(r)
 	if err != nil {
@@ -169,10 +172,11 @@ func TestEventRuntimeOwnsStoreAndRoutesEvents(t *testing.T) {
 	if len(roles) != 1 || roles[0] != store.RoleOwner {
 		t.Fatalf("store roles = %v, want one RoleOwner", roles)
 	}
-	id, err := app.EventRepoID(r.Common, false)
-	if err != nil || id != ev.id {
-		t.Fatalf("repo-id file = %s, %v; runtime %s", id, err, ev.id)
+	reader, err := store.Open(ctx, r.Common, store.RoleReader)
+	if err != nil || reader.Repo() != ev.id {
+		t.Fatalf("store on disk = %v; runtime %s", err, ev.id)
 	}
+	_ = reader.Close()
 	l, unlisten := ev.projector.listen()
 	defer unlisten()
 	e, err := rt.bus.Publish(ctx, bus.Event{Type: bus.TypeGitHeadChanged, Source: "test", Repo: ev.id, Worktree: "main"})
@@ -204,5 +208,37 @@ func TestEventWorkerHasOneOriginWidePath(t *testing.T) {
 		t.Fatalf("worker = %d %s", rec.Code, rec.Header().Get("Content-Type"))
 	case err != nil && rec.Code != 404:
 		t.Fatalf("missing worker = %d", rec.Code)
+	}
+}
+
+// The watcher reports index writes as git.index.changed, so a projection
+// that refreshed the index itself would wake itself up again.
+func TestOverviewDoesNotRewriteTheIndex(t *testing.T) {
+	dir := eventRepo(t)
+	file := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(file, []byte("a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "a.txt")
+	gitIn(t, dir, "commit", "-q", "-m", "chore: add a")
+	// Same content, new stat data: a plain git status would refresh the index.
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(file, later, later); err != nil {
+		t.Fatal(err)
+	}
+	index := filepath.Join(dir, ".git", "index")
+	before, err := os.Stat(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := overviewOf(context.Background(), dir, filepath.Join(dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) || after.Size() != before.Size() {
+		t.Fatalf("overview rewrote the index: %v -> %v", before.ModTime(), after.ModTime())
 	}
 }

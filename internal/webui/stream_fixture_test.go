@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// streamFixture is a scripted /api/events endpoint for browser tests. The
+// scriptedStream is a scripted /api/events endpoint for browser tests. The
 // test page writes the SSE text itself, so it controls every frame and
 // chunk boundary of the wire format in the event-driven-platform ADR.
-type streamFixture struct {
+type scriptedStream struct {
 	authorized func(*http.Request) bool
 
 	mu       sync.Mutex
@@ -20,12 +20,12 @@ type streamFixture struct {
 	status   int
 }
 
-func newStreamFixture(authorized func(*http.Request) bool) *streamFixture {
-	return &streamFixture{authorized: authorized, streams: map[chan string]struct{}{}}
+func newScriptedStream(authorized func(*http.Request) bool) *scriptedStream {
+	return &scriptedStream{authorized: authorized, streams: map[chan string]struct{}{}}
 }
 
 // events serves GET <worktree>/api/events.
-func (f *streamFixture) events(w http.ResponseWriter, r *http.Request) {
+func (f *scriptedStream) events(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.requests = append(f.requests, map[string]string{
 		"authorization": r.Header.Get("Authorization"), "last_event_id": r.Header.Get("Last-Event-ID"),
@@ -69,7 +69,7 @@ func (f *streamFixture) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (f *streamFixture) open() int {
+func (f *scriptedStream) open() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.streams)
@@ -81,7 +81,7 @@ func (f *streamFixture) open() int {
 //	POST /fixture/stream/drop     end every open stream
 //	POST /fixture/stream/status   answer later requests with ?code= (0 serves the stream)
 //	GET  /fixture/stream/requests the requests seen so far
-func (f *streamFixture) install(mux *http.ServeMux) {
+func (f *scriptedStream) install(mux *http.ServeMux) {
 	mux.HandleFunc("POST /fixture/stream/emit", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		if err != nil {

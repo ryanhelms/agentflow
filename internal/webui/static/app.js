@@ -488,7 +488,8 @@ const streamLabels = {idle: "Connecting", connecting: "Connecting", live: "Live"
 const offlineNotes = {
   unsupported: "This console does not serve live updates. Use Resync to reload the checkout.",
   forbidden: "The console refused the live stream for this worktree. Use Resync to try again.",
-  busy: "Too many live streams are open for this console. Close another console tab, or use Resync."
+  busy: "Too many live streams are open for this console. Close another console tab, or use Resync.",
+  unavailable: "Live updates are not available for this worktree yet. The console keeps retrying."
 };
 const operationNames = {rebase: "Rebase", merge: "Merge", "cherry-pick": "Cherry-pick", revert: "Revert", bisect: "Bisect"};
 const shownFacts = new Map();
@@ -529,8 +530,10 @@ function ownOverview(entry) {
   return entry.projection === "overview" && (worktreeID === "*" || entry.worktree === worktreeID);
 }
 
-// The overview projection's state (lane 1.4, projection_overview.go). Unknown
-// fields are ignored and missing ones read as empty, so the shape can grow.
+// The overview projection's state (OverviewState in projection_overview.go).
+// head is the short OID, "" before the first commit; upstream is
+// {name, ahead, behind} and absent when the branch has none. Unknown fields
+// are ignored and missing ones read as empty, so the shape can grow.
 function overviewState(raw) {
   if (raw === null || typeof raw !== "object") return null;
   const text = value => typeof value === "string" ? value : "";
@@ -538,11 +541,13 @@ function overviewState(raw) {
   const config = raw.config !== null && typeof raw.config === "object" ? raw.config : {};
   const problems = Array.isArray(config.problems) ? config.problems.filter(issue => typeof issue === "string" && issue) : [];
   if (config.valid === false && !problems.length) problems.push("The repository configuration is not valid.");
+  const upstream = raw.upstream !== null && typeof raw.upstream === "object"
+    ? {name: text(raw.upstream.name), ahead: count(raw.upstream.ahead), behind: count(raw.upstream.behind)} : null;
+  const staged = count(raw.staged), unstaged = count(raw.unstaged), untracked = count(raw.untracked);
   return {
-    branch: text(raw.branch), head: text(raw.head), detached: raw.detached === true,
-    ahead: count(raw.upstream?.ahead), behind: count(raw.upstream?.behind),
-    staged: count(raw.staged), unstaged: count(raw.unstaged), untracked: count(raw.untracked),
-    operation: text(raw.operation), problems
+    branch: text(raw.branch), head: text(raw.head), oid: text(raw.oid), detached: raw.detached === true, upstream,
+    changed: count(raw.changed) || staged + unstaged + untracked, staged, unstaged, untracked,
+    operation: text(raw.operation), task: text(raw.task), problems
   };
 }
 
@@ -613,10 +618,12 @@ function checkoutFacts() {
       branchText: state.branch || "Detached HEAD", changes: count ? plural(count,"changed path") : state.dirty ? "Uncommitted changes" : "None"};
   }
   const parts = [[now.staged,"staged"],[now.unstaged,"unstaged"],[now.untracked,"untracked"]].filter(([count]) => count).map(([count,label]) => count + " " + label);
-  const sync = [now.ahead && now.ahead + " ahead", now.behind && now.behind + " behind"].filter(Boolean).join(", ");
+  const up = now.upstream;
+  const sync = up ? [up.ahead && up.ahead + " ahead", up.behind && up.behind + " behind"].filter(Boolean).join(", ") : "";
   const branch = now.detached ? "" : now.branch;
-  return {branch, head: now.head.slice(0,Math.max(7,state.head?.length || 12)), dirty: parts.length > 0, operation: now.operation,
-    branchText: (branch || "Detached HEAD") + (sync ? " · " + sync : ""), changes: parts.join(" · ") || "None"};
+  return {branch, head: now.head, dirty: now.changed > 0, operation: now.operation,
+    branchText: (branch || "Detached HEAD") + (sync ? " · " + sync + (up.name ? " " + up.name : "") : ""),
+    changes: parts.join(" · ") || (now.changed ? plural(now.changed,"changed path") : "None")};
 }
 
 // Configuration problems and uncommitted work follow the stream; every other
@@ -651,7 +658,7 @@ function renderOverview(flash = false) {
   if (showFact(operation,"git-operation",running,flash)) changed.push(running || "The git operation finished");
   operation.hidden = !running;
   const metadata = $("repo-metadata");
-  for (const [key, label, value, follows] of [["branch","Branch",facts.branchText,true], ["revision","Revision",facts.head.slice(0,12),true], ["changes","Changes",facts.changes,true], ["cli","Running CLI",state.version], ["pin","Workflow pin",state.pin]]) {
+  for (const [key, label, value, follows] of [["branch","Branch",facts.branchText,true], ["revision","Revision",facts.head.slice(0,12) || "No commits yet",true], ["changes","Changes",facts.changes,true], ["cli","Running CLI",state.version], ["pin","Workflow pin",state.pin]]) {
     let field = metadata.querySelector('[data-field="' + key + '"]');
     if (!field) {
       field = element("dd");

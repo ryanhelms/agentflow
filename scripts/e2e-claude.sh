@@ -45,6 +45,12 @@ check() { # check <name> <command...>
 }
 
 export XDG_CACHE_HOME="$tmp/cache" AGENTFLOW_HOME="$tmp/home" AGENTFLOW_NO_UPDATE=1
+# The fixture repos use only their own hooks: no global or system git config
+# (a global core.hooksPath would replace the hooks `agentflow init` installs),
+# and no session or bypass variables inherited from the shell running this.
+printf '[init]\n\tdefaultBranch = main\n' >"$tmp/gitconfig"
+export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
+unset AGENTFLOW_SESSION_REPO AGENTFLOW_ALLOW_PRIMARY
 mkdir -p "$XDG_CACHE_HOME/agentflow/dev" "$AGENTFLOW_HOME"
 (cd "$root" && go build -o "$XDG_CACHE_HOME/agentflow/dev/agentflow" ./cmd/agentflow)
 ln -sfn dev "$XDG_CACHE_HOME/agentflow/current"
@@ -78,8 +84,12 @@ git commit -q --allow-empty -m "chore(PLAT-1): init"
 "$XDG_CACHE_HOME/agentflow/current/agentflow" init --non-interactive --provider task_management=jira >/dev/null
 rm -f .claude/settings.json # load the plugin from this checkout instead of the marketplace
 git add -A
-git commit -q -m "chore(PLAT-1): add agentflow configuration"
-git switch -q -c PLAT-123-gpu-quota-api
+# The pre-commit hook refuses commits in the primary checkout; committing
+# `agentflow init` there is the bypass it documents. Task work below runs in a
+# linked worktree, as `agentflow start --worktree` sets up, with the hook on.
+AGENTFLOW_ALLOW_PRIMARY=1 git commit -q -m "chore(PLAT-1): add agentflow configuration"
+git worktree add -q -b PLAT-123-gpu-quota-api "$tmp/task"
+cd "$tmp/task"
 mkdir -p api
 printf 'package api\n\n// Quota is a per-tenant GPU quota.\ntype Quota struct{ GPUs int }\n' >api/quota.go
 printf 'package api\n\nimport "testing"\n\nfunc TestQuota(t *testing.T) { _ = Quota{GPUs: 1} }\n' >api/quota_test.go
