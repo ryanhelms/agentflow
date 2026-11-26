@@ -46,11 +46,18 @@ if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum 
   echo "agentflow: checksum mismatch for $pkg, not installing" >&2
   exit 1
 }
-gh attestation verify "$tmp/$pkg" --repo ryanhelms/agentflow \
-  --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml >&2 || {
-  echo "agentflow: build attestation did not verify, not installing" >&2
-  exit 1
-}
+# GitHub has no attestations for private repositories owned by a user, so a private
+# release is installed on its checksum alone. A failed visibility lookup still verifies.
+if [ "${AGENTFLOW_INSECURE_SKIP_ATTESTATION:-}" = 1 ] ||
+  [ "$(gh repo view ryanhelms/agentflow --json visibility -q .visibility 2>/dev/null)" = PRIVATE ]; then
+  echo "agentflow: private release, skipping build attestation (checksum verified)" >&2
+else
+  gh attestation verify "$tmp/$pkg" --repo ryanhelms/agentflow \
+    --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml >&2 || {
+    echo "agentflow: build attestation did not verify, not installing" >&2
+    exit 1
+  }
+fi
 
 # Install atomically: extract into a private staging dir, then rename the binary into
 # place, so concurrent first runs (several AI clients starting at once) never see a

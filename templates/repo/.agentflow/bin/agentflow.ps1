@@ -40,8 +40,15 @@ try {
   $got = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $tmp $pkg)).Hash.ToLower()
   if ($want -ne $got) { throw "agentflow: checksum mismatch for $pkg, not installing" }
 
-  gh attestation verify (Join-Path $tmp $pkg) --repo ryanhelms/agentflow --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
-  if ($LASTEXITCODE -ne 0) { throw 'agentflow: build attestation did not verify, not installing' }
+  # GitHub has no attestations for private repositories owned by a user, so a private
+  # release is installed on its checksum alone. A failed visibility lookup still verifies.
+  $visibility = gh repo view ryanhelms/agentflow --json visibility -q .visibility 2>$null
+  if ($env:AGENTFLOW_INSECURE_SKIP_ATTESTATION -eq '1' -or ($LASTEXITCODE -eq 0 -and $visibility -eq 'PRIVATE')) {
+    [Console]::Error.WriteLine('agentflow: private release, skipping build attestation (checksum verified)')
+  } else {
+    gh attestation verify (Join-Path $tmp $pkg) --repo ryanhelms/agentflow --signer-workflow ryanhelms/agentflow/.github/workflows/release.yml 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+    if ($LASTEXITCODE -ne 0) { throw 'agentflow: build attestation did not verify, not installing' }
+  }
 
   # Install atomically: extract into a private staging dir and move it into place, then
   # replace the pointer file with a rename, so concurrent first runs never see a partial

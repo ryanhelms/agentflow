@@ -116,7 +116,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - if: steps.version.outputs.release == 'true'
+      # GitHub has no attestations for private repositories owned by a user.
+      - if: steps.version.outputs.release == 'true' && !github.event.repository.private
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
@@ -131,6 +132,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ steps.version.outputs.next }}
+          PRIVATE: ${{ github.event.repository.private }}
         run: |
           set -euo pipefail
           artifacts=$(mktemp -d)
@@ -139,6 +141,7 @@ jobs:
           cd "$artifacts"
           sha256sum --check checksums.txt
           for file in *.tar.gz *.zip install.sh install.ps1; do
+            [ "$PRIVATE" = true ] && break
             gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
           done
