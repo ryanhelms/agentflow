@@ -750,8 +750,32 @@ agentflow offers other repos.
 > **`develop` integration branch.** While the ACP platform program runs
 > ([docs/plans/acp-platform/](docs/plans/acp-platform/)), program PRs target `develop`,
 > CI also runs on pushes to `develop`, and the coordinator merges them there. Releases
-> still come only from `main`: the owner runs `agentflow promote` to move `develop` to
-> `main`.
+> still come only from `main`.
+
+- **Phase-gate auto-promotion.** When a phase passes its gate, the coordinator tags the
+  `develop` commit `develop-pN`. The `auto-promote` workflow
+  ([.github/workflows/auto-promote.yml](.github/workflows/auto-promote.yml)) then merges
+  that commit into `main` with a merge commit, `chore(release): promote develop to main
+  (develop-pN)`, and dispatches the release workflow. It does nothing, and fails with an
+  error, unless all of these hold:
+  - the commit is on `develop`;
+  - `ci` passed on a push to `develop` for exactly that commit (it waits up to 30 minutes);
+  - no commit since `main` is breaking (`!` or a `BREAKING CHANGE:` footer); the owner
+    promotes breaking changes by hand with `agentflow promote`;
+  - `main` has nothing `develop` lacks except `chore(release): vX.Y.Z` commits and earlier
+    promotion merges;
+  - the commit merges into `main` without conflicts. `develop` never edits `CHANGELOG.md`,
+    the README version marker or the plugin manifest versions, which only releases change.
+
+  Try it without merging:
+
+  ```bash
+  gh workflow run auto-promote.yml -f ref=develop-p1 -f dry_run=true
+  ```
+
+  The dry run runs every check and prints the commits it would merge and the version the
+  release would get. To stop auto-promotion, disable the `auto-promote` workflow in the
+  Actions tab, or stop pushing `develop-p*` tags. Nothing needs deleting.
 
 - **Single branch.** Every push to `main` derives the next version from the commit types
   since the last `vX.Y.Z` tag (`bin/next-version.sh`). The release workflow generates the
