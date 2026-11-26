@@ -81,20 +81,23 @@ type Role int
 
 const (
 	// RoleOwner holds OwnerLock for the store's lifetime and is the only
-	// writer while it runs. The webui daemon opens its repositories as
-	// owner; `agentflow events --follow` does when no daemon runs. Open
-	// fails with ErrOwned when another process owns the store. On open the
-	// owner truncates a partial last line left by a crash and reads the
-	// last Seq.
+	// writer while it runs. Only the webui daemon ever opens a store as
+	// owner. Open fails with ErrOwned when another process owns the store.
+	// On open the owner truncates a partial last line left by a crash and
+	// reads the last Seq.
 	RoleOwner Role = iota + 1
-	// RoleAppender is for short-lived processes (CLI, MCP servers, hooks).
-	// Each Append takes OwnerLock with filelock.TryExclusive, appends and
-	// releases it. When the lock is held, Append returns ErrOwned and the
-	// caller hands the event to the owner over the local socket (phase 2),
-	// or drops it with a warning on stderr if there is no socket. Events
-	// are observations: the next snapshot repairs a dropped one.
+	// RoleAppender is for processes that are not the daemon (CLI, MCP
+	// servers, hooks). Each Append takes OwnerLock with
+	// filelock.TryExclusive, appends and releases it. When the lock is
+	// held, Append returns ErrOwned and the caller hands the event to the
+	// daemon over the local socket. Until that socket exists (phase 2,
+	// lane 2.2, which also adds a test for it) the caller drops the event
+	// with a warning on stderr. Events are observations: the next snapshot
+	// repairs a dropped one.
 	RoleAppender
-	// RoleReader never writes and never takes OwnerLock.
+	// RoleReader never writes and never takes OwnerLock. `agentflow
+	// events`, with or without --follow, and the MCP tool read this way;
+	// --follow first makes sure the daemon is running.
 	RoleReader
 )
 
@@ -131,7 +134,7 @@ type Store interface {
 
 // Follower is a Reader that also waits for new events: a Polling Consumer
 // for processes that do not run the bus, such as `agentflow events
-// --follow` while the daemon owns the store.
+// --follow`, which reads while the daemon owns the store.
 type Follower interface {
 	Reader
 	// Follow yields like ReadFrom, then keeps yielding new events as the

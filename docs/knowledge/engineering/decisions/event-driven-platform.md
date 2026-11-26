@@ -179,9 +179,11 @@ Repositories are sorted, Seq is decimal without leading zeros, zero entries are 
 
 | Role | Who | Behaviour |
 | --- | --- | --- |
-| `RoleOwner` | the webui daemon; `agentflow events --follow` when no daemon runs | Holds `owner.lock` for its lifetime. On open, truncates a partial last line left by a crash and reads the last Seq. Only writer while it runs. `Open` returns `ErrOwned` if another process owns the store. |
-| `RoleAppender` | short-lived CLI, MCP and hook processes (phase 2 onwards) | Each `Append` takes `owner.lock` with `filelock.TryExclusive`, appends, releases. If the lock is held it returns `ErrOwned`; the caller sends the event to the owner over the local socket (phase 2, lane 2.2). Without a socket, it drops the event with a warning on stderr. Events are notifications, and the next snapshot repairs a missed one. |
-| `RoleReader` | `agentflow events` without `--follow`, MCP `agentflow_events` | Never writes, never locks. |
+| `RoleOwner` | the webui daemon, and nothing else | Holds `owner.lock` for its lifetime. On open, truncates a partial last line left by a crash and reads the last Seq. Only writer while it runs. `Open` returns `ErrOwned` if another process owns the store. |
+| `RoleAppender` | any process that is not the daemon: CLI, MCP and hook processes (phase 2 onwards) | Each `Append` takes `owner.lock` with `filelock.TryExclusive`, appends, releases. If the lock is held it returns `ErrOwned`; the caller sends the event to the daemon over the local socket. |
+| `RoleReader` | `agentflow events` (with or without `--follow`), MCP `agentflow_events` | Never writes, never locks. |
+
+**Dropped events in phase 1.** Until the local socket exists, an appender that gets `ErrOwned` drops the event with a warning on stderr. This is accepted for phase 1, where only the daemon produces events. Events are notifications, and the next snapshot repairs a missed one. Phase 2 lane 2.2 replaces the drop with a send over the socket and adds a test for that path.
 
 **Layout.**
 
@@ -275,7 +277,7 @@ The projector (lane 1.4) subscribes once, caches each key's last state, coalesce
 - `topic=<repo>/<worktree>/<pattern>`, repeated, at most 64. `*` as the repo means "this console's repository".
 - `Last-Event-ID: <cursor>`, optional, sent by the client itself.
 
-**Scope.** A stream authenticated on one worktree may follow every worktree of the same repository, because the console already lets that browser resume a session for any of them (one remember key per clone and origin). It never sees another repository. Topics naming another repository get 403.
+**Scope.** A stream authenticated on one worktree may follow every worktree of the same repository. This is the existing trust boundary, not a new one: the console key is already shared per clone and origin (one remember key per clone and origin), so that browser can already resume a session for any of those worktrees. A stream never sees another clone or another console host. The server refuses with 403 any topic outside the authenticated repository.
 
 **Frames.** Every frame is one SSE event whose data is one line of JSON (`internal/webui/projection.go`):
 
@@ -318,7 +320,7 @@ data: {"reason":"overflow"}
 
 Lane 1.4 adds both, over one `internal/app` method:
 
-- CLI: `agentflow events [--since CURSOR] [--type PATTERN] [--limit N] [--follow] [--json]`. It prints events and, at the end, the cursor to resume from. `--follow` keeps printing until interrupted. It reads the store as `RoleReader` while a daemon owns it, and otherwise becomes the owner and runs a watcher itself.
+- CLI: `agentflow events [--since CURSOR] [--type PATTERN] [--limit N] [--follow] [--json]`. It prints events and, at the end, the cursor to resume from. `--follow` keeps printing until interrupted. It never becomes the store's owner. It first makes sure the daemon is running, through the existing daemon start path in `internal/webui` (`LaunchCLI` and the `ServeChild` serve child) without opening a browser, then follows the store as `RoleReader` (`store.Follower`). The daemon runs the watcher.
 - MCP: `agentflow_events` with `since`, `types` and `limit`, returning `{events, cursor}`. It has no follow mode; callers poll with the returned cursor.
 
 Both are read-only and need no confirmation.
@@ -335,13 +337,18 @@ A lane changes only the files it owns. Shared files have one owner. A lane that 
 | 1.4 Stream, projections, CLI and MCP | `internal/webui/stream*.go`, `internal/webui/projection*.go`, the event wiring in `internal/webui/daemon.go` and `server.go` (route, bus, store and watcher start-up), `internal/app/events*.go`, `internal/cli/events*.go`, **`internal/cli/cli.go`, `internal/mcpserver/server.go`, `internal/cli/parity_test.go`**, `adapters/claude-code/skills/events/SKILL.md`, `README.md`, `docs/events.md`, the blueprint capability table | `internal/webui/static/**` |
 | 1.5 Browser client | `internal/webui/static/event-worker.js`, the overview part of `internal/webui/static/app.js`, the script tag in `static/index.html`, overview rules in `static/style.css` | any Go file |
 
-Lane 1.4 is the only phase 1 lane that may edit `cli.go`, `mcpserver/server.go` or `parity_test.go`. Exported contract types (`Event`, `Cursor`, `Topic`, `Pattern`, the type registry and payloads, every interface in this ADR, `webui.Projection` and the frame types) change only through an amendment to this ADR. Moving the worktree ID derivation out of `inspectWorktree` so `agentflow events --follow` can compute it without the daemon is lane 1.4's job.
+Lane 1.4 is the only phase 1 lane that may edit `cli.go`, `mcpserver/server.go` or `parity_test.go`. Exported contract types (`Event`, `Cursor`, `Topic`, `Pattern`, the type registry and payloads, every interface in this ADR, `webui.Projection` and the frame types) change only through an amendment to this ADR. Moving the worktree ID derivation out of `inspectWorktree` in `daemon.go`, so the CLI can compute worktree IDs without a daemon, is lane 1.4's job.
+
+**Security review (lane 1.4, before merge).**
+
+- [ ] No cross-clone or cross-host leakage: a stream only ever carries events, states and cursor entries of the repository its session belongs to.
+- [ ] A topic naming another repository, or a `Last-Event-ID` covering one, never widens what the stream sends. Topics outside the authenticated repository get 403.
 
 ## Consequences
 
 - The console can show changes as they happen, and later phases add sources (approvals, GitHub, harnesses, AI sessions) without new plumbing.
 - Each repository's git dir gains an `agentflow/events/` directory of at most about 50 MB. It is local, never committed, and removed with the clone.
 - Events are notifications. Missing one never corrupts state; it only delays an update until the next event or snapshot.
-- Short-lived processes cannot write events while a daemon runs until the local socket arrives in phase 2. Phase 1 needs none: only the daemon and `events --follow` produce events.
+- Only the daemon owns a store. Other processes cannot write events while it runs until the local socket arrives in phase 2 (lane 2.2). Phase 1 needs none: only the daemon produces events, and `events --follow` starts the daemon when it is not running.
 - One stream per browser origin keeps the HTTP/1.1 connection pool free for the console's other requests.
 - The fsnotify dependency is the only new dependency of the program.
