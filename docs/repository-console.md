@@ -337,6 +337,19 @@ Answer an approval in the agent session or terminal that asked for it. Both
 panels update on their own; a changed value is highlighted for two seconds and
 announced to screen readers.
 
+**Timeline** is a live feed of the operations run in the repository from the
+command line, from agents and from the console. Each operation is one entry
+with its steps and their times: requested, waiting for approval, approved, then
+applied, failed, suggested only, cancelled or expired. An entry names who ran
+it, its worktree, task and branch, and links to the commit, pull request or task
+it touched. A failed operation says why in a sentence. An operation that waits
+has **Show in Approvals**, which moves to its request. Filter the feed by
+worktree, state and origin; it starts with this worktree. **Copy ID** copies the
+operation ID, which is on the operation's line in `~/.agentflow/audit.log` and in
+`agentflow events`. The feed keeps the 50 newest operations of the last 7 days.
+It fills as Agentflow's commands start to record `op.*` events; a command that
+does not record them yet does not appear.
+
 If Agent Commander opened the console, **Needs attention** also lists pending
 worker questions from this exact worktree. They load with the checkout and
 again on **Resync**. Review the question and confirm your

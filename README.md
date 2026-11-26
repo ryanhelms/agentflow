@@ -470,7 +470,12 @@ The overview is live: a branch switch, a commit, staging or an edit under
 requests with their checks, review and merge readiness, the issues bound to
 its worktrees, recent commits and blocked or failed hooks, approvals with the
 time each has left, and the handoff brief. The **Activity** panel also shows
-when GitHub is unavailable or rate limited and when Agentflow retries. All
+when GitHub is unavailable or rate limited and when Agentflow retries. The
+**Timeline** panel is a live feed of operations run from the command line,
+from agents and from the console: each shows its steps with times (requested,
+waiting for approval, applied or failed), who ran it, and links to its task,
+pull request and commit, and you can filter it by worktree, state and origin.
+It fills as Agentflow's commands start to record `op.*` events. All
 tabs of a clone share one event stream, which also carries requests to show a
 screen in an open tab. If the overview looks out of date, press **Resync** to
 discard it and load a fresh snapshot. `agentflow events --follow` prints the same events in a

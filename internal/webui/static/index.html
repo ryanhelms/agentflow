@@ -10,11 +10,13 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="typed-editor.css">
   <link rel="stylesheet" href="document-editor.css">
+  <link rel="stylesheet" href="timeline.css">
   <script src="typed-editor.js" defer></script>
   <script src="document-editor.js" defer></script>
   <script src="tab-navigation.js" defer></script>
   <script src="event-worker.js" defer></script>
   <script src="live-panels.js" defer></script>
+  <script src="timeline.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -125,6 +127,25 @@
                 <h3 id="recent-title">Recent commits and hooks</h3>
                 <ul class="rows live-list" id="recent-list" aria-labelledby="recent-title"></ul>
               </div>
+            </div>
+          </section>
+          <section class="panel timeline-panel" id="timeline-panel" aria-labelledby="timeline-title">
+            <div class="section-heading"><h2 id="timeline-title" tabindex="-1">Timeline</h2><span class="tag" id="timeline-count"></span></div>
+            <p id="timeline-note" class="live-note" hidden></p>
+            <p id="timeline-wait" class="muted">Waiting for live updates…</p>
+            <div id="timeline-body" hidden>
+              <form id="timeline-filters" class="timeline-filters" aria-label="Filter the timeline">
+                <label>Worktree<select id="timeline-worktree"></select></label>
+                <label>State<select id="timeline-state"></select></label>
+                <label>Origin<select id="timeline-origin"></select></label>
+                <button id="timeline-reset" class="button secondary small" type="button" hidden>Clear filters</button>
+              </form>
+              <p id="timeline-summary" class="muted timeline-summary" hidden></p>
+              <ol class="rows live-list timeline-list" id="timeline-list" aria-labelledby="timeline-title"></ol>
+              <p id="timeline-empty" class="muted live-empty" hidden></p>
+              <button id="timeline-more" class="button secondary small" type="button" hidden>Show more</button>
+              <p id="timeline-truncated" class="muted panel-hint" hidden>Older operations are not shown. Run <code>agentflow events</code> to list them.</p>
+              <p class="muted panel-hint">Operations run from the command line, from agents and from this console. An operation’s ID is on its line in <code>~/.agentflow/audit.log</code>.</p>
             </div>
           </section>
           <section class="panel roles-panel" aria-labelledby="routing-title">
