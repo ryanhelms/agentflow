@@ -127,6 +127,8 @@ jobs:
         run: bash scripts/test-install-sh.sh
       - name: Test changelog generator
         run: bash scripts/test-changelog.sh
+      - name: Test auto-promote guards
+        run: bash scripts/test-promote-guard.sh
       - uses: $/actions/setup
         with:
           binary: true
