@@ -466,6 +466,33 @@ func TestUserTranslatorPersonalConfigAndClientSettings(t *testing.T) {
 		t.Fatalf("removed provider = %v", types(evs))
 	}
 
+	// The plugin registry is a personal file too. Only the file itself counts:
+	// its lock and the installed copies signal nothing.
+	registry := write(filepath.Join(f.u.Home, "plugins", "installed.json"), `{"version":1,"plugins":[]}`)
+	write(filepath.Join(f.u.Home, "plugins", "installed.json.lock"), "")
+	write(filepath.Join(f.u.Home, "plugins", "ci-notify", "0123456789abcdef", "agentflow-plugin.yml"), "x")
+	evs = f.translate(registry, filepath.Join(f.u.Home, "plugins", "installed.json.lock"))
+	if len(evs) != 1 || evs[0].Type != bus.TypeConfigLayerChanged || evs[0].Repo != bus.GlobalRepo {
+		t.Fatalf("plugin registry = %v", types(evs))
+	}
+	if p := decode[bus.ConfigLayerChanged](t, evs[0]); p.Layer != bus.LayerPersonal || !slices.Equal(p.Paths, []string{"plugins/installed.json"}) {
+		t.Fatalf("payload = %+v", p)
+	}
+	write(registry, `{"version":1,"plugins":[{"id":"a"}]}`)
+	evs = f.translate(registry)
+	if len(evs) != 1 || !slices.Equal(decode[bus.ConfigLayerChanged](t, evs[0]).Paths, []string{"plugins/installed.json"}) {
+		t.Fatalf("registry edit = %v", types(evs))
+	}
+	if evs := f.translate(registry); len(evs) != 0 {
+		t.Fatalf("no-op reported: %v", types(evs))
+	}
+	if err := os.Remove(registry); err != nil {
+		t.Fatal(err)
+	}
+	if evs := f.translate(registry); len(evs) != 1 {
+		t.Fatalf("a removed registry is not reported: %v", types(evs))
+	}
+
 	// Client settings: one event per client, naming files relative to the OS home.
 	claude := write(filepath.Join(f.u.UserHome, ".claude", "settings.json"), `{"hooks":{}}`)
 	codex := write(filepath.Join(f.u.UserHome, ".codex", "config.toml"), "model = 'x'\n")
