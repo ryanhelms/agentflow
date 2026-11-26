@@ -1,0 +1,24 @@
+$ agentflow config save_personal --input -
+--- stdin
+{"confirm_token":"<confirm-token>","patch":{"actions":{"commit":"auto"}},"user_revision":"<digest-1>"}
+--- stdout
+{
+  "personal": {
+    "local": "",
+    "remote": "confirm",
+    "window": "",
+    "actions": {
+      "commit": "auto"
+    }
+  },
+  "repository": {
+    "local": "",
+    "remote": "",
+    "window": "",
+    "actions": null,
+    "allow_auto_pr_publication": false
+  },
+  "user_revision": "<digest-2>",
+  "actions": "<elided>",
+  "note": "Restart running Agentflow MCP sessions to use the saved policy for other tools."
+}

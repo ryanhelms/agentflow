@@ -1,0 +1,49 @@
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets pr_open (remote) to confirm. test/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "base": "main",
+    "body": "Adds the quota check.",
+    "draft": false,
+    "head": "PLAT-1-quota",
+    "head_sha": "<object-1>",
+    "jira_effects": [
+      {
+        "key": "PLAT-1",
+        "when": "on pr.merged",
+        "from": "Open",
+        "to": "QA"
+      }
+    ],
+    "labels": null,
+    "repo": "team/app",
+    "repository": "<repo>",
+    "reviewers": null,
+    "source_remote": "origin",
+    "source_repo": "team/app",
+    "target_remote": "origin",
+    "title": "feat(PLAT-1): bound quota"
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "test/<owner>",
+    "action": "pr_open",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "pr_open",
+    "level": "confirm",
+    "source": "autonomy.remote",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

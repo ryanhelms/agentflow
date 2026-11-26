@@ -1,0 +1,43 @@
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.remote sets start (remote) to confirm. test/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "assign_to_me": true,
+    "branch": "issue-42-0efd766f81d9",
+    "key": "org/repo#42",
+    "repo": "<repo>",
+    "summary": "Add quota",
+    "task_ref": "github-issues/org%2Frepo/42",
+    "transition": {
+      "key": "org/repo#42",
+      "event": "branch.created",
+      "from": "",
+      "applied": false,
+      "note": "no task state mapping for this event"
+    },
+    "worktree": false,
+    "worktree_path": ""
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "test/<owner>",
+    "action": "start",
+    "class": "remote",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "remote",
+    "action": "start",
+    "level": "confirm",
+    "source": "autonomy.remote",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

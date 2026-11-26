@@ -1,0 +1,8 @@
+{
+  "status": "committed",
+  "sha": "<short-object>",
+  "message": "fix(PLAT-1): bound quota",
+  "files": [
+    "new.txt"
+  ]
+}

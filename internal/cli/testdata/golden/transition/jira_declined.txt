@@ -1,0 +1,18 @@
+$ agentflow transition PLAT-1 pr.merged
+--- stdin
+n
+--- stdout
+{
+  "key": "PLAT-1",
+  "event": "pr.merged",
+  "from": "Open",
+  "to": "QA",
+  "applied": false,
+  "site": "https://tasks.example"
+}
+Proceed? [y/N]: 
+--- stderr
+Agentflow transition: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets transition (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+--- error
+cancelled

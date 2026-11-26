@@ -1,0 +1,4 @@
+$ agentflow transition PLAT-1 pr.merged
+--- stdout
+autonomy.remote sets transition to suggest. Run it yourself
+  agentflow transition PLAT-1 'pr.merged'

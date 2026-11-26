@@ -1,0 +1,3 @@
+$ agentflow commit -m "feat: add widget" --dry-run
+--- stdout
+✓ valid

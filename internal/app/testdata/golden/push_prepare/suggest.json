@@ -1,0 +1,27 @@
+{
+  "status": "suggest",
+  "reason": "autonomy.remote sets push to suggest. Run it yourself",
+  "summary": {
+    "branch": "PLAT-1-quota",
+    "head_sha": "<object-1>",
+    "repository": "<repo>",
+    "source_remote": "origin",
+    "source_repo": "team/app"
+  },
+  "commands": [
+    "git push --no-follow-tags --recurse-submodules=no -- 'origin' '<object-1>:refs/heads/PLAT-1-quota'"
+  ],
+  "policy": {
+    "class": "remote",
+    "action": "push",
+    "level": "suggest",
+    "source": "autonomy.remote",
+    "user_class": "suggest",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}

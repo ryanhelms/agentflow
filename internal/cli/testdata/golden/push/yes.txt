@@ -1,0 +1,17 @@
+$ agentflow push --yes
+--- stdout
+{
+  "branch": "feature/pr",
+  "head_sha": "<object-1>",
+  "repository": "<repo>",
+  "source_remote": "origin",
+  "source_repo": "team/app"
+}
+{
+  "branch": "feature/pr",
+  "head_sha": "<object-1>",
+  "status": "pushed"
+}
+--- stderr
+Agentflow push: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets push (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it

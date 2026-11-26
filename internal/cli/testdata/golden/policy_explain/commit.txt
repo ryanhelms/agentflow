@@ -1,0 +1,26 @@
+$ agentflow policy explain commit
+--- stdout
+[
+  {
+    "action": "commit",
+    "rules": [
+      {
+        "class": "local",
+        "action": "commit",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "mandatory": false
+  }
+]

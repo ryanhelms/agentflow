@@ -1,0 +1,30 @@
+$ agentflow start PLAT-1 --worktree --yes
+--- stdout
+{
+  "assign_to_me": true,
+  "branch": "PLAT-1-reach-qa",
+  "key": "PLAT-1",
+  "repo": "<repo>",
+  "site": "https://tasks.example",
+  "transition": {
+    "key": "PLAT-1",
+    "event": "branch.created",
+    "from": "",
+    "applied": false,
+    "note": "no mapping for this project; nothing happens"
+  },
+  "worktree": true,
+  "worktree_path": "<worktrees>/PLAT-1-reach-qa"
+}
+{
+  "key": "PLAT-1",
+  "branch": "PLAT-1-reach-qa",
+  "worktree": "<worktrees>/PLAT-1-reach-qa",
+  "assigned": true,
+  "next": "Start your agent in the worktree: cd '<worktrees>/PLAT-1-reach-qa'"
+}
+--- stderr
+Agentflow start: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets start (remote) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+Worktree: <worktrees>/PLAT-1-reach-qa
+Start your agent in the worktree: cd '<worktrees>/PLAT-1-reach-qa'

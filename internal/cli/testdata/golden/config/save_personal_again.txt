@@ -1,0 +1,6 @@
+$ agentflow config save_personal --input -
+--- stdin
+{"confirm_token":"<confirm-token>","patch":{"actions":{"commit":"auto"}},"user_revision":"<digest-1>"}
+--- stdout
+--- error
+personal settings changed; reload them before saving

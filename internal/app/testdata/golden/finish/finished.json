@@ -1,0 +1,14 @@
+{
+  "repo": "<repo-name>",
+  "branch": "issue-42-0efd766f81d9",
+  "path": "<worktrees>/issue-42-0efd766f81d9",
+  "state": "finished",
+  "detail": "merged into origin/main",
+  "actions": [
+    "git worktree remove <worktrees>/issue-42-0efd766f81d9",
+    "git branch -D issue-42-0efd766f81d9",
+    "git worktree prune"
+  ],
+  "primary": "<repo>",
+  "next": "cd '<repo>'"
+}
