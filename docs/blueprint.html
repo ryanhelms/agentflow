@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>Nscale Delivery Loop</title>
+<title>agentflow Delivery Loop</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;0,9..40,900;1,9..40,400&family=DM+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: keyline-ruled engineering blueprint. Sticky section index on the left, square panels, 0.5px Nscale-blue rules. */
+/* Layout: keyline-ruled engineering blueprint. Sticky section index on the left, square panels, 0.5px blue rules. */
 :root{
   --bg:#FDFFF8;          /* Chalk */
   --panel:#E1EAF9;       /* Frost */
@@ -18,7 +18,7 @@
   --fg:#040E27;          /* Midnight */
   --fg-2:#3B404D;        /* Slate */
   --muted:#5D657B;
-  --accent:#0F41F3;      /* Nscale Blue (fills) */
+  --accent:#0F41F3;      /* accent blue (fills) */
   --accent-text:#0F41F3;
   --on-accent:#FDFFF8;
   --highlight:#00865C;   /* Spearmint 900 for text on Chalk */
@@ -67,7 +67,7 @@ p code,li code,td code{font-size:.86em;background:var(--panel-2);padding:1px 5px
 .mast{border-bottom:var(--kw) solid var(--line)}
 .mast .wrap{padding-block:40px 32px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:end}
 .mark{display:flex;align-items:center;gap:12px;color:var(--accent-text);margin-bottom:28px}
-.mark svg{width:44px;height:25px}
+.mark svg{width:30px;height:30px}
 .mark span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-2)}
 h1{font-weight:900;font-size:clamp(40px,6vw,72px);line-height:1;letter-spacing:-.03em;margin:0;text-wrap:balance}
 h1 em{font-style:normal;color:var(--accent-text)}
@@ -249,20 +249,18 @@ footer .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:1
 <header class="mast">
   <div class="wrap">
     <div>
-      <div class="mark" aria-label="Nscale">
-        <svg viewBox="0 0 192 109" aria-hidden="true" fill="currentColor">
-          <path transform="translate(69.881 0.214)" d="M122.119 11.753C122.119 1.316 109.511-3.923 102.114 3.44L.68 104.404C-.769 105.846.252 108.32 2.296 108.32H16.954C17.649 108.32 18.343 108.267 19.03 108.162L41.647 104.708C55.965 102.521 70.538 102.61 84.829 104.971L103.969 108.135C104.71 108.257 105.46 108.319 106.211 108.319H116.515C119.61 108.319 122.119 105.81 122.119 102.715V11.753Z"/>
-          <path opacity=".6" transform="translate(32.919 31.266)" d="M2.296 77.234C.255 77.234-.767 74.767.675 73.323L70.814 3.082C74.914-1.025 81.569-1.028 85.672 3.076 89.774 7.178 89.774 13.828 85.672 17.93L29.55 74.052C27.513 76.089 24.75 77.233 21.869 77.233L2.296 77.234Z"/>
-          <path opacity=".4" transform="translate(0 53.454)" d="M5.442 55.06C.606 55.06-1.818 49.215 1.598 45.791L44.221 3.083C48.321-1.025 54.976-1.028 59.08 3.076 63.181 7.177 63.181 13.826 59.08 17.927L25.129 51.878C23.092 53.915 20.329 55.059 17.448 55.059L5.442 55.06Z"/>
+      <div class="mark" aria-label="agentflow">
+        <svg viewBox="0 0 96 96" aria-hidden="true" fill="currentColor">
+          <path d="M0 0h32v32H0ZM64 64h32v32H64Z"/>
+          <path d="M32 16h16v64h16" fill="none" stroke="currentColor" stroke-width="12"/>
         </svg>
-        <span>Engineering Enablement · Architecture &amp; Implementation</span>
+        <span>agentflow · Architecture &amp; Implementation</span>
       </div>
-      <h1>The Nscale <em>Delivery Loop</em></h1>
-      <p class="lede">One commit message moves the ticket, updates the docs, and tells the team. This is how GitHub, Jira and Confluence work as one system at Nscale, what we automate, and the order we roll it out.</p>
+      <h1>The agentflow <em>Delivery Loop</em></h1>
+      <p class="lede">One commit message moves the ticket, updates the docs, and tells the team. This is how GitHub, Jira and Confluence work as one system, what we automate, and the order we roll it out.</p>
     </div>
     <div class="meta">
-      <div>Status <b>Architecture approved · v0.7</b></div>
-      <div>Approvers <b>Kyle Redelinghuys · Vishal Srini</b></div>
+      <div>Status <b>Design blueprint · v0.7</b></div>
       <div>Owner <b>Ryan Helms</b></div>
       <div>Updated <b>23 Nov 2026</b></div>
       <div>Scope <b>GitHub.com · Jira Cloud · Confluence Cloud</b></div>
@@ -423,7 +421,7 @@ Agentflow: skip</span></pre>
         </table>
       </div>
       <p class="example">Repos choose their own merge style. The PR check validates the title and every commit, so the convention holds whether a repo squashes, rebases or merges. On squash-merge repos the PR title becomes the commit on main.</p>
-      <p class="example">Smart Commits only run when the committer's git email matches a Jira user. Ask engineers to set <code>git config user.email</code> to their @nscale.com address.</p>
+      <p class="example">Smart Commits only run when the committer's git email matches a Jira user. Ask engineers to set <code>git config user.email</code> to their @example.com work address.</p>
 
       <div class="tester" aria-labelledby="tester-h">
         <header>
@@ -513,8 +511,8 @@ Agentflow: skip</span></pre>
           <thead><tr><th><code>builds:</code></th><th>Release output</th></tr></thead>
           <tbody>
             <tr><td class="mono">binary</td><td>GoReleaser archives for each platform plus <code>checksums.txt</code>, attached to the release with build attestations. agentflow's own self-update uses exactly this.</td></tr>
-            <tr><td class="mono">image</td><td>Pushed to <code>ghcr.io/nscaledev/&lt;unit&gt;</code> and tagged <code>1.4.0</code>, <code>1.4</code>, <code>1</code> and the short SHA, with the attestation stored in the registry.</td></tr>
-            <tr><td class="mono">helm</td><td><code>version</code> and <code>appVersion</code> set to the release, pushed to <code>oci://ghcr.io/nscaledev/charts</code> and attached. The Release PR also updates <code>Chart.yaml</code>.</td></tr>
+            <tr><td class="mono">image</td><td>Pushed to <code>ghcr.io/acme/&lt;unit&gt;</code> and tagged <code>1.4.0</code>, <code>1.4</code>, <code>1</code> and the short SHA, with the attestation stored in the registry.</td></tr>
+            <tr><td class="mono">helm</td><td><code>version</code> and <code>appVersion</code> set to the release, pushed to <code>oci://ghcr.io/acme/charts</code> and attached. The Release PR also updates <code>Chart.yaml</code>.</td></tr>
             <tr><td class="mono">library</td><td>Go submodules get the <code>path/v1.4.0</code> tag Go needs. npm packages publish to GitHub Packages, Python packages to PyPI through trusted publishing, and Terraform modules are tag-only.</td></tr>
           </tbody>
         </table>
@@ -592,7 +590,7 @@ units:
 - id: version
   uses: ryanhelms/agentflow/actions/version@v0
   with: { unit: api }
-- run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api</pre>
+- run: docker build -t ghcr.io/acme/api:${{ steps.version.outputs.version }} services/api</pre>
           <button class="copy" type="button">Copy</button>
         </div>
         <div class="panel" role="tabpanel" id="r-cli" aria-labelledby="rb-cli" hidden>
@@ -887,7 +885,7 @@ fi</pre>
         </div>
 
         <div class="panel" role="tabpanel" id="t-jira" aria-labelledby="tb-jira" hidden>
-          <p class="note">Built in the Jira Automation UI as global rules scoped to opted-in projects, owned by the Engineering Enablement service account. Keep the exported JSON in <code>ryanhelms/agentflow/jira-automation/</code> so changes are reviewed.</p>
+          <p class="note">Built in the Jira Automation UI as global rules scoped to opted-in projects, owned by a dedicated service account. Keep the exported JSON in <code>ryanhelms/agentflow/jira-automation/</code> so changes are reviewed.</p>
 <pre class="code"><span class="c">RULE  Epic → design doc</span>
   When   Issue created
   If     Issue type = Epic
@@ -950,7 +948,7 @@ jobs:
         <table>
           <thead><tr><th>Name</th><th>Kind</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td class="mono">JIRA_BASE, CONFLUENCE_BASE</td><td>Variable</td><td><code>https://nscale.atlassian.net</code> (confirm site URL)</td></tr>
+            <tr><td class="mono">JIRA_BASE, CONFLUENCE_BASE</td><td>Variable</td><td><code>https://example.atlassian.net</code> (your site URL)</td></tr>
             <tr><td class="mono">JIRA_USER, JIRA_TOKEN</td><td>Secret</td><td>Atlassian service account <code>svc-agentflow</code> and its scoped API token, used for Jira and Confluence</td></tr>
             <tr><td class="mono">SLACK_WEBHOOK_*</td><td>Secret</td><td>One incoming webhook per team channel</td></tr>
             <tr><td class="mono">ANTHROPIC_API_KEY</td><td>Secret</td><td>Phase 9 only, scoped to opted-in repos</td></tr>
@@ -1078,7 +1076,7 @@ jobs:
             <tr><td>Developer</td><td class="mono">AGENTFLOW_NO_UPDATE=1</td><td>Turn off background updates, for example on a plane. <code>min_version</code> and the blocked list still apply.</td></tr>
             <tr><td>Repo</td><td class="mono">update.track: 0</td><td>Follow the latest release within one major version, so a breaking <code>2.0</code> never arrives unannounced</td></tr>
             <tr><td>Repo</td><td class="mono">update.pin: 0.5.2</td><td>Emergency pin for an incident. The binary warns on every run until it is removed.</td></tr>
-            <tr><td>Eng Enablement</td><td class="mono">policy/versions.json</td><td>Raise <code>min_version</code> or block a bad release for every install at once</td></tr>
+            <tr><td>Maintainer</td><td class="mono">policy/versions.json</td><td>Raise <code>min_version</code> or block a bad release for every install at once</td></tr>
           </tbody>
         </table>
       </div>
@@ -1182,7 +1180,7 @@ update:
   <span class="c"># pin: 0.5.2                   # incident use only; warns on every run</span>
 
 jira:
-  site: https://nscale.atlassian.net
+  site: https://example.atlassian.net
   projects: [PLAT]               <span class="c"># pilot project only (decision 01)</span>
 flow_map: ryanhelms/agentflow@v0:flow-map.yml
 
@@ -1422,9 +1420,9 @@ release:
           <div class="path">.claude/settings.json (in each repo)</div>
 <pre class="code">{
   "extraKnownMarketplaces": {
-    "nscale": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
+    "agentflow": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
   },
-  "enabledPlugins": { "agentflow@nscale": true },
+  "enabledPlugins": { "agentflow@agentflow": true },
   "includeCoAuthoredBy": false
 }</pre>
           <div class="path">adapters/claude-code/hooks/hooks.json</div>
@@ -1632,10 +1630,9 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
       <p class="note">The <a href="rollout.md#provider-migration-rehearsal">provider migration rehearsal</a> records caller pins, compares previews, verifies replay, and restores baseline settings before consumer rollout.</p>
       <p class="eyebrow"><span class="n">09</span>Rollout</p>
       <h2>Ten phases, one pilot team first</h2>
-      <p class="status-note"><span class="pill ok">Approved</span> Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Pilot rollout follows the phase exit checks below.</p>
       <p class="sub">Phases are gated by outcomes, not dates. A phase starts only when the previous one has passed its exit check, and we widen the rollout only when the pilot team says the automation saves more time than it costs.</p>
       <div class="phases">
-        <div class="phase"><div class="when">P0<b>Foundations</b></div><ul><li>Install the GitHub for Jira app on the <code>nscale</code> org, all repos</li><li>Create <code>svc-agentflow</code> in Atlassian with a scoped token; org secrets in GitHub</li><li>Engineering leadership nominates the pilot team and two pilot repos</li><li>Create <code>ryanhelms/agentflow</code> with CODEOWNERS; the pilot lead fills in the pilot project's <code>flow-map.yml</code> row</li><li>Eng managers publish the shared Confluence templates in the Engineering space</li><li>Capture baseline metrics</li></ul><div class="exit"><b>Exit</b>Pilot team named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed</div></div>
+        <div class="phase"><div class="when">P0<b>Foundations</b></div><ul><li>Install the GitHub for Jira app on the <code>acme</code> org, all repos</li><li>Create <code>svc-agentflow</code> in Atlassian with a scoped token; org secrets in GitHub</li><li>Engineering leadership nominates the pilot team and two pilot repos</li><li>Create <code>ryanhelms/agentflow</code> with CODEOWNERS; the pilot lead fills in the pilot project's <code>flow-map.yml</code> row</li><li>Eng managers publish the shared Confluence templates in the Engineering space</li><li>Capture baseline metrics</li></ul><div class="exit"><b>Exit</b>Pilot team named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed</div></div>
         <div class="phase"><div class="when">P1<b>Commit convention</b></div><ul><li>agentflow v0.x on pilot repos: release pipeline and self-update, launcher, session context, commit generate/validate/split, breaking-change detection</li><li>Publish the convention and the commit tester to the pilot team</li><li>Add <code>.githooks/commit-msg</code> to pilot repos</li><li>Set <code>git user.email</code> so Smart Commits match Jira users</li></ul><div class="exit"><b>Exit</b>Every pilot engineer has the hook installed and Smart Commits resolve to their Jira user</div></div>
         <div class="phase"><div class="when">P2<b>PR key enforcement</b></div><ul><li>agentflow: PR readiness check and PR opening</li><li>Roll out the PR key check in warn mode</li><li>Fix the common misses it reports, then make it a required check via org ruleset</li></ul><div class="exit"><b>Exit</b>95% of pilot commits and PRs carry a valid key; check switched to required</div></div>
         <div class="phase"><div class="when">P3<b>Ticket transitions</b></div><ul><li>agentflow: Jira dry-run preview, pick + start, AC tracking, scope drift, review follow-up, collision radar</li><li>Turn on branch, PR and merge transitions from <code>flow-map.yml</code></li><li>Enable commit verbs (<code>#start</code>, <code>#review</code>, <code>#qa</code>, <code>#done</code>, <code>#block</code>)</li></ul><div class="exit"><b>Exit</b>Pilot team stops moving tickets by hand; no wrong-direction transitions across a full sprint</div></div>
@@ -1644,7 +1641,7 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
         <div class="phase"><div class="when">P6<b>Epic pages &amp; sprint reports</b></div><ul><li>agentflow: standup and end-of-day drafts</li><li>Jira Automation rule: Epic created → design doc from template</li><li>Sprint report published on sprint close</li></ul><div class="exit"><b>Exit</b>Pilot team uses the generated design docs and reports in planning and retros</div></div>
         <div class="phase"><div class="when">P7<b>Signals</b></div><ul><li>Slack routing, hygiene bots and the incident flow</li><li>Auto-create issues from alerts and failed main builds</li></ul><div class="exit"><b>Exit</b>Alert noise reviewed with the pilot team; nothing muted for being too chatty</div></div>
         <div class="phase"><div class="when">P8<b>Org-wide rollout</b></div><ul><li>Roll P1–P7 out team by team, using the pilot's runbook; repos opt in to agentflow by committing <code>.agentflow/</code></li><li>Each team confirms its flow map row against real tickets before switching on</li></ul><div class="exit"><b>Exit</b>All in-scope teams on the flow map and meeting the success measures</div></div>
-        <div class="phase"><div class="when">P9<b>AI assist</b></div><ul><li>Covered by Nscale's existing Anthropic approval; no separate review</li><li>Repos opt in with the <code>agentflow-ai</code> topic; start with the pilot repos</li><li>PR drafts and ticket summaries</li><li>Measure how much engineers edit the drafts before using them</li></ul><div class="exit"><b>Exit</b>Pilot engineers keep it on; approval to widen</div></div>
+        <div class="phase"><div class="when">P9<b>AI assist</b></div><ul><li>Confirm that your AI provider agreement covers this use</li><li>Repos opt in with the <code>agentflow-ai</code> topic; start with the pilot repos</li><li>PR drafts and ticket summaries</li><li>Measure how much engineers edit the drafts before using them</li></ul><div class="exit"><b>Exit</b>Pilot engineers keep it on; approval to widen</div></div>
       </div>
     </section>
 
@@ -1655,7 +1652,7 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
       <div class="gov">
         <div><h4>Access</h4><ul><li>One Atlassian service account with a scoped token, limited to opted-in projects and spaces</li><li>Rotate tokens every 90 days; rotation runbook lives in agentflow</li><li>Workflows request least-privilege <code>permissions:</code> and pin third-party actions to a SHA</li><li>No secrets ever appear in commit messages, PR bodies or Jira comments</li></ul></div>
         <div><h4>Failure handling</h4><ul><li>Automation never fails a merge because Jira or Confluence is down; it warns and retries</li><li>Every action leaves a Jira comment or Actions log line saying what changed and why</li><li>Respect Atlassian rate limits: back off on HTTP 429 and batch JQL lookups</li></ul></div>
-        <div><h4>Ownership</h4><ul><li>Engineering Enablement owns <code>ryanhelms/agentflow</code> and the Jira Automation rules</li><li>Team leads own their <code>flow-map.yml</code> block</li><li>Eng managers jointly own the shared Confluence templates</li><li>Changes ship as tagged releases; repos stay on <code>@v0</code></li></ul></div>
+        <div><h4>Ownership</h4><ul><li>The platform owner maintains <code>ryanhelms/agentflow</code> and the Jira Automation rules</li><li>Team leads own their <code>flow-map.yml</code> block</li><li>Eng managers jointly own the shared Confluence templates</li><li>Changes ship as tagged releases; repos stay on <code>@v0</code></li></ul></div>
       </div>
       <h3>Success measures</h3>
       <div class="metrics">
@@ -1671,12 +1668,11 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
     <section id="questions">
       <p class="eyebrow"><span class="n">11</span>Decisions</p>
       <h2>Decisions made</h2>
-      <p class="sub">The open questions from v0.1, answered in the follow-up interview on 20 Nov 2026. The pilot team nomination is still open.</p>
+      <p class="sub">The open questions from v0.1, answered on 20 Nov 2026. The pilot team nomination is still open.</p>
       <ol class="qs">
-        <li><div><b>Architecture and plan sign-off</b>Kyle Redelinghuys and Vishal Srini approved this blueprint and rollout plan.</div><span class="pill ok">Approved</span></li>
         <li><div><b>Jira projects in scope: the pilot team's project only</b>Other projects join one team at a time in P8, each adding its own flow-map row and confirming it against real tickets first.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Confluence: one shared template set</b>Design doc, postmortem and release notes templates live in the Engineering space. Teams publish into their own spaces. Eng managers jointly own the templates.</div><span class="pill ok">Decided</span></li>
-        <li><div><b>Claude access: approved under the existing Anthropic agreement</b>No separate P9 review. AI assist is opt-in per repo with the <code>agentflow-ai</code> topic, starting with the pilot repos.</div><span class="pill ok">Decided</span></li>
+        <li><div><b>AI assist: opt-in per repo</b>Repos opt in with the <code>agentflow-ai</code> topic, starting with the pilot repos.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Versioning: SemVer for every deployable, shipped as GitHub Releases</b>release-please with fully automatic releases, one version per deployable unit (<code>api-v1.4.0</code> in monorepos), and prerelease versions that follow the branching strategy. Production deploys releases only, plus approved hotfixes that must end in a patch release.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Merge style: each repo chooses</b>The PR check validates the PR title and every commit, so squash, rebase and merge commits are all covered.</div><span class="pill ok">Decided</span></li>
         <li><div><b>Pilot team: nominated by Engineering leadership</b>The nomination happens in P0 and is the first P0 exit check. A team with a Review + QA workflow gives the flow map the best test.</div><span class="pill info">Name pending</span></li>
@@ -1686,7 +1682,7 @@ agentflow_commit({ ..., "confirm_token": "cf_7Qm2…" })  →  { "status": "comm
 </div>
 
 <footer>
-  <div class="wrap"><span>Nscale · Engineering Enablement</span><span>Delivery Loop blueprint v0.7 · Internal</span></div>
+  <div class="wrap"><span>agentflow</span><span>Delivery Loop blueprint v0.7</span></div>
 </footer>
 
 <script>

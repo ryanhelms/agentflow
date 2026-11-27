@@ -82,7 +82,7 @@ func TestForbiddenAlwaysBlocksSessionAllow(t *testing.T) {
 		"agentflow ai respond ais_1 ask_1 --json --allow",
 		".agentflow/bin/agentflow ai respond ais_1 ask_1 --allow",
 		`"$HOME/.cache/agentflow/current/agentflow" ai respond ais_1 ask_1 --allow`,
-		"/home/me/.claude/plugins/cache/nscale/agentflow/0.60.0/bin/launch ai respond ais_1 ask_1 --allow",
+		"/home/me/.claude/plugins/cache/agentflow/agentflow/0.60.0/bin/launch ai respond ais_1 ask_1 --allow",
 		"go run ./cmd/agentflow ai respond ais_1 ask_1 --allow",
 		"agentflow --native-client codex ai respond ais_1 ask_1 --allow",
 		`sh -c "agentflow ai respond ais_1 ask_1 --allow"`,

@@ -3,19 +3,18 @@
 [![ci](https://github.com/ryanhelms/agentflow/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanhelms/agentflow/actions/workflows/ci.yml)
 [![release](https://github.com/ryanhelms/agentflow/actions/workflows/release.yml/badge.svg)](https://github.com/ryanhelms/agentflow/actions/workflows/release.yml)
 
-**agentflow connects GitHub, Jira and Confluence into one delivery loop for Nscale
-engineering.** Engineers state intent once, in the commit message, and agentflow moves the
-ticket, publishes the release, updates the docs and tells the team. The same rules apply
-whether the work is done by a person in a terminal or by an AI agent in Claude Code,
-Codex, Grok, Cursor, Copilot or Gemini.
+**agentflow connects GitHub, Jira and Confluence into one delivery loop.** Engineers state
+intent once, in the commit message, and agentflow moves the ticket, publishes the release,
+updates the docs and tells the team. The same rules apply whether the work is done by a person
+in a terminal or by an AI agent in Claude Code, Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Public repository owned by Ryan Helms (public since 2026-11-27). It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. The ACP platform program is running: its PRs merge into the `develop` integration branch ([docs/plans/acp-platform/](docs/plans/acp-platform/)). |
-| **Current release** | <!-- agentflow:version -->`v0.56.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
-| **Owner** | Engineering Enablement · maintainer Ryan Helms |
-| **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
+| **Status** | Public and MIT-licensed. The repository moved to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1; repositories that still pin the previous location move with `agentflow pin`. The plugin marketplace is now `agentflow`: [reinstall plugins installed before the rename](#reinstall-plugins-after-the-marketplace-rename). agentflow uses a Git-backed OKF knowledge bundle. The ACP platform program is running: its PRs merge into the `develop` integration branch ([docs/plans/acp-platform/](docs/plans/acp-platform/)). |
+| **Owner** | Ryan Helms |
+| **Architecture** | [docs/blueprint.html](docs/blueprint.html): architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
+| **Current release** | <!-- agentflow:version -->`v0.56.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 
 ---
 
@@ -35,6 +34,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
 - [Documentation](#documentation)
+- [License](#license)
 
 ## Why agentflow
 
@@ -391,9 +391,8 @@ qualified `Task-Ref` trailers. The optional `task-events.yml` PR preview uses
 read-only issue permissions. The [consumer canary](docs/consumer-canary.md)
 covers runner credentials, event replay, release outputs and pin rollback.
 
-The Agentflow repository rollout, tracked before the move in
-[nscaledev/agentflow#88](https://github.com/nscaledev/agentflow/issues/88), adds
-read-only previews from the PR base configuration. Its merge writer requires one
+The Agentflow repository rollout adds read-only
+previews from the PR base configuration. Its merge writer requires one
 qualified issue matching `AGENTFLOW_PROVIDER_PILOT_ISSUE`. Clear that variable
 to pause writes, or set `AGENTFLOW_ENABLED=false` to pause both jobs. Activation
 awaits the signed compatible reader and the live OKF bundle cutover.
@@ -616,7 +615,7 @@ editor. The source view also offers field and value
 completion. You can publish
 a reviewed configuration change through a GitHub pull request. The overview
 also brings together local changes, open PRs and pending Agent Commander
-questions for this worktree. The console uses the Nscale design system. The
+questions for this worktree. The console uses the agentflow design system. The
 **Appearance** control follows your system theme or selects light or dark mode.
 [Repository console guide](docs/repository-console.md)
 
@@ -900,12 +899,11 @@ The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `re
 (which only explains that you run `agentflow promote` yourself). The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos agentflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
-`update`) run only when you invoke them. Install directly from the internal
-Agentflow repository:
+`update`) run only when you invoke them. Install directly from the Agentflow repository:
 
 ```sh
 claude plugin marketplace add ryanhelms/agentflow
-claude plugin install agentflow@nscale
+claude plugin install agentflow@agentflow
 ```
 
 Use `/agentflow:manager install`, `update` or `remove` for a project. Update
@@ -914,6 +912,36 @@ workflow pins. The CLI equivalent is `agentflow update --latest-stable` followed
 by `agentflow pin` through the updated launcher. Project pins and major-version
 restrictions are reported for review. Other clients have their own installation
 commands and capabilities. [Client installation guide](docs/client-plugins.md).
+
+### Reinstall plugins after the marketplace rename
+
+The marketplace was renamed from `nscale` to `agentflow`. A plugin installed from the old
+name gets no more updates, so remove it and install it again.
+
+Claude Code:
+
+```sh
+claude plugin uninstall agentflow@nscale
+claude plugin marketplace remove nscale
+claude plugin marketplace add ryanhelms/agentflow
+claude plugin install agentflow@agentflow
+```
+
+Codex:
+
+```sh
+codex plugin remove agentflow@nscale
+codex plugin marketplace remove nscale
+codex plugin marketplace add ryanhelms/agentflow
+codex plugin add agentflow@agentflow
+```
+
+In Cursor, VS Code and Copilot, remove the plugin and the marketplace in the client's plugin
+manager, then add them again.
+
+In each repository set up for Claude Code, delete `extraKnownMarketplaces.nscale` and
+`enabledPlugins."agentflow@nscale"` from `.claude/settings.json`, then run
+`agentflow install --client claude`. `agentflow remove` still undoes the old entries.
 
 ## Security and governance
 
@@ -1125,8 +1153,8 @@ scripts/                  e2e test, blueprint build, agent-docs check
 To view the launch and documentation website locally, run
 `docker compose up --build --wait website` from the repository root and open
 [the local website](http://127.0.0.1:5173). Edit `website/src/` to see changes
-in the browser. The site uses Nscale's shared page layouts, components, and
-tokens. [Website development guide](CONTRIBUTING.md#website)
+in the browser. The site uses the agentflow design packages for page layouts,
+components and tokens. [Website development guide](CONTRIBUTING.md#website)
 
 ```bash
 make check     # vet, race tests, golangci-lint, shellcheck, actionlint, agent docs
@@ -1155,6 +1183,6 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [AGENTS.md](AGENTS.md) | Instructions for AI agents working on this repo |
 | [SECURITY.md](SECURITY.md) | Security model and reporting |
 
----
+## License
 
-Internal to Nscale. Not licensed for external use or distribution.
+MIT. See [LICENSE](LICENSE).

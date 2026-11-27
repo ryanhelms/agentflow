@@ -209,7 +209,7 @@ These are used by other repos and clients. Changing them is a breaking change:
 
 ## Keep these in sync
 
-- Blueprint: edit `docs/artifact/nscale-delivery-loop.html`, then run
+- Blueprint: edit `docs/artifact/agentflow-delivery-loop.html`, then run
   `scripts/build-blueprint.sh` to regenerate `docs/blueprint.html`.
 - Templates and adapters are embedded in the binary (`templates/embed.go`,
   `adapters/embed.go`). After changing them, run `go test ./internal/setup/`.

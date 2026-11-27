@@ -225,11 +225,7 @@ func run(ctx context.Context, cmd string, args []string) error {
 	case "login":
 		return runLogin(ctx, args)
 	case "logout":
-		a, err := open(ctx)
-		if err != nil {
-			return err
-		}
-		return auth.DeleteAtlassian(a.Cfg.Jira.Site)
+		return runLogout(ctx, args)
 	case "doctor":
 		return runDoctor(ctx, args)
 	case "task":
@@ -648,7 +644,7 @@ func runLogin(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfgSite := config.DefaultSite
+	cfgSite := ""
 	dir, _ := os.Getwd()
 	if repo, err := gitx.Open(ctx, dir); err == nil {
 		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
@@ -660,6 +656,9 @@ func runLogin(ctx context.Context, args []string) error {
 	}
 	if *site == "" {
 		*site = cfgSite
+	}
+	if *site == "" {
+		return errors.New("--site is required: no jira.site is set in .agentflow/config.yml")
 	}
 	if *email == "" {
 		return errors.New("--email is required")
@@ -693,6 +692,25 @@ func runLogin(ctx context.Context, args []string) error {
 		fmt.Println("GitHub: run `gh auth login` so agentflow can open PRs and install updates.")
 	}
 	return nil
+}
+
+func runLogout(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
+	site := fs.String("site", "", "Atlassian site (default: jira.site from .agentflow/config.yml)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *site == "" {
+		a, err := open(ctx)
+		if err != nil {
+			return err
+		}
+		*site = a.Cfg.Jira.Site
+	}
+	if *site == "" {
+		return errors.New("no Atlassian site: pass --site or set jira.site in .agentflow/config.yml")
+	}
+	return auth.DeleteAtlassian(*site)
 }
 
 func runStart(ctx context.Context, args []string) error {

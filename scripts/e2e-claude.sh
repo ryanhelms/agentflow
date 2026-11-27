@@ -110,7 +110,7 @@ repo="$tmp/repo"
 mkdir -p "$repo"
 cd "$repo"
 git init -q -b main
-git config user.email "e2e@nscale.com"
+git config user.email "e2e@example.com"
 git config user.name "agentflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
 "$XDG_CACHE_HOME/agentflow/current/agentflow" init --non-interactive --provider task_management=jira >/dev/null
@@ -180,7 +180,7 @@ mkdir -p "$fresh"
 cd "$fresh"
 git init -q -b main
 git remote add origin https://github.com/nscaledev/e2e-fresh.git
-git config user.email "e2e@nscale.com"
+git config user.email "e2e@example.com"
 git config user.name "agentflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
 run_claude "$tmp/4.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"

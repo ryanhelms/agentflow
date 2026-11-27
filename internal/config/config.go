@@ -171,7 +171,6 @@ type UserWorktree struct {
 // Defaults applied when fields are missing.
 var (
 	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
-	DefaultSite       = "https://nscale.atlassian.net"
 	DefaultFlowMap    = "ryanhelms/agentflow@v0:flow-map.yml"
 	DefaultInitOrgs   = []string{"nscaledev", "ryanhelms"}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
@@ -294,9 +293,6 @@ func (c *Repo) applyDefaults() {
 	}
 	if c.Commit.SubjectMax == 0 {
 		c.Commit.SubjectMax = 72
-	}
-	if c.Jira.Site == "" {
-		c.Jira.Site = DefaultSite
 	}
 	if c.Confluence.Site == "" {
 		c.Confluence.Site = c.Jira.Site

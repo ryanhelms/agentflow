@@ -40,6 +40,9 @@ func (a *App) jiraSite() (string, error) {
 		return "", provider.Unsupported(p, "Jira operations")
 	}
 	site := a.jiraSettings().Site
+	if site == "" {
+		return "", errors.New("no Jira site is configured: set task_management.settings.site in .agentflow/config.yml")
+	}
 	return site, validateSite(site)
 }
 
@@ -178,6 +181,9 @@ func (a *App) confluenceSite() (string, error) {
 	site := a.Cfg.Confluence.Site
 	if s, ok := a.Cfg.Providers.KnowledgeBase.Settings.(*config.ConfluenceSettings); ok {
 		site = s.Site
+	}
+	if site == "" {
+		return "", errors.New("no Confluence site is configured: set knowledge_base.settings.site in .agentflow/config.yml")
 	}
 	if err := validateSite(site); err != nil {
 		return "", fmt.Errorf("knowledge_base.settings.site: %w", err)

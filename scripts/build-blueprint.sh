@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Rebuild docs/blueprint.html (a standalone page) from the published artifact source
-# docs/artifact/nscale-delivery-loop.html, which has no <html>/<head>/<body> skeleton.
+# docs/artifact/agentflow-delivery-loop.html, which has no <html>/<head>/<body> skeleton.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-src=docs/artifact/nscale-delivery-loop.html
+src=docs/artifact/agentflow-delivery-loop.html
 out=docs/blueprint.html
 
 split=$(grep -n '^</style>' "$src" | head -n1 | cut -d: -f1)
