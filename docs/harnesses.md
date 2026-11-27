@@ -100,7 +100,10 @@ In the console, use that harness's own **Probe now** button on its card. Until y
 top of the Harnesses page skip it, and it shows probe `refused`, code `plugin_launch`,
 with that command as its fix. `ai doctor` warns in its `harnesses` check and names
 each such harness with its `--probe --id` command. `agentflow plugin add` shows the exact command, arguments
-and version command it would run.
+and version command it would run. So do `ai harnesses` (an "A probe by name runs:" line
+under the harness), `ai doctor` and the line above the card's own **Probe now** on the
+Harnesses page: the version command first (`--version` unless the plugin sets other
+version arguments), then the command and its arguments, or "with no version command".
 
 A plugin's arguments must be plain words or flags: an optional `-` or `--`, then
 letters, digits, `.`, `_` or `-`, optionally `=` and a value of the same characters,
@@ -136,8 +139,12 @@ put in reach, and `ai doctor` lists each one:
 | `unsafe_permissions` | a directory or file that others can change, or that another user owns |
 | `shim` | a Windows `.cmd` or `.bat` file |
 
-Package runners, interpreters, shells and downloaders (`npx`, `uvx`, `node`,
-`python`, `bash`, `curl` and others) are never run.
+Package runners, interpreters, shells, programs that run their arguments as a
+command, and downloaders (`npx`, `uvx`, `node`, `nodejs`, `python`, `gem`, `cargo`,
+`corepack`, `bash`, `env`, `xargs`, `curl` and others) are never run. Agentflow
+compares the file name without case, without a Windows extension and without a
+version suffix, so `python3.12`, `PIP3.12.EXE` and `node22` are refused too. It checks
+the command, the base commands, and the file a found command resolves to.
 
 ## Where definitions come from
 

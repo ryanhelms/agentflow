@@ -17,17 +17,50 @@ var (
 	envNameRule = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
 )
 
-// launchers are the programs phase 6 never starts: package runners,
-// interpreters, shells and downloaders. They are compared without case and
-// without ".exe".
+// launchers are the programs phase 6 never starts: package runners and
+// version managers, interpreters, shells, programs that run their
+// arguments as a command, and downloaders. They are compared as
+// LauncherName gives them: the base name without case, without a Windows
+// extension and without a version suffix, so python3.12, PIP3.12.EXE and
+// node22 match python, pip and node. TestRegistryCommandsAreNotLaunchers
+// checks that no pinned registry or overlay command matches.
 var launchers = map[string]bool{
-	"npx": true, "npm": true, "pnpm": true, "pnpx": true, "yarn": true,
-	"bun": true, "bunx": true, "deno": true, "uv": true, "uvx": true,
-	"pip": true, "pip3": true, "pipx": true, "python": true, "python3": true,
-	"node": true, "sh": true, "bash": true, "zsh": true, "fish": true,
-	"env": true, "sudo": true, "doas": true, "curl": true, "wget": true,
-	"cmd": true, "powershell": true, "pwsh": true,
+	// JavaScript package runners, runtimes and version managers.
+	"npx": true, "npm": true, "pnpm": true, "pnpx": true, "yarn": true, "yarnpkg": true,
+	"bun": true, "bunx": true, "deno": true, "node": true, "nodejs": true, "corepack": true,
+	"tsx": true, "ts-node": true, "volta": true, "fnm": true, "nvm": true,
+	// Python.
+	"uv": true, "uvx": true, "pip": true, "pipx": true, "python": true, "pythonw": true,
+	"py": true, "pypy": true, "poetry": true, "pipenv": true, "pdm": true, "hatch": true,
+	"conda": true, "mamba": true, "micromamba": true, "pixi": true,
+	// Other interpreters, runtimes and their package runners.
+	"ruby": true, "irb": true, "gem": true, "bundle": true, "bundler": true, "rake": true,
+	"cargo": true, "rustup": true, "go": true, "perl": true, "php": true, "composer": true,
+	"lua": true, "luajit": true, "java": true, "jbang": true, "dotnet": true, "dnx": true,
+	"awk": true, "gawk": true, "mawk": true, "nawk": true, "tclsh": true, "rscript": true,
+	"osascript": true, "cscript": true, "wscript": true, "mshta": true,
+	// Version and environment managers.
+	"mise": true, "asdf": true, "pkgx": true, "nix": true, "nix-shell": true,
+	// Shells.
+	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true, "ksh": true,
+	"mksh": true, "csh": true, "tcsh": true, "ash": true, "nu": true, "elvish": true,
+	"xonsh": true, "busybox": true, "toybox": true, "cmd": true, "powershell": true, "pwsh": true,
+	// Programs that run their arguments, or their input, as a command.
+	"env": true, "sudo": true, "doas": true, "su": true, "runuser": true, "pkexec": true,
+	"xargs": true, "nohup": true, "nice": true, "ionice": true, "timeout": true,
+	"stdbuf": true, "setsid": true, "chroot": true, "unshare": true, "nsenter": true,
+	"flock": true, "exec": true, "time": true, "watch": true, "script": true,
+	"caffeinate": true, "start": true, "runas": true, "wsl": true,
+	// Downloaders.
+	"curl": true, "wget": true, "aria2c": true,
 }
+
+// versionSuffix is a version at the end of a command name: python3.12,
+// pip-3.12, node22, node-v22, python3.13t.
+var versionSuffix = regexp.MustCompile(`([._-]v?)?[0-9]+(\.[0-9]+)*[tm]?$`)
+
+// windowsExtensions are trimmed from a command name before it is compared.
+var windowsExtensions = []string{".exe", ".cmd", ".bat", ".com"}
 
 // launchSafetyNames change program lookup, loading or trust. They are
 // compared without case; launchSafetyPrefixes match the start of a name.
@@ -80,18 +113,29 @@ func ValidArg(s string) bool { return argRule.MatchString(s) }
 // (^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$). It does not check the launcher list.
 func ValidCommandName(s string) bool { return commandRule.MatchString(s) }
 
-// RefusedLauncher reports whether the base name of command, without case and
-// without ".exe", is a package runner, interpreter, shell or downloader that
-// phase 6 never starts.
-func RefusedLauncher(command string) bool {
+// LauncherName is the name RefusedLauncher compares: the base name of
+// command (split at / and \\), without case, without a Windows extension
+// (.exe, .cmd, .bat, .com) and without a version suffix ("PIP3.12.EXE" ->
+// "pip", "node22" -> "node"). A name that is only a version keeps it.
+func LauncherName(command string) string {
 	base := command
 	if i := strings.LastIndexAny(base, `/\`); i >= 0 {
 		base = base[i+1:]
 	}
 	base = strings.ToLower(base)
-	base = strings.TrimSuffix(base, ".exe")
-	return launchers[base]
+	for _, ext := range windowsExtensions {
+		base = strings.TrimSuffix(base, ext)
+	}
+	if loc := versionSuffix.FindStringIndex(base); loc != nil && loc[0] > 0 {
+		base = base[:loc[0]]
+	}
+	return base
 }
+
+// RefusedLauncher reports whether LauncherName(command) is a package
+// runner, interpreter, shell, command runner or downloader that phase 6
+// never starts.
+func RefusedLauncher(command string) bool { return launchers[LauncherName(command)] }
 
 // LaunchSafetyName reports whether the environment variable name changes
 // program lookup, loading or trust (PATH, LD_*, DYLD_*, NODE_OPTIONS, the

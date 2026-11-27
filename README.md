@@ -754,7 +754,10 @@ A probe runs an installed harness's version command, sends one ACP `initialize`
 request and, for Claude Code and Codex, runs their sign-in status command. Probes
 are on by default. Turn off `ai.harnesses.auto_probe` and only you can ask for one:
 you, in a terminal outside an AI agent, or with the console's Probe button. Turn
-off `ai.harnesses.sign_in_check` and no sign-in command runs for anyone.
+off `ai.harnesses.sign_in_check` and no sign-in command runs for anyone. A harness
+that a plugin added runs only when you probe it by name; `ai harnesses` and its card
+show the version command and the command that probe runs. Package runners,
+interpreters and shells are never run, also with a version in the name (`python3.12`).
 [AI harnesses](docs/harnesses.md) explains the states, the checks and the
 overrides.
 

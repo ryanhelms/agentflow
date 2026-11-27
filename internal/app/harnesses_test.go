@@ -195,14 +195,15 @@ func TestHarnessDoctorFindsEachProblem(t *testing.T) {
 		// chose how to start; the fix is the probe that names it.
 		{"plugin harness waits for a probe by name", func(r *harness.Report) {
 			r.Harnesses = []harness.Harness{{ID: "acme-agent", State: harness.StateNative, Notes: []string{harness.NotePluginLaunch},
+				Command: "acme", Args: []string{"acp"}, VersionArgs: []string{"--version"},
 				Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch},
 				Fix:   &harness.Fix{Text: "A plugin chose the command or its arguments.", Command: harness.ProbeCommand + " --id acme-agent"}}}
-		}, "harnesses", CheckWarn, []string{"agentflow ai harnesses --probe --id acme-agent"}},
+		}, "harnesses", CheckWarn, []string{"agentflow ai harnesses --probe --id acme-agent", "`agentflow ai harnesses --probe --id acme-agent` (runs acme --version, then acme acp)"}},
 		{"plugin harness beside a ready one", func(r *harness.Report) {
 			r.Harnesses = append(r.Harnesses,
 				harness.Harness{ID: "acme-agent", State: harness.StateNative, Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}},
-				harness.Harness{ID: "acme-two", State: harness.StateNative, Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}})
-		}, "harnesses", CheckWarn, []string{"Ready: gemini.", "only by name: acme-agent, acme-two", "`agentflow ai harnesses --probe --id acme-two`", "agentflow ai harnesses --probe --id acme-agent"}},
+				harness.Harness{ID: "acme-two", State: harness.StateNative, Command: "two", Args: []string{"acp"}, NoVersion: true, Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}})
+		}, "harnesses", CheckWarn, []string{"Ready: gemini.", "only by name: acme-agent, acme-two", "`agentflow ai harnesses --probe --id acme-two` (runs two acp, with no version command)", "agentflow ai harnesses --probe --id acme-agent"}},
 		{"nothing found", func(r *harness.Report) { r.Harnesses = nil },
 			"harnesses", CheckWarn, []string{"No ACP harnesses found", "agentflow ai harnesses --all"}},
 	}

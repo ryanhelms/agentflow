@@ -2284,7 +2284,7 @@ The lane checks every other pinned entry: where the default command is wrong, or
 **Validation** (`harnessdef.Validate`; problems are reported with their layer and ID, and the definition is left out, never half-applied):
 
 - ID `^[a-z][a-z0-9-]{0,63}$`. A plugin ID that equals a registry or overlay ID is refused (`id_taken`).
-- `command`: a bare name `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`, or an absolute path in the personal layer. Refused everywhere (`launcher`), compared without case and without `.exe`: `npx`, `npm`, `pnpm`, `pnpx`, `yarn`, `bun`, `bunx`, `deno`, `uv`, `uvx`, `pip`, `pip3`, `pipx`, `python`, `python3`, `node`, `sh`, `bash`, `zsh`, `fish`, `env`, `sudo`, `doas`, `curl`, `wget`, `cmd`, `powershell`, `pwsh`. Phase 6 never runs a package runner, an interpreter, a shell or a downloader.
+- `command`: a bare name `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`, or an absolute path in the personal layer. Refused everywhere (`launcher`), compared without case and without `.exe`: `npx`, `npm`, `pnpm`, `pnpx`, `yarn`, `bun`, `bunx`, `deno`, `uv`, `uvx`, `pip`, `pip3`, `pipx`, `python`, `python3`, `node`, `sh`, `bash`, `zsh`, `fish`, `env`, `sudo`, `doas`, `curl`, `wget`, `cmd`, `powershell`, `pwsh`. Phase 6 never runs a package runner, an interpreter, a shell or a downloader. ("Phase 6 security review amendments", item 6, adds a version-suffix rule and more names.)
 - `args`, `version_args`, `base_commands`: at most 16 items, each matching the registry arg rule above (`args`).
 - `min_version`: `X.Y.Z` (`version`). `name`: one line, at most 64 bytes.
 - A definition with no command after layering is listed with its registry data only, as `not_installed`, and never probed.
@@ -2531,6 +2531,12 @@ type Harness struct {
     // found; a path under the OS home is shown as "~/...". Never in events.
     Command     string            `json:"command,omitempty"`
     Args        []string          `json:"args,omitempty"`
+    // VersionArgs: the version command's arguments, which a probe runs
+    // first (["--version"] when the definition sets none). NoVersion: it
+    // runs none. Set only with Command. Never in events. (Added by
+    // "Phase 6 security review amendments", item 6.)
+    VersionArgs []string          `json:"version_args,omitempty"`
+    NoVersion   bool              `json:"no_version,omitempty"`
     Path        string            `json:"path,omitempty"`
     // Base is the base CLI's command and where it was found, for adapters.
     Base        *Base             `json:"base,omitempty"`
@@ -3037,6 +3043,12 @@ export AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
 **5. Tests and `make e2e`.**
 - The demo's step 3 is a Go test (`TestHarnessProductionWiring`) because the live step would reach the owner's running console daemon: removing the fake base CLI publishes `harness.removed` and drops the harness from the projection in one pass, and restoring it publishes `harness.detected`.
 - The console daemon's registry is the OS account's `~/.agentflow-ui`, not `AGENTFLOW_HOME`. So `scripts/e2e-claude.sh` exports `CONTINUOUS_INTEGRATION=1`, which suppresses only the automatic console, and fails when any fixture path appears in that registry. `make e2e` therefore cannot start or reuse a console daemon that would probe with the person's real settings.
+
+**6. Versioned launcher names, and the launch a probe by name runs** (issue #120; changes "Phase 6 harness definitions" and "Phase 6 `Harness` type").
+- `harnessdef.RefusedLauncher` compares `harnessdef.LauncherName(command)`: the base name (split at `/` and `\`), without case, without `.exe`, `.cmd`, `.bat` or `.com`, and without a version suffix `([._-]v?)?[0-9]+(\.[0-9]+)*[tm]?$` (a name that is only a version keeps it). So `python3.12`, `PIP3.12.EXE`, `pip-3.12`, `node22`, `node-v22` and `python3.13t` are refused. Every caller gets the rule: `Validate` (`command`, `base_commands`), the registry's default command, the probe (the found path and its resolved target), the sign-in check (path and target) and sign-in commands. The finder applies no name rule of its own; a file that resolves to a launcher (a `my-agent` link to `python3.12`) is refused by the probe and the sign-in check.
+- The list adds JavaScript runners and managers (`yarnpkg`, `nodejs`, `corepack`, `tsx`, `ts-node`, `volta`, `fnm`, `nvm`), Python ones (`pythonw`, `py`, `pypy`, `poetry`, `pipenv`, `pdm`, `hatch`, `conda`, `mamba`, `micromamba`, `pixi`), other interpreters and their runners (`ruby`, `irb`, `gem`, `bundle`, `bundler`, `rake`, `cargo`, `rustup`, `go`, `perl`, `php`, `composer`, `lua`, `luajit`, `java`, `jbang`, `dotnet`, `dnx`, `awk`, `gawk`, `mawk`, `nawk`, `tclsh`, `rscript`, `osascript`, `cscript`, `wscript`, `mshta`), version and environment managers (`mise`, `asdf`, `pkgx`, `nix`, `nix-shell`), shells (`dash`, `ksh`, `mksh`, `csh`, `tcsh`, `ash`, `nu`, `elvish`, `xonsh`, `busybox`, `toybox`), programs that run their arguments or input as a command (`su`, `runuser`, `pkexec`, `xargs`, `nohup`, `nice`, `ionice`, `timeout`, `stdbuf`, `setsid`, `chroot`, `unshare`, `nsenter`, `flock`, `exec`, `time`, `watch`, `script`, `caffeinate`, `start`, `runas`, `wsl`) and `aria2c`. The suffix rule matches `pip3` and `python3`. It stays one list for every layer.
+- `TestRegistryCommandsAreNotLaunchers` checks that no pinned registry default command (every platform key, and npx/uvx), binary `cmd`, overlay `command` or `base_commands` is refused. `TestRefusedLauncherNames`, `TestProbeRefusals`, `TestSignInRefusals` and `TestDetectPluginHarnessShowsItsLaunch` cover the names.
+- `Harness` adds `version_args` (the effective version arguments: `["--version"]` by default) and `no_version` (additive). `harness.ProbeLaunch` writes what a probe runs as one line: "<version command>, then <command and args>" (`--version` when `version_args` is empty and `no_version` is not set), or "<command and args>, with no version command". For a harness with the note `plugin_launch`, `ai harnesses` prints "A probe by name runs: <that line>" before its fix; `ai doctor`'s `harnesses` check adds "(runs <that line>)" after each `--probe --id` command; and the Harnesses page card shows the same right before its own **Probe now**, in the fix box or, once the harness is ready, on the card, as text with no Copy button. Tests: `TestProbeLaunch`, `TestAIHarnessesShowPluginLaunch` (golden `ai/harnesses_plugin.txt`), the doctor cases "plugin harness waits for a probe by name" and "plugin harness beside a ready one", and the Harnesses page fixture.
 
 ### Phase 6 amendments to earlier contracts
 

@@ -103,6 +103,65 @@ func TestOverlayMatchesRegistry(t *testing.T) {
 	}
 }
 
+// TestRegistryCommandsAreNotLaunchers keeps the launcher list from
+// refusing a real harness: on every platform key the registry uses, and
+// for npx and uvx (""), no pinned entry's default command is a refused
+// launcher, and neither is any overlay command or base command.
+func TestRegistryCommandsAreNotLaunchers(t *testing.T) {
+	cat, err := acpregistry.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	platforms := []string{"darwin-aarch64", "darwin-x86_64", "linux-aarch64", "linux-aarch64-musl", "linux-x86_64", "linux-x86_64-musl", "windows-aarch64", "windows-x86_64", ""}
+	checked := 0
+	for _, e := range cat.Entries {
+		for _, p := range platforms {
+			cmd, _, err := acpregistry.DefaultCommand(e.Distribution, p)
+			if err != nil {
+				continue
+			}
+			checked++
+			if harnessdef.RefusedLauncher(cmd) {
+				t.Errorf("%s (%s): the registry command %q is a refused launcher", e.ID, p, cmd)
+			}
+		}
+		for p, b := range e.Distribution.Binary {
+			if b.Cmd != "" && harnessdef.RefusedLauncher(b.Cmd) {
+				t.Errorf("%s (%s): the binary %q is a refused launcher", e.ID, p, b.Cmd)
+			}
+		}
+	}
+	if checked < len(cat.Entries) {
+		t.Fatalf("checked %d commands for %d entries", checked, len(cat.Entries))
+	}
+	overlay, err := LoadOverlay()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id, d := range overlay {
+		for _, c := range append([]string{d.Command}, d.BaseCommands...) {
+			if c != "" && harnessdef.RefusedLauncher(c) {
+				t.Errorf("%s: the overlay command %q is a refused launcher", id, c)
+			}
+		}
+	}
+}
+
+// ProbeLaunch shows the default version command when none is set, and
+// says when there is none.
+func TestProbeLaunch(t *testing.T) {
+	for want, h := range map[string]Harness{
+		"acme --version, then acme acp":     {Command: "acme", Args: []string{"acp"}},
+		"acme version --short, then acme":   {Command: "acme", VersionArgs: []string{"version", "--short"}},
+		"acme acp, with no version command": {Command: "acme", Args: []string{"acp"}, NoVersion: true, VersionArgs: []string{"x"}},
+		"":                                  {Args: []string{"acp"}},
+	} {
+		if got := ProbeLaunch(h); got != want {
+			t.Errorf("ProbeLaunch(%+v) = %q, want %q", h, got, want)
+		}
+	}
+}
+
 func TestComposeLayers(t *testing.T) {
 	cat, err := acpregistry.Load()
 	if err != nil {

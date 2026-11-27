@@ -333,6 +333,16 @@ func TestProbeRefusals(t *testing.T) {
 	if rec := p.Probe(context.Background(), bad, time.Second); rec.Status != ProbeFailed || rec.Code != CodeLaunch {
 		t.Errorf("bad args: %+v", rec)
 	}
+	// The finder does not check names: a harness whose file resolves to a
+	// versioned interpreter (a my-agent link to python3.12) is refused here.
+	for _, name := range []string{"python3.12", "node22", "PIP3.12.EXE"} {
+		linked := f
+		linked.Target = filepath.Join(filepath.Dir(f.Target), name)
+		linked.Identity = identity("linked-" + strings.ToLower(strings.ReplaceAll(name, ".", "-")))
+		if rec := p.Probe(context.Background(), linked, time.Second); rec.Status != ProbeFailed || rec.Code != CodeLaunch {
+			t.Errorf("target %s: %+v", name, rec)
+		}
+	}
 	if entries := readAgentLog(t, log); len(entries) != 0 {
 		t.Errorf("a refused probe started the agent: %+v", entries)
 	}
