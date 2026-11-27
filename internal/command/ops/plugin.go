@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/command"
@@ -38,6 +39,14 @@ type pluginListIn struct {
 
 type pluginAddIn struct {
 	Path         string `json:"path"`
+	ConfirmToken string `json:"confirm_token,omitempty"`
+	yes          bool
+	asJSON       bool
+}
+
+type pluginApproveIn struct {
+	OperationID  string `json:"operation_id"`
+	Decline      bool   `json:"decline,omitempty"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
 	yes          bool
 	asJSON       bool
@@ -163,9 +172,59 @@ var (
 	}
 )
 
+// pluginApproveSpec approves a write a plugin asked for. Like add and
+// remove it is for the person at the terminal: no tool, always asks, and
+// refuses agents and non-terminals. Approving changes an approval record, not
+// a repository, so it publishes no op.* events; the Invoker writes its audit
+// line. The console's plugin host then runs the approved write itself.
+var pluginApproveSpec = command.Spec[pluginApproveIn, app.PluginApproved]{
+	Name:    "plugin.approve",
+	CLIPath: []string{"plugin", "approve"},
+	CLI: &command.CLI[pluginApproveIn]{
+		Flags: func(fs *flag.FlagSet, in *pluginApproveIn) {
+			fs.BoolVar(&in.Decline, "decline", false, "decline the write instead: it never runs")
+			fs.BoolVar(&in.yes, "yes", false, "ignored: plugin approve always asks you")
+			fs.BoolVar(&in.asJSON, "json", false, "print JSON")
+		},
+		Args: func(in *pluginApproveIn, args []string) error {
+			if len(args) != 1 {
+				return errors.New(pluginApproveUsage)
+			}
+			in.OperationID = args[0]
+			return nil
+		},
+		Interspersed: true,
+		Run: func(ctx context.Context, call command.CLICall[pluginApproveIn], in pluginApproveIn) error {
+			run := func(token string) (any, error) {
+				next := in
+				next.ConfirmToken = token
+				return call.Invoke(ctx, next)
+			}
+			ignoredYes(in.yes, "plugin approve")
+			if in.asJSON {
+				return call.Env.Confirm(false, run)
+			}
+			return confirmPlugin(run, printApproved)
+		},
+		Usage:   "  plugin approve OP_ID [--decline] [--json]\n                                 approve a write a plugin asked for; the console then runs it once\n                                 run it yourself at a terminal: it always asks; --yes is ignored",
+		Section: command.SectionWork,
+		Order:   4040,
+	},
+	Policy: command.Policy{Class: policy.Local, Action: app.PluginApproveAction, AuditByInvoker: true},
+	Events: command.ScopeNone,
+	Token:  func(in *pluginApproveIn) *string { return &in.ConfirmToken },
+	Run: func(ctx context.Context, a *app.App, in pluginApproveIn) (any, error) {
+		if err := requirePerson("plugin approve", pluginApproveWhy); err != nil {
+			return nil, err
+		}
+		return a.PluginApprove(ctx, in.OperationID, in.ConfirmToken, in.Decline)
+	},
+}
+
 const (
-	pluginAddUsage    = "usage: agentflow plugin add PATH [--json]"
-	pluginRemoveUsage = "usage: agentflow plugin remove ID [--json]"
+	pluginAddUsage     = "usage: agentflow plugin add PATH [--json]"
+	pluginRemoveUsage  = "usage: agentflow plugin remove ID [--json]"
+	pluginApproveUsage = "usage: agentflow plugin approve OP_ID [--decline] [--json]"
 )
 
 // StdinIsTerminal reports whether standard input is a terminal. plugin add
@@ -194,8 +253,9 @@ func requirePerson(command, why string) error {
 }
 
 const (
-	pluginAddWhy    = "installs a program that runs as you"
-	pluginRemoveWhy = "can end a rule that denies operations"
+	pluginAddWhy     = "installs a program that runs as you"
+	pluginRemoveWhy  = "can end a rule that denies operations"
+	pluginApproveWhy = "lets a plugin's write run"
 )
 
 // ignoredYes says that --yes has no effect, so a script that passes it sees
@@ -210,6 +270,7 @@ func init() {
 	command.Register(pluginListSpec)
 	command.Register(pluginAddSpec)
 	command.Register(pluginRemoveSpec)
+	command.Register(pluginApproveSpec)
 }
 
 // ---- command line ----
@@ -333,6 +394,28 @@ func printPluginSummary(w io.Writer, p *app.Pending) {
 		for _, warn := range s.Warnings {
 			fmt.Fprintf(w, "! %s\n", warn)
 		}
+	case app.PluginApproveSummary:
+		if p.Policy != nil {
+			fmt.Fprintf(w, "Agentflow %s: %s (%s)\n", p.Policy.Action, p.Policy.Level, p.Policy.Source)
+		}
+		verb := "Approve"
+		if s.Decline {
+			verb = "Decline"
+		}
+		fmt.Fprintf(w, "%s what plugin %q asked to run:\n  command   %q\n", verb, s.Plugin, s.Command)
+		if s.Subject != "" {
+			fmt.Fprintf(w, "  what      %q\n", s.Subject)
+		}
+		if s.Task != "" {
+			fmt.Fprintf(w, "  task      %q\n", s.Task)
+		}
+		if s.Branch != "" {
+			fmt.Fprintf(w, "  branch    %q\n", s.Branch)
+		}
+		fmt.Fprintf(w, "  request   %s\n  expires   %s\n", s.OperationID, s.ExpiresAt.UTC().Format(time.RFC3339))
+		if !s.Decline {
+			fmt.Fprintln(w, "! The console runs it once, as the plugin, right after you approve.")
+		}
 	default:
 		printSummary(w, p)
 	}
@@ -366,6 +449,20 @@ func printAdded(w io.Writer, out any) {
 	default:
 		fmt.Fprintf(w, "Added %s %s (%s).\n%s\n", r.ID, r.Version, r.Hash, r.Next)
 	}
+}
+
+func printApproved(w io.Writer, out any) {
+	r, ok := out.(app.PluginApproved)
+	if !ok {
+		raw, _ := json.MarshalIndent(out, "", "  ")
+		fmt.Fprintln(w, string(raw))
+		return
+	}
+	verb := "Approved"
+	if r.State != "approved" {
+		verb = "Declined"
+	}
+	fmt.Fprintf(w, "%s %s: %s from plugin %s.\n%s\n", verb, r.OperationID, r.Command, r.Plugin, r.Next)
 }
 
 func printRemoved(w io.Writer, out any) {

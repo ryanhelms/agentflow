@@ -302,6 +302,13 @@ func TestJournalApprovalsListsOneRepository(t *testing.T) {
 	if _, err := u.gate.Check(policy.Local, "commit", "done", done.Approval.OperationID, false); err != nil {
 		t.Fatal(err)
 	}
+	// A plugin's held write.
+	plugGate := *u.gate
+	plugGate.Client = "plugin:ci-notify"
+	held, err := plugGate.Check(policy.Remote, "notify", "held", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Another repository's records, and a past expiry nobody recorded.
 	elsewhere, err := policy.NewGate(u.home, config.Autonomy{Local: config.Confirm, Remote: config.Confirm}, "codex")
 	if err != nil {
@@ -321,7 +328,7 @@ func TestJournalApprovalsListsOneRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 3 {
+	if len(items) != 4 {
 		t.Fatalf("items = %+v", items)
 	}
 	byID := map[string]ApprovalItem{}
@@ -331,6 +338,12 @@ func TestJournalApprovalsListsOneRepository(t *testing.T) {
 	if it := byID[open.Approval.OperationID]; it.State != bus.StatePending || it.Expired || it.Client != "claude-code" || it.Action != "pr.open" {
 		t.Fatalf("open = %+v", it)
 	}
+	if it := byID[open.Approval.OperationID]; it.RequestedBy != "claude-code" {
+		t.Fatalf("open requested_by = %q", it.RequestedBy)
+	}
+	if it := byID[held.Approval.OperationID]; it.RequestedBy != "plugin:ci-notify" || it.State != bus.StatePending {
+		t.Fatalf("held = %+v", it)
+	}
 	if it := byID[done.Approval.OperationID]; it.State != bus.StateConsumed {
 		t.Fatalf("done = %+v", it)
 	}
@@ -338,6 +351,9 @@ func TestJournalApprovalsListsOneRepository(t *testing.T) {
 		t.Fatalf("lapsed = %+v", it)
 	}
 	raw, _ := json.Marshal(items)
+	if strings.Count(string(raw), `"requested_by":`) != len(items) || !strings.Contains(string(raw), `"requested_by":""`) {
+		t.Fatalf("requested_by is not on every item: %s", raw)
+	}
 	if strings.Contains(string(raw), "SECRET") || strings.Contains(string(raw), "fingerprint") {
 		t.Fatalf("items leak the record: %s", raw)
 	}

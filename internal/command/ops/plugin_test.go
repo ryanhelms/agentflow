@@ -12,6 +12,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/command/ops"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
@@ -684,5 +685,49 @@ func TestAgentCannotTurnOffADenyRuleThroughConfigSet(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(r.home, "config.yml")); string(b) != personal {
 		t.Errorf("the personal settings changed:\n%s", b)
+	}
+}
+
+func TestPluginApproveApprovesOnlyAPluginRequestAndAuditsOnce(t *testing.T) {
+	r := newPluginRepo(t, "agentflow: 1\n", confirmEverything)
+	plug := *r.app.Gate
+	plug.Client = "plugin:ci-notify"
+	pg := plug.WithCeiling(config.Confirm)
+	d, err := pg.Check(policy.Remote, "notify", map[string]string{"signal": "ci.failed"}, "", false)
+	if err != nil || d.Approval == nil {
+		t.Fatalf("plugin request: %+v %v", d, err)
+	}
+	id := d.Approval.OperationID
+	if err := pg.DescribePluginRequest(id, policy.PluginRequest{Command: "notify", Subject: "notify ci.failed"}); err != nil {
+		t.Fatal(err)
+	}
+	// An agent's own approval is refused.
+	agent, err := r.app.Gate.Check(policy.Remote, "push", map[string]string{"b": "x"}, "", false)
+	if err != nil || agent.Approval == nil {
+		t.Fatal(agent, err)
+	}
+	if _, _, err := r.cli(t, true, "plugin", "approve", agent.Approval.OperationID, "--json"); !errors.Is(err, policy.ErrNotPluginRequest) {
+		t.Fatalf("approved an agent's record: %v", err)
+	}
+	auditBefore := len(r.auditLines(t))
+	em, env, err := r.cli(t, true, "plugin", "approve", id, "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOpTypes(t, em)
+	var out app.PluginApproved
+	if err := json.Unmarshal(env.Out.Bytes(), &out); err != nil || out.State != "approved" || out.Plugin != "ci-notify" || out.Command != "notify" {
+		t.Fatalf("approved = %s %v", env.Out.Bytes(), err)
+	}
+	if lines := r.auditLines(t)[auditBefore:]; len(lines) != 2 || lines[1]["result"] != "applied" || lines[1]["operation"] != "plugin.approve" {
+		t.Fatalf("audit lines of the confirmed approve: %v", lines)
+	}
+	if ap, err := pg.Status(id); err != nil || ap.State != "approved" {
+		t.Fatalf("record after approve: %+v %v", ap, err)
+	}
+	// An agent session is refused before anything is read.
+	t.Setenv("CLAUDECODE", "1")
+	if _, _, err := r.cli(t, true, "plugin", "approve", id, "--json"); err == nil || !strings.Contains(err.Error(), "AI agent") {
+		t.Fatalf("agent session: %v", err)
 	}
 }

@@ -1,0 +1,15 @@
+$ agentflow plugin approve <operation-id>
+--- stdin
+y
+--- stdout
+Approved <operation-id>: notify from plugin ci-notify.
+The console runs it once, now, and its result appears on the timeline. If the console restarted since the plugin asked, nothing runs.
+--- stderr
+Agentflow plugin.approve: confirm (default)
+Approve what plugin "ci-notify" asked to run:
+  command   "notify"
+  what      "notify ci.failed"
+  request   <operation-id>
+  expires   <time>
+! The console runs it once, as the plugin, right after you approve.
+Proceed? [y/N]: 

@@ -1,0 +1,16 @@
+$ agentflow plugin approve <operation-id> --yes
+--- stdin
+n
+--- stdout
+--- stderr
+--yes is ignored: plugin approve always asks you.
+Agentflow plugin.approve: confirm (default)
+Approve what plugin "ci-notify" asked to run:
+  command   "notify"
+  what      "notify ci.failed"
+  request   <operation-id>
+  expires   <time>
+! The console runs it once, as the plugin, right after you approve.
+Proceed? [y/N]: 
+--- error
+cancelled

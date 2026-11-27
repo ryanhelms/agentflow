@@ -1,0 +1,8 @@
+$ agentflow plugin approve <operation-id> --yes
+--- stdin
+y
+--- stdout
+--- stderr
+--yes is ignored: plugin approve always asks you.
+--- error
+plugin approve lets a plugin's write run, so an AI agent may not run it (CLAUDECODE is set): run this in your own terminal

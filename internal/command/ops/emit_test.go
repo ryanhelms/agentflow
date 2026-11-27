@@ -74,8 +74,9 @@ var directCalls = map[string]string{
 // phase 3 "ScopeNone"). Each still runs the policy gate and the Invoker writes
 // its audit line. The test fails when an entry is no longer a ScopeNone write.
 var scopeNoneWrites = map[string]string{
-	"plugin.add":    "installs into the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
-	"plugin.remove": "deletes from the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
+	"plugin.add":     "installs into the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
+	"plugin.remove":  "deletes from the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
+	"plugin.approve": "answers an approval record in the user's journal; the approvals panel learns of it from approval.resolved, and the plugin's write publishes its own op.* events",
 }
 
 // auditExempt lists registered writes that neither set AuditByInvoker nor write
