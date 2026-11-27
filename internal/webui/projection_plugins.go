@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/plugin"
@@ -139,7 +137,7 @@ func pluginItem(in manifest.Installed, enabled, disabledHere bool, s plugin.Stat
 		item.Extensions = append(item.Extensions, ext)
 	}
 	for _, r := range m.Extensions.PermissionRule {
-		item.Extensions = append(item.Extensions, PluginExtension{Point: string(manifest.PointPermissionRule), Name: r.Name, Deny: firstLine(r.Deny, plugin.MaxDenyMessage)})
+		item.Extensions = append(item.Extensions, PluginExtension{Point: string(manifest.PointPermissionRule), Name: r.Name, Deny: plugin.SafeText(r.Deny, plugin.MaxDenyMessage)})
 	}
 	return item
 }
@@ -147,20 +145,6 @@ func pluginItem(in manifest.Installed, enabled, disabledHere bool, s plugin.Stat
 func orEmpty(s []string) []string {
 	if s == nil {
 		return []string{}
-	}
-	return s
-}
-
-// firstLine is s's first line, at most n bytes on a rune boundary.
-func firstLine(s string, n int) string {
-	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
-		s = s[:i]
-	}
-	if len(s) > n {
-		s = s[:n]
-		for len(s) > 0 && !utf8.ValidString(s) {
-			s = s[:len(s)-1]
-		}
 	}
 	return s
 }

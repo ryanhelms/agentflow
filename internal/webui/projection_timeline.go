@@ -10,6 +10,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/bus/store"
+	"github.com/ryanhelms/agentflow/internal/plugin"
 )
 
 // The timeline projection (lane 3.5). The contract is in the ADR, section
@@ -433,6 +434,7 @@ func httpsURL(raw string) string {
 // (oldest first) to the operation its operation_id names, keeping the
 // newest MaxTimelineAnnotations, oldest first. An annotation for an
 // operation outside st is not shown. Text and URL are plugin text: clamped,
+// control and bidi characters stripped (plugin.SafeText),
 // the URL kept only when it is https.
 func attachAnnotations(st *TimelineState, events []bus.Event) {
 	index := map[string]int{}
@@ -448,6 +450,7 @@ func attachAnnotations(st *TimelineState, events []bus.Event) {
 			continue
 		}
 		p = p.Clamp()
+		p.Text, p.Plugin = plugin.SafeText(p.Text, len(p.Text)), plugin.SafeText(p.Plugin, len(p.Plugin))
 		i, ok := index[p.OperationID]
 		if !ok || p.Plugin == "" || p.Text == "" {
 			continue

@@ -19,7 +19,7 @@ func pluginFixture() (*plugintest.Source, *plugintest.Layers) {
 		Permissions: manifest.Permissions{Subscribe: []string{"gh.ci.updated"}, Invoke: []string{"notify"}},
 		Extensions: manifest.Extensions{
 			Handler:        []manifest.Handler{{Name: "ci-failed", On: []string{"gh.ci.updated"}, Actions: []manifest.Action{{Invoke: &manifest.InvokeAction{Command: "notify"}}}}},
-			PermissionRule: []manifest.PermissionRule{{Name: "no-push", Match: manifest.RuleMatch{Operation: []string{"push"}}, Deny: "No.\n<b>x</b>"}},
+			PermissionRule: []manifest.PermissionRule{{Name: "no-push", Match: manifest.RuleMatch{Operation: []string{"push"}}, Deny: "No\u202e\u0007.\n<b>x</b>"}},
 		}}
 	src.Set(manifest.Installed{ID: m.ID, Version: m.Version, Tier: m.Tier, Hash: "sha256:" + strings.Repeat("b", 64), Manifest: m})
 	layers.SetPersonal("ci-notify", plugin.PersonalPlugin{Enabled: true})
@@ -103,5 +103,12 @@ func TestTimelineAttachesAnnotations(t *testing.T) {
 	a := st.Operations[0].Annotations
 	if len(a) != MaxTimelineAnnotations || a[0].Text != "hint 3" || a[4].Text != "hint 7" || a[0].URL != "" || a[0].Level != bus.AnnotationInfo || a[0].Plugin != "hints" {
 		t.Fatalf("annotations: %+v", a)
+	}
+	// Control and bidi characters never reach the page.
+	bidi := []bus.Event{events[0], ev(bus.TypePluginAnnotationAdded, `{"plugin":"hi\u202ents","operation_id":"`+op+`","text":"ok\u202e\u0007\u2066x"}`, 9)}
+	st = timelineOf(bidi, now)
+	attachAnnotations(&st, bidi)
+	if a := st.Operations[0].Annotations; len(a) != 1 || a[0].Text != "okx" || a[0].Plugin != "hints" {
+		t.Fatalf("unsafe text kept: %+v", a)
 	}
 }
