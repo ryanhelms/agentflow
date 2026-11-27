@@ -378,7 +378,7 @@ func signInCheck(r harness.Report) DoctorCheck {
 }
 
 func readyCheck(r harness.Report) DoctorCheck {
-	var ready []string
+	var ready, byName []string
 	var fix *harness.Fix
 	found := false
 	for _, h := range r.Harnesses {
@@ -389,9 +389,30 @@ func readyCheck(r harness.Report) DoctorCheck {
 		if harnessReady(h) {
 			ready = append(ready, h.ID)
 		}
+		if h.Probe.Status == harness.ProbeRefused && h.Probe.Code == harness.CodePluginLaunch {
+			byName = append(byName, h.ID)
+		}
 		if fix == nil && h.Fix != nil {
 			fix = h.Fix
 		}
+	}
+	if len(byName) > 0 {
+		// A probe of every harness (doctor --probe too) skips a harness a
+		// plugin chose how to start: name each one, with the probe that
+		// starts it.
+		var commands []string
+		for _, id := range byName {
+			commands = append(commands, "`"+harness.ProbeCommand+" --id "+id+"`")
+		}
+		message := "No harness is ready."
+		if len(ready) > 0 {
+			message = fmt.Sprintf("Ready: %s.", strings.Join(ready, ", "))
+		}
+		message += fmt.Sprintf(" A plugin chose how these start, so they are probed only by name: %s.", strings.Join(byName, ", "))
+		return warned("harnesses", message, harness.Fix{
+			Text:    "Probe each one by name if you trust it: " + strings.Join(commands, ", ") + ".",
+			Command: harness.ProbeCommand + " --id " + byName[0],
+		})
 	}
 	switch {
 	case len(ready) > 0:

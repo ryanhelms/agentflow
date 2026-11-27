@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"sync"
 	"time"
 
@@ -140,7 +141,9 @@ func (s *server) harnessesProbe(w http.ResponseWriter, r *http.Request) {
 	if len(ids) == 0 {
 		if rep, ok := rt.source.Last(); ok {
 			for _, h := range rep.Harnesses {
-				if h.State != harness.StateNotInstalled {
+				// Probe all skips a harness a plugin chose how to start: only
+				// its own card's Probe now (its ID) starts it.
+				if h.State != harness.StateNotInstalled && !slices.Contains(h.Notes, harness.NotePluginLaunch) {
 					ids = append(ids, h.ID)
 				}
 			}

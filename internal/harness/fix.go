@@ -99,7 +99,7 @@ func FixFor(in FixInput) *Fix {
 		case CodeShim:
 			return &Fix{Text: fmt.Sprintf("`%s` is a Windows command script, which agentflow does not start. Point the override at the program's `.exe`.", h.Path)}
 		case CodePluginLaunch:
-			return &Fix{Text: "A plugin chose the command or its arguments, so agentflow never probes it automatically or for an agent. Probe it yourself if you trust it.", Command: ProbeCommand + " --id " + h.ID}
+			return &Fix{Text: "A plugin chose the command or its arguments, so agentflow never probes it automatically, for an agent or in a probe of every harness. Probe it by name if you trust it.", Command: ProbeCommand + " --id " + h.ID}
 		}
 	}
 	if h.Auth.Status == SignInUnknown && h.Auth.Code == CodeEnvCredential {

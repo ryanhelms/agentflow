@@ -136,7 +136,8 @@ func DescribeExtensions(m manifest.Manifest) []string {
 	}
 	// A harness is data, but its command and arguments are what agentflow
 	// starts when you probe it: show all of them. A plugin's harness is
-	// never probed automatically or for an agent, only when you ask.
+	// never probed automatically, for an agent or by a probe of every
+	// harness, only when you probe it by name.
 	for _, h := range m.Extensions.Harness {
 		if h.Command == "" {
 			out = append(out, "harness "+h.ID+": names no command")
@@ -156,7 +157,7 @@ func DescribeExtensions(m manifest.Manifest) []string {
 		if len(h.BaseCommands) > 0 {
 			line += " (adapter for " + strings.Join(h.BaseCommands, ", ") + ")"
 		}
-		out = append(out, line+"; found on your PATH, only when you probe it yourself")
+		out = append(out, line+"; found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id "+h.ID+")")
 	}
 	return out
 }

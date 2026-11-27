@@ -586,9 +586,104 @@ func TestDetectPluginHarnessOnlyForAPerson(t *testing.T) {
 	if calls, _ := log.Calls(); len(calls) != 0 || e.prober.count() != 0 {
 		t.Fatalf("a plugin harness was started without a person: %d version runs, %d probes", len(calls), e.prober.count())
 	}
-	h := byID(t, e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true}), "acme-agent")
+	h := byID(t, e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true, IDs: []string{"acme-agent"}}), "acme-agent")
 	if h.Probe.Status != ProbeOK || e.prober.count() != 1 {
-		t.Fatalf("a person's probe: %+v, %d probes", h.Probe, e.prober.count())
+		t.Fatalf("a person's probe by name: %+v, %d probes", h.Probe, e.prober.count())
+	}
+}
+
+// TestDetectPluginHarnessOnlyByName: a probe of every harness is not
+// consent for a plugin's command. `ai harnesses --probe` with no --id,
+// `ai doctor --probe` and the console's Probe all (a person's probe with no
+// IDs) skip it and report refused/plugin_launch, with the fix that names its
+// ID; so does a probe that names only other harnesses. Naming its ID (--id,
+// the card's Probe now, or the fix command) starts it.
+func TestDetectPluginHarnessOnlyByName(t *testing.T) {
+	e := pluginEnv(t,
+		manifest.HarnessEntry{ID: "acme-agent", Definition: harnessdef.Definition{Name: "Acme", Command: "acme", Args: []string{"acp"}}},
+		manifest.HarnessEntry{ID: "acme-other", Definition: harnessdef.Definition{Name: "Other", Command: "acme-other"}},
+	)
+	log := harnesstest.StatusCLI(t, e.bin, "acme", 0, "acme 1.0.0")
+	harnesstest.StatusCLI(t, e.bin, "acme-other", 0, "acme-other 1.0.0")
+	for _, o := range []DetectOptions{
+		{Requester: RequesterPerson, Probe: true},
+		{Requester: RequesterPerson, Probe: true, All: true},
+		{Requester: RequesterPerson},
+		{Requester: RequesterPerson, Probe: true, IDs: []string{"acme-other", "acme-agent-x"}},
+	} {
+		if len(o.IDs) > 0 {
+			// Only the named harnesses are listed; acme-agent is not one.
+			if r := e.detect(t, o); slices.ContainsFunc(r.Harnesses, func(h Harness) bool { return h.ID == "acme-agent" }) {
+				t.Fatalf("%+v listed acme-agent", o)
+			}
+			continue
+		}
+		h := byID(t, e.detect(t, o), "acme-agent")
+		if h.Probe.Status != ProbeRefused || h.Probe.Code != CodePluginLaunch {
+			t.Fatalf("%+v: probe %+v", o, h.Probe)
+		}
+		if h.Fix == nil || h.Fix.Command != ProbeCommand+" --id acme-agent" {
+			t.Fatalf("%+v: fix %+v", o, h.Fix)
+		}
+	}
+	if calls, _ := log.Calls(); len(calls) != 0 {
+		t.Fatalf("acme ran %d version commands without being named", len(calls))
+	}
+	probes := e.prober.count()
+	h := byID(t, e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true, IDs: []string{"acme-agent"}}), "acme-agent")
+	if h.Probe.Status != ProbeOK || e.prober.count() != probes+1 {
+		t.Fatalf("probe by name: %+v, %d probes", h.Probe, e.prober.count()-probes)
+	}
+	if calls, _ := log.Calls(); len(calls) != 1 {
+		t.Fatalf("version runs after a probe by name: %d", len(calls))
+	}
+	// Probe all again: the saved result is shown, nothing is started.
+	h = byID(t, e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true}), "acme-agent")
+	if h.Probe.Status != ProbeCached || e.prober.count() != probes+1 {
+		t.Fatalf("probe all after a probe by name: %+v, %d probes", h.Probe, e.prober.count()-probes)
+	}
+}
+
+// TestDetectPluginArgBypassesRefused: the security review's bypasses of the
+// old deny rules (a path glued to -C or -f, a long flag followed by a path,
+// user@host), including `git -C/path reset --hard`, leave the definition out
+// with a problem, and nothing runs, even for a person's probe by name.
+func TestDetectPluginArgBypassesRefused(t *testing.T) {
+	bad := map[string]harnessdef.Definition{
+		"git-reset":   {Command: "git", Args: []string{"-C/Users/x/repo", "reset", "--hard"}},
+		"git-version": {Command: "git", VersionArgs: []string{"-C/path", "reset", "--hard"}},
+		"cat-f":       {Command: "acme", Args: []string{"-f/etc/passwd"}},
+		"out-file":    {Command: "acme", VersionArgs: []string{"--output-file/x"}},
+		"ssh-host":    {Command: "acme", Args: []string{"user@host"}},
+	}
+	var entries []manifest.HarnessEntry
+	var ids []string
+	for id, d := range bad {
+		entries = append(entries, manifest.HarnessEntry{ID: id, Definition: d})
+		ids = append(ids, id)
+	}
+	e := pluginEnv(t, entries...)
+	gitLog := harnesstest.StatusCLI(t, e.bin, "git", 0, "git version 2.0.0")
+	acmeLog := harnesstest.StatusCLI(t, e.bin, "acme", 0, "acme 1.0.0")
+	r := e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true, All: true, IDs: ids})
+	if len(r.Harnesses) != 0 {
+		t.Fatalf("listed: %+v", r.Harnesses)
+	}
+	refused := map[string]bool{}
+	for _, p := range r.Problems {
+		if p.Code == harnessdef.CodeArgs {
+			refused[p.ID] = true
+		}
+	}
+	for id := range bad {
+		if !refused[id] {
+			t.Errorf("%s: no args problem in %+v", id, r.Problems)
+		}
+	}
+	gc, _ := gitLog.Calls()
+	ac, _ := acmeLog.Calls()
+	if len(gc) != 0 || len(ac) != 0 || e.prober.count() != 0 {
+		t.Fatalf("ran: git %d, acme %d, probes %d", len(gc), len(ac), e.prober.count())
 	}
 }
 

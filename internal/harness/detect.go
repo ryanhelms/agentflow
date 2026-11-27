@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -243,13 +244,15 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 	if b := f.BaseFound; b != nil {
 		h.Base = &Base{Name: b.Definition.Name, Command: b.Definition.Command, Path: Tilde(b.Path)}
 	}
+	// A plugin chose what is started: only a person's own probe that names
+	// this harness's ID runs it. Never the daemon or an agent, whatever
+	// auto_probe says, and never a probe of every harness.
+	pluginRefused := def.PluginLaunch != "" && (o.Requester != RequesterPerson || !slices.Contains(o.IDs, def.ID))
 	if def.PluginLaunch != "" {
 		h.Notes = append(h.Notes, NotePluginLaunch)
-		// A plugin chose what is started: only a person's own probe runs
-		// it, never the daemon or an agent, whatever auto_probe says.
-		if o.Requester != RequesterPerson {
-			probeAllowed = false
-		}
+	}
+	if pluginRefused {
+		probeAllowed = false
 	}
 	found := isFound && f.Path != ""
 	var rec *ProbeRecord
@@ -259,7 +262,7 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 		switch {
 		case f.shim:
 			h.Probe = Probe{Status: ProbeRefused, Code: CodeShim}
-		case def.PluginLaunch != "" && o.Requester != RequesterPerson && (rec == nil || rec.Status == ProbeNone):
+		case pluginRefused && (rec == nil || rec.Status == ProbeNone):
 			h.Probe = Probe{Status: ProbeRefused, Code: CodePluginLaunch}
 		case probeAllowed && d.shouldProbe(o, rec, now):
 			r, err := d.probe(ctx, st, f, o, rec, now)

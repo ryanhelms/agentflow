@@ -87,14 +87,27 @@ agentflow reports `unknown`, not signed out, because you may sign in with it.
 
 A refused request returns `probe_refused: needs_person` with the cached results.
 
-A harness that a plugin defines is different: agentflow never starts it on its own
-or for an agent, whatever the settings say. Only your own probe runs it (probe
-`refused`, code `plugin_launch`, until you do). `agentflow plugin add` shows the
-exact command, arguments and version command it would run, and a plugin's arguments
-may not hold an absolute path, `..`, `~`, a `:` (URLs, `host:path`, drive letters)
-or a value starting with `@`. If your own override sets the command, the arguments
-and the version arguments (or `no_version`) again, the harness is yours and follows
-the rules above.
+A harness that a plugin defines is different: agentflow never starts it on its own,
+for an agent, or in a probe of every harness, whatever the settings say. Only a probe
+that names its ID runs it:
+
+```bash
+agentflow ai harnesses --probe --id <id>
+```
+
+In the console, use that harness's own **Probe now** button on its card. Until you do,
+`ai harnesses --probe` without `--id`, `ai doctor --probe` and the **Probe now** at the
+top of the Harnesses page skip it, and it shows probe `refused`, code `plugin_launch`,
+with that command as its fix. `ai doctor` warns in its `harnesses` check and names
+each such harness with its `--probe --id` command. `agentflow plugin add` shows the exact command, arguments
+and version command it would run.
+
+A plugin's arguments must be plain words or flags: an optional `-` or `--`, then
+letters, digits, `.`, `_` or `-`, optionally `=` and a value of the same characters,
+and no `..`. So a path, a host or a URL is refused, also when it is glued to a flag
+(`-C/path`, `--output-file/x`, `user@host`), and agentflow leaves the definition out
+with a problem. If your own override sets the command, the arguments and the version
+arguments (or `no_version`) again, the harness is yours and follows the rules above.
 
 Two settings control this. Both are **on by default**. Change them on the Settings
 page (group **AI harnesses**) or from the terminal:

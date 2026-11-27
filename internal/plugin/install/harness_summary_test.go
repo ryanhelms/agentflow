@@ -18,10 +18,10 @@ func TestSummaryListsHarnesses(t *testing.T) {
 	}}}
 	got := install.DescribeExtensions(m)
 	want := []string{
-		"harness acme-agent: when you probe it, runs acme acp, and for its version acme --version; found on your PATH, only when you probe it yourself",
-		"harness acme-adapter: when you probe it, runs acme-acp, and for its version acme-acp --version (adapter for acme); found on your PATH, only when you probe it yourself",
-		"harness acme-v: when you probe it, runs acme acp, and for its version acme -V --short; found on your PATH, only when you probe it yourself",
-		"harness acme-n: when you probe it, runs acme, no version command; found on your PATH, only when you probe it yourself",
+		"harness acme-agent: when you probe it, runs acme acp, and for its version acme --version; found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id acme-agent)",
+		"harness acme-adapter: when you probe it, runs acme-acp, and for its version acme-acp --version (adapter for acme); found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id acme-adapter)",
+		"harness acme-v: when you probe it, runs acme acp, and for its version acme -V --short; found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id acme-v)",
+		"harness acme-n: when you probe it, runs acme, no version command; found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id acme-n)",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %q\nwant %q", got, want)

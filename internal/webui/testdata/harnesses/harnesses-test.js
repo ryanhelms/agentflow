@@ -302,11 +302,17 @@
 
     // Automatic probes turned off in Settings shows here; the page itself changes nothing.
     const waiting = harness("waiting",{code:"not_probed",probe:{status:"refused",code:"needs_person"},acp:undefined,auth:{status:"unknown",code:"needs_person"},fix:{text:"Automatic probes are off. Probe it yourself, or turn them on.",command:"agentflow ai harnesses --probe"}});
-    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,waiting,opencode,goose,pi],{auto_probe:false}))]));
+    // A harness a plugin added: Probe now at the top skips it, so its fix box holds its own Probe now, which names its ID.
+    const plugged = harness("acme-agent",{name:"Acme",sources:["plugin:acme"],code:"not_probed",probe:{status:"refused",code:"plugin_launch"},acp:undefined,notes:["plugin_launch"],
+      fix:{text:"A plugin chose the command or its arguments, so agentflow never probes it automatically, for an agent or in a probe of every harness. Probe it by name if you trust it.",command:"agentflow ai harnesses --probe --id acme-agent"}});
+    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,waiting,plugged,opencode,goose,pi],{auto_probe:false}))]));
     await until(() => byID("harnesses-auto").textContent === "Off","automatic probes are not shown as off");
     const turnOn = part("waiting","fix").querySelector("a");
     check(shows("waiting","status") === "Not probed" && part("waiting","fix").querySelector(".hn-fix-text").textContent === "Automatic probes are off. Probe it yourself, or turn them on." && turnOn.textContent === "turn them on" && turnOn.getAttribute("href") === "#settings?group=ai"
       && commands(part("waiting","fix")).length === 0 && part("waiting","fix").contains(part("waiting","probe")) && shows("waiting","auth-detail") === "","the card that waits for a person is wrong");
+    check(part("acme-agent","fix").contains(part("acme-agent","probe")) && part("acme-agent","probe").dataset.part === "probe" && card("acme-agent").dataset.key === "acme-agent" && commands(part("acme-agent","fix")).length === 0
+      && fact("acme-agent","probe").textContent === "Not run: a plugin chose how it starts, so only its own Probe now runs it"
+      && byID("harnesses-probe-hint").textContent.includes("A harness a plugin added is skipped"),"the plugin harness card does not lead to its own probe by name");
     check(byID("harnesses-auto").dataset.state === "off" && byID("harnesses-auto-detail").textContent.includes("only looks at files") && byID("harnesses-auto").classList.contains("live-changed"),"the automatic probes change is not shown");
 
     // Everything ready: the other group says that nothing needs attention.

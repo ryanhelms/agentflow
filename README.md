@@ -559,7 +559,8 @@ command and where it was found, the layers that define it, the probe result, its
 ACP capabilities, and the fix with a command to copy. It also says whether you
 are signed in, signed out, or whether Agentflow cannot tell, and lists the
 harness's own ways to sign in. **Probe now** asks the console to probe every
-harness found, or one card; the results arrive over the event stream. The header
+harness found, or one card; the results arrive over the event stream. A harness a
+plugin added is probed only from its own card. The header
 shows the pinned registry copy, whether automatic probes are on, the PATH entries
 Agentflow skipped and any definition it refused. The page installs nothing and
 changes no setting: automatic probes, the sign-in check and harness overrides
@@ -880,8 +881,9 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   runs with your real home folder, and agentflow keeps only its verdict, never its
   output. Who asked is set by agentflow, not by the caller's input: MCP calls count as
   an agent, and an agent can probe only while `ai.harnesses.auto_probe` is on. A
-  harness a plugin defines is never probed automatically or for an agent, only when you
-  probe it yourself, and its arguments may not hold a path, host or URL.
+  harness a plugin defines is never probed automatically, for an agent or in a probe of
+  every harness, only when you probe it by name (`--id`, or its card's **Probe now**),
+  and its arguments must be plain words or flags, never a path, host or URL.
   [AI harnesses](docs/harnesses.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,

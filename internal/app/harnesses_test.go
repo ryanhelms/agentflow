@@ -126,7 +126,7 @@ func TestHarnessDoctorAllOK(t *testing.T) {
 	if r.Failed() {
 		t.Error("Failed with every check ok")
 	}
-	if len(d.asked) != 1 || !d.asked[0].Probe || d.asked[0].All || d.asked[0].Requester != "agent" {
+	if len(d.asked) != 1 || !d.asked[0].Probe || d.asked[0].All || len(d.asked[0].IDs) != 0 || d.asked[0].Requester != "agent" {
 		t.Errorf("asked %+v", d.asked)
 	}
 }
@@ -191,6 +191,18 @@ func TestHarnessDoctorFindsEachProblem(t *testing.T) {
 		{"the first fix", func(r *harness.Report) {
 			r.Harnesses = []harness.Harness{{ID: "a", State: harness.StateIncompatible}, {ID: "codex-acp", State: harness.StateNeedsAuth, Fix: signIn}, {ID: "goose", State: harness.StateNative, Fix: probe}}
 		}, "harnesses", CheckWarn, []string{"codex login"}},
+		// doctor --probe names no ID, so the detector skips a harness a plugin
+		// chose how to start; the fix is the probe that names it.
+		{"plugin harness waits for a probe by name", func(r *harness.Report) {
+			r.Harnesses = []harness.Harness{{ID: "acme-agent", State: harness.StateNative, Notes: []string{harness.NotePluginLaunch},
+				Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch},
+				Fix:   &harness.Fix{Text: "A plugin chose the command or its arguments.", Command: harness.ProbeCommand + " --id acme-agent"}}}
+		}, "harnesses", CheckWarn, []string{"agentflow ai harnesses --probe --id acme-agent"}},
+		{"plugin harness beside a ready one", func(r *harness.Report) {
+			r.Harnesses = append(r.Harnesses,
+				harness.Harness{ID: "acme-agent", State: harness.StateNative, Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}},
+				harness.Harness{ID: "acme-two", State: harness.StateNative, Probe: harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}})
+		}, "harnesses", CheckWarn, []string{"Ready: gemini.", "only by name: acme-agent, acme-two", "`agentflow ai harnesses --probe --id acme-two`", "agentflow ai harnesses --probe --id acme-agent"}},
 		{"nothing found", func(r *harness.Report) { r.Harnesses = nil },
 			"harnesses", CheckWarn, []string{"No ACP harnesses found", "agentflow ai harnesses --all"}},
 	}

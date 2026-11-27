@@ -205,7 +205,7 @@
       case "launch": return "Agentflow could not start it.";
       case "needs_person": return "Automatic probes are off, so Agentflow has not started it.";
       case "shim": return "It is a Windows command script, which Agentflow does not start.";
-      case "plugin_launch": return "A plugin chose how it is started, so Agentflow probes it only when you ask.";
+      case "plugin_launch": return "A plugin chose how it is started, so Agentflow probes it only when you probe this harness by name.";
       case "test_guard": return "It was not started, because this is a test run.";
     }
     return "Found on your PATH. Agentflow has not started it yet, so it does not know whether it speaks ACP.";
@@ -224,7 +224,7 @@
     timeout: "No answer in time", exited: "Exited before it answered", launch: "Could not be started",
     protocol: "Did not answer like an ACP agent", protocol_version: "Answered with another ACP version",
     needs_person: "Not run: automatic probes are off", shim: "Not run: it is a Windows command script", test_guard: "Not run in a test",
-    plugin_launch: "Not run: a plugin chose how it starts, so only you can probe it"
+    plugin_launch: "Not run: a plugin chose how it starts, so only its own Probe now runs it"
   };
   function probeText(probe) {
     if (probe.status === "none") return "Not run yet";
@@ -261,7 +261,7 @@
   const noteCodes = {
     registry_env_ignored: "The ACP registry lists environment variables for this harness. Agentflow never applies them.",
     quarantined: "The ACP registry has quarantined this agent.",
-    plugin_launch: "A plugin chose this harness's command or arguments. Agentflow never starts it on its own or for an agent; only your own probe does."
+    plugin_launch: "A plugin chose this harness's command or arguments. Agentflow never starts it on its own, for an agent or with Probe now at the top of the page; only this card's Probe now does."
   };
   const skipReasons = {
     relative: "an empty or relative entry", inside_repository: "inside a repository Agentflow is working in",
@@ -467,10 +467,12 @@
 
     // A harness that was found and never started needs one thing: a probe.
     // Its fix box holds the card's own Probe now button instead of a
-    // terminal command.
+    // terminal command. That button names the harness's ID, which is the
+    // only probe that starts a harness a plugin chose how to start
+    // (plugin_launch); Probe now at the top skips those.
     function probeIsFix(harness) {
       return current.detector && harness.probeable && (harness.state === "native" || harness.state === "adapter_installed")
-        && (harness.probe.code === "not_probed" || harness.probe.code === "needs_person" || harness.probe.status === "none");
+        && (harness.probe.code === "not_probed" || harness.probe.code === "needs_person" || harness.probe.code === "plugin_launch" || harness.probe.status === "none");
     }
 
     function fixParts(harness) {

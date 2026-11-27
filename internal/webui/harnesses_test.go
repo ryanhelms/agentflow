@@ -211,8 +211,11 @@ func TestHarnessProbe(t *testing.T) {
 		t.Errorf("without a source: %d %s", w.Code, w.Body)
 	}
 	det := &scriptedDetector{}
+	acme := testHarness("acme-agent", harness.StateNative, "/x/acme")
+	acme.Notes = []string{harness.NotePluginLaunch}
+	acme.Probe = harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}
 	det.set(testHarness("gemini", harness.StateNative, "/x/gemini"), testHarness("goose", harness.StateNative, "/x/goose"),
-		harness.Harness{ID: "kimi", State: harness.StateNotInstalled})
+		harness.Harness{ID: "kimi", State: harness.StateNotInstalled}, acme)
 	src := runSource(t, det)
 	if w := harnessRequest(t, s, "/api/harnesses/probe", "{}", nil); w.Code != 503 {
 		t.Errorf("without the ai.harnesses command: %d %s", w.Code, w.Body)
@@ -241,6 +244,8 @@ func TestHarnessProbe(t *testing.T) {
 	if !call.in.Probe || call.in.All || len(call.in.IDs) != 0 || call.client != harnessesClient {
 		t.Errorf("call %+v", call)
 	}
+	// Probe all sends no IDs, and a plugin's harness is not shown as probing:
+	// the detector skips it (refused/plugin_launch) unless its ID is named.
 	if got := strings.Join(probingIDs(), ","); got != "gemini,goose" {
 		t.Errorf("probing %q", got)
 	}
@@ -262,6 +267,17 @@ func TestHarnessProbe(t *testing.T) {
 	}
 	call = <-calls
 	if !call.in.Probe || strings.Join(call.in.IDs, ",") != "gemini" {
+		t.Errorf("call %+v", call)
+	}
+
+	// The plugin harness's own Probe now sends its ID, which reaches the
+	// command, so the detector may start it.
+	now = now.Add(61 * time.Second)
+	if w := harnessRequest(t, s, "/api/harnesses/probe", `{"ids":["acme-agent"]}`, nil); w.Code != 202 {
+		t.Fatalf("probe by name: %d %s", w.Code, w.Body)
+	}
+	call = <-calls
+	if !call.in.Probe || strings.Join(call.in.IDs, ",") != "acme-agent" {
 		t.Errorf("call %+v", call)
 	}
 }
