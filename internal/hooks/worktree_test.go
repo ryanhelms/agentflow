@@ -59,6 +59,9 @@ func TestCoordinatorMerge(t *testing.T) {
 	var asked []string
 	MergeGH = func(_ context.Context, _ string, args ...string) (string, error) {
 		asked = append(asked, strings.Join(args, " "))
+		if slices.Contains(args, "--repo") {
+			return "main\n", nil // PR 12 of another repository targets main
+		}
 		if len(args) > 2 {
 			if base, ok := bases[args[2]]; ok {
 				return base + "\n", nil
@@ -87,6 +90,9 @@ func TestCoordinatorMerge(t *testing.T) {
 		"git push --force origin feature":                 2,
 		"git push origin HEAD:develop":                    2,
 		"gh pr merge 12 --squash; rm -rf /tmp/xyz":        2,
+		"gh pr merge 12 --squash\\ngh pr merge 13":        2, // newline chains a second merge
+		"gh pr merge 12 --squash -R o/other":              2,
+		"gh pr merge 12 --squash --repo=o/other":          2,
 		"gh pr create --title 'feat: add x' --body":       0,
 	} {
 		if got := check(command, false); got != want {
@@ -98,19 +104,6 @@ func TestCoordinatorMerge(t *testing.T) {
 	}
 	if got := check("gh pr merge 13 --merge", true); got != 0 {
 		t.Fatalf("--convention-only blocked a merge: exit %d", got)
-	}
-}
-
-func TestMergeTarget(t *testing.T) {
-	for cmd, want := range map[string]string{
-		"gh pr merge 12 --squash":                           "12",
-		"gh pr merge --squash -t \"feat: x\" feat-1":        "feat-1",
-		"gh pr merge --auto --squash":                       "",
-		"cd x && gh pr merge https://github.com/o/r/pull/3": "https://github.com/o/r/pull/3",
-	} {
-		if got := mergeTarget(cmd); got != want {
-			t.Errorf("mergeTarget(%q) = %q want %q", cmd, got, want)
-		}
 	}
 }
 

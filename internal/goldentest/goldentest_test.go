@@ -25,6 +25,8 @@ func TestNormalizerReplacesVolatileValues(t *testing.T) {
 		{"short object ID", `"sha": "89abcde"`, `"sha": "<short-object>"`},
 		{"object IDs keep their number", sha1a + " " + sha1b + " " + sha1a, "<object-1> <object-2> <object-1>"},
 		{"digest", `"digest": "` + sha2 + `"`, `"digest": "<digest-1>"`},
+		{"AI session and ask IDs", "ais_0123456789abcdef0123456789abcdef ask_0123456789abcdef ais_0123456789abcdef0123456789abcdef", "<session-1> <ask-2> <session-1>"},
+		{"ask deadline", "Allow once? [y/N] (denied at 16:04:59): ", "Allow once? [y/N] (denied at <time>): "},
 		{"text that is not an ID", "deadbeef is not 40 characters, PLAT-1 stays", "deadbeef is not 40 characters, PLAT-1 stays"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

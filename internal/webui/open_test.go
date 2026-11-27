@@ -70,8 +70,8 @@ func TestConsoleStartupPipe(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || ready.URL == "" || ready.Reused != tc.reused {
-				t.Fatalf("startup returned reused=%v, urlPresent=%v, err=%v", ready.Reused, ready.URL != "", err)
+			if err != nil || !ready.Ready || ready.URL != "" || ready.Reused != tc.reused {
+				t.Fatalf("startup returned ready=%v reused=%v, urlPresent=%v, err=%v", ready.Ready, ready.Reused, ready.URL != "", err)
 			}
 		})
 	}
@@ -88,7 +88,7 @@ func TestConsoleStartupChild(t *testing.T) {
 	case "invalid":
 		_, _ = os.Stdout.WriteString("unstructured output including sample-launch\n")
 	default:
-		_ = json.NewEncoder(os.Stdout).Encode(startup{URL: "sample-launch", Reused: mode == "concurrent"})
+		_ = json.NewEncoder(os.Stdout).Encode(startup{Ready: true, Reused: mode == "concurrent"})
 	}
 	// Deliberately keep the child alive beyond the report. The parent should
 	// only wait for the message, not process exit or EOF.
@@ -119,10 +119,10 @@ func TestDetachedConsoleAfterLauncherExit(t *testing.T) {
 	case "daemon":
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
-		err := serveRegistered(ctx, registry, -1, op, func(address string, reused bool) {
-			_ = json.NewEncoder(os.Stdout).Encode(startup{URL: address, Reused: reused})
+		err := serveRegisteredAs(ctx, registry, -1, op, func(_ string, reused bool) {
+			_ = json.NewEncoder(os.Stdout).Encode(startup{Ready: true, Reused: reused})
 			_ = os.Stdout.Close()
-		})
+		}, true)
 		if err != nil {
 			t.Fatal(err)
 		}

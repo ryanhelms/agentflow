@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/ryanhelms/agentflow/internal/aisession"
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/harness"
@@ -157,7 +158,7 @@ func init() {
 // registry, plugin or harness text can drive the terminal.
 func printable(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) {
+		if unicode.IsControl(r) || aisession.Hazard(r) {
 			return -1
 		}
 		return r

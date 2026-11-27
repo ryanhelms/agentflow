@@ -24,8 +24,8 @@ func (d *daemon) pickerResource(w http.ResponseWriter, r *http.Request, clone re
 		pickerAsset(w, "workspace-picker.js", "text/javascript; charset=utf-8")
 	case "/_agentflow/appearance.js":
 		pickerAsset(w, "appearance.js", "text/javascript; charset=utf-8")
-	case "/_agentflow/nscale-tokens.css":
-		pickerAsset(w, "nscale-tokens.css", "text/css; charset=utf-8")
+	case "/_agentflow/agentflow-tokens.css":
+		pickerAsset(w, "agentflow-tokens.css", "text/css; charset=utf-8")
 	case "/_agentflow/style.css":
 		pickerAsset(w, "style.css", "text/css; charset=utf-8")
 	case "/_agentflow/event-worker.js":

@@ -1,6 +1,6 @@
 {
   "name": "agentflow",
-  "version": "0.56.1",
+  "version": "0.60.0",
   "description": "Agentflow delivery loop: Jira-linked Conventional Commits, ticket context, flow-map previews, PRs, reviews and Confluence from Claude Code.",
   "author": {
     "name": "Ryan Helms"

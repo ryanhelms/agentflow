@@ -28,8 +28,9 @@ const InputArgs = "…"
 
 // ProgramName is the name a program is invoked by: the last element of path,
 // with either kind of separator, in lower case and without a Windows
-// extension.
+// extension or zsh's leading = (=gh runs the gh on PATH).
 func ProgramName(path string) string {
+	path = strings.TrimPrefix(path, "=")
 	name := strings.ToLower(path[strings.LastIndexAny(path, `/\`)+1:])
 	for _, ext := range []string{".exe", ".cmd", ".bat", ".ps1"} {
 		name = strings.TrimSuffix(name, ext)

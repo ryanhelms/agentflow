@@ -71,8 +71,32 @@ the same clone for 30 days. The initial one-time link goes straight to the
 browser. A fresh profile, expired authorization or a different origin can show
 the reconnect screen. Copy the suggested prompt into the chat for that
 worktree, or run the displayed command from its terminal. Use
-`agentflow ui --no-open` to request a fresh one-time link for a specific browser.
-Keep that link on your machine. Private browsing and clearing site data
+`agentflow ui --no-open` in your own terminal to request a fresh one-time link
+for a specific browser. Keep that link on your machine.
+
+Only a person at a terminal gets the link: standard input is a terminal, and no
+AI agent (`CLAUDECODE`, `CODEX_*` and the other agent variables) or AI session
+(`AGENTFLOW_ACP_SESSION`) is in the environment. For anyone else,
+`agentflow ui` opens the browser itself, says so and never prints, returns or
+logs the link, with any flag; if no browser opens, it says to run
+`agentflow ui` in your own terminal. `agentflow ui --no-open` refuses before it
+starts the console or makes a link. The console's own startup step,
+`agentflow ui --serve-child`, only reports that the console is ready and never
+prints a link, whoever runs it; agentflow then asks the console for the link
+over its private, encrypted control channel. Agents are also blocked from
+running `agentflow ui --no-open` and `ui --serve-child` directly; that is a cheap
+check that a script or a command built at run time gets around.
+
+When agentflow opens the browser for you, the opener gets a fixed environment
+(the system `PATH`, your account's real home, and the display variables), never
+the caller's, so a variable such as `BROWSER` cannot choose the program that
+receives the link. The link is briefly visible in the process list while the
+browser opens.
+
+This stops ordinary agent behaviour. It does not stop a program running as you
+that deliberately fakes a terminal (a pseudo-terminal) and removes the variables
+that mark it as an agent: it gets the link as you would, and can also read
+agentflow's private files. Private browsing and clearing site data
 remove browser-local credentials and drafts. A console started with v0.43.0
 predates the daemon. Its first launch after upgrading opens the new address.
 
@@ -312,8 +336,8 @@ provider for the role and removes its previous inline settings. Return to
 **Providers** to configure the staged selection in the same proposal. Preview the
 resulting defaults, definitions and source diff before publishing. A switch
 routes future operations once the new configuration is in use. Existing provider
-records stay at their source. Automatic data migration and a per-repository
-scope selector are tracked in [issue #96](https://github.com/nscaledev/agentflow/issues/96).
+records stay at their source. The console does not migrate data automatically and
+has no per-repository scope selector.
 See [provider definitions and precedence](providers.md#provider-definitions).
 
 ## Set approval preferences and ceilings
@@ -430,22 +454,15 @@ Agent Commander disconnected.
 
 ## Update the console design tokens
 
-The Go binary embeds the published `package/tokens.css` from
-`@nscaledev/design-tokens@0.1.0` as `internal/webui/static/nscale-tokens.css`.
-This keeps both themes available offline. The Nscale Design System MCP's
-`list_design_packages` tool reports the package version and archive SHA-256.
+The Go binary embeds `package/tokens.css` from
+`website/vendor/agentflow-design-tokens-0.1.0.tgz` as
+`internal/webui/static/agentflow-tokens.css`. This keeps both themes available offline.
 
-To reproduce the checked-in asset, run these commands from the repository root
-with GitHub Packages read access. You can also use the same archive from the
-design-system plugin's `vendor/` directory.
+To reproduce the checked-in asset, run this from the repository root:
 
 ```bash
-token_dir=$(mktemp -d)
-npm pack @nscaledev/design-tokens@0.1.0 --registry=https://npm.pkg.github.com --pack-destination="$token_dir"
-token_archive="$token_dir/nscaledev-design-tokens-0.1.0.tgz"
-printf '%s  %s\n' cf7592b43e4a0fe0f2fdee54213b7b23b5267203e9866733cd6abcc1f4435362 "$token_archive" | shasum -a 256 -c - &&
-  tar -xOzf "$token_archive" package/tokens.css > internal/webui/static/nscale-tokens.css
+tar -xOzf website/vendor/agentflow-design-tokens-0.1.0.tgz package/tokens.css > internal/webui/static/agentflow-tokens.css
 ```
 
-For a package upgrade, update the version and archive checksum together,
-replace the stylesheet, and check the console in light and dark mode.
+For a package upgrade, update the archive name here, replace the stylesheet, and check the
+console in light and dark mode.

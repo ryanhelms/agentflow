@@ -30,6 +30,13 @@ type AutonomyAction struct {
 // write. Resolution always uses the class of the actual operation.
 var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"adr_draft":             {"local", ""},
+	"ai.cancel":             {"local", "Cancels an ACP session."},
+	"ai.fetch":              {"remote", "A session's web fetch always asks a person unless a personal rule allows it."},
+	"ai.fs.read":            {"read", "A session reads a file in its worktree."},
+	"ai.fs.write":           {"local", "A session writes a file in its worktree."},
+	"ai.permission":         {"local", "A session's tool of an unknown kind always asks a person."},
+	"ai.run":                {"local", "Starting an ACP session always requires confirmation."},
+	"ai.terminal":           {"local", "A session's command always asks a person unless a personal rule allows the program."},
 	"comment":               {"remote", "Some provider routes require confirmation."},
 	"commit":                {"local", ""},
 	"console.autonomy":      {"local remote", "Agent changes to personal approval settings require confirmation."},
@@ -70,7 +77,8 @@ func ValidAutonomyAction(action string) bool {
 
 func DescribeAutonomyAction(action string) (AutonomyAction, bool) {
 	v, ok := autonomyCatalog[action]
-	required := strings.HasPrefix(action, "setup.") || strings.HasPrefix(action, "console.") || action == "release_publish" || action == "ticket_create" || action == "plugin.install" || action == "plugin.approve"
+	required := strings.HasPrefix(action, "setup.") || strings.HasPrefix(action, "console.") || action == "release_publish" || action == "ticket_create" || action == "plugin.install" || action == "plugin.approve" ||
+		action == "ai.run" || action == "ai.terminal" || action == "ai.fetch" || action == "ai.permission"
 	return AutonomyAction{Classes: strings.Fields(v.classes), Confirmation: v.confirmation, Mandatory: ok && required}, ok
 }
 
@@ -147,6 +155,17 @@ func resolveAutonomy(user *User, repo *Repo, class, action string, forceConfirm,
 	d.ApprovalWindow = d.Window.String()
 	if class == "read" {
 		d.Level, d.Source = Auto, "read"
+		// A catalog action of class read (ai.fs.read) honours an explicit
+		// level, so a person can make a session's reads ask or stop. No
+		// other read operation changes.
+		if k, ok := DescribeAutonomyAction(action); ok && len(k.Classes) == 1 && k.Classes[0] == "read" {
+			if l := user.Autonomy.Actions[action]; l == Suggest || l == Confirm {
+				d.UserAction, d.Level, d.Source = l, l, "autonomy.actions."+action
+			}
+			if l := repo.Policy.MaxAutonomy.Actions[action]; (l == Suggest || l == Confirm) && l.rank() < d.Level.rank() {
+				d.RepoAction, d.Level, d.Source = l, l, "policy.max_autonomy.actions."+action
+			}
+		}
 		return d
 	}
 	if class != "local" && class != "remote" {

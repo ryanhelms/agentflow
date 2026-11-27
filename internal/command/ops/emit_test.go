@@ -43,6 +43,7 @@ var registeredWriteLegacyCLI = map[string]string{
 var laneWrites = []string{
 	"docs.publish", "adr.draft", "release.publish", "notify", "setup.apply", "worktree.go-work",
 	"finish", "sweep", "delegate", "promote", "secops.triage",
+	"ai.run", "ai.respond", "ai.cancel",
 }
 
 // unregisteredWrites lists the CLI commands of this lane that write and are
@@ -87,6 +88,10 @@ var auditExempt = map[string]string{}
 // that makes them write, so checkTool sees their events.
 var toolInputs = map[string]map[string]any{
 	"agentflow_commit_context": {"paths": []any{"a.txt"}}, // no paths only reads the staged index
+	// AI sessions: valid session and request IDs (the fake Manager of
+	// ai_sessions_test.go answers them).
+	"agentflow_ai_respond": {"session": "ais_0123456789abcdef0123456789abcdef", "ask": "ask_0123456789abcdef"},
+	"agentflow_ai_cancel":  {"session": "ais_0123456789abcdef0123456789abcdef"},
 }
 
 // legacyOnlyTools lists the write tools of the MCP server that the registry

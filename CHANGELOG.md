@@ -5,6 +5,50 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.60.0](https://github.com/ryanhelms/agentflow/compare/v0.59.0...v0.60.0) - 2026-11-27
+
+### Features
+
+- add the harness contract, test guard and jsonrpc.Run (#108) ([5c59dbc](https://github.com/ryanhelms/agentflow/commit/5c59dbc41524bfbaa49c2e721e1a511107ae1940))
+- integrate phase 6 harness detection (#118) ([fdf0eca](https://github.com/ryanhelms/agentflow/commit/fdf0eca7c179012ee74979fc86dfbc05967edf98))
+
+### Fixes
+
+- wait for approved plugin writes when the host stops (#99) ([f037424](https://github.com/ryanhelms/agentflow/commit/f037424ee57f22ac83c31b7b4b6f6abad6aa2689))
+- ignore an agentflow home inside a repository (#106) ([ab89596](https://github.com/ryanhelms/agentflow/commit/ab8959652545c491d3e6bb4f652f070d03045fab))
+- refuse versioned launchers and show plugin probe commands (#126) ([b4389ac](https://github.com/ryanhelms/agentflow/commit/b4389accd8d85dae92a06079a265d223c20ee3b5))
+
+## [0.59.0](https://github.com/ryanhelms/agentflow/compare/v0.58.0...v0.59.0) - 2026-11-27
+
+### Features
+
+- add shared stdio JSON-RPC and a scrubbed launcher (#83) ([e690f16](https://github.com/ryanhelms/agentflow/commit/e690f16f15bc3b7dbfa199bc9638e7d5defa62c9))
+- add the plugin manifest package and plugin settings (#85) ([4baff6d](https://github.com/ryanhelms/agentflow/commit/4baff6d06de3ba16ebfebfe8fc8d15ee49d71dab))
+- add plugin commands, samples and docs (#86) ([5be29a2](https://github.com/ryanhelms/agentflow/commit/5be29a297b31b4e0fe9266eb36e698106e87c57c))
+- run plugins in the daemon with deny-only permission rules (#90) ([74baa10](https://github.com/ryanhelms/agentflow/commit/74baa10a136d9fe5105cd00291d79bd10425ffaf))
+- show installed plugins and their health live (#84) ([89591f6](https://github.com/ryanhelms/agentflow/commit/89591f6160f6d25ee3234ac283829b5658829eb8))
+- approve a plugin's write and run it once afterwards (#92) ([cdcfa14](https://github.com/ryanhelms/agentflow/commit/cdcfa14cfc760884193ad49956c38da7155ded6b))
+
+### Fixes
+
+- repeat the plugin and command right before approve asks (#96) ([013e2f4](https://github.com/ryanhelms/agentflow/commit/013e2f4cfc7aa3d98bfe95fb3305344ce82cfda7))
+
+## [0.58.0](https://github.com/ryanhelms/agentflow/compare/v0.57.0...v0.58.0) - 2026-11-26
+
+### Features
+
+- describe every config field for structured controls (#73) ([6202a27](https://github.com/ryanhelms/agentflow/commit/6202a277cce54b5ac76f5a52941eddacb651c23a))
+- save settings as one previewed change set (#74) ([f70669b](https://github.com/ryanhelms/agentflow/commit/f70669b344f5d9a596b4a7fa5e7c3b8f26a5af68))
+- edit every setting with controls and one Save bar (#76) ([33f5ffd](https://github.com/ryanhelms/agentflow/commit/33f5ffd9c89233d3c808afb9859dce0e69b71fcd))
+
+## [0.57.0](https://github.com/ryanhelms/agentflow/compare/v0.56.1...v0.57.0) - 2026-11-26
+
+### Features
+
+- wire the live event pipeline end to end (#31) ([5cf3e6d](https://github.com/ryanhelms/agentflow/commit/5cf3e6d5b04559afa8b5a72c1a627ab53352a5d7))
+- make the console fully live (#51) ([a5648e3](https://github.com/ryanhelms/agentflow/commit/a5648e3cb07278bc74733942dd2ad650d5b97285))
+- run every operation through commands with a live timeline (#59) ([c555ac4](https://github.com/ryanhelms/agentflow/commit/c555ac4a6215957a7900968cbd6b668cafdc4f0c))
+
 ## [0.56.1](https://github.com/ryanhelms/agentflow/compare/v0.56.0...v0.56.1) - 2026-11-26
 
 ### Fixes

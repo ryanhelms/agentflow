@@ -3,6 +3,7 @@ package aisession
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/acp"
@@ -36,7 +37,20 @@ type Options struct {
 	Detach func(ctx context.Context, id ID) error
 	// MCPServer is the server entry for session/new, or nil for none.
 	MCPServer func(id ID) *acp.MCPServer
-	Now       func() time.Time
+	// WorkDirs lists the repositories the console daemon serves (their
+	// common git directories). PATH entries inside any worktree of them, or
+	// of the session's own repository, are dropped from the session PATH,
+	// and SHELL there is not passed. An error refuses the start
+	// (unsafe_environment): the repositories cannot be told. nil means
+	// only the session's own repository. (Integration amendment, 2026-11-27.)
+	WorkDirs func(ctx context.Context) ([]string, error)
+	Now      func() time.Time
+	// AccountHome is the OS account's own agentflow home (~/.agentflow of
+	// the os/user account, not $HOME or AGENTFLOW_HOME). When it differs
+	// from Home, its settings may only make a session stricter and its
+	// sessions count toward the caps (account.go). Empty: no account layer
+	// (tests, unless they set one).
+	AccountHome string
 }
 
 // ---- lifecycle ("Phase 7 session lifecycle") ----
@@ -191,6 +205,12 @@ type Path struct {
 	Rel    string // slash path relative to the worktree root; "" when outside
 	Real   string // resolved, when it exists
 	Exists bool
+
+	// What resolve found, kept so the read and the write compare the file
+	// they open with the one the chain classified (os.SameFile), not with
+	// whatever the path names at that moment: info is the file (nil when it
+	// did not exist), dir the folder it is in (nil when that did not exist).
+	info, dir fs.FileInfo
 }
 
 type Command struct {
@@ -256,6 +276,7 @@ const (
 	VerdictHardlink         = "hardlink"
 	VerdictNotFound         = "not_found" // answered -32002
 	VerdictIO               = "io"
+	VerdictChanged          = "changed" // the file changed since its preview was shown
 	// never-lists ("Phase 7 terminals")
 	VerdictNeverList          = "never_list"
 	VerdictAgentflowInSession = "agentflow_in_session"
@@ -296,12 +317,22 @@ const (
 	ReasonRule              = "rule"
 	ReasonGate              = "gate"
 	ReasonCeiling           = "ceiling"
+	// ReasonPreviewTooLarge: an fs_write whose preview is cut or not text;
+	// no one can allow it.
+	ReasonPreviewTooLarge = "preview_too_large"
+	// ReasonUnicodeName: on macOS and Windows a path below the worktree
+	// has a component with a non-ASCII rune, which the file system may
+	// fold onto another name; only a person may allow it.
+	ReasonUnicodeName = "unicode_name"
+	// ReasonEnv: a terminal request carries the agent's own environment
+	// entries; no rule allows it, a person sees every name and value.
+	ReasonEnv = "env"
 )
 
 // Gate actions and their classes ("Per request kind").
 const (
 	ActionRun        = "ai.run"
-	ActionRespond    = "ai.respond"
+	ActionRespond    = "ai.respond" // the audit name of ai respond; not an autonomy action: only the answer rules decide
 	ActionCancel     = "ai.cancel"
 	ActionFSRead     = "ai.fs.read"
 	ActionFSWrite    = "ai.fs.write"
@@ -320,7 +351,8 @@ const CeilingConfirm = "confirm"
 // session's host writes it. Fingerprint is the SHA-256 of the canonical
 // ask; every answer is bound to it and to ExpiresAt.
 type AskRecord struct {
-	ID         string                 `json:"id"` // "ask_" and 16 hex characters
+	// ID is "ask_" and 16 lowercase hex characters (^ask_[0-9a-f]{16}$).
+	ID         string                 `json:"id"`
 	Session    ID                     `json:"session"`
 	Kind       Kind                   `json:"kind"`
 	ToolCallID string                 `json:"tool_call,omitempty"`
@@ -328,19 +360,62 @@ type AskRecord struct {
 	Title      string                 `json:"title,omitempty"` // the agent's words, sanitized
 	Options    []acp.PermissionOption `json:"options,omitempty"`
 	// Paths are worktree-relative, or "~/..." outside the worktree.
-	Paths    []string `json:"paths,omitempty"`
-	Line     string   `json:"line,omitempty"` // POSIX-quoted command line
-	Cwd      string   `json:"cwd,omitempty"`  // worktree-relative
-	EnvNames []string `json:"env_names,omitempty"`
-	Size     int64    `json:"size,omitempty"`
-	Reason   string   `json:"reason"`
+	Paths []string `json:"paths,omitempty"`
+	// ResolvedPaths, set when a link moves any of Paths elsewhere in the
+	// worktree, is where each path leads (worktree-relative), in the same
+	// order: the place the operation would reach.
+	ResolvedPaths []string `json:"resolved_paths,omitempty"`
+	Line          string   `json:"line,omitempty"` // POSIX-quoted command line
+	Cwd           string   `json:"cwd,omitempty"`  // worktree-relative
+	EnvNames      []string `json:"env_names,omitempty"`
+	// Env, for a terminal ask, is each of the agent's environment entries
+	// with its value, as the process would get it: a value can run code
+	// (GIT_EXTERNAL_DIFF, PAGER, GOFLAGS), so the person judges it. Like
+	// Diff it lives only in this 0600 file, is covered by the fingerprint
+	// and never reaches the transcript, an event, a log or the audit.
+	Env []AskEnv `json:"env,omitempty"`
+	// Program, for a terminal ask, is the resolved program agentflow would
+	// start ("~/..." under the account home).
+	Program string `json:"program,omitempty"`
+	Size    int64  `json:"size,omitempty"`
+	// Diff, for an fs_write ask, is what the write would change: the
+	// current content and the exact bytes that will be written, each at
+	// most MaxPreview. It is not redacted (the person judges the real
+	// content), lives only in this 0600 file, and is removed when the ask is
+	// answered, expires or the session ends: never in the transcript, an
+	// event, a log or the audit. NewSHA256 is the SHA-256 of the content
+	// (covered by the fingerprint); agentflow writes exactly those bytes.
+	Diff      *AskDiff `json:"diff,omitempty"`
+	NewSHA256 string   `json:"new_sha256,omitempty"`
+	Reason    string   `json:"reason"`
 	// CanAllow is false for a permission request without an allow_once
 	// option: the ask then shows only Reject.
-	CanAllow    bool      `json:"can_allow"`
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Fingerprint string    `json:"fingerprint"` // hex SHA-256
+	CanAllow  bool      `json:"can_allow"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	// Fingerprint is the SHA-256 of the canonical ask as 64 lowercase hex
+	// characters (^[0-9a-f]{64}$).
+	Fingerprint string `json:"fingerprint"`
 }
+
+// AskEnv is one environment entry of a terminal ask.
+type AskEnv struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// AskDiff is an fs_write ask's preview. Cut is set when either text was
+// longer than MaxPreview or is not valid UTF-8: the ask then cannot be
+// allowed (CanAllow false, reason preview_too_large).
+type AskDiff struct {
+	Path    string `json:"path"`
+	OldText string `json:"old_text,omitempty"` // empty for a new file
+	NewText string `json:"new_text"`
+	Cut     bool   `json:"cut,omitempty"`
+}
+
+// MaxPreview bounds each text of an AskDiff.
+const MaxPreview = 256 << 10
 
 // AnswerRecord is asks/<ask>.answer.json, created with O_EXCL: the first
 // answer wins. An allow carries MAC, the hex HMAC-SHA256 of the
@@ -391,11 +466,15 @@ const (
 
 // Session is session.json.
 type Session struct {
-	ID           ID         `json:"id"`
-	Harness      string     `json:"harness"`
-	HarnessName  string     `json:"harness_name"`
-	Identity     string     `json:"identity"` // harness.Found.Identity at start
-	Repo         string     `json:"repo"`     // bus repository ID
+	ID          ID     `json:"id"`
+	Harness     string `json:"harness"`
+	HarnessName string `json:"harness_name"`
+	Identity    string `json:"identity"` // harness.Found.Identity at start
+	Repo        string `json:"repo"`     // bus repository ID
+	// Common is the repository's common git directory, resolved: every
+	// worktree of one repository shares it. Callers see only the sessions
+	// of their own repository (WithScope).
+	Common       string     `json:"common,omitempty"`
 	WorktreeID   string     `json:"worktree_id"`
 	Worktree     string     `json:"worktree"` // absolute; shown with "~"
 	Branch       string     `json:"branch,omitempty"`
@@ -414,6 +493,11 @@ type Session struct {
 	Usage        *Usage     `json:"usage,omitempty"`
 	Counters     Counters   `json:"counters"`
 	ChangedFiles []string   `json:"changed_files,omitempty"`
+	// Elsewhere marks a stub: the account store's record of a session
+	// stored in another agentflow home. It holds only the ID, worktree,
+	// state, times and heartbeat, never content. It counts toward the caps
+	// and is hidden from every reader (List, Get).
+	Elsewhere bool `json:"elsewhere,omitempty"`
 }
 
 type HostInfo struct {
@@ -437,8 +521,16 @@ type Usage struct {
 }
 
 type Counters struct {
-	Updates, ToolCalls, Asks, Allowed, Denied, Unasked, Terminals int
-	BytesRead, BytesWritten, TranscriptBytes                      int64
+	Updates         int   `json:"updates"`
+	ToolCalls       int   `json:"tool_calls"`
+	Asks            int   `json:"asks"`
+	Allowed         int   `json:"allowed"`
+	Denied          int   `json:"denied"`
+	Unasked         int   `json:"unasked"`
+	Terminals       int   `json:"terminals"`
+	BytesRead       int64 `json:"bytes_read"`
+	BytesWritten    int64 `json:"bytes_written"`
+	TranscriptBytes int64 `json:"transcript_bytes"`
 }
 
 // Item is one transcript line.
@@ -476,6 +568,9 @@ type Caps struct {
 	MaxRunning    int // per user
 	PerWorktree   int // 1
 	StartsPerHour int
+	// Counted elsewhere (the account store, when AGENTFLOW_HOME is another
+	// folder): added to this store's own counts.
+	Running, Here, Recent int
 }
 
 // Store is the session store under <home>/ai (OpenStore). Every method
@@ -632,6 +727,11 @@ type HostOptions struct {
 	// OnAsk is called when an ask is held, for the foreground terminal to
 	// prompt; the answer goes through Manager.Answer.
 	OnAsk func(AskRecord)
+	// ClaimToken is the secret Start made for this session: only a host
+	// that presents it may claim the record. Start passes it to a detached
+	// host on its standard input; a host in the starting process finds it
+	// without this field. Empty in any other process, which is refused.
+	ClaimToken string
 }
 
 // Manager is the Process Manager every surface uses (lane 7.3's app

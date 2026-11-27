@@ -51,9 +51,17 @@ func (e *ConfigLoadError) Error() string { return e.err.Error() }
 func (e *ConfigLoadError) Unwrap() error { return e.err }
 
 // Open opens the repo containing dir. client names the calling AI client.
+// Inside an AI session (SessionEnv set) it opens the session's own
+// read-only client instead, whatever client says.
 func Open(ctx context.Context, dir, client string) (*App, error) {
 	if strings.HasPrefix(client, policy.PluginClientPrefix) {
 		return nil, policy.ErrReservedClient
+	}
+	if policy.IsSessionClient(client) {
+		return nil, policy.ErrReservedSessionClient
+	}
+	if id := os.Getenv(SessionEnv); id != "" {
+		return openSession(ctx, dir, id)
 	}
 	return open(ctx, dir, client, "")
 }
@@ -85,9 +93,12 @@ func open(ctx context.Context, dir, client, plugin string) (*App, error) {
 		client = "cli"
 	}
 	var gate *policy.Gate
-	if plugin != "" {
+	switch {
+	case plugin != "":
 		gate, err = policy.NewPluginGate(home, config.Effective(user, cfg), plugin)
-	} else {
+	case policy.IsSessionClient(client):
+		gate, err = policy.NewSessionGate(home, config.Effective(user, cfg), strings.TrimPrefix(client, policy.SessionClientPrefix))
+	default:
 		gate, err = policy.NewGate(home, config.Effective(user, cfg), client)
 	}
 	if err != nil {

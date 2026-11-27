@@ -132,4 +132,4 @@ func (s *server) commanderFor(r *http.Request) (commanderBinding, string) {
 	return c.actor, signature(c.epoch, "commander/tab-scope", "")
 }
 
-const commanderReconnect = "Reconnect Agent Commander from this worktree with agentflow ui --screen handoff --no-open and open its one-time link."
+const commanderReconnect = "Reconnect Agent Commander: in your own terminal, run agentflow ui --screen handoff --no-open from this worktree and open its one-time link."

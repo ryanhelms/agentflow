@@ -6,7 +6,8 @@
 # adapters/claude-code and checks: the MCP server connects with all tools, the skills
 # load, the SessionStart hook injects ticket context, /agentflow:commit makes a
 # convention commit through the confirmation flow, the PreToolUse hook blocks the
-# never-list commands, the harness tools report without starting any harness, a new
+# never-list commands, the harness tools report without starting any harness, the AI
+# session tools refuse or ask for confirmation without starting a session, a new
 # nscaledev repo is set up automatically, and /agentflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
 # (for the remote flow map). Nothing touches your real repos, caches or Claude config,
 # apart from the Claude account usage of the runs.
@@ -52,10 +53,30 @@ printf '[init]\n\tdefaultBranch = main\n' >"$tmp/gitconfig"
 export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
 unset AGENTFLOW_SESSION_REPO AGENTFLOW_ALLOW_PRIMARY
 mkdir -p "$XDG_CACHE_HOME/agentflow/dev" "$AGENTFLOW_HOME"
-# Harness probes and sign-in checks are on by default, and `claude` itself is on
-# PATH as a harness's base CLI: turn both off before anything starts, so no run
-# starts a harness or a sign-in command.
-printf 'ai:\n  harnesses:\n    auto_probe: false\n    sign_in_check: false\n' >"$AGENTFLOW_HOME/config.yml"
+# Harness probes, sign-in checks and agent-started AI sessions are on by
+# default, and `claude` itself is on PATH as a harness's base CLI: turn all
+# three off before anything starts, so no run starts a harness, a sign-in
+# command or a session. The only harness the session checks may ever reach is
+# the fake agent, built here and named e2e-fake (ADR "Phase 7 test guard",
+# step 1). Its --log file records every message it receives.
+mkdir -p "$tmp/bin"
+(cd "$root" && go build -o "$tmp/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp)
+fake_log="$tmp/fake-acp.log"
+write_config() { # write_config <auto_probe> <agent_start> [disabled IDs...]
+  local probe=$1 start=$2 id
+  shift 2
+  {
+    printf 'ai:\n  harnesses:\n    auto_probe: %s\n    sign_in_check: false\n' "$probe"
+    printf '    overrides:\n      e2e-fake:\n        name: E2E fake\n        command: "%s"\n' "$tmp/bin/fake-acp"
+    printf '        args: ["--mode=session-demo", "--log=%s"]\n' "$fake_log"
+    printf '    disabled:'
+    if [ "$#" -eq 0 ]; then printf ' []'; fi
+    printf '\n'
+    for id in "$@"; do printf '      - "%s"\n' "$id"; done
+    printf '  sessions:\n    agent_start: %s\n' "$start"
+  } >"$AGENTFLOW_HOME/config.yml"
+}
+write_config false false
 # The console daemon's registry is the OS account's own (~/.agentflow-ui), not
 # AGENTFLOW_HOME, so a console opened here would start or reuse the person's
 # daemon, which probes with the person's real settings and PATH. claude -p run
@@ -89,7 +110,7 @@ repo="$tmp/repo"
 mkdir -p "$repo"
 cd "$repo"
 git init -q -b main
-git config user.email "e2e@nscale.com"
+git config user.email "e2e@example.com"
 git config user.name "agentflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
 "$XDG_CACHE_HOME/agentflow/current/agentflow" init --non-interactive --provider task_management=jira >/dev/null
@@ -113,12 +134,17 @@ run_claude() { # run_claude <out.jsonl> <prompt> [allowedTools...]
     --allowedTools "$@" </dev/null >"$out" 2>"$out.err" || true
 }
 
+echo "0. worktree hooks"
+commit_refused() { ! git -C "$1" commit -q --allow-empty -m "chore(PLAT-1): blocked"; }
+check "commit in the primary checkout refused" commit_refused "$repo"
+
 echo "1. plugin loads"
 run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"
 init=$(jq -c 'select(.type=="system" and .subtype=="init")' "$tmp/1.jsonl")
 check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:agentflow:agentflow" and .status=="connected")' <<<"$init"
 check "25 agentflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_agentflow_agentflow__"))] | length >= 25' <<<"$init"
 check "harness tools listed" jq -e '[.tools[] | select(test("__agentflow_ai_(harnesses|doctor)$"))] | length == 2' <<<"$init"
+check "AI session tools listed" jq -e '[.tools[] | select(test("__agentflow_ai_(run|status|respond|cancel)$"))] | length == 4' <<<"$init"
 check "21 skills" jq -e '[.slash_commands[] | select(startswith("agentflow:"))] | length >= 21' <<<"$init"
 check "manager skill available" jq -e '.slash_commands | index("agentflow:manager") != null' <<<"$init"
 check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("agentflow · PLAT-123") and contains("Fixture GPU quota task"))' "$tmp/1.jsonl"
@@ -154,7 +180,7 @@ mkdir -p "$fresh"
 cd "$fresh"
 git init -q -b main
 git remote add origin https://github.com/nscaledev/e2e-fresh.git
-git config user.email "e2e@nscale.com"
+git config user.email "e2e@example.com"
 git config user.name "agentflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"
 run_claude "$tmp/4.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"
@@ -188,6 +214,65 @@ no_harness_ran() {
   return 0
 }
 check "no harness or sign-in command ran" no_harness_ran
+
+echo "6. AI sessions, with only the fake agent reachable"
+# ADR "Phase 7 test guard", steps 2 to 5. With agent_start on by default, no
+# scenario may reach a real harness: every harness ID except e2e-fake is
+# disabled before probes and agent starts are turned on.
+cd "$tmp/task"
+ids=$(agentflow ai harnesses --all --json | jq -r '.harnesses[].id')
+disabled=()
+for id in $ids; do
+  if [ "$id" != e2e-fake ]; then disabled+=("$id"); fi
+done
+if [ "${#disabled[@]}" -gt 64 ]; then
+  echo "  ✖ more than 64 harness IDs to disable; stopping before anything is turned on"
+  exit 1
+fi
+write_config false false ${disabled[@]+"${disabled[@]}"}
+left=$(agentflow ai harnesses --all --json | jq -r '[.harnesses[].id] | join(",")')
+if [ "$left" != e2e-fake ]; then
+  echo "  ✖ harnesses still listed after disabling ($left); stopping before anything is turned on"
+  exit 1
+fi
+write_config true true ${disabled[@]+"${disabled[@]}"}
+agentflow ai harnesses --probe --id e2e-fake --json >"$tmp/probe.json"
+check "e2e-fake probed" jq -e '.harnesses | length == 1 and .[0].id == "e2e-fake"' "$tmp/probe.json"
+run_claude "$tmp/7.jsonl" "AI session test. Make exactly three tool calls, in order, and nothing else: (1) agentflow_ai_status with no arguments; (2) agentflow_ai_run with harness \"claude-acp\" and prompt \"say hi\"; (3) agentflow_ai_run with harness \"e2e-fake\" and prompt \"say hi\". Never pass confirm_token, never call a tool again to apply a confirmation, and do not start anything else. Then reply with the word done." \
+  "mcp__plugin_agentflow_agentflow__agentflow_ai_status" "mcp__plugin_agentflow_agentflow__agentflow_ai_run"
+session_calls=$(jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name | test("__agentflow_ai_(run|status)$")))' "$tmp/7.jsonl")
+# A tool result is a string or a list of text blocks; read the text either way,
+# so quotes in a reply are not escaped by re-encoding it as JSON.
+result_text='.content | if type == "array" then map(.text? // "") | join("\n") else tostring end'
+session_results=$(jq -r "select(.type==\"user\") | .message.content[]? | select(.type==\"tool_result\") | $result_text" "$tmp/7.jsonl")
+check "status and run called" jq -e -s '[.[].name | sub(".*__"; "")] | index("agentflow_ai_status") != null and index("agentflow_ai_run") != null' <<<"$session_calls"
+check "no confirm_token passed" jq -e -s 'all(.[]; (.input.confirm_token // "") == "")' <<<"$session_calls"
+check "status lists no sessions" grep -Eq '"sessions": \[\]' <<<"$session_results"
+run_result() { # run_result <harness>: the reply to the agentflow_ai_run call for that harness
+  local id
+  id=$(jq -r --arg h "$1" 'select(.name | endswith("__agentflow_ai_run")) | select(.input.harness == $h) | .id' <<<"$session_calls" | head -n1)
+  [ -n "$id" ] || return 0
+  jq -r --arg id "$id" "select(.type==\"user\") | .message.content[]? | select(.type==\"tool_result\" and .tool_use_id == \$id) | $result_text" "$tmp/7.jsonl"
+}
+claude_acp_result=$(run_result claude-acp)
+fake_result=$(run_result e2e-fake)
+check "claude-acp refused" grep -Eq 'not_ready|not found|unknown harness' <<<"$claude_acp_result"
+no_confirmation() { ! grep -q needs_confirmation <<<"$1"; }
+check "claude-acp did not ask for confirmation" no_confirmation "$claude_acp_result"
+check "e2e-fake needs confirmation" grep -q needs_confirmation <<<"$fake_result"
+# Nothing passed the gate: no session record, no session/new in the fake's
+# log (only the probe's initialize), and a probe record for e2e-fake only.
+# `ai status` creates the empty session store, so look inside it.
+no_session_record() { [ -z "$(ls -A "$AGENTFLOW_HOME/ai/sessions" 2>/dev/null)" ]; }
+check "no session created" no_session_record
+fake_only_initialize() {
+  [ -s "$fake_log" ] || return 1
+  jq -e -s '[.[] | select(.method != null) | .method] | length >= 1 and all(. == "initialize")' "$fake_log"
+}
+check "fake agent saw only the probe's initialize" fake_only_initialize
+check "probe cache holds e2e-fake only" jq -e '[.records[].id] | unique == ["e2e-fake"]' "$AGENTFLOW_HOME/harnesses/cache.json"
+# Turn sessions and probes off again before the last check.
+write_config false false ${disabled[@]+"${disabled[@]}"}
 
 # No console daemon served a fixture repository: the registry lists every
 # worktree it serves (read only; nothing there is changed).

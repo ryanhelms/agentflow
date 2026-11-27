@@ -72,7 +72,7 @@ func Groups() []Group {
 		Group{ID: groupIntegrations, Label: "Integrations", Order: 600},
 		Group{ID: groupUpdates, Label: "Updates", Order: 700},
 		Group{ID: groupInit, Label: "Automatic setup", Order: 800},
-		Group{ID: groupAI, Label: "AI harnesses", Order: 850},
+		Group{ID: groupAI, Label: "AI harnesses and sessions", Order: 850},
 		Group{ID: groupPlugins, Label: "Plugins", Order: GroupOrderPlugins},
 	)
 }

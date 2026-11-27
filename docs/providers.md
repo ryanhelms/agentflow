@@ -50,7 +50,7 @@ roles, including the legacy Jira and Confluence jobs.
 | Provider | Settings and defaults |
 | --- | --- |
 | Code hosting | `hosts` defaults to an empty hostname-to-forge map. `source_remote` and `target_remote` default to unset, so detection can select Git remotes. |
-| Jira | `site` and `projects` inherit the legacy Jira settings and defaults. |
+| Jira | `site` and `projects` inherit the legacy Jira settings. No site is built in: set one before using Jira. |
 | Asana | `project` is the default project GID. `transitions` maps each project GID to its events and destination section GIDs. Both start unset. |
 | Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. Optional `publish_spaces` lists the exact space keys permitted for document publication. |
 | GitHub | An unset `repository` defers to Git remote detection. |

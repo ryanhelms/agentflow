@@ -168,3 +168,14 @@ func TestOpEventsAreSocketTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestAISessionEventsAreSocketTypes(t *testing.T) {
+	for _, typ := range []bus.Type{bus.TypeAISessionStarted, bus.TypeAISessionChanged, bus.TypeAISessionOutput, bus.TypeAISessionAsked, bus.TypeAISessionAnswered, bus.TypeAISessionEnded} {
+		if !notifysock.Allowed(typ) {
+			t.Errorf("%s is not a socket type", typ)
+		}
+	}
+	if notifysock.Allowed(bus.TypeHarnessChanged) {
+		t.Error("harness.changed must come only from the daemon")
+	}
+}
