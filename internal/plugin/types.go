@@ -218,6 +218,11 @@ const (
 	RefuseNotReady     = "not_ready" // called before initialize finished
 )
 
+// CodeResumedByHost is the failed Code of a plugin's resume that the host
+// already resumed after a person approved it: the write ran, or runs, once,
+// and this call ran nothing.
+const CodeResumedByHost = "resumed_by_host"
+
 // Layers reads the plugin sections of the two configuration layers. Lane
 // 5.3 adds config.User.Plugins (personal: plugins.<id>.enabled and
 // plugins.<id>.settings) and config.Repo.Plugins (repo: plugins.disabled);

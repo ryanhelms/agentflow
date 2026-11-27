@@ -1,0 +1,29 @@
+$ agentflow plugin approve <operation-id> --decline
+--- stdin
+y
+--- stdout
+Declined <operation-id>: notify from plugin ci-notify.
+The write will not run.
+--- stderr
+Agentflow plugin.approve: confirm (default)
+Decline what plugin "ci-notify" asked to run:
+  command   "notify"
+  what      "notify ci.recovered"
+  request   <operation-id>
+  expires   <time>
+  what the command will do, as its own confirmation shows it:
+  {
+    "deliveries": [
+      {
+        "destination": "audit",
+        "provider": "webhook",
+        "status": "planned"
+      }
+    ],
+    "notification": {
+      "body": "Failed checks: lint\nSee the run.",
+      "signal": "ci.recovered",
+      "title": "CI failed on feat"
+    }
+  }
+Proceed? [y/N]: 

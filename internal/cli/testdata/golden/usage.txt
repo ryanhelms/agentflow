@@ -75,6 +75,9 @@ Work
                                  run it yourself at a terminal: it always asks; --yes is ignored
   plugin remove ID [--json]      delete a plugin, its data and its settings
                                  run it yourself at a terminal: it always asks; --yes is ignored
+  plugin approve OP_ID [--decline] [--json]
+                                 approve a write a plugin asked for; the console then runs it once
+                                 run it yourself at a terminal: it always asks; --yes is ignored
   push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
   pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
   commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow

@@ -1,7 +1,9 @@
 // Package policy's local approval journal is shared by CLI and MCP processes.
 // A kernel lock protects the scope index and all state transitions. Each
 // durable record contains only a fingerprint and metadata, never the bearer
-// token, command, message, paths, or provider payload.
+// token, command line, message, paths, or provider payload. A plugin's record
+// also holds a PluginRequest: the command name and its safe Detail, never its
+// input.
 package policy
 
 import (
@@ -79,6 +81,9 @@ type approvalRecord struct {
 	// RequestedBy is the client whose call created the record. A plugin
 	// client (PluginClientPrefix) may redeem only records it created.
 	RequestedBy string `json:"requested_by,omitempty"`
+	// Request is the safe summary of a plugin's held write
+	// (DescribePluginRequest), shown by plugin approve.
+	Request *PluginRequest `json:"request,omitempty"`
 }
 
 // PluginClientPrefix starts the client name of a plugin's calls.
@@ -97,8 +102,30 @@ const (
 	cancelled = "cancelled"
 )
 
+// ErrReservedClient: a caller named itself a plugin. The client prefix
+// PluginClientPrefix belongs to the plugin host (NewPluginGate).
+var ErrReservedClient = errors.New(`client names that start with "plugin:" are reserved for the agentflow plugin host`)
+
 // NewGate opens the same per-user secret across restarts and concurrent clients.
+// It refuses a client name with PluginClientPrefix: only NewPluginGate makes
+// a plugin's gate.
 func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
+	if strings.HasPrefix(client, PluginClientPrefix) {
+		return nil, ErrReservedClient
+	}
+	return newGate(dir, a, client)
+}
+
+// NewPluginGate opens plugin id's gate, client PluginClientPrefix + id. Only
+// the plugin host calls it.
+func NewPluginGate(dir string, a config.Autonomy, id string) (*Gate, error) {
+	if id == "" || strings.ContainsAny(id, ": \t\r\n") {
+		return nil, fmt.Errorf("%q is not a plugin ID", id)
+	}
+	return newGate(dir, a, PluginClientPrefix+id)
+}
+
+func newGate(dir string, a config.Autonomy, client string) (*Gate, error) {
 	g := &Gate{Autonomy: a, initial: a, Client: client, auditDir: dir, now: time.Now}
 	key := filepath.Join(dir, "confirm.key")
 	secret, err := os.ReadFile(key)

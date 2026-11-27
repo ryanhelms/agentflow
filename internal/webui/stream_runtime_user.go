@@ -12,6 +12,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/plugin"
 	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/watch"
 )
@@ -173,7 +174,7 @@ func (j journalApprovals) Approvals(ctx context.Context, repo bus.RepoID) ([]App
 	for _, r := range records {
 		state := bus.ApprovalState(r.State)
 		items = append(items, ApprovalItem{Approval: watch.ApprovalPayload(r), State: state,
-			Expired: watch.ObservedExpiry(state, r.ExpiresAt, now)})
+			RequestedBy: plugin.SafeText(r.RequestedBy, bus.MaxPayloadText), Expired: watch.ObservedExpiry(state, r.ExpiresAt, now)})
 	}
 	sort.SliceStable(items, func(a, b int) bool { return items[a].IssuedAt.Before(items[b].IssuedAt) })
 	return items, nil

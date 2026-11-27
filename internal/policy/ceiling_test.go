@@ -8,7 +8,7 @@ import (
 )
 
 func TestWithCeilingCapsEveryLevel(t *testing.T) {
-	g, err := NewGate(t.TempDir(), config.Autonomy{Local: config.Auto, Remote: config.Auto}, "plugin:x")
+	g, err := NewPluginGate(t.TempDir(), config.Autonomy{Local: config.Auto, Remote: config.Auto}, "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestWithCeilingCapsEveryLevel(t *testing.T) {
 		t.Fatalf("resume after approval: %+v %v", ok, err)
 	}
 
-	suggest, err := NewGate(t.TempDir(), config.Autonomy{Local: config.Suggest, Remote: config.Suggest}, "plugin:x")
+	suggest, err := NewPluginGate(t.TempDir(), config.Autonomy{Local: config.Suggest, Remote: config.Suggest}, "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestPluginRedeemsOnlyItsOwnApprovals(t *testing.T) {
 	if _, err := person.Approve(d.Approval.OperationID, d.Token); err != nil {
 		t.Fatal(err)
 	}
-	spy, err := NewGate(dir, config.Autonomy{Local: config.Auto, Remote: config.Auto}, "plugin:spy")
+	spy, err := NewPluginGate(dir, config.Autonomy{Local: config.Auto, Remote: config.Auto}, "spy")
 	if err != nil {
 		t.Fatal(err)
 	}

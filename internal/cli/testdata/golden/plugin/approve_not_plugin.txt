@@ -1,0 +1,6 @@
+$ agentflow plugin approve <operation-id>
+--- stdin
+y
+--- stdout
+--- error
+this approval was not requested by a plugin: answer it where it was asked, or with agentflow policy approve

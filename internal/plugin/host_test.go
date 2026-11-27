@@ -57,7 +57,8 @@ type fakeIn struct {
 func fakeNotify(ran chan fakeIn) command.Spec[fakeIn, map[string]string] {
 	return command.Spec[fakeIn, map[string]string]{
 		Name: "notify", Policy: command.Policy{Class: policy.Remote, Action: "notify", Gate: command.GateByInvoker, AuditByInvoker: true},
-		Token: func(in *fakeIn) *string { return &in.ConfirmToken },
+		Token:    func(in *fakeIn) *string { return &in.ConfirmToken },
+		Describe: func(in fakeIn) command.Detail { return command.Detail{Subject: "notify " + in.Signal} },
 		Plan: func(_ context.Context, _ *app.App, in fakeIn) (command.Plan, error) {
 			return command.Plan{Summary: map[string]string{"signal": in.Signal}}, nil
 		},
@@ -118,7 +119,8 @@ func newFixture(t *testing.T, child func() *plugintest.Child) *fixture {
 			c, ok := f.commands[name]
 			return c, ok
 		},
-		OpenApp: func(_ context.Context, _ string, client string) (*app.App, error) {
+		OpenApp: func(_ context.Context, _ string, id string) (*app.App, error) {
+			client := plugin.OriginPrefix + id
 			g := *gate
 			g.Client = client
 			return &app.App{Gate: &g, Client: client}, nil

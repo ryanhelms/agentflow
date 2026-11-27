@@ -1,0 +1,6 @@
+$ agentflow plugin approve <operation-id>
+--- stdin
+y
+--- stdout
+--- error
+this request does not store the full summary of what it would run, so it cannot be approved: decline it with --decline, or let it expire (the command returned no confirmation summary)
