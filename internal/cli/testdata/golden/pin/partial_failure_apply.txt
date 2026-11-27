@@ -1,0 +1,8 @@
+$ agentflow pin
+--- stdout
+.github/workflows/agentflow.yml: v0.60.0 -> v0.61.0. Commit it on a branch as `chore: pin agentflow workflows to v0.61.0` and open a PR.
+.githooks/commit-msg: replaced the stock file with the one from v0.61.0.
+--- stderr
+agentflow: .agentflow/bin/agentflow is a stock file from an older release, but could not replace it: openat .agentflow/bin/agentflow.agentflow-new: file exists
+--- error
+.agentflow/bin/agentflow: openat .agentflow/bin/agentflow.agentflow-new: file exists

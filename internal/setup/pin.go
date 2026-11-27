@@ -2,9 +2,10 @@ package setup
 
 import (
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -81,33 +82,72 @@ func versionParts(v string) [3]int {
 
 // PinResult is what Pin found and changed.
 type PinResult struct {
-	File    string `json:"file"`
+	File    string `json:"file,omitempty"` // "" when the repository has no caller workflow
 	From    string `json:"from,omitempty"` // oldest pinned release before ("" = floating)
 	To      string `json:"to"`
 	Changed bool   `json:"changed"`
+	// Launchers lists the launcher files found (missing ones are left out).
+	Launchers []LauncherFile `json:"launchers,omitempty"`
+}
+
+// Behind reports whether the workflow or a stock launcher file is older than this release.
+func (r *PinResult) Behind() bool {
+	if r.Changed {
+		return true
+	}
+	for _, f := range r.Launchers {
+		if f.State == LauncherOutdated || f.State == LauncherUpdated || f.State == LauncherFailed {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrNotRelease means the running agentflow is not a release build and has no commit to
 // pin to.
 var ErrNotRelease = errors.New("this agentflow is not a release build; install a release (agentflow update) to pin workflows")
 
-// Pin re-pins the caller workflow in repoDir to the running agentflow release. With check
-// it only reports.
+// Pin re-pins the caller workflow in repoDir to the running agentflow release and
+// replaces stock launcher files from older releases (RefreshLaunchers). With check it
+// only reports. A missing caller workflow is an error unless a launcher file is stock.
 func Pin(repoDir string, check bool) (*PinResult, error) {
 	if !version.Release() {
 		return nil, ErrNotRelease
 	}
-	file, data, err := readCallerWorkflow(repoDir)
+	root, err := os.OpenRoot(repoDir)
 	if err != nil {
 		return nil, err
 	}
-	res := &PinResult{File: file, From: PinnedVersion(data), To: "v" + strings.TrimPrefix(version.Version, "v")}
-	out := RepinWorkflow(data, version.Commit, version.Version)
-	res.Changed = string(out) != string(data)
-	if !res.Changed || check {
+	defer root.Close()
+	res := &PinResult{To: "v" + strings.TrimPrefix(version.Version, "v")}
+	if res.Launchers, err = RefreshLaunchers(root, true); err != nil {
+		return nil, err
+	}
+	file, data, err := readCallerWorkflow(root)
+	switch {
+	case errors.Is(err, os.ErrNotExist) && slices.ContainsFunc(res.Launchers, LauncherFile.Stock):
+	case err != nil:
+		return nil, err
+	default:
+		res.File, res.From = file, PinnedVersion(data)
+	}
+	var out []byte
+	if res.File != "" {
+		out = RepinWorkflow(data, version.Commit, version.Version)
+		res.Changed = string(out) != string(data)
+	}
+	if check {
 		return res, nil
 	}
-	return res, os.WriteFile(filepath.Join(repoDir, filepath.FromSlash(file)), out, 0o644)
+	// The workflow first: when it fails nothing has changed. A launcher that then fails
+	// is reported in res with the others, so the caller can show everything that changed.
+	if res.Changed {
+		if err := publishAfter(root, file, out, nil); err != nil {
+			return nil, err
+		}
+	}
+	res.Launchers, err = RefreshLaunchers(root, false)
+	return res, err
 }
 
 // PinBehind reports the release the repo's caller workflow is pinned to when it is older
@@ -116,7 +156,12 @@ func PinBehind(repoDir string) string {
 	if !version.Release() {
 		return ""
 	}
-	_, data, err := readCallerWorkflow(repoDir)
+	root, err := os.OpenRoot(repoDir)
+	if err != nil {
+		return ""
+	}
+	defer root.Close()
+	_, data, err := readCallerWorkflow(root)
 	if err != nil {
 		return ""
 	}
@@ -126,14 +171,28 @@ func PinBehind(repoDir string) string {
 	return ""
 }
 
-func readCallerWorkflow(repoDir string) (string, []byte, error) {
+// readCallerWorkflow reads the caller workflow, or the legacy one when it is missing,
+// through root: a workflow that links out of the repository is an error, never read.
+func readCallerWorkflow(root *os.Root) (string, []byte, error) {
 	file := CallerWorkflow
-	data, err := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(file)))
+	data, err := readRegular(root, file)
 	if errors.Is(err, os.ErrNotExist) {
-		legacy, legacyErr := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(legacyCallerWorkflow)))
+		legacy, legacyErr := readRegular(root, legacyCallerWorkflow)
 		if !errors.Is(legacyErr, os.ErrNotExist) {
 			return legacyCallerWorkflow, legacy, legacyErr
 		}
 	}
 	return file, data, err
+}
+
+// readRegular reads rel through root when it is a regular file (not a link).
+func readRegular(root *os.Root, rel string) ([]byte, error) {
+	info, err := root.Lstat(rel)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: use a regular file, not a link", rel)
+	}
+	return root.ReadFile(rel)
 }

@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/gh"
 )
 
@@ -69,25 +70,62 @@ func New(current string, opts Options, client *gh.Client) (*Updater, error) {
 	return &Updater{Current: current, Opts: opts, GH: client, Dir: dir, Log: func(string, ...any) {}}, nil
 }
 
-// CacheDir returns the install cache root: %LOCALAPPDATA%\agentflow on Windows,
-// otherwise ${XDG_CACHE_HOME:-~/.cache}/agentflow. The repo launchers use the same paths.
+// CacheDir returns the install cache root, creating it: %LOCALAPPDATA%\agentflow
+// on Windows, otherwise ${XDG_CACHE_HOME:-~/.cache}/agentflow. The repo launchers
+// use the same paths and the same check (see CacheRoot).
 func CacheDir() (string, error) {
-	if runtime.GOOS == "windows" {
-		if la := os.Getenv("LOCALAPPDATA"); la != "" {
-			dir := filepath.Join(la, "agentflow")
-			return dir, os.MkdirAll(dir, 0o755)
-		}
+	dir, err := CacheRoot()
+	if err != nil {
+		return "", err
 	}
-	base := os.Getenv("XDG_CACHE_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
+	return dir, os.MkdirAll(dir, 0o755)
+}
+
+// CacheRoot returns the install cache root without creating it. A repository's
+// environment can set XDG_CACHE_HOME, HOME or LOCALAPPDATA, so a root inside a
+// git working tree or git directory is never used: the account's own folder
+// (~/.cache/agentflow from the user database, or the Windows known local
+// application data folder) is used instead, with a warning. See config.UserDir.
+func CacheRoot() (string, error) {
+	return cacheRoot(runtime.GOOS, os.Getenv, ownCacheRoot)
+}
+
+// cacheRoot keeps the variables' raw text (no filepath.Join, which would hide a
+// ".." from the check), as the launchers do.
+func cacheRoot(goos string, getenv func(string) string, own func(goos string) (string, error)) (string, error) {
+	sep := string(filepath.Separator)
+	ownFn := func() (string, error) { return own(goos) }
+	if goos == "windows" {
+		dir := ""
+		if la := getenv("LOCALAPPDATA"); la != "" {
+			dir = la + sep + "agentflow"
+		}
+		return config.UserDir(dir, "LOCALAPPDATA", "install cache", ownFn)
+	}
+	if base := getenv("XDG_CACHE_HOME"); base != "" {
+		return config.UserDir(base+sep+"agentflow", "XDG_CACHE_HOME", "install cache", ownFn)
+	}
+	dir := ""
+	if home := getenv("HOME"); home != "" {
+		dir = home + sep + ".cache" + sep + "agentflow"
+	}
+	return config.UserDir(dir, "HOME", "install cache", ownFn)
+}
+
+// ownCacheRoot is the account's own cache root.
+func ownCacheRoot(goos string) (string, error) {
+	if goos == "windows" {
+		local, err := localAppData()
 		if err != nil {
 			return "", err
 		}
-		base = filepath.Join(home, ".cache")
+		return filepath.Join(local, "agentflow"), nil
 	}
-	dir := filepath.Join(base, "agentflow")
-	return dir, os.MkdirAll(dir, 0o755)
+	home, err := config.AccountHome()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cache", "agentflow"), nil
 }
 
 // ---- versions ----

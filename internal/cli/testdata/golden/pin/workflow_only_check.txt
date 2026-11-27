@@ -1,0 +1,4 @@
+$ agentflow pin --check
+--- stdout
+.github/workflows/agentflow.yml: v0.60.0, agentflow v0.61.0 is installed. Run agentflow pin.
+--- error
