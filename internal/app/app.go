@@ -275,7 +275,9 @@ func (a *App) PlanTransition(ctx context.Context, key, event string) (Transition
 	if err != nil {
 		return res, err
 	}
-	if _, err := a.jiraSite(); err != nil {
+	// Without a site the plan still comes from the flow map and says below that
+	// Jira cannot be reached: a commit must not fail over its preview.
+	if _, err := a.jiraSite(); err != nil && !errors.Is(err, errNoJiraSite) {
 		return res, err
 	}
 	fm, err := a.FlowMap(ctx)

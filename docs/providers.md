@@ -146,8 +146,8 @@ release catalog is empty. Each layer accepts `.yml` and `.yaml` files, with one 
 document per file and one definition per provider and role in that layer.
 Legacy Jira projects and site seed Jira preferences before the release layer.
 Confluence inherits the legacy Jira site unless its own legacy site is set.
-Inline role settings take precedence over project definition files. The legacy
-login and doctor commands still consult the top-level Jira configuration.
+Inline role settings take precedence over project definition files. `login`,
+`logout` and `doctor` use the resolved Jira site. No site is built in.
 
 ```yaml
 # .agentflow/providers/issues.yml
