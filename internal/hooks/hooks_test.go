@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -171,5 +172,129 @@ func TestSessionStartReportsConfiguredProviders(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "task_management=none, knowledge_base=repository") || strings.Contains(out.String(), "Jira") {
 		t.Fatalf("session context = %s", out.String())
+	}
+}
+
+// preBashModes are the two modes of the pre-bash hook. The plugin rule holds in
+// both.
+var preBashModes = map[string]bool{"never list": false, "convention only": true}
+
+// preBashExit runs the pre-bash hook on command and returns its exit code and
+// what it printed.
+func preBashExit(t *testing.T, command string, conventionOnly bool) (int, string) {
+	t.Helper()
+	in, err := json.Marshal(map[string]any{"tool_input": map[string]any{"command": command}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var errBuf bytes.Buffer
+	var ee *ExitError
+	if errors.As(PreBash(context.Background(), bytes.NewReader(in), &errBuf, conventionOnly), &ee) {
+		return ee.Code, errBuf.String()
+	}
+	return 0, errBuf.String()
+}
+
+// Installing, removing and approving plugin writes are the person's
+// decisions: the hook blocks each of these ways of invoking the binary, in both
+// modes, because plugins belong to the user and not to a repository.
+func TestPreBashBlocksPluginDecisions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, command := range []string{
+		"agentflow plugin add ./x",
+		"agentflow plugin add ./x --yes --json",
+		"agentflow plugin remove ci-notify",
+		"agentflow plugin approve op_00112233445566778899aabbccddeeff",
+		".agentflow/bin/agentflow plugin approve op_1",
+		"./agentflow plugin add x",
+		`"$HOME/.cache/agentflow/current/agentflow" plugin remove x`,
+		"~/.cache/agentflow/0.58.0/agentflow plugin add x",
+		"C:/Users/me/AppData/Local/agentflow/0.58.0/agentflow.exe plugin add x",
+		`cmd /c "C:\repo\.agentflow\bin\agentflow.cmd plugin add x"`,
+		"pwsh -File .agentflow/bin/agentflow.ps1 plugin add x",
+		"bash .agentflow/bin/agentflow plugin add x",
+		"/home/me/.claude/plugins/cache/nscale/agentflow/0.58.0/bin/launch plugin add x",
+		`"${CLAUDE_PLUGIN_ROOT}/bin/launch" plugin add x`,
+		"go run ./cmd/agentflow plugin add x",
+		"agentflow --native-client codex plugin add x",
+		"agentflow plugin 'add' x",
+		"script -q /dev/null agentflow plugin add x",
+		"script -q /dev/null .agentflow/bin/agentflow plugin approve op_1",
+		`script -qc "agentflow plugin add x" /dev/null`,
+		`script --command="agentflow plugin remove x" /dev/null`,
+		"script -q /dev/null sh -c 'agentflow plugin add x'",
+		`sh -c "agentflow plugin add x"`,
+		"bash -lc 'cd /tmp && agentflow plugin add x'",
+		`zsh -c "echo y | agentflow plugin add x"`,
+		`eval "agentflow plugin add x"`,
+		`expect -c 'spawn agentflow plugin add x; send "y\r"'`,
+		"echo y | agentflow plugin add x",
+		"cd /tmp/p && agentflow plugin add .",
+		"CLAUDECODE= agentflow plugin add x",
+		"unset CLAUDECODE; agentflow plugin add x",
+		"env -u CLAUDECODE -u CODEX_THREAD_ID agentflow plugin add x",
+		"env -i PATH=/usr/bin script -q /dev/null agentflow plugin add x",
+		"setsid nohup agentflow plugin add x &",
+		"timeout 30 agentflow plugin add x",
+		"sudo agentflow plugin add x",
+		"if true; then agentflow plugin add x; fi",
+		"(agentflow plugin add x)",
+		"out=$(agentflow plugin add x --json)",
+		"agentflow plugin list && agentflow plugin add x",
+		"agentflow plugin add -- ./x",
+		"agentflow plugin add --help ./x",
+		`agentflow plugin add "$SRC"`,
+		"agentflow plugin add -",
+		"echo ./x | xargs agentflow plugin add",
+		"echo ci-notify | xargs agentflow plugin remove --yes",
+		"echo ./x | xargs sh -c 'agentflow plugin add \"$@\"' sh",
+	} {
+		for mode, conventionOnly := range preBashModes {
+			if code, shown := preBashExit(t, command, conventionOnly); code != 2 || !strings.Contains(shown, "in their own terminal") {
+				t.Errorf("%s, %q: exit %d, want it blocked (%s)", mode, command, code, shown)
+			}
+		}
+	}
+}
+
+// Commands that read plugins, belong to another program, or only mention the
+// words in an argument run as usual.
+func TestPreBashAllowsMentionsOfPluginCommands(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, command := range []string{
+		"agentflow plugin list",
+		"agentflow plugin list --json",
+		".agentflow/bin/agentflow plugin --help",
+		"agentflow config get plugins",
+		`echo "agentflow plugin add PATH"`,
+		"echo agentflow plugin remove x",
+		`grep -rn "agentflow plugin add" docs`,
+		"rg 'agentflow plugin (add|remove|approve)' README.md",
+		"git log --grep='agentflow plugin remove'",
+		`git commit -m "docs(PLAT-1): say agentflow plugin add needs a terminal"`,
+		"gh issue comment 80 --body \"$(cat <<'EOF'\nThe plugin's rule is off.\nRun agentflow plugin add yourself.\nEOF\n)\"",
+		"cat > notes.txt <<'EOF'\nagentflow plugin add x\nEOF",
+		"cat docs/plugins.md # agentflow plugin add",
+		`printf '%s\n' 'sh -c "agentflow plugin add x"'`,
+		`gh issue comment 80 --body "run agentflow plugin approve op_1 yourself"`,
+		`bash -c 'echo "agentflow plugin add x"'`,
+		"bash scripts/check.sh agentflow plugin add",
+		"codex plugin add agentflow@nscale",
+		"claude plugin remove agentflow",
+		// Without a source or an ID there is nothing to decide.
+		"agentflow plugin add",
+		"agentflow plugin remove",
+		"agentflow plugin add --help",
+		"agentflow plugin remove --help",
+		"agentflow plugin approve -h",
+		".agentflow/bin/agentflow plugin add --json --yes",
+		"sh -c 'agentflow plugin add --help'",
+		"agentflow plugin add --help > help.txt && cat help.txt",
+	} {
+		for mode, conventionOnly := range preBashModes {
+			if code, shown := preBashExit(t, command, conventionOnly); code != 0 {
+				t.Errorf("%s, %q: exit %d, want it allowed (%s)", mode, command, code, shown)
+			}
+		}
 	}
 }

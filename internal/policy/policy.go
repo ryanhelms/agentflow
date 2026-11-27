@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/boundary"
 	"github.com/ryanhelms/agentflow/internal/config"
 )
 
@@ -214,6 +215,9 @@ var ReleaseBranches = []string{"main", "master"}
 
 // ForbiddenWith is Forbidden with the configured relaxations.
 func ForbiddenWith(cmd string, protected []string, currentBranch string, opt NeverOptions) string {
+	if reason := ForbiddenAlways(cmd); reason != "" {
+		return reason
+	}
 	switch {
 	case forcePushRe.MatchString(cmd):
 		return "force-push is never allowed through agentflow-managed agents"
@@ -235,6 +239,58 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 		return fmt.Sprintf("pushing to protected branch %q is never allowed; push a feature branch and open a PR", target)
 	}
 	return ""
+}
+
+// ForbiddenAlways returns a reason for the never-list entries that hold in
+// every mode and repository, including pre-bash --convention-only. Plugins
+// belong to the user, not to a repository, so no repository's mode lets an
+// agent add, remove or approve one.
+func ForbiddenAlways(cmd string) string {
+	if changesPlugins(cmd) {
+		return "adding, removing and approving plugins is a human decision; ask the user to run agentflow plugin add, remove or approve in their own terminal"
+	}
+	return ""
+}
+
+// namesSomething reports whether args hold more than options: a plugin source
+// or an ID. Without one, as in "plugin add --help", nothing can be decided.
+func namesSomething(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return a == "-" || !strings.HasPrefix(a, "-") })
+}
+
+// pluginDecisions are the plugin subcommands that only a person may run:
+// installing, removing, and approving what a plugin asks to write.
+var pluginDecisions = []string{"add", "remove", "approve"}
+
+// changesPlugins reports whether cmd runs one of agentflow's plugin
+// decisions. It finds the program by name, by the path of a launcher or of a
+// cached build, or through go run, also inside a shell, script or another
+// wrapper (boundary.SimpleCommands). It does not see every form: not a command
+// built while it runs, piped into a shell or written to a file first, nor one
+// behind an option that takes a separate value (sudo -u me). This stops
+// ordinary agent use, not a deliberate way around. Unlike the patterns above, a command
+// that only mentions the words in an argument of another program does not
+// match.
+func changesPlugins(cmd string) bool {
+	for _, words := range boundary.SimpleCommands(cmd) {
+		program, args := words[0], words[1:]
+		switch name := boundary.ProgramName(program); {
+		case name == "agentflow":
+		// The Claude Code plugin's launcher is bin/launch.
+		case name == "launch" && (strings.Contains(strings.ToLower(program), "agentflow") || strings.Contains(program, "CLAUDE_PLUGIN_ROOT")):
+		case name == "go" && len(args) > 1 && args[0] == "run" && boundary.ProgramName(args[1]) == "agentflow":
+			args = args[2:]
+		default:
+			continue
+		}
+		if len(args) > 1 && args[0] == "--native-client" {
+			args = args[2:]
+		}
+		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) && namesSomething(args[2:]) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsProtected reports whether branch matches any protected pattern.

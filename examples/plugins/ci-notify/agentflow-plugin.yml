@@ -1,0 +1,44 @@
+# ci-notify: a plugin with no code. agentflow reads these rules itself.
+#
+# When the checks of a branch you work on go from anything else to
+# "failure", it runs the notify command once. It asks for two things only:
+# to hear about gh.ci.updated events, and to run notify.
+#
+# Add it:     agentflow plugin add examples/plugins/ci-notify
+# Turn it on: agentflow config set plugins.ci-notify.enabled=true
+#
+# Read docs/plugins.md before you write your own.
+schema: 1
+id: ci-notify
+name: CI failure notifications
+version: 0.1.0
+description: Sends a notification when the checks of a branch you work on start failing.
+tier: declarative
+permissions:
+  subscribe: [gh.ci.updated]
+  invoke: [notify]
+extensions:
+  handler:
+    - name: ci-failed
+      on: [gh.ci.updated]
+      # Every condition must hold. The previous state keeps a branch that
+      # stays red from notifying again.
+      when:
+        - {field: payload.state, equals: failure}
+        - {field: payload.previous, not_equals: failure}
+      actions:
+        - invoke:
+            command: notify
+            input:
+              signal: "{{settings.signal}}"
+              # One operation ID per commit: a retry of the same failure
+              # replaces the notification instead of repeating it.
+              operation_id: "ci-notify-{{event.payload.head_sha}}"
+              title: "CI failed on {{event.payload.head_ref}}"
+              body: "Failed checks: {{event.payload.failed}}"
+settings:
+  - key: signal
+    type: string
+    default: ci.failed
+    label: Notification signal
+    description: The notification signal to send. Route it in the notifications provider settings.

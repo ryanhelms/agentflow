@@ -336,6 +336,29 @@
     "mandatory": false
   },
   {
+    "action": "plugin.install",
+    "rules": [
+      {
+        "class": "local",
+        "action": "plugin.install",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Installing or removing plugins requires confirmation.",
+    "mandatory": true
+  },
+  {
     "action": "pr_open",
     "rules": [
       {

@@ -1,0 +1,30 @@
+$ agentflow plugin list --json
+--- stdout
+{
+  "plugins": [
+    {
+      "id": "ci-notify",
+      "name": "CI failure notifications",
+      "version": "0.1.0",
+      "tier": "declarative",
+      "hash": "sha256:<digest-1>",
+      "hash_ok": true,
+      "enabled": false,
+      "disabled_in_repo": false,
+      "extensions": [
+        "handler ci-failed: on gh.ci.updated (2 conditions) then invoke notify"
+      ],
+      "permissions": {
+        "subscribe": [
+          "gh.ci.updated"
+        ],
+        "publish": [],
+        "invoke": [
+          "notify"
+        ]
+      },
+      "installed_at": "<time>",
+      "dead_letters": []
+    }
+  ]
+}

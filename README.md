@@ -61,7 +61,8 @@ code. agentflow makes git the source of truth and turns the rest into automation
 | **Versioning and releases** | SemVer for apps, services, CLIs, images, Helm charts and libraries · one version per deployable unit · fully automatic GitHub Releases · branch-aware prerelease versions · production release guard with an approved hotfix path · Jira fix versions |
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
-| **AI assist** | 50 MCP tools, a live event stream of git and configuration changes, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **Plugins** | Add behaviour without changing agentflow: YAML rules or a small program, installed from a local path after a confirmation that lists every permission, turned on in your personal settings, with its own settings on the Settings page · see [docs/plugins.md](docs/plugins.md) |
+| **AI assist** | 55 MCP tools, a live event stream of git and configuration changes, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -449,6 +450,9 @@ Deployments and release lookup also support local JSON fixtures.
 | Push a feature branch | `agentflow push` | `agentflow_push` |
 | Mark an existing draft ready for review | `agentflow pr mark-ready` | `agentflow_pr_mark_ready` |
 | Explain an approval | `agentflow policy explain ACTION` | `agentflow_policy_explain` |
+| List installed plugins | `agentflow plugin list [--json]` | `agentflow_plugin_list` or `/agentflow:plugin` |
+| Add a plugin from a local path (you, at a terminal) | `agentflow plugin add PATH` | – |
+| Remove a plugin, its data and its settings (you, at a terminal) | `agentflow plugin remove ID` | – |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -654,6 +658,33 @@ When a provider write needs confirmation, the CLI shows the approval summary. Pa
 `--yes` to accept it. For supported writes through a connected Codex provider, put
 `--native-client codex` before the command. See [provider routing and examples](docs/providers.md).
 
+### Add plugins
+
+A plugin adds behaviour to agentflow: it reacts to events, adds notes to the timeline
+and can deny operations you choose to block. It is either YAML rules, which run no
+code of their own, or a program that you build first. Plugins belong to you, not to a
+repository, and run in the repository console.
+
+```text
+agentflow plugin add examples/plugins/ci-notify    # shows every permission, then asks
+agentflow config set plugins.ci-notify.enabled=true
+```
+
+`plugin add` reads a local directory or YAML file and never downloads anything. It
+asks under every approval setting, installs the plugin turned off, and checks the
+installed files against their hash before each start.
+
+**Run `plugin add` and `plugin remove` yourself.** Agentflow refuses them from
+agent sessions and non-interactive shells, its Claude Code hook blocks agents from
+running them, and `--yes` does not skip their question. A process that runs as you
+could still get around these checks on purpose. Turning a plugin on is a loosening
+change in the Save review, and so is turning off a plugin that has a permission
+rule. A repository can turn a plugin off for itself with
+`plugins.disabled`, and can never install or turn one on. No AI tool adds, removes
+or turns on a plugin. **A program plugin runs as you and is not sandboxed: add
+only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
+permissions and how to write your own, and `examples/plugins/` has two samples.
+
 ## Commit convention
 
 ```
@@ -744,7 +775,9 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **Untrusted content.** Ticket, page and review text reaches agents as labelled reference
   data; remote writes derived from it always need confirmation.
 - **Never list.** At every autonomy level agentflow refuses force-pushes, pushes to protected
-  branches, PR merges, remote branch deletes and acting as another user. With
+  branches, PR merges, remote branch deletes and acting as another user. Its Claude Code
+  hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`, in
+  `--convention-only` mode too. With
   `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
   `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
@@ -757,6 +790,16 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   session. `policy.coordinator_merge` looks up the base in the PR's own repository.
   `agentflow delegate` hands the work to a session in the other repository.
   [Repository boundary](docs/repo-boundary.md)
+- **Plugins.** A plugin is installed only from a local path, after a confirmation that
+  lists every permission and that neither an approval setting nor `--yes` skips.
+  Agentflow refuses `plugin add` and `plugin remove` from agent sessions and
+  non-interactive shells, and its Claude Code hook blocks agents from running them.
+  A process running as you could still get around this on purpose. Turning off a
+  plugin with a deny rule counts as loosening. A plugin starts turned off,
+  its files are checked against their hash before every start, and a repository can
+  turn it off but never install or enable it. A plugin never holds a confirmation
+  token: its writes wait for you. A program plugin gets a clean environment, which is
+  not a sandbox: it runs as you. [Plugins](docs/plugins.md)
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
@@ -838,6 +881,7 @@ cmd/agentflow/              CLI entry point
 internal/                 operations (app), MCP server, hooks, commit engine, flow map,
                           release maths, policy, self-update, Atlassian and GitHub clients
 adapters/                 per-client files; adapters/claude-code is the Claude Code plugin
+examples/plugins/         sample plugins: ci-notify (YAML) and timeline-hints (a program)
 templates/repo/           files agentflow init writes into a consuming repo
 .github/workflows/        agentflow's CI and releases, plus reusable workflows for other repos
 actions/                  composite actions: setup, ship, version, release-guard
@@ -873,6 +917,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/blueprint.html](docs/blueprint.html) | Architecture, automations, plugin, rollout and decisions |
 | [docs/releases.md](docs/releases.md) | Semantic versioning, GitHub Releases, release guard |
 | [docs/worktrees.md](docs/worktrees.md) | Task worktrees, `go.work`, `finish`, `sweep`, `promote` and the hooks |
+| [docs/plugins.md](docs/plugins.md) | Add, turn on and remove plugins, what a plugin may do, and how to write one |
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |

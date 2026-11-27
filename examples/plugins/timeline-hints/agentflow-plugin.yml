@@ -1,0 +1,27 @@
+# timeline-hints: a plugin that is a small program. agentflow starts the
+# executable below, which you build first (see main.go), and talks to it over
+# standard input and output.
+#
+# It receives op.failed events and may publish one kind of event back: a note
+# on the timeline. It cannot run commands.
+#
+# Build it:   go build -o timeline-hints .
+# Add it:     agentflow plugin add examples/plugins/timeline-hints
+# Turn it on: agentflow config set plugins.timeline-hints.enabled=true
+#
+# The program runs as you. Read main.go before you add it.
+schema: 1
+id: timeline-hints
+name: Timeline hints
+version: 0.1.0
+description: Adds a hint to the timeline when an operation fails.
+tier: process
+exec:
+  command: timeline-hints
+permissions:
+  subscribe: [op.failed]
+  publish: [plugin.annotation.added]
+extensions:
+  handler:
+    - name: failed-operations
+      on: [op.failed]
