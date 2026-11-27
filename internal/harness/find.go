@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 	"github.com/ryanhelms/agentflow/internal/worktree"
 )
 
@@ -70,16 +71,24 @@ func (f *finder) run(defs []Layered) (finderResult, error) {
 				return res, err
 			}
 		}
-		var base *Base
+		var base *Found
 		for _, c := range def.BaseCommands {
 			b, err := f.lookup(entries, c, skip)
 			if err != nil {
 				return res, err
 			}
-			if b != nil && !b.shim {
-				base = &Base{Name: def.BaseName, Command: c, Path: b.Path}
-				break
+			if b == nil || b.shim {
+				continue
 			}
+			id, err := IdentityOf(b.Path, def.StatusArgs, nil)
+			if err != nil {
+				continue
+			}
+			bf := b.Found
+			bf.ID, bf.Identity = d.ID, id
+			bf.Definition = harnessdef.Definition{Name: def.BaseName, Command: c}
+			base = &bf
+			break
 		}
 		if hit == nil {
 			if base != nil {

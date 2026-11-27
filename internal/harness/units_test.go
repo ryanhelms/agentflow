@@ -87,6 +87,7 @@ func TestResolveTable(t *testing.T) {
 		{"protocol version beats sign-in", ResolveInput{Found: true, Record: &ProbeRecord{Status: ProbeFailed, Code: CodeProtocolVersion}, Auth: SignInStatus{Status: SignedOut}}, StateIncompatible, CodeProtocolVersion},
 		{"too old", ResolveInput{Found: true, Version: "1.0.0", MinVersion: "1.2.0", Record: good}, StateIncompatible, CodeVersionTooOld},
 		{"signed out", ResolveInput{Found: true, Record: good, Auth: SignInStatus{Status: SignedOut}}, StateNeedsAuth, CodeSignedOut},
+		{"initialize -32000", ResolveInput{Found: true, ProbeCode: CodeAuthRequired, Record: &ProbeRecord{Status: ProbeFailed, Code: CodeAuthRequired, ProbedAt: later, AuthRequiredAt: &later}}, StateNeedsAuth, CodeAuthRequired},
 		{"session auth", ResolveInput{Found: true, Record: &ProbeRecord{Status: ProbeOK, Code: CodeOK, ProbedAt: time.Unix(100, 0), AuthRequiredAt: &later}}, StateNeedsAuth, CodeAuthRequired},
 		{"auth before a good probe", ResolveInput{Found: true, ProbeCode: CodeOK, Record: &ProbeRecord{Status: ProbeOK, ProbedAt: later, AuthRequiredAt: &time.Time{}}}, StateNative, ""},
 		{"adapter ok", ResolveInput{Kind: harnessdef.KindAdapter, Found: true, ProbeCode: CodeOK, Record: good}, StateAdapterInstalled, ""},

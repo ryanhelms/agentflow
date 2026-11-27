@@ -13,11 +13,14 @@
 //
 // types.go is the contract: states, codes, limits, Harness, Report, Found,
 // ProbeRecord and the Store, Prober and Detector interfaces. Changing it
-// needs an ADR amendment. So far this package implements only the test
-// guard (guard.go, ErrTestGuard). The registry, PATH finder, version
-// command, state table, fix text and Detector come from lane 6.1's later
-// work; the Prober, the Store (cache.json) and the sign-in check from lane
-// 6.2. Until then nothing in this package detects or starts a harness.
+// needs an ADR amendment. Lane 6.1 implements the definition layers
+// (acpregistry, overlay.yml, registry.go), the PATH finder (find.go), the
+// version command and probe launch profile (version.go), the state table
+// (state.go), fix text (fix.go) and the Detector (detect.go: New,
+// NewForWorkDir). Lane 6.2 implements the Prober (probe.go), the Store
+// (cache.go) and the SignInChecker (signin.go) and wires them through
+// Options; until then the Detector probes nothing (NoProber) and keeps its
+// records in memory.
 //
 // Tests that reach detection set their PATH with harnesstest.PATH.
 package harness

@@ -2630,7 +2630,11 @@ type Found struct {
     Target     string // resolved
     PathDir    string // the PATH entry
     Identity   string // "sha256:<hex>" of the identity fields
-    BaseFound  *Base
+    // BaseFound is the adapter's base CLI, found by the same rules: Path
+    // absolute, PathDir, Target, Identity = IdentityOf(Path, StatusArgs,
+    // nil). Its Definition holds only Name (base name) and Command (the
+    // base command that matched). nil when no base command was found.
+    BaseFound  *Found
 }
 
 // ProbeRecord is the stored result for one identity.
@@ -2646,8 +2650,9 @@ type ProbeRecord struct {
     ProbedAt       time.Time          `json:"probed_at"`
     DurationMS     int64              `json:"duration_ms"`
     AuthRequiredAt *time.Time         `json:"auth_required_at,omitempty"`
-    // Auth is the last sign-in verdict for this identity (and its base
-    // CLI's identity), with its time; never any output.
+    // Auth is the last sign-in verdict for this identity, with its time;
+    // never any output. BaseIdentity is BaseFound.Identity when that
+    // verdict was taken ("" without a base); a change makes it due again.
     Auth           *SignInStatus      `json:"auth,omitempty"`
     BaseIdentity   string             `json:"base_identity,omitempty"`
 }
@@ -2666,12 +2671,30 @@ type PublishedState struct {
     State State  `json:"state"`
     Code  string `json:"code,omitempty"`
     Version string `json:"version,omitempty"`
+    // ProbeStatus is Harness.Probe.Status, so a probe-status change
+    // survives a daemon restart.
+    ProbeStatus string `json:"probe_status,omitempty"`
 }
 
 // Prober runs one initialize probe (lane 6.2: probe.go). The version
 // command is the Detector's own (lane 6.1: version.go).
 type Prober interface {
     Probe(ctx context.Context, f Found, timeout time.Duration) ProbeRecord
+}
+
+// SignInChecker runs one sign-in check (lane 6.2: signin.go,
+// *SignInCheck). The Detector calls it in the probe pass after initialize
+// and stores the verdict in ProbeRecord.Auth.
+type SignInChecker interface {
+    Check(ctx context.Context, f Found, r SignInRequest) SignInStatus
+}
+
+// SignInRequest says who asks for a check and under which settings.
+type SignInRequest struct {
+    Requester string        // person, agent or daemon
+    AutoProbe bool          // effective ai.harnesses.auto_probe
+    Enabled   bool          // effective ai.harnesses.sign_in_check
+    Previous  *SignInStatus // the stored verdict for this identity, if any
 }
 
 // DetectOptions select a pass.
@@ -2691,7 +2714,7 @@ type Detector interface {
 }
 ```
 
-Lane 6.1 implements `Detector` over the registry, the finder, its own version command, a `Prober` and a `Store`. Lane 6.2 implements `Prober` and `Store` and wires them in. Until 6.2 merges, 6.1 tests with an in-memory `Store` and a fake `Prober`, and production uses a `Prober` that returns probe status `none`.
+Lane 6.1 implements `Detector` over the registry, the finder, its own version command, a `Prober`, a `SignInChecker` and a `Store`. In a probe pass the Detector runs the version command, then `Prober.Probe`, then (when allowed) `SignInChecker.Check`, and then `Store.Put`s the one record; the `Prober` and the checker never write the store. A `-32000` answer to initialize is recorded by the `Prober` as probe status `failed`, code `auth_required`, with `AuthRequiredAt` set, and the state table gives `needs_auth`. Lane 6.2 implements `Prober`, `SignInChecker` and `Store` and wires them in through `harness.Options`. Until 6.2 merges, 6.1 tests with an in-memory `Store` and a fake `Prober`, and production uses a `Prober` that returns probe status `none`.
 
 **The cache** (`<home>/harnesses/cache.json`, lane 6.2): mode 0600 in a 0700 directory, replaced atomically under `cache.json.lock` (`internal/filelock`), read-modify-write per entry so the CLI and the daemon can both write. At most 256 records and 256 KiB; the oldest records go first. A record applies only to its identity, and for at most 24 hours. It holds no path, no stderr and no agent text beyond the sanitized `ACPInfo` and `SignIn`.
 

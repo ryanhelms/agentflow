@@ -19,14 +19,27 @@ import (
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 )
 
-// SignInChecker runs one sign-in status command (lane 6.2: signin.go). The
-// Detector decides whether and when it runs ("Phase 6 sign-in check", "who
-// may probe"); CheckSignIn applies the status profile, the verdict mapping,
-// the credential-variable rule and the unsafe-environment rule, discards
-// every byte of output, and returns only the verdict (with CheckedAt). home
-// is the agentflow home, for <home>/harnesses/<id>/status.
+// SignInChecker runs one sign-in status command (lane 6.2: signin.go,
+// *SignInCheck). The Detector calls it in the probe pass, after initialize,
+// and stores the verdict in ProbeRecord.Auth. The checker applies the
+// status profile, the verdict mapping, the credential-variable rule and the
+// unsafe-environment rule, discards every byte of output, and returns only
+// the verdict (with CheckedAt).
 type SignInChecker interface {
-	CheckSignIn(ctx context.Context, home string, f Found) SignInStatus
+	Check(ctx context.Context, f Found, r SignInRequest) SignInStatus
+}
+
+// SignInRequest says who asks for a sign-in check and under which settings
+// (the same type as lane 6.2's signin.go; integration keeps one copy).
+type SignInRequest struct {
+	// Requester is RequesterPerson, RequesterAgent or RequesterDaemon.
+	Requester string
+	// AutoProbe and Enabled are the effective values of
+	// ai.harnesses.auto_probe and ai.harnesses.sign_in_check.
+	AutoProbe bool
+	Enabled   bool
+	// Previous is the stored verdict for this identity, if any.
+	Previous *SignInStatus
 }
 
 // Options configure a Detector. Zero fields take production defaults.
@@ -212,10 +225,8 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 			h.Notes = append(h.Notes, NoteRegistryEnvIgnored)
 		}
 	}
-	if f.BaseFound != nil {
-		b := *f.BaseFound
-		b.Path = Tilde(b.Path)
-		h.Base = &b
+	if b := f.BaseFound; b != nil {
+		h.Base = &Base{Name: b.Definition.Name, Command: b.Definition.Command, Path: Tilde(b.Path)}
 	}
 	found := isFound && f.Path != ""
 	var rec *ProbeRecord
@@ -308,7 +319,7 @@ func (d *detector) probe(ctx context.Context, st settings, f found, o DetectOpti
 	if d.mayCheckSignIn(st, f, o) {
 		baseIdentity := ""
 		if f.Definition.StatusFrom == harnessdef.StatusFromBase && f.BaseFound != nil {
-			baseIdentity, _ = IdentityOf(f.BaseFound.Path, f.Definition.StatusArgs, nil)
+			baseIdentity = f.BaseFound.Identity
 		}
 		// A person's probe always checks. Otherwise the verdict is reused
 		// until the base CLI's identity changes or it is a day old (a new
@@ -324,7 +335,9 @@ func (d *detector) probe(ctx context.Context, st settings, f found, o DetectOpti
 				return ProbeRecord{}, err
 			}
 			signInMu.Lock()
-			v := d.o.SignIn.CheckSignIn(ctx, st.home, f.Found)
+			v := d.o.SignIn.Check(ctx, f.Found, SignInRequest{
+				Requester: o.Requester, AutoProbe: st.autoProbe, Enabled: st.signInCheck, Previous: r.Auth,
+			})
 			signInMu.Unlock()
 			if v.CheckedAt == nil {
 				v.CheckedAt = timePtr(d.o.Now())
@@ -332,7 +345,7 @@ func (d *detector) probe(ctx context.Context, st settings, f found, o DetectOpti
 			r.Auth, r.BaseIdentity = &v, baseIdentity
 		}
 	}
-	if r.Status != ProbeNone || r.Version != "" {
+	if r.Status != ProbeNone || r.Version != "" || r.Auth != nil {
 		if err := d.o.Store.Put(r); err != nil {
 			return r, nil // the cache is best effort; the pass still reports
 		}

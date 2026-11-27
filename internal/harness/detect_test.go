@@ -59,12 +59,15 @@ type fakeSignIn struct {
 	mu    sync.Mutex
 	calls int
 	v     SignInStatus
+	f     Found
+	r     SignInRequest
 }
 
-func (s *fakeSignIn) CheckSignIn(context.Context, string, Found) SignInStatus {
+func (s *fakeSignIn) Check(_ context.Context, f Found, r SignInRequest) SignInStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
+	s.f, s.r = f, r
 	return s.v
 }
 
@@ -304,6 +307,26 @@ func TestDetectSignInCheck(t *testing.T) {
 	}
 	if h.Fix == nil || !strings.HasPrefix(h.Fix.Text, "Sign in to") {
 		t.Fatalf("fix = %+v", h.Fix)
+	}
+	// The checker gets the base CLI as found and the request; the verdict
+	// is stored with the base identity it was taken for.
+	b := e.signIn.f.BaseFound
+	if b == nil || !filepath.IsAbs(b.Path) || b.PathDir == "" || b.Target == "" || !strings.HasPrefix(b.Identity, "sha256:") ||
+		b.Definition.Command != "demo-cli" || b.Definition.Name != "Demo CLI" || b.ID != "demo" {
+		t.Fatalf("base found = %+v", b)
+	}
+	if want, _ := IdentityOf(b.Path, []string{"--status=out"}, nil); b.Identity != want {
+		t.Fatalf("base identity = %s, want %s", b.Identity, want)
+	}
+	if got := e.signIn.r; got.Requester != RequesterPerson || !got.Enabled || got.AutoProbe {
+		t.Fatalf("request = %+v", got)
+	}
+	rec, ok, _ := e.store.Get("demo", e.signIn.f.Identity)
+	if !ok || rec.Auth == nil || rec.Auth.Status != SignedOut || rec.BaseIdentity != b.Identity {
+		t.Fatalf("stored = %+v (%v)", rec, ok)
+	}
+	if h.Base == nil || h.Base.Command != "demo-cli" || h.Base.Name != "Demo CLI" || h.Base.Path == "" {
+		t.Fatalf("base = %+v", h.Base)
 	}
 	// With sign_in_check off nobody runs it.
 	harnesstest.WriteSettings(t, e.home, harnesstest.Settings{AutoProbe: true, Overrides: defs})
