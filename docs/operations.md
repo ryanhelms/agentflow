@@ -158,7 +158,8 @@ agentflow's own releases never use it: they tag with the release deploy key.
 history shows the real person. Developers create the token at
 https://id.atlassian.com/manage-profile/security/api-tokens and paste it once;
 `agentflow login --token-stdin` reads it from stdin for scripted setups. `agentflow logout`
-removes it.
+removes it. Both use the site in the repository's configuration; `--site URL` names another one,
+for example to remove a token stored for a site the repository no longer names.
 
 ### Planned: OAuth 2.0 (3LO)
 

@@ -14,7 +14,7 @@ in a terminal or by an AI agent in Claude Code, Codex, Grok, Cursor, Copilot or 
 | **Owner** | Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
-| **Current release** | <!-- agentflow:version -->`v0.60.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.61.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 
 ---
 
@@ -962,7 +962,8 @@ manager, then add them again.
 
 In each repository set up for Claude Code, delete `extraKnownMarketplaces.nscale` and
 `enabledPlugins."agentflow@nscale"` from `.claude/settings.json`, then run
-`agentflow install --client claude`. `agentflow remove` still undoes the old entries.
+`agentflow install --client claude`. `agentflow remove` still undoes old entries that name
+`ryanhelms/agentflow`; delete older ones by hand.
 
 ## Security and governance
 
