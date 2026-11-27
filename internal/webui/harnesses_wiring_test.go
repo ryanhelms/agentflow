@@ -54,7 +54,14 @@ func TestHarnessProductionWiring(t *testing.T) {
 		"demo-ready":      {Name: "Demo ready", Command: "fake-acp", Args: args},
 		"demo-signin":     adapter,
 		"demo-signin-off": adapter,
+		// The demo's step 3: an adapter whose base CLI comes and goes.
+		"demo-adapter": {Name: "Demo adapter", Kind: harnessdef.KindAdapter, Command: "fake-adapter-acp", BaseName: "Demo base", BaseCommands: []string{"fake-base"}},
 	}
+	basePath := filepath.Join(harnesstest.Bin(t, "fake-base", "1.0.0"), "fake-base")
+	if err := os.Rename(basePath, filepath.Join(bin, "fake-base")); err != nil {
+		t.Fatal(err)
+	}
+	basePath = filepath.Join(bin, "fake-base")
 	settings := func(auto, signIn bool) {
 		harnesstest.WriteSettings(t, home, harnesstest.Settings{AutoProbe: auto, SignInCheck: signIn, Overrides: overrides})
 	}
@@ -180,6 +187,72 @@ func TestHarnessProductionWiring(t *testing.T) {
 	}
 	if n, s := starts(), statusRuns(); n != 3 || s != 1 {
 		t.Fatalf("the daemon and the reads started %d agents and %d status commands, want 3 and 1", n, s)
+	}
+
+	// The demo's step 3, without the live console daemon (which would be
+	// the owner's): removing the base CLI publishes harness.removed and drops
+	// demo-adapter from the projection within one pass; restoring it
+	// publishes harness.detected.
+	b := bus.New(bus.Options{})
+	sub, err := b.Subscribe(bus.SubscribeOptions{Name: "test"}, bus.Topic{Repo: bus.GlobalRepo, Worktree: bus.Any, Types: "harness.*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sub.Close()
+	live := &watch.HarnessSource{Detector: o.Detector, Store: o.Store, Bus: b, AutoProbe: o.AutoProbe, PollInterval: o.PollInterval, Join: 10 * time.Millisecond}
+	lctx, lcancel := context.WithCancel(context.Background())
+	ldone := make(chan error, 1)
+	go func() { ldone <- live.Run(lctx) }()
+	defer func() {
+		lcancel()
+		if err := <-ldone; err != nil {
+			t.Error(err)
+		}
+	}()
+	inPage := func() bool {
+		for _, h := range harnessesStateOf(harnessesRuntime{source: live}, nil, home).Harnesses {
+			if h.ID == "demo-adapter" {
+				return true
+			}
+		}
+		return false
+	}
+	waitEvent := func(want bus.Type) {
+		t.Helper()
+		timeout := time.After(10 * time.Second)
+		for {
+			select {
+			case e := <-sub.Events():
+				if e.Type == want && strings.Contains(string(e.Payload), `"demo-adapter"`) {
+					return
+				}
+			case <-timeout:
+				t.Fatalf("no %s for demo-adapter", want)
+			}
+		}
+	}
+	for deadline := time.Now().Add(10 * time.Second); live.Passes() < 1 && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !inPage() {
+		t.Fatal("demo-adapter is not on the page at start")
+	}
+	if err := os.Rename(basePath, basePath+".gone"); err != nil {
+		t.Fatal(err)
+	}
+	passes := live.Passes()
+	live.Trigger(watch.HarnessTriggerFocus)
+	waitEvent(bus.TypeHarnessRemoved)
+	if live.Passes() != passes+1 || inPage() {
+		t.Fatalf("after removal: %d passes (was %d), on the page: %v", live.Passes(), passes, inPage())
+	}
+	if err := os.Rename(basePath+".gone", basePath); err != nil {
+		t.Fatal(err)
+	}
+	live.Trigger(watch.HarnessTriggerFocus)
+	waitEvent(bus.TypeHarnessDetected)
+	if !inPage() {
+		t.Fatal("demo-adapter did not come back")
 	}
 
 	// No byte of the status command's output is kept.
