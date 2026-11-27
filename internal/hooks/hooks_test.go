@@ -83,10 +83,14 @@ func TestPreBashConventionOnly(t *testing.T) {
 }
 
 func TestSessionStartAutoInit(t *testing.T) {
-	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("AGENTFLOW_HOME", home)
 	t.Setenv("HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("init:\n  orgs: [acme]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
-	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/ryanhelms/demo.git"}} {
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/acme/demo.git"}} {
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("%v %s", err, out)
 		}
@@ -117,6 +121,51 @@ func TestSessionStartAutoInit(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".agentflow", "config.yml")); err == nil {
 		t.Error("auto init ran in an opted-out clone")
+	}
+}
+
+// Without init.orgs the session hook sets nothing up, suggests nothing, asks
+// nothing and writes nothing to the agentflow home, whoever owns the repo.
+func TestSessionStartWithoutInitOrgs(t *testing.T) {
+	for name, homeConfig := range map[string]string{
+		"home not initialised": "",
+		"empty owner list":     "init:\n  orgs: []\n",
+		"unlisted owner":       "init:\n  auto: auto\n  orgs: [example]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("AGENTFLOW_HOME", home)
+			t.Setenv("HOME", t.TempDir())
+			if homeConfig != "" {
+				if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte(homeConfig), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			dir := t.TempDir()
+			for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/acme/demo.git"}} {
+				if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+					t.Fatalf("%v %s", err, out)
+				}
+			}
+			t.Chdir(dir)
+			var out bytes.Buffer
+			if err := SessionStart(context.Background(), "claude", "", &out); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out.String(), "agentflow init") || strings.Contains(out.String(), "set this repo up") {
+				t.Errorf("context = %s", out.String())
+			}
+			if _, err := os.Stat(filepath.Join(dir, ".agentflow")); !os.IsNotExist(err) {
+				t.Errorf("hook set the repo up: %v", err)
+			}
+			got, err := os.ReadFile(filepath.Join(home, "config.yml"))
+			if homeConfig == "" && !os.IsNotExist(err) {
+				t.Errorf("hook wrote the home: %s %v", got, err)
+			}
+			if homeConfig != "" && string(got) != homeConfig {
+				t.Errorf("hook changed the home: %s", got)
+			}
+		})
 	}
 }
 

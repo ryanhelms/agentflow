@@ -8,7 +8,7 @@
 # convention commit through the confirmation flow, the PreToolUse hook blocks the
 # never-list commands, the harness tools report without starting any harness, the AI
 # session tools refuse or ask for confirmation without starting a session, a new
-# nscaledev repo is set up automatically, and /agentflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
+# repo of an owner listed in init.orgs (acme) is set up automatically, and /agentflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
 # (for the remote flow map). Nothing touches your real repos, caches or Claude config,
 # apart from the Claude account usage of the runs.
 #
@@ -66,6 +66,8 @@ write_config() { # write_config <auto_probe> <agent_start> [disabled IDs...]
   local probe=$1 start=$2 id
   shift 2
   {
+    # init.orgs has no default: list the fixture owner so step 5 sets its repo up.
+    printf 'init:\n  auto: auto\n  orgs: [acme]\n'
     printf 'ai:\n  harnesses:\n    auto_probe: %s\n    sign_in_check: false\n' "$probe"
     printf '    overrides:\n      e2e-fake:\n        name: E2E fake\n        command: "%s"\n' "$tmp/bin/fake-acp"
     printf '        args: ["--mode=session-demo", "--log=%s"]\n' "$fake_log"
@@ -179,7 +181,7 @@ fresh="$tmp/fresh"
 mkdir -p "$fresh"
 cd "$fresh"
 git init -q -b main
-git remote add origin https://github.com/nscaledev/e2e-fresh.git
+git remote add origin https://github.com/acme/e2e-fresh.git
 git config user.email "e2e@example.com"
 git config user.name "agentflow e2e"
 git commit -q --allow-empty -m "chore(PLAT-1): init"

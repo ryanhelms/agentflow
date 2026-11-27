@@ -266,7 +266,7 @@ func (b *tableBuilder) personal() {
 		"What the AI-client plugins do in a repository that has no agentflow configuration: set it up, only suggest setup, or do nothing. Applies to the listed organisations only.",
 		withApplies(AppliesNextRun)), optEnum("auto", "ask", "off"))
 	b.add(l, "init.orgs", "", ctl(groupInit, WidgetChips, "Organisations",
-		"GitHub owners whose repositories the plugins may set up automatically.", withApplies(AppliesNextRun)))
+		"GitHub owners whose repositories the plugins may set up automatically. Empty by default: with none listed, the plugins set nothing up and suggest nothing. agentflow init asks once in a terminal.", withApplies(AppliesNextRun)))
 
 	b.aiHarnesses()
 	b.aiSessions()

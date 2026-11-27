@@ -159,16 +159,37 @@ Disable agentflow in a repo at any time with the repository variable `AGENTFLOW_
 every job in the caller workflow checks it.
 
 **Automatic setup with the Claude Code plugin.** When a Claude Code session starts in a
-repo with no `.agentflow/config.yml` and the repo's GitHub owner is in your `init.orgs`
-(default `nscaledev` and `ryanhelms`), the plugin runs `agentflow init` for you. It writes the files above
-and commits nothing; Claude tells you what was written and offers a branch and PR. Choose
-the behaviour in `~/.agentflow/config.yml`:
+repo with no `.agentflow/config.yml` and the repo's GitHub owner is in your `init.orgs`,
+the plugin runs `agentflow init` for you. It writes the files above and commits nothing;
+Claude tells you what was written and offers a branch and PR. `init.orgs` has no default:
+with no owners listed, the session hook sets nothing up and suggests nothing. Choose the
+behaviour in `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`):
 
 ```yaml
 init:
   auto: auto        # auto (default) | ask (only suggest /agentflow:init) | off
-  orgs: [nscaledev, ryanhelms]
+  orgs: [acme]      # GitHub owners; empty means none
 ```
+
+**First `agentflow init` on a machine.** Your agentflow home (`AGENTFLOW_HOME`, default
+`~/.agentflow`, never a folder inside a repository) counts as set up once its
+`config.yml` exists. Until then, `agentflow init`:
+
+| | Home not set up | Home set up |
+| --- | --- | --- |
+| **In a terminal** | Asks which GitHub owners may be set up automatically (empty means none; nothing is preselected) and, if you name any, `auto`, `ask` or `off`. Saves the answers to `config.yml`, an empty list included, so it never asks again. | Asks nothing. |
+| **No terminal** (an agent, CI, `--non-interactive`) | Sets the repository up, writes nothing to the home, and prints the questions with the command that answers them. | Asks nothing. |
+
+The command that answers the questions asks you to confirm before it saves:
+
+```sh
+agentflow config set init.orgs=acme init.auto=ask
+agentflow config set init.orgs=     # no automatic setup
+```
+
+The session hook never asks and never writes to the home. Repository settings stay in
+each repository's `.agentflow/`, and provider questions are still asked per repository,
+so several repositories share one home without interfering.
 
 **Updating the pinned workflows.** `agentflow pin` (or `/agentflow:pin`) moves every
 `ryanhelms/agentflow` reference in `.github/workflows/agentflow.yml` to the release you have

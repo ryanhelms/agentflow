@@ -1,7 +1,6 @@
 package config
 
 import (
-	"slices"
 	"testing"
 )
 
@@ -9,10 +8,19 @@ func TestDefaultsPointAtRyanhelmsRepository(t *testing.T) {
 	if DefaultFlowMap != "ryanhelms/agentflow@v0:flow-map.yml" {
 		t.Fatalf("DefaultFlowMap = %q", DefaultFlowMap)
 	}
-	for _, org := range []string{"ryanhelms", "nscaledev"} {
-		if !slices.Contains(DefaultInitOrgs, org) {
-			t.Fatalf("DefaultInitOrgs = %v, want %s", DefaultInitOrgs, org)
-		}
+	if len(DefaultInitOrgs) != 0 {
+		t.Fatalf("DefaultInitOrgs = %v, want none", DefaultInitOrgs)
+	}
+}
+
+func TestLoadUserHasNoDefaultInitOrgs(t *testing.T) {
+	t.Setenv("AGENTFLOW_HOME", t.TempDir())
+	u, err := LoadUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(u.Init.Orgs) != 0 || u.Init.Auto != "auto" {
+		t.Fatalf("init = %+v, want no owners", u.Init)
 	}
 }
 
