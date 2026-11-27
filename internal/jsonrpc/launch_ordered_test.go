@@ -55,7 +55,7 @@ func TestLaunchOrderedResponsesSurviveExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer p.Kill()
+	defer func() { _ = p.Kill() }()
 	var got string
 	if err := p.Conn().Call(context.Background(), "go", nil, &got); err != nil {
 		t.Fatalf("Call: %v (handled %d notifications)", err, handled.Load())

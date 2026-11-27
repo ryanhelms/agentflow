@@ -23,10 +23,12 @@ import (
 const ChildMode = "aisession-agent"
 
 // SessionToken and CwdToken in a Call's params become the ACP session ID
-// and the cwd session/new gave.
+// and the cwd session/new gave; TerminalToken becomes the terminalId the
+// last terminal/create answered.
 const (
-	SessionToken = "$SESSION"
-	CwdToken     = "$CWD"
+	SessionToken  = "$SESSION"
+	CwdToken      = "$CWD"
+	TerminalToken = "$TERMINAL"
 )
 
 // Script is what the fake agent does. It answers initialize with
@@ -217,6 +219,8 @@ func agent(args []string) int {
 		cwd       string
 		cancelled = make(chan struct{})
 		once      sync.Once
+		termMu    sync.Mutex
+		lastTerm  string
 	)
 	const sessionID = "fake-session"
 	h := jsonrpc.HandlerFunc(func(ctx context.Context, r *jsonrpc.Request) (any, error) {
@@ -273,10 +277,22 @@ func agent(args []string) int {
 					_ = conn.Notify(ctx, acp.MethodSessionUpdate, map[string]any{"sessionId": sessionID, "update": st.Update})
 				case st.Call != nil:
 					call := *st.Call
-					params := strings.NewReplacer(SessionToken, sessionID, CwdToken, cwd).Replace(string(call.Params))
+					termMu.Lock()
+					params := strings.NewReplacer(SessionToken, sessionID, CwdToken, cwd, TerminalToken, lastTerm).Replace(string(call.Params))
+					termMu.Unlock()
 					do := func() {
 						var res json.RawMessage
 						err := conn.Call(context.Background(), call.Method, json.RawMessage(params), &res)
+						if call.Method == acp.MethodTerminalCreate && err == nil {
+							var t struct {
+								TerminalID string `json:"terminalId"`
+							}
+							if json.Unmarshal(res, &t) == nil {
+								termMu.Lock()
+								lastTerm = t.TerminalID
+								termMu.Unlock()
+							}
+						}
 						e := LogEntry{Called: call.Method, Result: res}
 						var rerr *jsonrpc.Error
 						if errors.As(err, &rerr) {

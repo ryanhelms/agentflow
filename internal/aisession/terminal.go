@@ -92,7 +92,7 @@ func (ts *terminals) start(c *Command, env []string, limit uint64) (*terminal, e
 				sig := ws.Signal().String()
 				st.Signal = &sig
 			} else if code := cmd.ProcessState.ExitCode(); code >= 0 && code <= 1<<31 {
-				u := uint32(code) //nolint:gosec // G115: checked to be 0 to 2^31 above
+				u := uint32(code)
 				st.ExitCode = &u
 			}
 		} else if err != nil {

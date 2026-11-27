@@ -27,7 +27,7 @@ func TestResolveDirAllow(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name, dir, allow string
-		want            string
+		want             string
 	}{
 		{"the allowed directory", work, work, real(work)},
 		{"below it", sub, work, real(sub)},
