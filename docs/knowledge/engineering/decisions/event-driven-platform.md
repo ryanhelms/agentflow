@@ -2645,8 +2645,9 @@ ai:
 | `personal:ai.harnesses.probe_timeout` | `duration` | 5s | 1s to 30s | Probe time limit | How long a harness has to answer the ACP initialize request before the probe gives up. | `next-run` | |
 | `personal:ai.harnesses.disabled` | `chips` | [] | 64 items | Harnesses to ignore | Harness IDs agentflow never lists or starts. | `live` | `shrink` |
 
-**The loosening check is code, not metadata.** `settings.loosening` reads specific keys (`policyOf` in `internal/settings/checks.go`); `FieldMeta.Loosens` only says that a field is checked. Lane 6.1 adds the harness cases there: `auto_probe` false to true gives "Lets agentflow start installed harnesses without asking, and lets agents ask for probes.", and an ID removed from `disabled` gives "Stops ignoring the harness <id>, so agentflow may list and start it." 
 | `personal:ai.harnesses.overrides` | `kv-table`, key = harness ID, `columns` below | {} | 64 entries | Harness overrides | Changes how agentflow finds or starts a harness, or adds one that is not in the ACP registry. | `live` | |
+
+**The loosening check is code, not metadata.** `settings.loosening` reads specific keys (`policyOf` in `internal/settings/checks.go`); `FieldMeta.Loosens` only says that a field is checked. Lane 6.1 adds the harness cases there: `auto_probe` false to true gives "Lets agentflow start installed harnesses without asking, and lets agents ask for probes.", and an ID removed from `disabled` gives "Stops ignoring the harness <id>, so agentflow may list and start it."
 
 `overrides` columns (one `FieldMeta` each): `name` (`text`, "Name"), `kind` (`select` `native`/`adapter`, "Kind"), `command` (`text`, "Command", "A command name on your PATH, or an absolute path."), `args` (`chips`, "ACP arguments"), `version_args` (`chips`, "Version arguments"), `no_version` (`toggle`, "Never ask for a version"), `base_name` (`text`, "Base CLI name"), `base_commands` (`chips`, "Base CLI commands"), `min_version` (`text`, "Oldest version").
 
@@ -2811,6 +2812,7 @@ No test may resolve or start a real harness (plan guardrail).
 - `TestGuardRefusesRealPATH` (lane 6.1) runs detection with `PATH=/usr/bin:/bin` and expects `ErrTestGuard`.
 - Every test that reaches detection, in any lane (CLI, MCP, webui, ops), sets its PATH with `harnesstest.PATH`.
 - **Existing daemon tests.** `stream_runtime_harnesses.go` registers from `init`, so every webui test that starts a daemon runtime would reach detection. As with `newPluginOptions` (phase 5), the extension reads its dependencies from `newHarnessOptions`; in a test binary that returns no `Detector` unless a test sets one, so the extension starts no source and the state has `detector: false`. Lane 6.2 tests set it with a fake PATH.
+- **`make e2e` (lane 6.3).** The guard does not cover it: e2e runs the real binary on the real PATH. Every e2e call to `agentflow_ai_harnesses` or `agentflow_ai_doctor` therefore runs with a temporary `PATH` and `AGENTFLOW_HOME` and without `probe`, so no real harness is looked up or started.
 
 ### Phase 6 demo and gate
 
