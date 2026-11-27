@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -100,8 +101,18 @@ func SessionStart(ctx context.Context, client, notice string, stdout io.Writer) 
 func sessionStart(ctx context.Context, client, notice string, stdout io.Writer) error {
 	dir, _ := os.Getwd()
 	a, err := app.Open(ctx, dir, client)
+	var refused *config.HomeInRepositoryError
+	if errors.As(err, &refused) {
+		fmt.Fprintln(stdout, "agentflow: "+refused.Error())
+		return nil
+	}
 	if err != nil {
 		return nil // not a repo: say nothing
+	}
+	// The agent reads stdout, not stderr: repeat an ignored-home warning
+	// so it can tell the person.
+	for _, n := range config.HomeNotices() {
+		fmt.Fprintln(stdout, n)
 	}
 	if !a.HasCfg {
 		autoInit(ctx, a, client, stdout)

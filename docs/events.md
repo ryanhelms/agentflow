@@ -142,6 +142,9 @@ console. Start the console from a shell that uses the same home as your agents. 
 holds a lock on `console.lock` in the home it watches, and releases it when it stops.
 `agentflow doctor` warns (`!`, not a failed check) when the console daemon uses a different
 `AGENTFLOW_HOME` from the shell you run it in, and prints nothing about it when no daemon runs.
+The daemon applies the same rule as every other agentflow process: a home inside any git
+repository (each repository it serves included) is ignored with a warning, and the
+account's `~/.agentflow` is used instead.
 
 ## Events from hooks
 

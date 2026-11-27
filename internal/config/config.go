@@ -332,29 +332,6 @@ func Home() (string, error) {
 	return dir, os.MkdirAll(dir, 0o700)
 }
 
-// HomeDir returns the configured user directory without creating it.
-func HomeDir() (string, error) {
-	if h := os.Getenv("AGENTFLOW_HOME"); h != "" {
-		return h, nil
-	}
-	if h := os.Getenv("DEVFLOW_HOME"); h != "" {
-		return h, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".agentflow")
-	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
-		return dir, err
-	}
-	legacy := filepath.Join(home, ".devflow")
-	if _, err := os.Lstat(legacy); !errors.Is(err, os.ErrNotExist) {
-		return legacy, err
-	}
-	return dir, nil
-}
-
 // LoadUser reads ~/.agentflow/config.yml, defaulting autonomy to confirm.
 func LoadUser() (*User, error) {
 	u := &User{}

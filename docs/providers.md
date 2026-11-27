@@ -666,8 +666,9 @@ On native Windows, configure the project server manually with the verified
 On native macOS and Linux, providers that need GitHub CLI first try
 `gh --version` on PATH. If that check fails, setup looks for
 `companions.yml` in your agentflow home (normally `~/.agentflow`, or an absolute
-`AGENTFLOW_HOME`). Keep this directory outside the checkout, under stable
-directories you trust. The directory and manifest must be owned by your user
+`AGENTFLOW_HOME`). Agentflow ignores an agentflow home inside a git repository and
+uses your account's `~/.agentflow` instead, so keep it outside every checkout, under
+stable directories you trust. The directory and manifest must be owned by your user
 and writable only by you. Use an ordinary directory and a regular manifest file.
 
 Supply one pin per OS and architecture. Use the SHA256 of the **raw executable**
