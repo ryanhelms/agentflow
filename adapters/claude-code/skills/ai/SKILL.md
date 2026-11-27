@@ -53,9 +53,11 @@ When `ai run` refuses, report the code and its fix and stop: `nested`,
 `agentflow start <task> --worktree`), `not_ready`, `plugin_launch`,
 `unsafe_environment`, `home_unsafe`, or a `limit_*` code. Do not change a setting to get around a refusal.
 
-`agentflow_ai_status` (`session`, `since`) lists the sessions, or one session's
-transcript from a sequence number. Use `since` with the returned `next_seq` to
-read only new items.
+`agentflow_ai_status` (`session`, `since`) lists the sessions of this
+repository, or one session's transcript from a sequence number. Use `since` with
+the returned `next_seq` to read only new items. Status, respond and cancel see
+only the sessions of the repository you run them in; another repository's
+session answers `not_found`.
 
 `agentflow_ai_respond` (`session`, `ask`, `decision`) accepts only
 `decision: "reject"`. **You can never allow a request.** When a session waits,

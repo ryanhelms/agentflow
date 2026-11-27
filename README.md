@@ -479,7 +479,12 @@ daemon or `agentflow ui --stop` to shut it down for all clones.
 Only a person at a terminal sees the console's one-time sign-in link: standard
 input is a terminal and no AI agent or AI session is in the environment. For
 anyone else, `agentflow ui` opens the browser itself and never prints the link,
-and `agentflow ui --no-open` refuses. `agentflow_ui_open` never returns it.
+and `agentflow ui --no-open` refuses. `agentflow_ui_open` never returns it, and
+the console's startup step `ui --serve-child` never prints it. The browser opener
+gets a fixed environment, so a caller's `BROWSER` or `PATH` cannot receive the
+link. This stops ordinary agent behaviour, not a program running as you that
+deliberately fakes a terminal and removes the agent variables: that program gets
+the link as you would. [Repository console](docs/repository-console.md)
 An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 
@@ -809,7 +814,12 @@ environment variables passed, agentflow's read-only MCP tools, the limits, the
 control files that changed, and the prompt. Every file and command request the
 harness sends agentflow is checked: the never-list, the worktree boundary, your
 `ai.permissions.rules`, then your autonomy policy, and denied when nothing allows
-it. Control-file writes and secret-file reads always ask you. An agent can start a
+it. Control-file writes and secret-file reads always ask you, also through a link
+or, on macOS and Windows, a non-ASCII spelling; a command that sets its own
+environment variables always asks and shows each value. `ai status`, `ai respond`
+and `ai cancel` see only the sessions of the repository you run them in. When
+`AGENTFLOW_HOME` points somewhere else, your own `~/.agentflow` settings still hold
+and can only make a session stricter. An agent can start a
 session (turn off `ai.sessions.agent_start` to stop that), but its session asks you
 for every write and command, and an agent can only reject a request, never allow
 one. **Cancel session** in the console's AI panel stops a session at once;
@@ -951,10 +961,15 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   sign-in variables pass. Its `PATH` drops every entry inside a worktree of its own
   repository or of any repository the console serves. Every file and command request it sends agentflow goes
   through the never-list, the worktree boundary, your rules and your policy, and is
-  denied when nothing allows it. Only a person allows a request, and an allow is bound
+  denied when nothing allows it; paths are checked as named and as they resolve.
+  Only a person allows a request, and an allow is bound
   to the request as the person saw it (its fingerprint): `agentflow_ai_respond`
   can only reject, `ai respond --allow` refuses agents and non-terminals, and the
-  pre-bash hook blocks agents from running it in every mode. The MCP server agentflow
+  pre-bash hook blocks agents from running it in every mode. These stop ordinary
+  agent behaviour: a program running as you that deliberately fakes a terminal and
+  removes the agent variables can allow its own requests and start sessions as you,
+  and the record will say a person did it. Your account's own settings hold
+  whatever `AGENTFLOW_HOME` a caller sets, and the session limits count both homes. The MCP server agentflow
   passes to a harness (`agentflow mcp --session ID`) has only read-only tools, and its
   client can never write. A session cannot start a session. The harness's own tools
   are not checked: agentflow reports what it ran without asking and lists the changed

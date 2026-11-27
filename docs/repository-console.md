@@ -80,8 +80,23 @@ AI agent (`CLAUDECODE`, `CODEX_*` and the other agent variables) or AI session
 `agentflow ui` opens the browser itself, says so and never prints, returns or
 logs the link, with any flag; if no browser opens, it says to run
 `agentflow ui` in your own terminal. `agentflow ui --no-open` refuses before it
-starts the console or makes a link. This closes the easy route only: a process
-running as you can still read agentflow's private files. Private browsing and clearing site data
+starts the console or makes a link. The console's own startup step,
+`agentflow ui --serve-child`, only reports that the console is ready and never
+prints a link, whoever runs it; agentflow then asks the console for the link
+over its private, encrypted control channel. Agents are also blocked from
+running `agentflow ui --no-open` and `ui --serve-child` directly; that is a cheap
+check that a script or a command built at run time gets around.
+
+When agentflow opens the browser for you, the opener gets a fixed environment
+(the system `PATH`, your account's real home, and the display variables), never
+the caller's, so a variable such as `BROWSER` cannot choose the program that
+receives the link. The link is briefly visible in the process list while the
+browser opens.
+
+This stops ordinary agent behaviour. It does not stop a program running as you
+that deliberately fakes a terminal (a pseudo-terminal) and removes the variables
+that mark it as an agent: it gets the link as you would, and can also read
+agentflow's private files. Private browsing and clearing site data
 remove browser-local credentials and drafts. A console started with v0.43.0
 predates the daemon. Its first launch after upgrading opens the new address.
 

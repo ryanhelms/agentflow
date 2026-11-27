@@ -29,6 +29,12 @@ agentflow ai cancel SESSION [--yes] [--json]
 `PROMPT` may be `-` to read it from standard input. In Claude Code, use
 `/agentflow:ai`.
 
+`ai status`, `ai respond` and `ai cancel` see only the sessions of the
+repository you run them in (any of its worktrees). A session of another
+repository answers like an unknown ID. Outside a repository they refuse
+(`not_worktree`). The console's AI panel answers and cancels only the sessions
+of the repository it shows.
+
 ### Where a session runs
 
 A session always runs in the worktree of the process that starts it: the
@@ -94,10 +100,24 @@ allows the request, it is denied.
   for every request except reads inside the worktree.
 - Writes to control files (`.agentflow/`, `.claude/`, `.github/workflows/`,
   `AGENTS.md` and others) and reads of secret files (`.env`, `*.pem`, `id_rsa*`
-  and others) always ask you.
+  and others) always ask you. Agentflow checks both the path the harness named
+  and the path it leads to through links, so `notes.txt` linked to `.env`, or
+  `docs/ci.yml` under a `docs` link to `.github/workflows`, asks as the real
+  file does. A rule allows a path only when every form of it matches.
+- On macOS and Windows, a path with a non-ASCII character in any name below the
+  worktree always asks you (`unicode_name`): those file systems open, for
+  example, `id_rſa` as `id_rsa`, so no list can tell what it names.
+- Right before a read or write, agentflow checks again that the path still
+  leads where it did. If it changed, the request is denied (`changed`).
 - Anything outside the worktree, in `.git` or in a nested repository is denied.
 - A command that names the agentflow home, the console registry or the session
-  store is denied, whatever your rules say.
+  store is denied, whatever your rules say. Agentflow compares the names and the
+  files they open, so a link or a folded spelling counts too. It is still a text
+  check: a path built while the command runs gets past it.
+- A command that sets any environment variable of its own always asks you, whatever
+  your rules say (`env`): a value such as `GIT_EXTERNAL_DIFF`, `PAGER` or
+  `GOFLAGS` can make an allowed program run other code. The request shows each
+  name and value and the program it starts.
 - The session `PATH`, for the harness and its commands, keeps only entries
   outside every worktree of the session's repository and of every repository the
   console serves, so a repository cannot put a program in front of `go` or `npm`.
@@ -107,10 +127,20 @@ allows the request, it is denied.
 A request waits up to 5 minutes (`ai.sessions.ask_timeout`) and is then denied.
 `ai status` lists the waiting requests, each with its `ai respond` command.
 
+A command request shows the command line, the program it starts (its full
+path), the folder it runs in and each environment variable with its value.
+Characters that hide or change what you read (zero-width, direction marks,
+line separators, unusual spaces) are shown as `<U+XXXX>`. After you allow it,
+agentflow resolves the folder and the program again; if either changed, the
+command is denied (`changed`). The values are kept only in the request's own
+file, as a write's change is (below).
+
 ### What a write request shows
 
-A write request shows the change: the path, the file's current text and the new
-text. **Allow once** is offered only when you can see the whole change:
+A write request shows the change: the path (and where it leads, when a link
+moves it), the file's current text and the new text. In a terminal, every line
+of the file's text starts with `old| ` or `new| `, so no line of the file can
+pass for agentflow's own markers. **Allow once** is offered only when you can see the whole change:
 
 - The request holds at most 256 KiB of each side. A larger or binary change
   shows only **Reject** (`preview_too_large`).
@@ -139,8 +169,10 @@ request that changed since is refused.
 | The session itself | no | no | no |
 
 **Cancel session** in the console stops the session at once: your click is the
-confirmation. `ai cancel` and `agentflow_ai_cancel` follow your autonomy policy,
-so they may ask first.
+confirmation, even when you set `autonomy.actions.ai.cancel` to `suggest`,
+because stopping is a safety action. `ai cancel` and `agentflow_ai_cancel`
+follow your autonomy policy, so they may ask first. No autonomy setting decides
+who may answer: the rules above do (there is no `ai.respond` action).
 
 `ai respond --allow` shows the whole request and asks y/N. It refuses inside an
 AI agent and without a terminal, and it ignores `--yes`. The pre-bash hook blocks
@@ -162,6 +194,12 @@ Inside a session, every process has `AGENTFLOW_ACP_SESSION` set. Agentflow then
 treats the process as the session's own client: it can read, and it cannot
 write, start a session or answer a request.
 
+This variable is one layer, not a boundary: the harness's own shell, which
+agentflow cannot see, can unset it. A harness that then runs `agentflow ai run`
+counts as an ordinary agent. What bounds it is the limits below, which
+agentflow counts in the session store under its lock whatever the caller's
+environment says, and the `confirm` ceiling of an agent's session.
+
 ## Limits
 
 | Limit | Default | Setting |
@@ -176,6 +214,24 @@ write, start a session or answer a request.
 | Requests | 30 a minute per session | |
 | Terminals | 4 at once, 64 per session | |
 | What the harness sends as messages and updates | 64 MiB; past it the session ends `limit_output` | |
+| Tool calls followed | 4,096 per session; past it the session ends `limit_output` | |
+
+### Your own settings hold whatever `AGENTFLOW_HOME` says
+
+A caller can set `AGENTFLOW_HOME` to a fresh folder. When it is not your
+account's own agentflow home (`~/.agentflow`, found from your account, not from
+`HOME`), your settings there still hold, and can only make a session stricter:
+
+- **Let agents start sessions** off, the isolated home, `unasked: cancel` and
+  the read-only MCP server off win.
+- The session limits and the time limits take the lower value.
+- A harness you turned off stays off.
+- Every autonomy level takes the lower one.
+- Your `deny` and `ask` rules apply first; your `allow` rules there never apply
+  on their own.
+- The running, per-worktree and hourly limits count the sessions of both homes.
+
+Such a session is still not shown in your console, which reads your own home.
 
 The harness may report a cost. Agentflow shows it as reported by the harness and
 does not enforce it; the time limits bound what a session can spend.
@@ -194,6 +250,18 @@ does not enforce it; the time limits bound what a session can spend.
 - **Processes of your own user.** A program that deliberately reads agentflow's
   files can imitate you. The checks stop agent use and prompt injection, not a
   hostile program you installed.
+- **A program that fakes a terminal.** "Only a person may allow" means a person
+  at a terminal, with no variable that marks an agent. That stops ordinary agent
+  behaviour. It does not stop a program running as you that deliberately opens a
+  pseudo-terminal and removes those variables: it can allow its own session's
+  requests and start sessions as you, and the record says a person did it.
+- **Processes that leave their group.** When a session ends, agentflow kills each
+  terminal's process group. A process that moved to a group of its own (for
+  example with `setsid`, or a daemon) keeps running.
+- **A host that crashed.** The next `ai status` ends the session `host_lost`,
+  kills the harness's and the terminals' process groups when it can show they
+  are still the same processes (Linux and macOS), and deletes the waiting
+  requests, the session's temporary folder and its answer key.
 - **An agent that skips the confirmation.** An agent's `ai run` asks the agent to
   show you the summary. An agent that applies the confirmation itself can start a
   session without you. That session still asks you for every write and command,
@@ -206,5 +274,6 @@ Sessions live in the agentflow home, under `ai/sessions/<id>/`, readable only by
 you. A transcript can hold secrets despite best-effort redaction. Agentflow keeps
 ended sessions for 7 days (`ai.sessions.keep_days`), at most 50 sessions and
 200 MiB. Turn off `ai.sessions.keep_transcripts` to delete the transcript when a
-session ends. Nothing is written to the repository's event store except session
+session ends. The waiting requests, the temporary folder and the answer key are
+always deleted when a session ends. Nothing is written to the repository's event store except session
 IDs, codes and counts.
