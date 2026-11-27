@@ -2714,7 +2714,7 @@ type Detector interface {
 }
 ```
 
-Lane 6.1 implements `Detector` over the registry, the finder, its own version command, a `Prober`, a `SignInChecker` and a `Store`. In a probe pass the Detector runs the version command, then `Prober.Probe`, then (when allowed) `SignInChecker.Check`, and then `Store.Put`s the one record; the `Prober` and the checker never write the store. A `-32000` answer to initialize is recorded by the `Prober` as probe status `failed`, code `auth_required`, with `AuthRequiredAt` set, and the state table gives `needs_auth`. Lane 6.2 implements `Prober`, `SignInChecker` and `Store` and wires them in through `harness.Options`. Until 6.2 merges, 6.1 tests with an in-memory `Store` and a fake `Prober`, and production uses a `Prober` that returns probe status `none`.
+Lane 6.1 implements `Detector` over the registry, the finder, its own version command, a `Prober`, a `SignInChecker` and a `Store`. In a probe pass the Detector runs the version command, then `Prober.Probe`, then (when allowed) `SignInChecker.Check`, and then `Store.Put`s the one record; the `Prober` and the checker never write the store. A `-32000` answer to initialize is recorded by the `Prober` as probe status `failed`, code `auth_required`, with `AuthRequiredAt` set, and the state table gives `needs_auth`. Lane 6.2 implements `Prober`, `SignInChecker` and `Store` and wires them in through `harness.Options`. Production wires them through `harness.Production(home, version, workDirs)`, which builds the `FileStore`, `ACPProber` and `*SignInCheck` over the one agentflow home the pass reads its settings from (see "Phase 6 integration amendments").
 
 **The cache** (`<home>/harnesses/cache.json`, lane 6.2): mode 0600 in a 0700 directory, replaced atomically under `cache.json.lock` (`internal/filelock`), read-modify-write per entry so the CLI and the daemon can both write. At most 256 records and 256 KiB; the oldest records go first. A record applies only to its identity, and for at most 24 hours. It holds no path, no stderr and no agent text beyond the sanitized `ACPInfo` and `SignIn`.
 
@@ -2980,6 +2980,32 @@ export AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
 4. In a scratch git repository, put a copy of `fake-acp` in its `bin/` and that directory first on PATH, then run `ai doctor` from inside the repository: it lists the entry as skipped (`inside_repository`), and nothing from it is started.
 
 **Gate:** all four lanes merged; `make check` green on `develop` (including `TestPinnedRegistry`, `TestOverlayMatchesRegistry`, `TestGuardRefusesRealPATH`, `TestEveryConfigFieldHasControl`, `TestEveryMCPToolHasCLICommand`); `make e2e` passes (new MCP tools); the demo works; tag `develop-p6`; ledger updated.
+
+### Phase 6 integration amendments
+
+*Amendment from the phase 6 integration (issue #114), after lanes 6.1 to 6.4.* These change or add to the sections above; where they differ, this section wins.
+
+**Production wiring.**
+
+- `harness.Production(home, version, workDirs)` is the one production constructor. It builds `FileStore`, `NewProber(home, version, store)` and `NewSignInCheck(home)` over the same home. `app.NewHarnessDetector` (the CLI and MCP) and the daemon's `productionHarnessOptions` both use it. Without a usable home it wires no `Prober` and no sign-in check, so no probe file lands relative to the working directory. `harness.NewForWorkDir(workDir, version)` is `Production` for one work directory.
+- The daemon's work directories are every worktree it has registered (its index, read on each pass, plus the worktree being registered as it starts) and every worktree attached to its runtime, so the first pass already skips them. The home checks (`config.InsideRepository`) cover any repository and need no list.
+- `auto_probe` and `poll_interval` are read from the personal `config.yml` by `harness.ReadSettings` on every pass, and `sign_in_check` and `probe_timeout` by the Detector on every pass, so a change applies without a restart. An unsafe or unreadable home counts both toggles as off.
+- A console probe runs `ai.harnesses` with `app.WithHarnessRequester(ctx, person)` and `app.WithHarnessDetector(ctx, daemonDetector)`: the daemon's PATH rules and its prober's limits apply to it. Only the console's probe handler and the CLI Verb set a requester; no input field does.
+- `PublishedState.ProbeStatus` is written and read with the snapshot, so a probe-status change after a daemon restart is still published.
+
+**Probe announcements (coordinator decision).** The page must learn that a console probe started and landed even when nothing changed. A console probe publishes `harness.changed`, trigger `probe`, for each probed ID that the last pass published: once when it starts (the projection then has those IDs in `probing`) and once from the pass after it ends (with `probing` cleared). An ID with a real change in that pass gets only its diff event. The end IDs are kept apart from the trigger name, so a focus or config trigger during the probe does not lose them.
+
+**One installed program is listed once.** Two catalog entries can name the same command (the legacy `kimi` and `kimi-code` both install `kimi`). Found definitions whose file resolves to the same target form a group, and only the highest-ranked member is listed: highest layer (personal, plugin, agentflow, registry), then lowest ID. A definition a person or a plugin shaped is never dropped. So `kimi-code` (registry and agentflow overlay) is listed and the legacy `kimi` is left out, in every list including `--all`.
+
+**`DoctorReport` checks.** A check's `fix` is a `harness.Fix` object (`{text, command?, url?}`), not a string: `{checks: [{id, status, message, fix?: harness.Fix}], report: harness.Report}`.
+
+**Overrides columns.** `personal:ai.harnesses.overrides` has 17 columns: the twelve above plus `status_signed_in` and `status_signed_out` (exit codes, `chips`), `status_signed_out_line` (`text`), `config_env` (`chips`) and `status_source` (`text`), all marked advanced. A personal status command may therefore set its own exit codes and signed-out line.
+
+**`config_env` names.** These variables are passed, with their values, to a command that runs with the real `HOME`, so `harnessdef.Validate` refuses, in every layer (overlay, plugin, personal): a name that changes program lookup, loading or trust (the sign-in guidance list: `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS` and the rest); a credential-like name (the credential suffixes, any name with `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD` or `CREDENTIAL`, a name ending in `_KEY`, `SSH_AUTH_SOCK`, or a name in the definition's `credential_env`); and an `AGENTFLOW_*` or `DEVFLOW_*` name. The status profile applies the same rule again at run time (`harnessdef.ConfigEnvRefused`). `CODEX_HOME` and `CLAUDE_CONFIG_DIR` pass.
+
+**A repository `ai:` key is accepted and ignored**, not a `syntax` problem. The repository loader keeps unknown keys aside, as for every key it does not know, and no harness code reads the repository layer. Making it an error would fail every command in that repository, which is a larger change than phase 6 makes.
+
+**`Found.BaseFound` is a `*Found`** (as amended in the `Found` type above). The sign-in check starts the base file the finder found and checked (its `Path`, resolved `Target` and `PathDir`), and its `Identity` decides when a stored verdict is due again.
 
 ### Phase 6 amendments to earlier contracts
 
