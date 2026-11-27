@@ -53,7 +53,7 @@ agentflow start <task> --worktree
 
 | Started by | Runs | Output |
 | --- | --- | --- |
-| You, `ai run` in a terminal | in that terminal | the agent's messages, tool calls and plan as they arrive; requests are asked as `Allow once? [y/N]`; Ctrl-C cancels, a second Ctrl-C stops it |
+| You, `ai run` in a terminal | in that terminal | the agent's messages, tool calls and plan as they arrive; requests are asked as `Allow once? [y/N]`, and only an answer typed after that prompt counts; while it waits, new output is held until it ends; Ctrl-C cancels, a second Ctrl-C stops it |
 | `ai run --detach`, `agentflow_ai_run`, or `ai run` inside an AI agent | in the background | the session ID; follow it with `ai status SESSION --follow` or the console's AI panel |
 
 `ai status --follow` reads the session store directly, so it needs no console.

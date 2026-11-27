@@ -379,7 +379,8 @@ func printAIPlan(w io.Writer, summary any) {
 }
 
 // hostForeground runs the session in this process: items print as they
-// arrive, asks are prompted, Ctrl-C cancels, a second Ctrl-C stops.
+// arrive, except while a request waits for its answer (see
+// foregroundPrompt); Ctrl-C cancels, a second Ctrl-C stops.
 func hostForeground(ctx context.Context, a *app.App, id aisession.ID) error {
 	o := AIOptions(a)
 	hostCtx, stop := context.WithCancel(ctx)
@@ -400,49 +401,25 @@ func hostForeground(ctx context.Context, a *app.App, id aisession.ID) error {
 			return
 		}
 	}()
-	var mu sync.Mutex
-	out := &aiPrinter{w: os.Stdout}
-	asks := make(chan aisession.AskRecord, aisession.MaxAsksWaiting)
+	// Standard input is read from here on: the start confirmation above
+	// has its answer already.
+	prompt := newForegroundPrompt(os.Stdin, os.Stdout, os.Stderr, func(ask aisession.AskRecord, d aisession.Decision) error {
+		_, err := a.AIRespond(ctx, o, aisession.AnswerRequest{Session: id, Ask: ask.ID, Decision: d, Fingerprint: ask.Fingerprint})
+		return err
+	})
+	done := make(chan struct{})
+	prompted := make(chan struct{})
 	go func() {
-		for ask := range asks {
-			// The lock covers printing only: reading the answer must never
-			// hold up the host's items, a timeout, a cancel or the end.
-			mu.Lock()
-			printAsk(os.Stdout, ask)
-			mu.Unlock()
-			answer := false
-			if ask.CanAllow {
-				answer = strings.HasPrefix(strings.ToLower(askLine(fmt.Sprintf("Allow once? [y/N] (denied at %s): ", ask.ExpiresAt.Local().Format("15:04:05")))), "y")
-			} else {
-				askLine("Press Enter to reject it: ")
-			}
-			decision := aisession.Deny
-			if answer && ask.CanAllow {
-				decision = aisession.Allow
-			}
-			_, err := a.AIRespond(ctx, o, aisession.AnswerRequest{Session: id, Ask: ask.ID, Decision: decision, Fingerprint: ask.Fingerprint})
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "agentflow: %v\n", err)
-			}
-		}
+		defer close(prompted)
+		prompt.run(done)
 	}()
 	s, err := a.AIHost(hostCtx, o, id, aisession.HostOptions{
-		Mode: aisession.HostForeground,
-		OnItems: func(items []aisession.Item) {
-			mu.Lock()
-			defer mu.Unlock()
-			for _, it := range items {
-				out.item(it)
-			}
-		},
-		OnAsk: func(r aisession.AskRecord) {
-			select {
-			case asks <- r:
-			default:
-			}
-		},
+		Mode:    aisession.HostForeground,
+		OnItems: prompt.onItems,
+		OnAsk:   prompt.onAsk,
 	})
-	close(asks)
+	close(done)
+	<-prompted
 	if err != nil {
 		return err
 	}
