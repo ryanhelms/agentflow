@@ -90,6 +90,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/settings/preview", s.settingsPreview)
 	mux.HandleFunc("POST /api/settings/save", s.settingsSave)
 	mux.HandleFunc("POST /api/settings/undo", s.settingsUndo)
+	mux.HandleFunc("POST /api/harnesses/check", s.harnessesCheck)
+	mux.HandleFunc("POST /api/harnesses/probe", s.harnessesProbe)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")
