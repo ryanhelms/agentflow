@@ -1,0 +1,130 @@
+/*
+ * agentflow design tokens.
+ * Groups: brand/*, palette/*, semantic/* (Light/Dark), on-dark/*, status/*, space/s-*, radius/*.
+ */
+:where(.agentflow-ui) {
+  /* brand/* — constant across modes */
+  --brand-midnight: #040e27;
+  --brand-blue: #0f41f3;
+  --brand-blue-deep: #0c34c2;
+  --brand-chalk: #fdfff8;
+  --brand-frost: #e1eaf9;
+  --brand-slate: #3b404d;
+  --brand-spearmint: #00df99; /* accent only: live signal, one highlight, primary hover */
+
+  /* on-dark/* */
+  --on-dark-primary: #fdfff8;
+  --on-dark-secondary: #c3d0fc;
+  --on-dark-faint: #87a0f9;
+
+  /* space/s-1..s-10 — 4px grid */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px;
+  --s-6: 32px; --s-7: 48px; --s-8: 64px; --s-9: 96px; --s-10: 128px;
+
+  /* radius/none is the brand default: square and flat, no shadows */
+  --radius: 0;
+  --keyline: 1px; /* 0.5px on hi-dpi, see media query below */
+
+  /* type */
+  --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /*
+   * type size. In rem, so every size follows
+   * the root font size: the reader's browser setting, or a text-size preference. px at the default 16px root.
+   * Nothing below 11px; body is 14px.
+   */
+  --fs-2xs: 0.6875rem; /* 11 counts, badges, axis labels, dense tiles */
+  --fs-xs: 0.75rem;    /* 12 eyebrow, caption, small buttons */
+  --fs-sm: 0.8125rem;  /* 13 small, label, mono, table cells */
+  --fs-md: 0.875rem;   /* 14 body */
+  --fs-lg: 1rem;       /* 16 h3 */
+  --fs-xl: 1.125rem;   /* 18 */
+  --fs-2xl: 1.25rem;   /* 20 h2 */
+  --fs-3xl: 1.375rem;  /* 22 */
+  --fs-4xl: 1.5rem;    /* 24 mono-lg, KPI numbers */
+  --fs-5xl: 1.75rem;   /* 28 h1 */
+  --fs-6xl: 2rem;      /* 32 mono-xl */
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --t-fast: 120ms;
+  --t-med: 240ms;
+  --t-slow: 520ms;
+
+  /* layout: in rem where text sits inside, so rows and bars grow with the type */
+  --rail-w: 13.5rem;          /* 216 */
+  --rail-w-collapsed: 52px;
+  --topbar-h: 2.75rem;        /* 44 */
+  --statusbar-h: 1.625rem;    /* 26 */
+  --row-h: 1.875rem;          /* 30 */
+}
+@media (min-resolution: 2dppx) {
+  :where(.agentflow-ui) { --keyline: 0.5px; }
+}
+
+/* semantic/* — Dark mode (Midnight ground). Default for the console. */
+:where(.agentflow-ui),
+.agentflow-ui[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #040e27;
+  --surface: #0a1734;
+  --surface-2: #132248;
+  --text: #fdfff8;
+  --text-muted: #b4bbc7;
+  --text-subtle: #878c95;
+  --border: #1c2c57;
+  --border-strong: #2a3f7a; /* emphasised keylines */
+  --accent: #87a0f9;
+  --blue-wash: #0c34c2;
+  --on-blue: #fdfff8;
+  --focus: #00df99;
+  --primary-hover: #00df99;
+
+  /* status/* */
+  --ok: #00df99;      --ok-bg: rgba(0, 223, 153, 0.12);
+  --warn: #ffb547;    --warn-bg: rgba(255, 181, 71, 0.12);
+  --bad: #ff5d6c;     --bad-bg: rgba(255, 93, 108, 0.13);
+  --info: #87a0f9;    --info-bg: rgba(135, 160, 249, 0.13);
+
+  /* chart series: eight separable marks, periwinkle first. Five hues, then three brand
+     neutrals split by lightness. None reuses a status colour (--ok / --warn / --bad), so a series
+     can sit beside Conflict or Error in one stack and still read as its own thing. */
+  --series-1: #87a0f9; --series-2: #f58fd6; --series-3: #2cc8ee; --series-4: #d6e04e;
+  --series-5: #b07cff; --series-6: #3158ff; --series-7: #e1eaf9; --series-8: #7c8aa8;
+  --grid: #14224a;
+  --aurora-a: rgba(15, 65, 243, 0.55);
+  --aurora-b: rgba(0, 223, 153, 0.18);
+  --scrim: rgba(4, 14, 39, 0.72);
+}
+
+/* semantic/* — Light mode (Chalk ground) */
+:where(.agentflow-ui[data-theme='light'], [data-theme='light'] .agentflow-ui:not([data-theme])) {
+  color-scheme: light;
+  --bg: #fdfff8;
+  --surface: #ffffff;
+  --surface-2: #f0f5fc;
+  --text: #040e27;
+  --text-muted: #3b404d;
+  --text-subtle: #828793;
+  --border: #e1eaf9;
+  --border-strong: #b9c9ec;
+  --accent: #0f41f3;
+  --blue-wash: #e9effb;
+  --on-blue: #fdfff8;
+  --focus: #0f41f3;
+  --primary-hover: #00df99;
+
+  --ok: #00724f;      --ok-bg: #dffbf1;
+  --warn: #8a5300;    --warn-bg: #fff2d9;
+  --bad: #b3202e;     --bad-bg: #fde8ea;
+  --info: #0f41f3;    --info-bg: #e9effb;
+
+  --series-1: #0f41f3; --series-2: #c0268f; --series-3: #0086ad; --series-4: #6b7a00;
+  --series-5: #7a3ff2; --series-6: #071f7a; --series-7: #87a0f9; --series-8: #5b6475;
+  --grid: #e9effb;
+  --aurora-a: rgba(15, 65, 243, 0.16);
+  --aurora-b: rgba(0, 223, 153, 0.14);
+  --scrim: rgba(4, 14, 39, 0.4);
+}

@@ -8,6 +8,11 @@
       "name": "agentflow",
       "source": "./",
       "description": "Agentflow project tools and installation manager"
+    },
+    {
+      "name": "design-system",
+      "source": "./plugins/design-system",
+      "description": "Agentflow design system: tokens, React components and page templates, with a skill for building interfaces that use them"
     }
   ]
 }
