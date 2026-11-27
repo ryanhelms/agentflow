@@ -241,7 +241,10 @@ check "e2e-fake probed" jq -e '.harnesses | length == 1 and .[0].id == "e2e-fake
 run_claude "$tmp/7.jsonl" "AI session test. Make exactly three tool calls, in order, and nothing else: (1) agentflow_ai_status with no arguments; (2) agentflow_ai_run with harness \"claude-acp\" and prompt \"say hi\"; (3) agentflow_ai_run with harness \"e2e-fake\" and prompt \"say hi\". Never pass confirm_token, never call a tool again to apply a confirmation, and do not start anything else. Then reply with the word done." \
   "mcp__plugin_agentflow_agentflow__agentflow_ai_status" "mcp__plugin_agentflow_agentflow__agentflow_ai_run"
 session_calls=$(jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name | test("__agentflow_ai_(run|status)$")))' "$tmp/7.jsonl")
-session_results=$(jq -r 'select(.type=="user") | .message.content[]? | select(.type=="tool_result") | .content | tostring' "$tmp/7.jsonl")
+# A tool result is a string or a list of text blocks; read the text either way,
+# so quotes in a reply are not escaped by re-encoding it as JSON.
+result_text='.content | if type == "array" then map(.text? // "") | join("\n") else tostring end'
+session_results=$(jq -r "select(.type==\"user\") | .message.content[]? | select(.type==\"tool_result\") | $result_text" "$tmp/7.jsonl")
 check "status and run called" jq -e -s '[.[].name | sub(".*__"; "")] | index("agentflow_ai_status") != null and index("agentflow_ai_run") != null' <<<"$session_calls"
 check "no confirm_token passed" jq -e -s 'all(.[]; (.input.confirm_token // "") == "")' <<<"$session_calls"
 check "status lists no sessions" grep -Eq '"sessions": \[\]' <<<"$session_results"
@@ -249,7 +252,7 @@ run_result() { # run_result <harness>: the reply to the agentflow_ai_run call fo
   local id
   id=$(jq -r --arg h "$1" 'select(.name | endswith("__agentflow_ai_run")) | select(.input.harness == $h) | .id' <<<"$session_calls" | head -n1)
   [ -n "$id" ] || return 0
-  jq -r --arg id "$id" 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .tool_use_id == $id) | .content | tostring' "$tmp/7.jsonl"
+  jq -r --arg id "$id" "select(.type==\"user\") | .message.content[]? | select(.type==\"tool_result\" and .tool_use_id == \$id) | $result_text" "$tmp/7.jsonl"
 }
 claude_acp_result=$(run_result claude-acp)
 fake_result=$(run_result e2e-fake)
@@ -257,9 +260,11 @@ check "claude-acp refused" grep -Eq 'not_ready|not found|unknown harness' <<<"$c
 no_confirmation() { ! grep -q needs_confirmation <<<"$1"; }
 check "claude-acp did not ask for confirmation" no_confirmation "$claude_acp_result"
 check "e2e-fake needs confirmation" grep -q needs_confirmation <<<"$fake_result"
-# Nothing passed the gate: no session store, no session/new in the fake's
+# Nothing passed the gate: no session record, no session/new in the fake's
 # log (only the probe's initialize), and a probe record for e2e-fake only.
-check "no session created" test ! -e "$AGENTFLOW_HOME/ai/sessions"
+# `ai status` creates the empty session store, so look inside it.
+no_session_record() { [ -z "$(ls -A "$AGENTFLOW_HOME/ai/sessions" 2>/dev/null)" ]; }
+check "no session created" no_session_record
 fake_only_initialize() {
   [ -s "$fake_log" ] || return 1
   jq -e -s '[.[] | select(.method != null) | .method] | length >= 1 and all(. == "initialize")' "$fake_log"
