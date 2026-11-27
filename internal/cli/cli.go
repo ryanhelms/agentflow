@@ -185,8 +185,12 @@ func run(ctx context.Context, cmd string, args []string) error {
 		client := fs.String("client", "", "calling client name")
 		uiOnly := fs.Bool("ui-only", false, "expose only agentflow_ui_open for local console requests")
 		autoOpen := fs.Bool("auto-open", false, "the host explicitly identifies an interactive lead session; open its local console at startup")
+		session := fs.String("session", "", "serve AI session ID's read-only tools (agentflow passes this to a harness)")
 		if err := fs.Parse(args); err != nil {
 			return err
+		}
+		if *session != "" {
+			return mcpserver.ServeSession(ctx, *session)
 		}
 		u, _ := newUpdater(ctx)
 		return mcpserver.Serve(ctx, *client, u, *uiOnly, *autoOpen)

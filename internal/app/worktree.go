@@ -139,10 +139,16 @@ func (a *App) Sweep(ctx context.Context, req SweepRequest, token string) (*workt
 	return res, nil, err
 }
 
+// SessionEnv is set for every process below an AI session's harness: its
+// value is the session ID (ADR, "Phase 7 session environment"). It is one
+// layer, not a boundary: a harness can unset it.
+const SessionEnv = "AGENTFLOW_ACP_SESSION"
+
 // AgentEnvironment names the environment variable that shows an AI agent is
-// running this process, or "" for a person.
+// running this process, or "" for a person. A process inside an AI session
+// (SessionEnv) counts as an agent.
 func AgentEnvironment() string {
-	for _, name := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "AGENTFLOW_CODEX_HOST_ACTIVE"} {
+	for _, name := range []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "AGENTFLOW_CODEX_HOST_ACTIVE", SessionEnv} {
 		if os.Getenv(name) != "" {
 			return name
 		}
