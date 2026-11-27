@@ -203,26 +203,26 @@ func TestAskRateCap(t *testing.T) {
 	}
 	r := newRig(t, aisessiontest.Script{Steps: steps}, aisessiontest.Settings{})
 	ctx := person(context.Background())
-	s := r.start(t, ctx, "write")
+	id := r.start(t, ctx, "write").ID
 	// Reject every ask as it appears.
 	var asked atomic.Int64
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for {
-			got, asks, err := r.m.Get(ctx, s.ID)
+			got, asks, err := r.m.Get(ctx, id)
 			if err != nil || got.State == aisession.StateEnded {
 				return
 			}
 			for _, a := range asks {
-				if _, err := r.m.Answer(ctx, aisession.AnswerRequest{Session: s.ID, Ask: a.ID, Decision: aisession.Deny}); err == nil {
+				if _, err := r.m.Answer(ctx, aisession.AnswerRequest{Session: id, Ask: a.ID, Decision: aisession.Deny}); err == nil {
 					asked.Add(1)
 				}
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
-	s = r.d.Wait(t, s.ID, 120*time.Second)
+	s := r.d.Wait(t, id, 120*time.Second)
 	<-done
 	writes := aisessiontest.Calls(aisessiontest.ReadLog(t, r.agent.Log), acp.MethodWriteTextFile)
 	if len(writes) != aisession.MaxAsksPerMinute+1 {
