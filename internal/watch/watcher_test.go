@@ -415,25 +415,36 @@ func TestEventStoreNeverTriggersEvents(t *testing.T) {
 }
 
 func TestBurstIsDebounced(t *testing.T) {
+	// Not the default timings: on a slow runner, writes pause for more than
+	// Quiet or the burst outlasts MaxDelay, and the watcher rightly splits
+	// it. A long quiet and an out-of-reach maximum leave exactly one batch.
+	// TestAggregatorQuietAndMaxDelay checks the defaults with a fake clock.
+	const quiet = time.Second
 	for _, mode := range modes {
 		t.Run(string(mode), func(t *testing.T) {
 			root := newRepo(t)
-			writeFile(t, filepath.Join(root, ".agentflow", "config.yml"), "n: 0\n")
-			h := start(t, watch.Options{Mode: mode}, target(t, root, "main"))
+			config := filepath.Join(root, ".agentflow", "config.yml")
+			writeFile(t, config, "n: 0\n")
+			opts := watch.Options{Mode: mode, Quiet: quiet, MaxDelay: time.Minute}
+			h := start(t, opts, target(t, root, "main"))
+
+			var pause time.Duration // longest between two writes
+			last := time.Now()
 			for i := range 30 {
-				writeFile(t, filepath.Join(root, ".agentflow", "config.yml"), fmt.Sprintf("n: %d\n", i+1))
+				writeFile(t, config, fmt.Sprintf("n: %d\n", i+1))
+				pause, last = max(pause, time.Since(last)), time.Now()
 				time.Sleep(3 * time.Millisecond)
 			}
-			var n int
-			for _, e := range h.quiet(1200 * time.Millisecond) {
-				if e.Type == bus.TypeConfigLayerChanged {
-					n++
-				}
+
+			isConfig := is(bus.TypeConfigLayerChanged, "main")
+			e := h.wait(t, "burst", isConfig)
+			if p := payload[bus.ConfigLayerChanged](t, e); !slices.Equal(p.Paths, []string{".agentflow/config.yml"}) {
+				t.Fatalf("burst paths = %v", p.Paths)
 			}
-			// 30 writes in ~100 ms: one batch, or two when MaxDelay or a
-			// poll tick splits the burst.
-			if n < 1 || n > 2 {
-				t.Fatalf("burst gave %d config events", n)
+			for _, e := range h.quiet(2 * quiet) {
+				if isConfig(e) {
+					t.Fatalf("burst gave a second config event (longest pause between writes: %v)", pause)
+				}
 			}
 		})
 	}
