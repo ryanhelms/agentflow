@@ -139,6 +139,12 @@ func (f *files) writeChecked(rel, content string, dir fs.FileInfo, recheck func(
 	}
 	name := path.Clean(rel)
 	parent, base := path.Dir(name), path.Base(name)
+	// Classified first through the root, before anything is created: a
+	// path through a link that leaves the root is outside_worktree on every
+	// system and Go release (MkdirAll's own error for it differs).
+	if err := classifyTarget(f.root, name); err != nil {
+		return "", err
+	}
 	if parent != "." {
 		if err := f.root.MkdirAll(parent, 0o755); err != nil {
 			return "", rootErr(err)
@@ -158,22 +164,13 @@ func (f *files) writeChecked(rel, content string, dir fs.FileInfo, recheck func(
 			return "", &fsError{VerdictChanged}
 		}
 	}
+	// Again through the pinned folder: this is the file the rename replaces.
+	if err := classifyTarget(d, base); err != nil {
+		return "", err
+	}
 	mode := os.FileMode(0o644)
-	switch info, err := d.Lstat(base); {
-	case err == nil:
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", &fsError{VerdictLink}
-		}
-		if !info.Mode().IsRegular() {
-			return "", &fsError{VerdictNotRegular}
-		}
-		if links(info) > 1 {
-			return "", &fsError{VerdictHardlink}
-		}
+	if info, err := d.Lstat(base); err == nil {
 		mode = info.Mode().Perm()
-	case errors.Is(err, fs.ErrNotExist):
-	default:
-		return "", rootErr(err)
 	}
 	tmp := ".agentflow-write-" + randomHex(8)
 	file, err := d.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
@@ -211,6 +208,25 @@ func (f *files) writeChecked(rel, content string, dir fs.FileInfo, recheck func(
 	}
 	sum := sha256.Sum256([]byte(content))
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// classifyTarget refuses a write target name in r that is a link, not a
+// regular file or a file with more than one link; a missing one is fine.
+func classifyTarget(r *os.Root, name string) error {
+	info, err := r.Lstat(name)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return rootErr(err)
+	case info.Mode()&os.ModeSymlink != 0:
+		return &fsError{VerdictLink}
+	case !info.Mode().IsRegular():
+		return &fsError{VerdictNotRegular}
+	case links(info) > 1:
+		return &fsError{VerdictHardlink}
+	}
+	return nil
 }
 
 // state is what rel holds now: whether it exists, the SHA-256 of its

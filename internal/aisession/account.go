@@ -197,7 +197,10 @@ func (m *manager) accountStore() (*fileStore, error) {
 // account store's lock, taken before the session store's, and writes the
 // stub of the session create made into the account store before the lock
 // is released, so a start from any other home counts it.
-func (m *manager) withAccountCounts(worktree string, create func(running, here, recent int) (Session, error)) error {
+//
+// own is the session home's store: a stub of one of its own sessions is
+// skipped, as create counts that session's own record already.
+func (m *manager) withAccountCounts(own *fileStore, worktree string, create func(running, here, recent int) (Session, error)) error {
 	st, err := m.accountStore()
 	if err != nil {
 		// An account store that cannot be opened must not lift the caps.
@@ -216,6 +219,9 @@ func (m *manager) withAccountCounts(worktree string, create func(running, here, 
 		now := st.now()
 		running, here, recent := 0, 0, 0
 		for _, o := range all {
+			if o.Elsewhere && own.has(o.ID) {
+				continue
+			}
 			if now.Sub(o.CreatedAt) < time.Hour {
 				recent++
 			}

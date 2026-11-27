@@ -351,7 +351,7 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 		MCP: p.plan.MCP, Host: HostInfo{Mode: mode}, CreatedAt: m.o.Now().UTC(),
 	}
 	var created Session
-	err = m.withAccountCounts(p.root, func(running, here, recent int) (Session, error) {
+	err = m.withAccountCounts(st, p.root, func(running, here, recent int) (Session, error) {
 		var err error
 		created, err = st.Create(sess, r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour,
 			Running: running, Here: here, Recent: recent})

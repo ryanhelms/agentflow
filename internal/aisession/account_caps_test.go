@@ -187,3 +187,36 @@ func TestAccountStubIsHiddenAndHoldsNoContent(t *testing.T) {
 	}
 	stop(t, r.m, r.d, s.ID)
 }
+
+// A home that is not the account's counts each of its own sessions once:
+// its record there and its stub in the account store are one session.
+func TestCapsCountOneHomesSessionsOnce(t *testing.T) {
+	two := 2
+	set := aisessiontest.Settings{Sessions: config.UserAISessions{MaxRunning: &two}}
+	t.Run("running", func(t *testing.T) {
+		r, _ := accountRig(t, aisessiontest.Script{Steps: []aisessiontest.Step{{WaitCancel: true}}}, set, set)
+		s1 := r.start(t, person(context.Background()), "one")
+		waitStarted(t, r.m, s1.ID)
+		s2, err := r.m.Start(person(context.Background()), aisession.StartRequest{Harness: "demo", Prompt: "two", Dir: otherWorktree(t), Detach: true})
+		if err != nil {
+			t.Errorf("a second session from the same home = %v, want it to start under max_running 2", err)
+		} else {
+			stop(t, r.m, r.d, s2.ID)
+		}
+		stop(t, r.m, r.d, s1.ID)
+	})
+	t.Run("rate", func(t *testing.T) {
+		r, _ := accountRig(t, aisessiontest.Script{}, aisessiontest.Settings{}, aisessiontest.Settings{})
+		for i := range aisession.StartsPerHour {
+			s, err := r.m.Start(person(context.Background()), aisession.StartRequest{Harness: "demo", Prompt: "x", Dir: r.wt, Detach: true})
+			if err != nil {
+				t.Fatalf("start %d from one home: %v", i+1, err)
+			}
+			r.d.Wait(t, s.ID, 60*time.Second)
+		}
+		_, err := r.m.Start(person(context.Background()), aisession.StartRequest{Harness: "demo", Prompt: "x", Dir: r.wt, Detach: true})
+		if code := refusal(t, err); code != aisession.RefuseLimitRate {
+			t.Errorf("start %d = %s, want limit_rate", aisession.StartsPerHour+1, code)
+		}
+	})
+}

@@ -2,6 +2,7 @@ package aisession
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -183,11 +184,11 @@ func (w worktree) resolve(asked string) (Path, string) {
 	if real, err := filepath.EvalSymlinks(full); err == nil {
 		p.Real, p.Exists = real, true
 		if info, err := os.Stat(real); err == nil {
-			p.info = info
+			p.info = pinned(info)
 		}
 	}
 	if info, err := os.Stat(filepath.Dir(full)); err == nil && info.IsDir() {
-		p.dir = info
+		p.dir = pinned(info)
 	}
 	resolved, inside := w.resolvedRel(rel)
 	if !inside {
@@ -320,4 +321,12 @@ func resolvedPath(p string) string {
 		return r
 	}
 	return filepath.Clean(p)
+}
+
+// pinned loads info's file identity now. On Windows os.Stat reads the file
+// ID lazily, from the path, the first time os.SameFile compares it; a later
+// comparison would then read whatever the path names at that moment.
+func pinned(info fs.FileInfo) fs.FileInfo {
+	_ = os.SameFile(info, info)
+	return info
 }

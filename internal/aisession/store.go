@@ -782,3 +782,12 @@ func (s *fileStore) endStub(id ID) {
 		return s.write(sess)
 	})
 }
+
+// has reports whether the store holds a record for id.
+func (s *fileStore) has(id ID) bool {
+	if !ValidID(string(id)) {
+		return false
+	}
+	_, err := os.Stat(s.path(id, sessionFile))
+	return err == nil
+}
