@@ -42,7 +42,7 @@ var stockLaunchers = map[string][]string{
 	".agentflow/bin/agentflow.ps1": {
 		"c4b59ba292ee93cec33e68c6faed6d6c5ce54280623551cee387fa4e8d53a82b", // v0.53.0
 		"c58858ab02256499800722c6d3502cc59d568f1e1ba719673cbdb04effdaf041", // v0.54.0 - v0.60.0
-		"f569f3f644b96fa77c9b63d38a5482ca4e0ad0a94bf4a07b8ab731839eb92fb0", // unreleased (#129): replace it, do not add one
+		"0cbc097cc4e5f293e8a17974d4f607c24c093abf47a1def4f2fc9254cacaa5d4", // unreleased (#129): replace it, do not add one
 	},
 	".githooks/commit-msg": {
 		"7e8c1307c1b51da8e82582779a12ac78da429b843f3cb13735debc76994b2116", // v0.53.0 - v0.60.0

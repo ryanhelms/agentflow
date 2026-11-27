@@ -48,7 +48,7 @@ function Get-AgentflowInsideRepository([string]$Path) {
         }
       } elseif ([IO.File]::Exists($dir)) {
         return "cannot be checked (the file $dir is in its path)"
-      } elseif ($d.Parent -and $d.Parent.Exists -and
+      } elseif ($d.Parent -and $d.Parent.Exists -and !(Test-AgentflowLink $d.Parent) -and
                 @([IO.Directory]::GetFileSystemEntries($d.Parent.FullName, $d.Name)).Count -gt 0) {
         # Listed by its folder but neither a folder nor a file: a dangling link or junction.
         return "cannot be checked (it goes through the dangling link $dir)"

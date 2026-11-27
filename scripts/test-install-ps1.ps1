@@ -265,8 +265,8 @@ exit 0
     $dangling = Join-Path $outside 'dangling'
     New-TestLink $dangling $gone
     Remove-Item -LiteralPath $gone -Recurse -Force
-    Assert ((Get-AgentflowInsideRepository (Join-Path $dangling 'agentflow')) -match 'link') 'Accepted a cache through a dangling link.'
-    Assert ((Get-AgentflowInsideRepository $dangling) -match 'link') 'Accepted a dangling link as the cache.'
+    Assert ((Get-AgentflowInsideRepository (Join-Path $dangling 'agentflow')) -match 'cannot be checked') 'Accepted a cache through a dangling link.'
+    Assert ((Get-AgentflowInsideRepository $dangling) -match 'cannot be checked') 'Accepted a dangling link as the cache.'
     $env:LOCALAPPDATA = $dangling
     Assert ((Get-AgentflowCacheRoot 2>$null) -eq $own) 'Used a LOCALAPPDATA that is a dangling link.'
     # The account's own cache behind a link (a profile behind a junction) still runs. Off
