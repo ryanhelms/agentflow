@@ -36,7 +36,14 @@ type Options struct {
 	Detach func(ctx context.Context, id ID) error
 	// MCPServer is the server entry for session/new, or nil for none.
 	MCPServer func(id ID) *acp.MCPServer
-	Now       func() time.Time
+	// WorkDirs lists the repositories the console daemon serves (their
+	// common git directories). PATH entries inside any worktree of them, or
+	// of the session's own repository, are dropped from the session PATH,
+	// and SHELL there is not passed. An error refuses the start
+	// (unsafe_environment): the repositories cannot be told. nil means
+	// only the session's own repository. (Integration amendment, 2026-11-27.)
+	WorkDirs func(ctx context.Context) ([]string, error)
+	Now      func() time.Time
 }
 
 // ---- lifecycle ("Phase 7 session lifecycle") ----

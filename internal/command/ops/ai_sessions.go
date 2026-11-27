@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 	"unicode"
 
@@ -77,7 +78,18 @@ func AISessionOptions(a *app.App) aisession.Options {
 	}
 	o.MergeBase = func(cmd string) (string, error) { return hooks.MergeBase(context.Background(), dir, cmd) }
 	o.MCPServer = func(id aisession.ID) *acp.MCPServer { return sessionMCPServer(dir, id) }
+	o.WorkDirs = func(ctx context.Context) ([]string, error) { return aiServedRepos(ctx) }
 	return o
+}
+
+// aiServedRepos lists the repositories the console daemon serves, for the
+// session PATH filter. A test binary reads no console registry (it is the
+// account's own ~/.agentflow-ui) unless a test sets this.
+var aiServedRepos = func(ctx context.Context) ([]string, error) {
+	if testing.Testing() {
+		return nil, nil
+	}
+	return webui.ServedRepos(ctx)
 }
 
 // sessionMCPServer is the session/new entry for agentflow's own read-only
@@ -107,8 +119,10 @@ func inside(path, dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// aiOptions builds the Options of a call on a. Tests replace it.
-var aiOptions = AISessionOptions
+// AIOptions builds the Options the ai commands use for a call on a: the
+// production AISessionOptions. Tests replace it (to host detached sessions
+// in the test process); nothing else does.
+var AIOptions = AISessionOptions
 
 // aiRequester keeps a requester the surface set on ctx. Without one the call
 // is the App's session client's, or an agent's: never a person's.
@@ -228,7 +242,7 @@ var aiRunSpec = command.Spec[aiRunIn, app.AIRunResult]{
 	Describe: func(in aiRunIn) command.Detail { return command.Detail{Subject: "ai run " + in.Harness} },
 	Plan: func(ctx context.Context, a *app.App, in aiRunIn) (command.Plan, error) {
 		ctx = aiRequester(ctx, a)
-		plan, err := a.AIPlan(ctx, aiOptions(a), in.request(ctx))
+		plan, err := a.AIPlan(ctx, AIOptions(a), in.request(ctx))
 		if err != nil {
 			return command.Plan{}, err
 		}
@@ -237,7 +251,7 @@ var aiRunSpec = command.Spec[aiRunIn, app.AIRunResult]{
 	},
 	Run: func(ctx context.Context, a *app.App, in aiRunIn) (any, error) {
 		ctx = aiRequester(ctx, a)
-		return a.AIRun(ctx, aiOptions(a), in.request(ctx))
+		return a.AIRun(ctx, AIOptions(a), in.request(ctx))
 	},
 }
 
@@ -351,7 +365,7 @@ func printAIPlan(w io.Writer, summary any) {
 // hostForeground runs the session in this process: items print as they
 // arrive, asks are prompted, Ctrl-C cancels, a second Ctrl-C stops.
 func hostForeground(ctx context.Context, a *app.App, id aisession.ID) error {
-	o := aiOptions(a)
+	o := AIOptions(a)
 	hostCtx, stop := context.WithCancel(ctx)
 	defer stop()
 	sig := make(chan os.Signal, 2)
@@ -472,7 +486,7 @@ var aiStatusSpec = command.Spec[aiStatusIn, any]{
 		return nil
 	},
 	Run: func(ctx context.Context, a *app.App, in aiStatusIn) (any, error) {
-		return a.AIStatus(aiRequester(ctx, a), aiOptions(a), aisession.ID(in.Session), in.Since)
+		return a.AIStatus(aiRequester(ctx, a), AIOptions(a), aisession.ID(in.Session), in.Since)
 	},
 }
 
@@ -661,7 +675,7 @@ var aiRespondSpec = command.Spec[aiRespondIn, aisession.AnswerResult]{
 			}
 			decision = aisession.Allow
 		}
-		return a.AIRespond(ctx, aiOptions(a), aisession.AnswerRequest{Session: aisession.ID(in.Session), Ask: in.Ask, Decision: decision, Fingerprint: in.Fingerprint})
+		return a.AIRespond(ctx, AIOptions(a), aisession.AnswerRequest{Session: aisession.ID(in.Session), Ask: in.Ask, Decision: decision, Fingerprint: in.Fingerprint})
 	},
 }
 
@@ -719,7 +733,7 @@ func runAIRespond(ctx context.Context, call command.CLICall[aiRespondIn], in aiR
 			return err
 		}
 	}
-	_, asks, err := a.AISession(ctx, aiOptions(a), aisession.ID(in.Session))
+	_, asks, err := a.AISession(ctx, AIOptions(a), aisession.ID(in.Session))
 	if err != nil {
 		return err
 	}
@@ -858,18 +872,38 @@ var aiCancelSpec = command.Spec[aiCancelIn, app.AICancelResult]{
 	},
 	MCP: &command.MCP{Tool: "agentflow_ai_cancel", Annotations: command.LocalWrite,
 		Description: "Cancel an AI session: the harness is asked to stop, every waiting request is answered cancelled, and the session ends. Follows the user's autonomy policy, so it may return needs_confirmation first."},
-	Policy:   command.Policy{Class: policy.Local, Action: aisession.ActionCancel, Gate: command.GateByInvoker, AuditByInvoker: true},
+	// The gate runs in Run: a person's Cancel click in the console is the
+	// confirmation, so it never comes back as needs_confirmation or waits on
+	// another caller's approval. Every other caller, agentflow_ai_cancel
+	// included, follows the autonomy policy.
+	Policy:   command.Policy{Class: policy.Local, Action: aisession.ActionCancel, AuditByInvoker: true},
 	Events:   command.ScopeWorktree,
 	Token:    func(in *aiCancelIn) *string { return &in.ConfirmToken },
 	Validate: func(in aiCancelIn) error { return validSession(in.Session) },
 	Describe: func(in aiCancelIn) command.Detail { return command.Detail{Subject: "ai cancel " + in.Session} },
-	Plan: func(ctx context.Context, a *app.App, in aiCancelIn) (command.Plan, error) {
-		summary, err := a.AICancelPlan(aiRequester(ctx, a), aiOptions(a), aisession.ID(in.Session))
-		return command.Plan{Summary: summary}, err
-	},
 	Run: func(ctx context.Context, a *app.App, in aiCancelIn) (any, error) {
-		return a.AICancel(aiRequester(ctx, a), aiOptions(a), aisession.ID(in.Session))
+		ctx = aiRequester(ctx, a)
+		o, id := AIOptions(a), aisession.ID(in.Session)
+		if !consoleClick(ctx) {
+			summary, err := a.AICancelPlan(ctx, o, id)
+			if err != nil {
+				return nil, err
+			}
+			p, err := a.GateOperation(app.OperationGate{Class: policy.Local, Action: aisession.ActionCancel, Summary: summary, Token: in.ConfirmToken})
+			if err != nil || p != nil {
+				return p, err
+			}
+		}
+		return a.AICancel(ctx, o, id)
 	},
+}
+
+// consoleClick: the requester is a person at the console. Only the
+// console's handlers set it; mcpRequesterStage replaces it on every MCP
+// call.
+func consoleClick(ctx context.Context) bool {
+	r, ok := aisession.RequesterFrom(ctx)
+	return ok && r.Kind == aisession.RequesterPerson && r.Surface == aisession.SurfaceConsole
 }
 
 // Production wiring of the session layer: the Manager, and the session

@@ -137,6 +137,8 @@ func (s *server) aiInvoke(w http.ResponseWriter, r *http.Request, name string, i
 		return
 	}
 	inv := command.NewInvoker(command.Options{Auditor: command.AuditLog{}})
+	// ai.cancel needs no confirmation from here: the person's click is it
+	// (the Spec skips the gate for a person at the console).
 	res := jc.InvokeJSON(consoleRequester(ctx), inv, a, input, "", command.Origin{Source: "daemon", Client: aiClient})
 	if res.Err != nil && !errors.Is(res.Err, context.Canceled) {
 		// The refusal reaches the page as the stream's state; the log line

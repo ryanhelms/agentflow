@@ -27,8 +27,8 @@ import (
 )
 
 // maxUpdateBytes bounds what an agent may send in session/update text
-// before the session ends limit_output.
-const maxUpdateBytes = 64 << 20
+// before the session ends limit_output. A variable only for tests.
+var maxUpdateBytes int64 = 64 << 20
 
 // askPoll is how often a held ask looks for its answer file.
 const askPoll = 100 * time.Millisecond
@@ -253,7 +253,11 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	s := user.AI.Sessions
 	h.limits = Limits{MaxRunning: s.EffectiveMaxRunning(), MaxDuration: s.EffectiveMaxDuration(), IdleTimeout: s.EffectiveIdleTimeout(), AskTimeout: s.EffectiveAskTimeout()}
 
-	found, hh, err := harness.Locate(ctx, home, h.m.o.Version, func() []string { return []string{root} }, sess.Harness)
+	workDirs, err := h.m.o.workDirs(ctx, root)
+	if err != nil {
+		return fail(CodeLaunch)
+	}
+	found, hh, err := harness.Locate(ctx, home, h.m.o.Version, func() []string { return workDirs }, sess.Harness)
 	if err != nil || found.Identity != sess.Identity {
 		return fail(CodeLaunch)
 	}
@@ -267,7 +271,7 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	accountHome, _ := config.AccountHome()
 	env, ref := buildEnv(ctx, envInput{
 		Parent: os.Environ(), AccountHome: accountHome, SessionDir: dir, HomeMode: sess.Home,
-		HarnessDir: found.PathDir, Definition: found.Definition, WorkDirs: []string{root}, Session: h.id, Windows: isWindows(),
+		HarnessDir: found.PathDir, Definition: found.Definition, WorkDirs: workDirs, Session: h.id, Windows: isWindows(),
 	})
 	if ref != nil {
 		return fail(CodeLaunch)
@@ -760,7 +764,7 @@ func (h *host) awaitAnswer(ctx context.Context, rec AskRecord) (Verdict, string)
 }
 
 func (h *host) validAllow(rec AskRecord, a AnswerRecord) bool {
-	if a.By.Kind != RequesterPerson || strings.HasPrefix(a.By.Client, SessionClientPrefix) || a.By.Session != "" {
+	if a.By.Kind != RequesterPerson || policy.IsSessionClient(a.By.Client) || a.By.Session != "" {
 		return false
 	}
 	if !rec.CanAllow || a.Fingerprint != rec.Fingerprint || a.At.After(rec.ExpiresAt) {

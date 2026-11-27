@@ -22,10 +22,6 @@ import (
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
-// SessionClientPrefix starts the app client of a session's own MCP server
-// (lane 7.3 declares policy.SessionClientPrefix with the same value).
-const SessionClientPrefix = "ai-session:"
-
 // manager is the production Manager.
 type manager struct {
 	o  Options
@@ -67,7 +63,7 @@ func requester(ctx context.Context) Requester {
 // selfOrSession reports whether the caller is a session, its MCP server or
 // a process below a session.
 func selfOrSession(r Requester) bool {
-	return r.Kind == RequesterSession || strings.HasPrefix(r.Client, SessionClientPrefix) || os.Getenv(EnvSession) != ""
+	return r.Kind == RequesterSession || policy.IsSessionClient(r.Client) || os.Getenv(EnvSession) != ""
 }
 
 // prepared is what Prepare worked out, for Start and the host.
@@ -82,6 +78,34 @@ type prepared struct {
 	found   harness.Found
 	harness harness.Harness
 	limits  Limits
+}
+
+// errWorkDirs: Options.WorkDirs failed, so the served repositories cannot
+// be told.
+var errWorkDirs = errors.New("aisession: the repositories the console serves cannot be read")
+
+// workDirs is root and every existing absolute directory Options.WorkDirs
+// lists. A directory that no longer exists holds no program, so it is
+// skipped rather than making every PATH entry count as inside a
+// repository.
+func (o Options) workDirs(ctx context.Context, root string) ([]string, error) {
+	dirs := []string{root}
+	if o.WorkDirs == nil {
+		return dirs, nil
+	}
+	served, err := o.WorkDirs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errWorkDirs, err)
+	}
+	for _, d := range served {
+		if d == "" || !filepath.IsAbs(d) || slices.Contains(dirs, d) {
+			continue
+		}
+		if _, err := os.Stat(d); err == nil {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs, nil
 }
 
 func refuse(code, msg, fix string) error { return &Refusal{Code: code, Message: msg, Fix: fix} }
@@ -155,7 +179,12 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 	if gitDir == common {
 		return nil, refuse(RefusePrimaryCheckout, "Sessions run only in a task worktree, never in the primary checkout.", "Run agentflow start <task> --worktree and start the session in the worktree it prints.")
 	}
-	found, h, err := harness.Locate(ctx, home, m.o.Version, func() []string { return []string{root} }, r.Harness)
+	workDirs, err := m.o.workDirs(ctx, root)
+	if err != nil {
+		return nil, refuse(RefuseUnsafeEnvironment, "agentflow cannot read which repositories the console serves, so it cannot keep their programs off the session PATH.",
+			"Check that ~/.agentflow-ui is a private folder you own, or stop the console with agentflow ui --stop.")
+	}
+	found, h, err := harness.Locate(ctx, home, m.o.Version, func() []string { return workDirs }, r.Harness)
 	switch {
 	case errors.Is(err, harness.ErrTestGuard):
 		return nil, refuse(RefuseTestGuard, "In a test binary, the harness is outside the test's temporary directory.", "")
@@ -186,7 +215,7 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 	env, ref := buildEnv(ctx, envInput{
 		Parent: os.Environ(), AccountHome: accountHome, SessionDir: filepath.Join(home, storeDir, sessionsDir, "check"),
 		HomeMode: sess.EffectiveHome(), HarnessDir: found.PathDir, Definition: found.Definition,
-		WorkDirs: []string{root}, Session: "check", Windows: isWindows(),
+		WorkDirs: workDirs, Session: "check", Windows: isWindows(),
 	})
 	if ref != nil {
 		return nil, ref
@@ -470,6 +499,9 @@ func (m *manager) Answer(ctx context.Context, r AnswerRequest) (AnswerResult, er
 	}
 	if !m.o.Now().Before(ask.ExpiresAt) {
 		return AnswerResult{}, refuse(AnswerExpired, "This request has expired.", "")
+	}
+	if r.Decision == Allow && r.Fingerprint == "" {
+		return AnswerResult{}, refuse(AnswerFingerprint, "An allow must name the request as it was shown.", "Answer from the console's AI panel or with agentflow ai respond --allow.")
 	}
 	if r.Fingerprint != "" && !hmac.Equal([]byte(r.Fingerprint), []byte(ask.Fingerprint)) {
 		return AnswerResult{}, refuse(AnswerFingerprint, "This request changed since it was shown.", "")

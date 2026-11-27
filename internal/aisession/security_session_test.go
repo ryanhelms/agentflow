@@ -20,6 +20,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/aisession/aisessiontest"
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 var forbiddenEnv = []string{
@@ -169,11 +170,11 @@ func TestAnswerRules(t *testing.T) {
 	if code := refusal(t, answer(agentCtx(context.Background()), aisession.Allow, b.Fingerprint)); code != aisession.AnswerNeedsPerson {
 		t.Errorf("an agent's allow = %s", code)
 	}
-	self := aisession.WithRequester(context.Background(), aisession.Requester{Kind: aisession.RequesterSession, Session: s.ID, Client: aisession.SessionClientPrefix + string(s.ID)})
+	self := aisession.WithRequester(context.Background(), aisession.Requester{Kind: aisession.RequesterSession, Session: s.ID, Client: policy.SessionClientPrefix + string(s.ID)})
 	if code := refusal(t, answer(self, aisession.Allow, b.Fingerprint)); code != aisession.AnswerSelf {
 		t.Errorf("the session's own allow = %s", code)
 	}
-	lying := aisession.WithRequester(context.Background(), aisession.Requester{Kind: aisession.RequesterPerson, Surface: aisession.SurfaceMCP, Client: aisession.SessionClientPrefix + string(s.ID)})
+	lying := aisession.WithRequester(context.Background(), aisession.Requester{Kind: aisession.RequesterPerson, Surface: aisession.SurfaceMCP, Client: policy.SessionClientPrefix + string(s.ID)})
 	if code := refusal(t, answer(lying, aisession.Allow, b.Fingerprint)); code != aisession.AnswerSelf {
 		t.Errorf("the session's client claiming a person = %s", code)
 	}
