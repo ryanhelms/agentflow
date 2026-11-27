@@ -5,6 +5,8 @@ $installer = (Get-Item -LiteralPath (Join-Path $PSScriptRoot '../install.ps1')).
 $pwsh = (Get-Process -Id $PID).Path
 $windows = $env:OS -eq 'Windows_NT'
 $temp = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
+# The cache check refuses paths through links (macOS /var is one), so use the physical path.
+if (!$windows) { $temp = (& /bin/sh -c 'cd -P -- "$1" && pwd -P' sh $temp) }
 $original = (Get-Location).Path
 $vars = @{}
 foreach ($key in 'PATH','LOCALAPPDATA','DF_TEST_SHELL','DF_TEST_TEMP','GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_INDEX_FILE') {
@@ -200,6 +202,38 @@ exit 0
             Assert ([IO.File]::ReadAllText($pointer) -eq $staleDir) "Changed the prior installation after $mode."
         }
     }
+    # A repository-set LOCALAPPDATA is never used to find or install the binary (#129).
+    # Only the checks run here: the account's own folder is computed, never read.
+    $launcherText = [IO.File]::ReadAllText($sourceLauncher)
+    $begin = $launcherText.IndexOf('# >>> agentflow cache root')
+    $end = $launcherText.IndexOf('# <<< agentflow cache root')
+    Assert ($begin -ge 0 -and $end -gt $begin) 'The launcher has no cache-root block.'
+    . ([scriptblock]::Create($launcherText.Substring($begin, $end - $begin)))
+    $evil = Join-Path $temp 'evil repo'
+    [IO.Directory]::CreateDirectory($evil) | Out-Null
+    & git -C $evil init -q
+    Assert ($LASTEXITCODE -eq 0) 'git init failed.'
+    $outside = [IO.Directory]::CreateDirectory((Join-Path $temp 'outside')).FullName
+    Assert ($null -eq (Get-AgentflowInsideRepository (Join-Path $outside 'agentflow'))) 'Refused a cache outside every repository.'
+    foreach ($inside in (Join-Path $evil '.cache/agentflow'), (Join-Path $evil '.git/agentflow')) {
+        Assert ((Get-AgentflowInsideRepository $inside) -match 'is inside the repository') "Accepted a cache inside a repository: $inside"
+    }
+    Assert ((Get-AgentflowInsideRepository 'relative/agentflow') -match 'cannot be checked') 'Accepted a relative cache.'
+    Assert ((Get-AgentflowInsideRepository (Join-Path $evil '../outside/agentflow')) -match 'cannot be checked') 'Accepted a .. cache.'
+    $env:LOCALAPPDATA = Join-Path $evil '.cache'
+    $root = Get-AgentflowCacheRoot 2>$null
+    $own = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'agentflow'
+    Assert ($root -eq $own) "Used the repository-set LOCALAPPDATA: $root"
+    $env:LOCALAPPDATA = $outside
+    Assert ((Get-AgentflowCacheRoot) -eq (Join-Path $outside 'agentflow')) 'Changed a cache outside every repository.'
+    $planted = Join-Path $evil 'agentflow'
+    $plantedVersion = [IO.Directory]::CreateDirectory((Join-Path $planted '1.2.3')).FullName
+    [IO.File]::WriteAllText((Join-Path $plantedVersion 'agentflow.exe'), 'planted')
+    [IO.File]::WriteAllText((Join-Path $planted 'current.txt'), $plantedVersion)
+    Assert ($null -eq (Get-AgentflowActive $planted 2>$null)) 'Would run a binary from inside a repository.'
+    $pointedAway = [IO.Directory]::CreateDirectory((Join-Path $outside 'agentflow')).FullName
+    [IO.File]::WriteAllText((Join-Path $pointedAway 'current.txt'), $plantedVersion)
+    Assert ($null -eq (Get-AgentflowActive $pointedAway 2>$null)) 'Followed current.txt into a repository.'
     'PowerShell project installer tests passed.'
 } finally {
     Set-Location -LiteralPath $original

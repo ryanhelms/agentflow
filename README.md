@@ -918,9 +918,14 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   location keeps the same layout. A repository that can set `PATH`, or that commits its
   own `.agentflow/bin/agentflow` or `.githooks`, still runs its own code: those are
   repository files, and the Claude Code plugin runs a repository's launcher on purpose.
-  Repositories set up before this change keep their old launcher and hooks until you
-  run `agentflow init --force` there (it rewrites every template file) or copy the new
-  `.agentflow/bin/` and `.githooks/` files; `agentflow pin` does not update them.
+  A repository set up before this change keeps its old, unchecked launcher and hooks:
+  `agentflow init` leaves existing files alone and `agentflow pin` changes only
+  workflows. Replace `.agentflow/bin/agentflow`, `.agentflow/bin/agentflow.ps1`,
+  `.githooks/commit-msg` and `.githooks/pre-push` there with the files from this
+  release. Don't use `agentflow init --force` for this: it also overwrites
+  `.agentflow/config.yml` and the pinned workflow. The Claude Code and Codex plugins get
+  the check when the plugin updates, but in a repository that commits a launcher the
+  Claude Code plugin runs that launcher.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
