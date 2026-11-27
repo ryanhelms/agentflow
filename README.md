@@ -532,6 +532,23 @@ your edit or take the new value. You can search by name, description or ID and
 show only modified settings. **Providers** and **Autonomy** open their groups of
 this page. [Settings page design](docs/design/ui/settings.md)
 
+The **Plugins** page lists the plugins installed for your user, live: each one's
+name, version, tier and state (running, degraded, restarting with a countdown,
+failed and why), whether it is enabled and whether this repository turned it
+off, the handlers and permission rules it adds, the permissions it was granted,
+its counters and its recent failed deliveries. A plugin runs as you and is not
+sandboxed, and the page says so. **Enable in Settings** opens the plugin's group
+on the Settings page, so turning a plugin on goes through the same review as any
+other setting. The page does not install or remove anything: it shows
+`agentflow plugin add PATH` and `agentflow plugin remove ID` to copy into a
+terminal. Notes that plugins attach to an operation show under it on the
+**Timeline**, labelled with the plugin's ID. When a plugin's write waits for
+your approval, its card and the Approvals panel show
+`agentflow plugin approve <operation ID>` to copy into your own terminal; the
+console has no Approve button for it. `agentflow ui --screen plugins` opens the
+page.
+[Plugins page design](docs/design/ui/plugins.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field
