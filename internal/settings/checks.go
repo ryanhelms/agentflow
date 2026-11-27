@@ -13,6 +13,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/consolecfg"
+	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 )
 
 // The check chain (ADR, "Phase 4 diagnostics and the check chain"): a Chain
@@ -53,6 +54,8 @@ type check struct {
 	// next holds both files after every edit that passed.
 	next     [2]string
 	planDiff string
+	// rules caches rulePlugins.
+	rules *rulePlugins
 }
 
 type link func(c *check)
@@ -508,7 +511,7 @@ func policyLink(c *check) {
 			continue
 		}
 		if e.field.Meta.Loosens != config.LoosensNone {
-			if msg := loosening(e.prior, e.next); msg != "" {
+			if msg := loosening(e.prior, e.next, c.rulePlugins()); msg != "" {
 				e.loosens = msg
 				c.add(SeverityInfo, e, CodeLoosens, msg)
 			}
@@ -568,8 +571,35 @@ func rank(l config.Level) int {
 	return 1
 }
 
+// rulePlugins says which plugins may carry a permission rule. A rule only
+// denies operations, so turning such a plugin off loosens policy.
+type rulePlugins struct {
+	ids map[string]bool
+	// unread is set when the registry cannot be read: any plugin may then
+	// have a rule.
+	unread bool
+}
+
+func (r rulePlugins) may(id string) bool { return r.unread || r.ids[id] }
+
+// rulePlugins reads the registry once per check.
+func (c *check) rulePlugins() rulePlugins {
+	if c.rules == nil {
+		c.rules = &rulePlugins{ids: map[string]bool{}}
+		reg, err := manifest.ReadRegistry(c.s.Home)
+		c.rules.unread = err != nil
+		for _, p := range reg.Plugins {
+			if len(p.Manifest.Extensions.PermissionRule) > 0 {
+				c.rules.ids[p.ID] = true
+			}
+		}
+	}
+	return *c.rules
+}
+
 // loosening says how going from before to after loosens policy, or "".
-func loosening(before, after [2]string) string {
+// rules are the plugins that may carry a permission rule.
+func loosening(before, after [2]string, rules rulePlugins) string {
 	a, b := policyOf(before), policyOf(after)
 	keys := make([]string, 0, len(a.levels))
 	for k := range a.levels {
@@ -613,6 +643,25 @@ func loosening(before, after [2]string) string {
 	for _, id := range a.disabled {
 		if !slices.Contains(b.disabled, id) {
 			return fmt.Sprintf("Lets the plugin %s run for this repository again.", id)
+		}
+	}
+	// A permission rule only denies, so turning its plugin off loosens too:
+	// for the person, and, conservatively, for a repository.
+	why := "which has a permission rule: operations it denies are allowed again"
+	if rules.unread {
+		why = "which may have a permission rule: the plugin registry cannot be read"
+	}
+	for _, id := range slices.Sorted(maps.Keys(a.plugins)) {
+		if rules.may(id) && a.plugins[id] && !b.plugins[id] {
+			return fmt.Sprintf("Turns off the plugin %s, %s.", id, why)
+		}
+	}
+	if !rules.unread {
+		why = "which has a permission rule that denies operations"
+	}
+	for _, id := range b.disabled {
+		if rules.may(id) && !slices.Contains(a.disabled, id) {
+			return fmt.Sprintf("Turns off for this repository the plugin %s, %s.", id, why)
 		}
 	}
 	return ""

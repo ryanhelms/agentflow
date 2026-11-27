@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/settings"
@@ -182,6 +183,233 @@ func TestRepositoryCanOnlyTurnPluginsOff(t *testing.T) {
 		}
 		if got := has(codes(pv), "info:loosens"); got != tc.loose || (len(pv.Confirm) == 1) != tc.loose {
 			t.Errorf("%s: loosens = %v (%v), want %v", name, got, codes(pv), tc.loose)
+		}
+	}
+}
+
+func TestClearPluginRemovesOnlyThatPluginsBlock(t *testing.T) {
+	f := newFixture(t, "task-1")
+	path := filepath.Join(f.home, "config.yml")
+	body := "# my notes\natlassian:\n  email: me@example.com # work\nplugins:\n  ci-notify:\n    enabled: true\n    settings:\n      signal: ci.failed\n  other-plugin:\n    enabled: false\nworktree:\n  root: /tmp/trees\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := f.svc.ClearPlugin("ci-notify")
+	if err != nil || !cleared {
+		t.Fatalf("ClearPlugin = %v, %v", cleared, err)
+	}
+	want := "# my notes\natlassian:\n  email: me@example.com # work\nplugins:\n  other-plugin:\n    enabled: false\nworktree:\n  root: /tmp/trees\n"
+	if got := f.personal(t); got != want {
+		t.Fatalf("personal settings:\n%s\nwant:\n%s", got, want)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %o", info.Mode().Perm())
+	}
+	// A second call finds nothing and writes nothing.
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("second ClearPlugin = %v, %v", cleared, err)
+	}
+	// The last plugin takes the empty plugins key with it.
+	if cleared, err := f.svc.ClearPlugin("other-plugin"); err != nil || !cleared {
+		t.Fatalf("ClearPlugin(other-plugin) = %v, %v", cleared, err)
+	}
+	if got, want := f.personal(t), "# my notes\natlassian:\n  email: me@example.com # work\nworktree:\n  root: /tmp/trees\n"; got != want {
+		t.Fatalf("personal settings:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestClearPluginLeavesAMissingOrUnrelatedFileAlone(t *testing.T) {
+	f := newFixture(t, "task-1")
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("no file: %v, %v", cleared, err)
+	}
+	if _, err := os.Stat(filepath.Join(f.home, "config.yml")); !os.IsNotExist(err) {
+		t.Fatalf("ClearPlugin created the file: %v", err)
+	}
+	// No defaults are written for a file that has no autonomy keys.
+	body := "# only a comment and one key\nupdate:\n  auto: false\n"
+	if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || cleared {
+		t.Fatalf("nothing to clear: %v, %v", cleared, err)
+	}
+	if got := f.personal(t); got != body {
+		t.Fatalf("the file changed:\n%s", got)
+	}
+	for _, id := range []string{"", "../x", "Bad", "a"} {
+		if _, err := f.svc.ClearPlugin(id); err == nil {
+			t.Errorf("ClearPlugin(%q) succeeded", id)
+		}
+	}
+}
+
+func TestClearPluginWritesThroughALinkToADotfilesCheckout(t *testing.T) {
+	f := newFixture(t, "task-1")
+	real := filepath.Join(t.TempDir(), "dotfiles-config.yml")
+	if err := os.WriteFile(real, []byte("plugins:\n  ci-notify:\n    enabled: true\nupdate:\n  auto: false\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(f.home, "config.yml")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks are not available:", err)
+	}
+	if cleared, err := f.svc.ClearPlugin("ci-notify"); err != nil || !cleared {
+		t.Fatalf("ClearPlugin = %v, %v", cleared, err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the link was replaced by a file: %v", err)
+	}
+	if b, _ := os.ReadFile(real); string(b) != "update:\n  auto: false\n" {
+		t.Fatalf("checkout file:\n%s", b)
+	}
+}
+
+const ruleManifest = `schema: 1
+id: no-push
+name: No pushes
+version: 0.1.0
+tier: declarative
+extensions:
+  permission_rule:
+    - name: no-push
+      match: {operation: [push]}
+      deny: Pushes are paused.
+`
+
+// withRulePlugin registers a plugin that has a permission rule, and ci-notify,
+// which has none.
+func (f *fixture) withRulePlugin(t *testing.T) {
+	t.Helper()
+	f.withPlugin(t)
+	m, err := manifest.Load([]byte(ruleManifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = manifest.UpdateRegistry(f.home, func(r *manifest.Registry) error {
+		r.Plugins = append(r.Plugins, manifest.Installed{ID: m.ID, Version: m.Version, Tier: m.Tier, Manifest: m})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.reopen(t)
+}
+
+const bothEnabled = "plugins:\n  ci-notify: {enabled: true}\n  no-push: {enabled: true}\n"
+
+func TestTurningOffAPluginWithAPermissionRuleLoosens(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.withRulePlugin(t)
+	if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(bothEnabled), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.reopen(t)
+	for name, tc := range map[string]struct {
+		edit  settings.Edit
+		loose bool
+	}{
+		"disable":                  {set("personal:plugins.no-push.enabled", false), true},
+		"unset":                    {settings.Edit{ID: "personal:plugins.no-push.enabled", Op: settings.OpUnset}, true},
+		"keep on":                  {set("personal:plugins.no-push.enabled", true), false},
+		"disable one without rule": {set("personal:plugins.ci-notify.enabled", false), false},
+		"turn off for repository":  {set("repo:plugins.disabled", []string{"no-push"}), true},
+		"turn off one without":     {set("repo:plugins.disabled", []string{"ci-notify"}), false},
+		"turn off one not here":    {set("repo:plugins.disabled", []string{"somewhere-else"}), false},
+	} {
+		pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{tc.edit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := has(codes(pv), "info:loosens"); got != tc.loose || (len(pv.Confirm) == 1) != tc.loose {
+			t.Errorf("%s: loosens = %v (%v, %+v), want %v", name, got, codes(pv), pv.Confirm, tc.loose)
+		}
+		if tc.loose && len(pv.Confirm) == 1 && !strings.Contains(pv.Confirm[0].Message, "no-push") {
+			t.Errorf("%s: confirm %+v", name, pv.Confirm[0])
+		}
+	}
+}
+
+// Turning off a deny rule answers to console.autonomy like any other
+// loosening edit: with suggest there, config.set gives only the suggestion.
+func TestConsoleAutonomySuggestKeepsADenyRuleOn(t *testing.T) {
+	for name, tc := range map[string]struct{ personal, repo string }{
+		"personal suggest":   {personal: "autonomy:\n  actions:\n    console.autonomy: suggest\n", repo: repoConfig},
+		"repository ceiling": {repo: repoConfig + "    actions:\n      console.autonomy: suggest\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t, "task-1")
+			f.withRulePlugin(t)
+			if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte(tc.personal+bothEnabled), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(f.dir, ".agentflow", "config.yml"), []byte(tc.repo), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.reopen(t)
+			before := f.personal(t)
+			for _, cs := range []settings.ChangeSet{
+				{Edits: []settings.Edit{set("personal:plugins.no-push.enabled", false)}},
+				{Edits: []settings.Edit{{ID: "personal:plugins.no-push.enabled", Op: settings.OpUnset}}},
+				{Edits: []settings.Edit{set("repo:plugins.disabled", []string{"no-push"})}},
+				{Edits: []settings.Edit{set("personal:atlassian.email", "me@example.com"), set("personal:plugins.no-push.enabled", false)}},
+			} {
+				out, err := f.svc.Save(t.Context(), cs, "", f.app.GateOperation)
+				if err != nil {
+					t.Fatal(err)
+				}
+				p, ok := out.(*app.Pending)
+				if !ok || p.Status != "suggest" || p.ConfirmToken != "" {
+					t.Fatalf("save %v returned %#v, want suggest", cs.Edits, out)
+				}
+			}
+			if f.personal(t) != before || len(f.pub.published) != 0 {
+				t.Errorf("a suggest-only save wrote something")
+			}
+			// A plugin without a rule still turns off under console.settings.
+			res := f.save(t, settings.ChangeSet{Edits: []settings.Edit{set("personal:plugins.ci-notify.enabled", false)}})
+			if res.Status != settings.StatusSaved {
+				t.Errorf("plugin without a rule: %+v", res)
+			}
+		})
+	}
+}
+
+// A registry that cannot be read says nothing about rules, so turning off any
+// plugin counts as loosening.
+func TestTurningOffAnyPluginLoosensWhenTheRegistryCannotBeRead(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.withPlugin(t) // ci-notify has no permission rule
+	if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte("plugins:\n  ci-notify: {enabled: true}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.reopen(t) // the catalog keeps the plugin's fields from here on
+	if err := os.WriteFile(manifest.RegistryPath(f.home), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.ReadRegistry(f.home); err == nil {
+		t.Fatal("the damaged registry still reads")
+	}
+	for name, tc := range map[string]struct {
+		edit  settings.Edit
+		loose bool
+	}{
+		"disable":                 {set("personal:plugins.ci-notify.enabled", false), true},
+		"unset":                   {settings.Edit{ID: "personal:plugins.ci-notify.enabled", Op: settings.OpUnset}, true},
+		"keep on":                 {set("personal:plugins.ci-notify.enabled", true), false},
+		"turn off for repository": {set("repo:plugins.disabled", []string{"ci-notify"}), true},
+		"turn off another":        {set("repo:plugins.disabled", []string{"somewhere-else"}), true},
+		"turn off nothing":        {set("repo:plugins.disabled", []string{}), false},
+	} {
+		pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{tc.edit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := has(codes(pv), "info:loosens"); got != tc.loose || (len(pv.Confirm) == 1) != tc.loose {
+			t.Errorf("%s: loosens = %v (%v, %+v), want %v", name, got, codes(pv), pv.Confirm, tc.loose)
+		}
+		if tc.loose && len(pv.Confirm) == 1 && !strings.Contains(pv.Confirm[0].Message, "registry cannot be read") {
+			t.Errorf("%s: confirm %q", name, pv.Confirm[0].Message)
 		}
 	}
 }

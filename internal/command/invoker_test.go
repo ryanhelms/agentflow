@@ -94,6 +94,14 @@ func TestNewInvokerMatchesReference(t *testing.T) {
 			_, err := command.Invoke(context.Background(), inv, nil, s, fakeIn{}, command.Origin{Source: "cli", Client: "cli"})
 			return "", err
 		},
+		// A write that publishes no events is still audited.
+		"scope none write": func(inv command.Invoker) (string, error) {
+			s := command.Spec[fakeIn, fakeOut]{Name: "plugin.add", Events: command.ScopeNone,
+				Policy: command.Policy{Class: policy.Local, Action: "plugin.install", AuditByInvoker: true},
+				Run:    func(context.Context, *app.App, fakeIn) (any, error) { return fakeOut{Status: "added"}, nil }}
+			_, err := command.Invoke(context.Background(), inv, nil, s, fakeIn{}, command.Origin{Source: "cli", Client: "cli"})
+			return "", err
+		},
 		"native read": func(inv command.Invoker) (string, error) {
 			origin := command.Origin{Source: "mcp:claude", Client: "claude"}
 			_, err := command.Invoke(context.Background(), inv, nil, native2(true), fakeIn{}, origin)

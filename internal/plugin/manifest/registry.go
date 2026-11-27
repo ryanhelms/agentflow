@@ -37,6 +37,16 @@ func InstallPath(home, id, hash string) string {
 	return filepath.Join(PluginsPath(home), id, prefix)
 }
 
+// RootPath is <home>/plugins/<id>: everything of one plugin, its installed
+// copies and its data. It is empty when id is not valid, so a caller never
+// builds a path to delete from an ID it did not check.
+func RootPath(home, id string) string {
+	if !idRe.MatchString(id) {
+		return ""
+	}
+	return filepath.Join(PluginsPath(home), id)
+}
+
 // DataPath is <home>/plugins/<id>/data, the plugin's own writable place.
 func DataPath(home, id string) string {
 	if !idRe.MatchString(id) {
