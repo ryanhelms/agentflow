@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -61,7 +62,17 @@ type Layered struct {
 	// Entry is the registry entry, nil for an ID a plugin or the person
 	// added.
 	Entry *acpregistry.Entry
+	// PluginLaunch is the source ("plugin:<id>") of a plugin that chose
+	// what is started: the command, args or version_args. A plugin adds
+	// only new IDs, so it chose all three unless the person's override set
+	// each one again (no_version counts for version_args). Such a harness
+	// is started only by a person's own probe. "" otherwise.
+	PluginLaunch string
+	launch       launchOrigin
 }
+
+// launchOrigin records which layer last chose each launch field.
+type launchOrigin struct{ command, args, version string }
 
 // Compose layers the definitions (Composite: a non-empty field of a higher
 // layer replaces the field below; lists replace). A layer's definition that
@@ -117,6 +128,28 @@ func Compose(l Layers) ([]Layered, []Problem) {
 		}
 		cur.Definition = merged
 		cur.Sources = append(cur.Sources, source)
+		switch {
+		case layer == harnessdef.LayerPlugin:
+			// A new ID: the plugin chose every launch field, empty or not.
+			cur.launch = launchOrigin{command: source, args: source, version: source}
+		default:
+			if d.Command != "" {
+				cur.launch.command = source
+			}
+			if len(d.Args) > 0 {
+				cur.launch.args = source
+			}
+			if len(d.VersionArgs) > 0 || d.NoVersion {
+				cur.launch.version = source
+			}
+		}
+		cur.PluginLaunch = ""
+		for _, o := range []string{cur.launch.command, cur.launch.args, cur.launch.version} {
+			if strings.HasPrefix(o, SourcePluginPrefix) {
+				cur.PluginLaunch = o
+				break
+			}
+		}
 		byID[id] = cur
 	}
 

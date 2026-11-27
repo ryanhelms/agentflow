@@ -51,6 +51,9 @@ const (
 	CodeNeedsPerson = "needs_person"
 	CodeShim        = "shim"
 	CodeTestGuard   = "test_guard"
+	// CodePluginLaunch: a plugin chose what is started, so only a person's
+	// own probe runs it (never the daemon or an agent).
+	CodePluginLaunch = "plugin_launch"
 )
 
 // Version codes (Harness.VersionCode).
@@ -98,6 +101,9 @@ const (
 const (
 	NoteRegistryEnvIgnored = "registry_env_ignored"
 	NoteQuarantined        = "quarantined"
+	// NotePluginLaunch: a plugin chose the command or its arguments, so
+	// agentflow starts it only when a person probes it.
+	NotePluginLaunch = "plugin_launch"
 )
 
 // Requesters (DetectOptions.Requester; see "Phase 6 who may probe").

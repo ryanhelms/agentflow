@@ -134,17 +134,29 @@ func DescribeExtensions(m manifest.Manifest) []string {
 	for _, r := range m.Extensions.PermissionRule {
 		out = append(out, fmt.Sprintf("permission rule %s: denies %s with %q", r.Name, matchText(r.Match), r.Deny))
 	}
-	// A harness is data: agentflow may start its command, found on your
-	// PATH, for a few seconds to probe it.
+	// A harness is data, but its command and arguments are what agentflow
+	// starts when you probe it: show all of them. A plugin's harness is
+	// never probed automatically or for an agent, only when you ask.
 	for _, h := range m.Extensions.Harness {
-		line := "harness " + h.ID + ": starts " + strings.TrimSpace(strings.Join(append([]string{h.Command}, h.Args...), " "))
 		if h.Command == "" {
-			line = "harness " + h.ID + ": names no command"
+			out = append(out, "harness "+h.ID+": names no command")
+			continue
+		}
+		line := "harness " + h.ID + ": when you probe it, runs " + strings.Join(append([]string{h.Command}, h.Args...), " ")
+		switch {
+		case h.NoVersion:
+			line += ", no version command"
+		default:
+			version := h.VersionArgs
+			if len(version) == 0 {
+				version = []string{"--version"}
+			}
+			line += ", and for its version " + strings.Join(append([]string{h.Command}, version...), " ")
 		}
 		if len(h.BaseCommands) > 0 {
 			line += " (adapter for " + strings.Join(h.BaseCommands, ", ") + ")"
 		}
-		out = append(out, line+", found on your PATH")
+		out = append(out, line+"; found on your PATH, only when you probe it yourself")
 	}
 	return out
 }

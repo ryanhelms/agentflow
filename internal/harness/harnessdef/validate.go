@@ -194,6 +194,10 @@ func (v *validator) check(d Definition) {
 	}
 	v.args("args", d.Args)
 	v.args("version_args", d.VersionArgs)
+	if v.layer == LayerPlugin {
+		v.pluginArgs("args", d.Args)
+		v.pluginArgs("version_args", d.VersionArgs)
+	}
 	if d.BaseName != "" && !oneLine(d.BaseName, MaxNameLen) {
 		v.fail("base_name", CodeName, "must be one line of at most 64 bytes")
 	}
@@ -236,6 +240,34 @@ func (v *validator) args(field string, args []string) {
 			return
 		}
 	}
+}
+
+// pluginArgs refuses, in a plugin's args and version_args, any value that
+// could point the program at a file or a host: an absolute path (also after
+// "=" or ",", and Windows drive forms), "..", "~", and anything with a ":"
+// (URLs, host:path, drive letters). A plugin chooses these values, not the
+// person, and the program they reach may be any program on PATH.
+func (v *validator) pluginArgs(field string, args []string) {
+	for _, a := range args {
+		if PluginArgRefused(a) {
+			v.fail(field, CodeArgs, "a plugin's arguments may not hold a path, a host or a URL (no leading /, no .., ~ or :)")
+			return
+		}
+	}
+}
+
+// PluginArgRefused reports whether a plugin-layer argument holds a path,
+// a host or a URL.
+func PluginArgRefused(a string) bool {
+	if strings.ContainsAny(a, ":~\\") || strings.Contains(a, "..") {
+		return true
+	}
+	for _, part := range strings.FieldsFunc(a, func(r rune) bool { return r == '=' || r == ',' }) {
+		if strings.HasPrefix(part, "/") || strings.HasPrefix(part, "@") {
+			return true
+		}
+	}
+	return false
 }
 
 func hasStatus(d Definition) bool {

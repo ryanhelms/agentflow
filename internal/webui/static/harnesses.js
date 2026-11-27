@@ -205,6 +205,7 @@
       case "launch": return "Agentflow could not start it.";
       case "needs_person": return "Automatic probes are off, so Agentflow has not started it.";
       case "shim": return "It is a Windows command script, which Agentflow does not start.";
+      case "plugin_launch": return "A plugin chose how it is started, so Agentflow probes it only when you ask.";
       case "test_guard": return "It was not started, because this is a test run.";
     }
     return "Found on your PATH. Agentflow has not started it yet, so it does not know whether it speaks ACP.";
@@ -222,7 +223,8 @@
   const probeCodes = {
     timeout: "No answer in time", exited: "Exited before it answered", launch: "Could not be started",
     protocol: "Did not answer like an ACP agent", protocol_version: "Answered with another ACP version",
-    needs_person: "Not run: automatic probes are off", shim: "Not run: it is a Windows command script", test_guard: "Not run in a test"
+    needs_person: "Not run: automatic probes are off", shim: "Not run: it is a Windows command script", test_guard: "Not run in a test",
+    plugin_launch: "Not run: a plugin chose how it starts, so only you can probe it"
   };
   function probeText(probe) {
     if (probe.status === "none") return "Not run yet";
@@ -258,7 +260,8 @@
   }
   const noteCodes = {
     registry_env_ignored: "The ACP registry lists environment variables for this harness. Agentflow never applies them.",
-    quarantined: "The ACP registry has quarantined this agent."
+    quarantined: "The ACP registry has quarantined this agent.",
+    plugin_launch: "A plugin chose this harness's command or arguments. Agentflow never starts it on its own or for an agent; only your own probe does."
   };
   const skipReasons = {
     relative: "an empty or relative entry", inside_repository: "inside a repository Agentflow is working in",

@@ -239,6 +239,14 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 	if b := f.BaseFound; b != nil {
 		h.Base = &Base{Name: b.Definition.Name, Command: b.Definition.Command, Path: Tilde(b.Path)}
 	}
+	if def.PluginLaunch != "" {
+		h.Notes = append(h.Notes, NotePluginLaunch)
+		// A plugin chose what is started: only a person's own probe runs
+		// it, never the daemon or an agent, whatever auto_probe says.
+		if o.Requester != RequesterPerson {
+			probeAllowed = false
+		}
+	}
 	found := isFound && f.Path != ""
 	var rec *ProbeRecord
 	if found {
@@ -247,6 +255,8 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 		switch {
 		case f.shim:
 			h.Probe = Probe{Status: ProbeRefused, Code: CodeShim}
+		case def.PluginLaunch != "" && o.Requester != RequesterPerson && (rec == nil || rec.Status == ProbeNone):
+			h.Probe = Probe{Status: ProbeRefused, Code: CodePluginLaunch}
 		case probeAllowed && d.shouldProbe(o, rec, now):
 			r, err := d.probe(ctx, st, f, o, rec, now)
 			if err != nil {
