@@ -59,7 +59,7 @@ func ownedByUserOrRoot(info os.FileInfo) bool {
 
 func fileID(info os.FileInfo) (dev, ino uint64) {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		return uint64(st.Dev), st.Ino //nolint:unconvert // Dev is int32 on darwin, uint64 on linux
+		return uint64(st.Dev), st.Ino //nolint:gosec // G115: Dev is int32 on darwin; the value is only compared for change
 	}
 	return 0, 0
 }

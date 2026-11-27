@@ -50,7 +50,7 @@ func ProbeSpec(home string, f Found, args []string) (jsonrpc.LaunchSpec, io.Clos
 		return jsonrpc.LaunchSpec{}, nil, fmt.Errorf("harness: data directory: %w", err)
 	}
 	for _, d := range []string{filepath.Join(home, HarnessesDir), dir, data} {
-		if err := os.Chmod(d, 0o700); err != nil {
+		if err := os.Chmod(d, 0o700); err != nil { //nolint:gosec // G302: a directory needs its search bit; 0700 keeps it to the user
 			return jsonrpc.LaunchSpec{}, nil, fmt.Errorf("harness: data directory: %w", err)
 		}
 	}

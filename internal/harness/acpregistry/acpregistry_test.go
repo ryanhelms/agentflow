@@ -72,7 +72,7 @@ func TestPinnedRegistry(t *testing.T) {
 
 func TestCheckDropsBadValues(t *testing.T) {
 	a := acpregistry.Agent{
-		ID: "x", Name: "Evil‮ name\nwith lines", Version: "1.2.3",
+		ID: "x", Name: "Evil\u202e name\nwith lines", Version: "1.2.3",
 		Description: strings.Repeat("é", 200), Repository: "http://example.com", Website: "https://user@example.com",
 		Distribution: acpregistry.Distribution{
 			Binary: map[string]acpregistry.BinaryTarget{

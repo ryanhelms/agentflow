@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 	"github.com/ryanhelms/agentflow/internal/harness/harnesstest"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 )
@@ -177,4 +178,33 @@ func envValue(env []string, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestPATHTurnsBothTogglesOff(t *testing.T) {
+	harnesstest.PATH(t)
+	u, err := config.LoadUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.AI.Harnesses.AutoProbeOn() || u.AI.Harnesses.SignInCheckOn() {
+		t.Fatalf("toggles = %v %v, want both off", u.AI.Harnesses.AutoProbeOn(), u.AI.Harnesses.SignInCheckOn())
+	}
+}
+
+func TestWriteSettingsKeepsBothToggles(t *testing.T) {
+	home := harnesstest.PATH(t)
+	harnesstest.WriteSettings(t, home, harnesstest.Settings{AutoProbe: true, ProbeTimeout: 2 * time.Second,
+		Overrides: map[string]harnessdef.Definition{"mine": {Command: "mine"}}})
+	b, _ := os.ReadFile(filepath.Join(home, "config.yml"))
+	if !strings.Contains(string(b), "sign_in_check: false") || !strings.Contains(string(b), "auto_probe: true") {
+		t.Fatalf("config.yml = %s", b)
+	}
+	u, err := config.LoadUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := u.AI.Harnesses
+	if !h.AutoProbeOn() || h.SignInCheckOn() || h.EffectiveProbeTimeout() != 2*time.Second || h.Overrides["mine"].Command != "mine" {
+		t.Fatalf("harnesses = %+v", h)
+	}
 }

@@ -109,8 +109,8 @@ func writeCommands(invoke []string) []string {
 	return out
 }
 
-// DescribeExtensions describes each handler and permission rule of m in one
-// line. The lines are display text and stay stable for one manifest.
+// DescribeExtensions describes each handler, permission rule and harness of
+// m in one line. The lines are display text and stay stable for one manifest.
 func DescribeExtensions(m manifest.Manifest) []string {
 	out := []string{}
 	for _, h := range m.Extensions.Handler {
@@ -133,6 +133,18 @@ func DescribeExtensions(m manifest.Manifest) []string {
 	}
 	for _, r := range m.Extensions.PermissionRule {
 		out = append(out, fmt.Sprintf("permission rule %s: denies %s with %q", r.Name, matchText(r.Match), r.Deny))
+	}
+	// A harness is data: agentflow may start its command, found on your
+	// PATH, for a few seconds to probe it.
+	for _, h := range m.Extensions.Harness {
+		line := "harness " + h.ID + ": starts " + strings.TrimSpace(strings.Join(append([]string{h.Command}, h.Args...), " "))
+		if h.Command == "" {
+			line = "harness " + h.ID + ": names no command"
+		}
+		if len(h.BaseCommands) > 0 {
+			line += " (adapter for " + strings.Join(h.BaseCommands, ", ") + ")"
+		}
+		out = append(out, line+", found on your PATH")
 	}
 	return out
 }

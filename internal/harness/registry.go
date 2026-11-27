@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -220,13 +219,11 @@ func sortedDefKeys(m map[string]harnessdef.Definition) []string {
 	return out
 }
 
-// highestSource is the last of sources, or "registry".
-func highestSource(sources []string) string {
+// HighestSource is the highest layer that shaped a harness (the last of
+// Harness.Sources), or "registry": the Source of a harness.* event payload.
+func HighestSource(sources []string) string {
 	if len(sources) == 0 {
 		return SourceRegistry
 	}
 	return sources[len(sources)-1]
 }
-
-// isPluginSource reports whether a source is "plugin:<id>".
-func isPluginSource(s string) bool { return strings.HasPrefix(s, SourcePluginPrefix) }

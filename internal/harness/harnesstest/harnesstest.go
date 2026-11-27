@@ -25,7 +25,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 )
 
@@ -43,9 +47,9 @@ var ShellVariables = []string{"OLDPWD", "PWD", "SHLVL", "_"}
 // no git configuration: a test that commits sets its own identity (git -c
 // user.name=... -c user.email=..., or GIT_AUTHOR_* and GIT_COMMITTER_*).
 //
-// Not yet: writing auto_probe: false and sign_in_check: false into the
-// home's config.yml. That needs the ai configuration keys and lands with
-// them; until then nothing in agentflow reads those keys.
+// The agentflow home's config.yml turns both auto_probe and sign_in_check
+// off, since both default to on: a test that wants probes calls
+// WriteSettings, which always writes both toggles.
 func PATH(tb testing.TB, dirs ...string) string {
 	tb.Helper()
 	tmp := tempRoots()
@@ -81,7 +85,41 @@ func PATH(tb testing.TB, dirs ...string) string {
 	tb.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	agentflowHome := tb.TempDir()
 	tb.Setenv("AGENTFLOW_HOME", agentflowHome)
+	WriteSettings(tb, agentflowHome, Settings{})
 	return agentflowHome
+}
+
+// Settings are the personal ai.harnesses values WriteSettings writes. The
+// zero value turns both toggles off.
+type Settings struct {
+	AutoProbe    bool
+	SignInCheck  bool
+	ProbeTimeout time.Duration // 0 leaves the default
+	Disabled     []string
+	Overrides    map[string]harnessdef.Definition
+}
+
+// WriteSettings replaces home/config.yml with an ai.harnesses section that
+// always states auto_probe and sign_in_check, so a test never runs with the
+// defaults (both on).
+func WriteSettings(tb testing.TB, home string, s Settings) {
+	tb.Helper()
+	u := config.User{AI: config.UserAI{Harnesses: config.UserHarnesses{
+		AutoProbe: &s.AutoProbe, SignInCheck: &s.SignInCheck, Disabled: s.Disabled, Overrides: s.Overrides,
+	}}}
+	if s.ProbeTimeout > 0 {
+		u.AI.Harnesses.ProbeTimeout = &s.ProbeTimeout
+	}
+	type file struct {
+		AI config.UserAI `yaml:"ai"`
+	}
+	b, err := yaml.Marshal(file{AI: u.AI})
+	if err != nil {
+		tb.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.yml"), b, 0o600); err != nil {
+		tb.Fatal(err)
+	}
 }
 
 // toolsDir links git, found on the PATH in force before PATH changes it,
