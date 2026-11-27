@@ -20,6 +20,7 @@ import (
 func TestMain(m *testing.M) {
 	jsonrpctest.RegisterChild("plugin", childPlugin)
 	jsonrpctest.RegisterChild("plugin-env", childEnvPlugin)
+	jsonrpctest.RegisterChild("eager", childEager)
 	jsonrpctest.RunChild()
 	os.Exit(m.Run())
 }

@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"context"
 	"errors"
 	"fmt"
@@ -19,6 +20,8 @@ import (
 // ~/.agentflow-ui: a runtime started by a test opens its global store in a
 // private temporary registry instead.
 func TestMain(m *testing.M) {
+	jsonrpctest.RegisterChild("hints", childHints)
+	jsonrpctest.RunChild()
 	registry, err := os.MkdirTemp("", "agentflow-ui-registry-")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

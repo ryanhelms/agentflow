@@ -10,9 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 	"github.com/ryanhelms/agentflow/internal/plugin"
@@ -233,8 +231,8 @@ type Child struct {
 	// Host is the child's end of the connection, set at launch.
 	Host jsonrpc.Conn
 	Proc *Process
-	// Subscribe, when set, is sent as subscribe once the host accepts
-	// requests after initialize.
+	// Subscribe, when set, is sent once as subscribe as soon as initialize
+	// arrives, before the child answers it.
 	Subscribe []string
 }
 
@@ -330,14 +328,9 @@ func Serve(_ *Child, r *jsonrpc.Request) (any, error) {
 	return struct{}{}, nil
 }
 
-// subscribe retries until initialize has completed on the host.
+// subscribe sends subscribe once, while the host is still completing
+// initialize, as a real child may: the host must wait for its start rather
+// than refuse.
 func (c *Child) subscribe() {
-	for i := 0; i < 1000; i++ {
-		err := c.Host.Call(context.Background(), plugin.MethodSubscribe, plugin.SubscribeParams{Types: c.Subscribe}, nil)
-		var rpcErr *jsonrpc.Error
-		if !errors.As(err, &rpcErr) || !strings.Contains(string(rpcErr.Data), plugin.RefuseNotReady) {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
+	_ = c.Host.Call(context.Background(), plugin.MethodSubscribe, plugin.SubscribeParams{Types: c.Subscribe}, nil)
 }

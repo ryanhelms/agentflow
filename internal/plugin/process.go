@@ -38,7 +38,7 @@ func (f processFactory) New(p manifest.Installed) (Instance, error) {
 	if p.Manifest.Exec == nil || p.Dir == "" {
 		return nil, coded(errBadExec, bus.PluginCodeManifestInvalid, true)
 	}
-	return &process{h: f.h, p: p, done: make(chan struct{})}, nil
+	return &process{h: f.h, p: p, done: make(chan struct{}), started: make(chan struct{})}, nil
 }
 
 // process is the process tier's Instance: a Proxy (and Channel Adapter)
@@ -52,6 +52,11 @@ type process struct {
 	proc  jsonrpc.Process
 	conn  jsonrpc.Conn
 	ready atomic.Bool
+	// started is closed when Start returns. A child may send its first
+	// request right after answering initialize, before Start has read the
+	// answer: handle waits for it rather than refuse not_ready.
+	started   chan struct{}
+	startOnce sync.Once
 
 	once sync.Once
 	done chan struct{}
@@ -75,6 +80,7 @@ func execPath(p manifest.Installed) (string, error) {
 }
 
 func (pr *process) Start(ctx context.Context, hostEnv Env) error {
+	defer pr.startOnce.Do(func() { close(pr.started) })
 	pr.env = hostEnv
 	if pr.h.o.Launch == nil || pr.h.o.Environ == nil {
 		return coded(errNoLauncher, bus.PluginCodeLaunch, false)
@@ -235,6 +241,13 @@ func (pr *process) handle(ctx context.Context, r *jsonrpc.Request) (result any, 
 			result, err = nil, errors.New("internal error") // sent as internal error
 		}
 	}()
+	if !pr.ready.Load() {
+		select {
+		case <-pr.started:
+		case <-pr.done:
+		case <-ctx.Done():
+		}
+	}
 	if !pr.ready.Load() {
 		return nil, rpcRefusal(refuse(RefuseNotReady))
 	}
