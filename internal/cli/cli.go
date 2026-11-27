@@ -542,9 +542,10 @@ func runPin(ctx context.Context, args []string) error {
 		return err
 	}
 	res, err := setup.Pin(repo.Dir, *check)
-	if err != nil {
+	if res == nil {
 		return err
 	}
+	// With an error, res still lists everything pin changed before and after it.
 	from := res.From
 	if from == "" {
 		from = "floating refs"
@@ -567,6 +568,8 @@ func runPin(ctx context.Context, args []string) error {
 			fmt.Printf("%s: replaced the stock file with the one from %s.\n", f.Path, res.To)
 			updated = true
 		case setup.LauncherCurrent:
+		case setup.LauncherFailed:
+			fmt.Fprintf(os.Stderr, "agentflow: %s is a stock file from an older release, but %s\n", f.Path, f.Detail)
 		default:
 			fmt.Fprintf(os.Stderr, "agentflow: %s: %s\n", f.Path, f.Detail)
 		}
@@ -576,6 +579,9 @@ func runPin(ctx context.Context, args []string) error {
 	}
 	if res.File == "" && !res.Behind() {
 		fmt.Printf("The stock launcher files are up to date; this repository has no %s.\n", setup.CallerWorkflow)
+	}
+	if err != nil {
+		return err
 	}
 	if *check && res.Behind() {
 		return &hooks.ExitError{Code: 1}

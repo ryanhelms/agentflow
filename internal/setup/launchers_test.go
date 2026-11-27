@@ -325,3 +325,74 @@ func TestPinRefreshesLaunchers(t *testing.T) {
 		t.Fatalf("Pin --check with a custom hook = %+v, %v", res, err)
 	}
 }
+
+// A launcher pin cannot replace (a committed .agentflow-new file blocks the stage) is
+// reported with everything else pin changed: the workflow and the other files.
+func TestPinReportsAPartialFailure(t *testing.T) {
+	setRelease(t, "0.61.0")
+	dir := t.TempDir()
+	writeRepoFile(t, dir, CallerWorkflow, []byte("    uses: ryanhelms/agentflow/.github/workflows/jira-key.yml@"+
+		strings.Repeat("0123456789", 4)+" # v0.60.0\n"), 0o644)
+	writeRepoFile(t, dir, ".agentflow/bin/agentflow", stockCopy(t, "v0.54.0", ".agentflow/bin/agentflow"), 0o755)
+	writeRepoFile(t, dir, ".agentflow/bin/agentflow.agentflow-new", []byte("committed\n"), 0o644)
+	writeRepoFile(t, dir, ".githooks/commit-msg", stockCopy(t, "v0.53.0", ".githooks/commit-msg"), 0o755)
+	res, err := Pin(dir, false)
+	if err == nil || res == nil {
+		t.Fatalf("Pin = %+v, %v; want a result and an error", res, err)
+	}
+	if !res.Changed || res.File != CallerWorkflow {
+		t.Errorf("the workflow change is not reported: %+v", res)
+	}
+	states := map[string]string{}
+	for _, f := range res.Launchers {
+		states[f.Path] = f.State
+	}
+	if states[".agentflow/bin/agentflow"] != LauncherFailed || states[".githooks/commit-msg"] != LauncherUpdated {
+		t.Errorf("launchers = %+v", res.Launchers)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".githooks", "commit-msg")); !bytes.Equal(data, launcherTemplate(t, ".githooks/commit-msg")) {
+		t.Error("the hook after the failed launcher was not replaced")
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".agentflow", "bin", "agentflow.agentflow-new")); string(data) != "committed\n" {
+		t.Error("pin changed the committed .agentflow-new file")
+	}
+}
+
+// A caller workflow that links out of the repository is never read or written.
+func TestPinNeverWritesTheWorkflowThroughALink(t *testing.T) {
+	setRelease(t, "0.61.0")
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "agentflow.yml")
+	body := []byte("    uses: ryanhelms/agentflow/.github/workflows/jira-key.yml@" + strings.Repeat("0123456789", 4) + " # v0.60.0\n")
+	if err := os.WriteFile(outside, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".github", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, filepath.FromSlash(CallerWorkflow))); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	if _, err := Pin(dir, false); err == nil {
+		t.Fatal("Pin followed a workflow link out of the repository")
+	}
+	if data, _ := os.ReadFile(outside); !bytes.Equal(data, body) {
+		t.Fatal("Pin wrote through the workflow link")
+	}
+	if PinBehind(dir) != "" {
+		t.Error("PinBehind read the workflow through the link")
+	}
+	// A linked .github folder that leaves the repository is refused the same way.
+	github := t.TempDir()
+	writeRepoFile(t, github, "workflows/agentflow.yml", body, 0o644)
+	linked := t.TempDir()
+	if err := os.Symlink(github, filepath.Join(linked, ".github")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Pin(linked, false); err == nil || errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Pin = %v; want a refused .github link out of the repository", err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(github, "workflows", "agentflow.yml")); !bytes.Equal(data, body) {
+		t.Fatal("Pin wrote through the .github link")
+	}
+}

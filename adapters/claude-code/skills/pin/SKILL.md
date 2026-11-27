@@ -17,5 +17,8 @@ keeps itself on the latest verified release.
    (`!`) changes to the reusable workflows.
 3. Run `agentflow pin`, show
    `git diff -- .github/workflows/agentflow.yml .agentflow/bin .githooks`, then commit those
-   files on a new branch as `chore: pin agentflow workflows to vX.Y.Z` (use the repo's Jira
-   key as the scope when commits need one) and open a PR. Do not merge it.
+   files on a new branch with the subject `agentflow pin` prints: `chore: pin agentflow
+   workflows to vX.Y.Z` when the workflow changed, or `chore: update agentflow launchers to
+   vX.Y.Z` when only launcher or hook files changed (use the repo's Jira key as the scope when
+   commits need one). Open a PR. Do not merge it. If `agentflow pin` fails part way, it still
+   lists what it changed: report the failure and commit nothing until it is fixed.

@@ -33,6 +33,10 @@ func TestGoldenPin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	hook, err := os.ReadFile(filepath.Join("..", "setup", "testdata", "stock", "v0.53.0", ".githooks", "commit-msg"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	workflow := []byte("jobs:\n  lint:\n    uses: ryanhelms/agentflow/.github/workflows/jira-key.yml@" +
 		strings.Repeat("0123456789", 4) + " # v0.60.0\n")
 	// Each scenario runs pin --check, pin and pin --check again.
@@ -67,4 +71,19 @@ func TestGoldenPin(t *testing.T) {
 
 	// A customised hook only warns; no workflow, but a stock launcher.
 	scenario("no_workflow", map[string][]byte{".agentflow/bin/agentflow": stock, ".githooks/commit-msg": []byte("#!/bin/sh\nexit 0\n")})
+
+	// A launcher that cannot be replaced: pin still shows everything it changed.
+	dir := t.TempDir()
+	goldenGit(t, dir, "init", "-q")
+	for rel, data := range map[string][]byte{".github/workflows/agentflow.yml": workflow, ".agentflow/bin/agentflow": stock,
+		".agentflow/bin/agentflow.agentflow-new": []byte("committed\n"), ".githooks/commit-msg": hook} {
+		write(dir, rel, data, 0o755)
+	}
+	t.Chdir(dir)
+	g := newGoldenCLI(t)
+	r := g.run("", "pin")
+	if r.Err == nil {
+		t.Fatal("pin succeeded although a launcher could not be replaced")
+	}
+	g.check("pin/partial_failure_apply.txt", r)
 }

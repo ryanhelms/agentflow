@@ -2,8 +2,8 @@ package setup
 
 import (
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -96,7 +96,7 @@ func (r *PinResult) Behind() bool {
 		return true
 	}
 	for _, f := range r.Launchers {
-		if f.State == LauncherOutdated || f.State == LauncherUpdated {
+		if f.State == LauncherOutdated || f.State == LauncherUpdated || f.State == LauncherFailed {
 			return true
 		}
 	}
@@ -123,7 +123,7 @@ func Pin(repoDir string, check bool) (*PinResult, error) {
 	if res.Launchers, err = RefreshLaunchers(root, true); err != nil {
 		return nil, err
 	}
-	file, data, err := readCallerWorkflow(repoDir)
+	file, data, err := readCallerWorkflow(root)
 	switch {
 	case errors.Is(err, os.ErrNotExist) && slices.ContainsFunc(res.Launchers, LauncherFile.Stock):
 	case err != nil:
@@ -139,9 +139,11 @@ func Pin(repoDir string, check bool) (*PinResult, error) {
 	if check {
 		return res, nil
 	}
+	// The workflow first: when it fails nothing has changed. A launcher that then fails
+	// is reported in res with the others, so the caller can show everything that changed.
 	if res.Changed {
-		if err := os.WriteFile(filepath.Join(repoDir, filepath.FromSlash(file)), out, 0o644); err != nil {
-			return res, err
+		if err := publishAfter(root, file, out, nil); err != nil {
+			return nil, err
 		}
 	}
 	res.Launchers, err = RefreshLaunchers(root, false)
@@ -154,7 +156,12 @@ func PinBehind(repoDir string) string {
 	if !version.Release() {
 		return ""
 	}
-	_, data, err := readCallerWorkflow(repoDir)
+	root, err := os.OpenRoot(repoDir)
+	if err != nil {
+		return ""
+	}
+	defer root.Close()
+	_, data, err := readCallerWorkflow(root)
 	if err != nil {
 		return ""
 	}
@@ -164,14 +171,28 @@ func PinBehind(repoDir string) string {
 	return ""
 }
 
-func readCallerWorkflow(repoDir string) (string, []byte, error) {
+// readCallerWorkflow reads the caller workflow, or the legacy one when it is missing,
+// through root: a workflow that links out of the repository is an error, never read.
+func readCallerWorkflow(root *os.Root) (string, []byte, error) {
 	file := CallerWorkflow
-	data, err := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(file)))
+	data, err := readRegular(root, file)
 	if errors.Is(err, os.ErrNotExist) {
-		legacy, legacyErr := os.ReadFile(filepath.Join(repoDir, filepath.FromSlash(legacyCallerWorkflow)))
+		legacy, legacyErr := readRegular(root, legacyCallerWorkflow)
 		if !errors.Is(legacyErr, os.ErrNotExist) {
 			return legacyCallerWorkflow, legacy, legacyErr
 		}
 	}
 	return file, data, err
+}
+
+// readRegular reads rel through root when it is a regular file (not a link).
+func readRegular(root *os.Root, rel string) ([]byte, error) {
+	info, err := root.Lstat(rel)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s: use a regular file, not a link", rel)
+	}
+	return root.ReadFile(rel)
 }
