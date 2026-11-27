@@ -29,9 +29,10 @@ import (
 //     starts a harness only under the daemon's own rules. At most one pass
 //     every 10 s per console; more answer 202 and do nothing.
 //   - POST /api/harnesses/probe runs the ai.harnesses command through an
-//     Invoker with probe: true and client repository-console, which the
-//     command treats as a person. At most one a minute per console (429
-//     beyond). The source then runs a pass (trigger probe).
+//     Invoker with probe: true, as a person (personProbeContext) and under
+//     the daemon's own Detector. At most one a minute per console (429
+//     beyond). It publishes harness.changed (trigger probe) for each probed
+//     ID when it starts, and the pass after it ends publishes them again.
 
 // Console limits.
 const (
