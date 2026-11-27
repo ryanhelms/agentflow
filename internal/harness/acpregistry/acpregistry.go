@@ -190,6 +190,7 @@ func decode(fsys fs.FS) (*Catalog, error) {
 		c.Entries = append(c.Entries, e)
 		c.Problems = append(c.Problems, problems...)
 	}
+	sort.Slice(c.Entries, func(i, j int) bool { return c.Entries[i].ID < c.Entries[j].ID })
 	return c, nil
 }
 
