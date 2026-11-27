@@ -176,6 +176,12 @@ func TestChainPerRequestKind(t *testing.T) {
 	repoAsk := &config.Repo{}
 	repoAsk.AI.Permissions.Ask = []string{"README.md"}
 
+	// Control files match ignoring case on macOS and Windows only; on Linux
+	// .CLAUDE is another folder, and the person's rule decides.
+	foldWant, foldHandler, foldCode := Ask, HandlerNever, ReasonControlFile
+	if !foldCase() {
+		foldWant, foldHandler, foldCode = Allow, HandlerRule, "rule:all-write"
+	}
 	tests := []struct {
 		name    string
 		user    *config.User
@@ -192,7 +198,7 @@ func TestChainPerRequestKind(t *testing.T) {
 		{name: "the ceiling overrides the rule", user: userWith(allowSrc, config.Autonomy{}), ceiling: CeilingConfirm, r: c.write("src/a.go"), want: Ask, handler: HandlerGate, code: ReasonCeiling},
 		{name: "the ceiling leaves reads to policy", ceiling: CeilingConfirm, r: c.read("README.md"), want: Allow, handler: HandlerGate},
 		{name: "a control-file write asks whatever a rule says", user: userWith(allowAll, autoAll), r: c.write(".claude/settings.json"), want: Ask, handler: HandlerNever, code: ReasonControlFile},
-		{name: "a control-file write in any case", user: userWith(allowAll, autoAll), r: c.write(".CLAUDE/x.json"), want: Ask, handler: HandlerNever, code: ReasonControlFile},
+		{name: "a control-file write in another case", user: userWith(allowAll, autoAll), r: c.write(".CLAUDE/x.json"), want: foldWant, handler: foldHandler, code: foldCode},
 		{name: "a repository deny beats a person's allow", user: userWith(allowSrc, config.Autonomy{}), repo: repoDeny, r: c.write("src/a.go"), want: Deny, handler: HandlerRule, code: "rule:repo"},
 		{name: "a repository ask beats the gate", repo: repoAsk, r: c.read("README.md"), want: Ask, handler: HandlerRule, code: ReasonRule},
 		{name: "a mandatory terminal asks at auto", user: userWith(nil, autoAll), r: c.term("make", "test"), want: Ask, handler: HandlerGate, code: ReasonTerminal},

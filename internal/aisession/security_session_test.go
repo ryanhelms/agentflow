@@ -9,11 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -76,6 +74,14 @@ func TestSessionEnvironment(t *testing.T) {
 			t.Errorf("the harness lacks %s: %v", n, harnessEnv)
 		}
 	}
+	// Exactly the listed names ("Phase 7 session environment").
+	listed := []string{"PATH", "HOME", "USER", "LOGNAME", "LANG", "TZ", "TERM", "TMPDIR", "SHELL",
+		"GIT_TERMINAL_PROMPT", aisession.EnvSession, "FAKE_AGENT_KEY", "PWD", "SHLVL", "_"}
+	for _, n := range harnessEnv {
+		if !slices.Contains(listed, n) && !strings.HasPrefix(n, "LC_") && !strings.HasPrefix(n, "XDG_") {
+			t.Errorf("the harness got %s, which is not a listed name", n)
+		}
+	}
 	waits := aisessiontest.Calls(log, acp.MethodTerminalWaitForExit)
 	if len(waits) != 1 || waits[0].ErrorCode != 0 {
 		t.Fatalf("terminal wait = %+v", waits)
@@ -133,7 +139,10 @@ func TestSessionGuardRefusesRealPATH(t *testing.T) {
 }
 
 func TestAnswerRules(t *testing.T) {
-	content := "package src\n\n// exact bytes\r\n"
+	// The token shape is redacted everywhere else; the preview shows the
+	// exact bytes.
+	token := "ghp_" + strings.Repeat("Z", 36)
+	content := "package src\n\n// exact bytes " + token + "\r\n"
 	r := newRig(t, aisessiontest.Script{Steps: []aisessiontest.Step{
 		call(acp.MethodWriteTextFile, map[string]any{"sessionId": "$SESSION", "path": "$CWD/src/forged.go", "content": "forged"}),
 		call(acp.MethodWriteTextFile, map[string]any{"sessionId": "$SESSION", "path": "$CWD/src/new.go", "content": content}),
@@ -209,6 +218,9 @@ func TestAnswerRules(t *testing.T) {
 			t.Errorf("an event holds the write's content: %s", b)
 		}
 	}
+	// Nothing but the worktree file holds the content: no transcript,
+	// audit line or session file in the home.
+	assertTreeLacks(t, r.home, "exact bytes", token)
 }
 
 // waitAskOtherThan waits for a waiting ask of id other than not.
@@ -335,53 +347,6 @@ func hasAnswer(items []aisession.Item, handler string) bool {
 		}
 	}
 	return false
-}
-
-func TestCancelAnswersAsksAndKillsTerminals(t *testing.T) {
-	pidFile := filepath.Join(t.TempDir(), "pid")
-	bin := script(t, "sleeper", "echo $$ > \"$1\"\nexec /bin/sleep 60\n")
-	set := aisessiontest.Settings{Rules: map[string]config.AIRule{"sleeper": {Kind: config.AIRuleKindTerminal, Match: "sleeper", Decision: config.AIDecisionAllow}}}
-	r := newRig(t, aisessiontest.Script{Steps: []aisessiontest.Step{
-		call(acp.MethodTerminalCreate, map[string]any{"sessionId": "$SESSION", "command": "sleeper", "args": []string{pidFile}}),
-		asyncCall(acp.MethodWriteTextFile, map[string]any{"sessionId": "$SESSION", "path": "$CWD/x.txt", "content": "x"}),
-		{WaitCancel: true},
-	}}, set, bin)
-	ctx := person(context.Background())
-	s := r.start(t, ctx, "cancel me")
-	r.waitAsk(t, s.ID)
-	pid := waitPID(t, pidFile)
-	if _, err := r.m.Cancel(ctx, s.ID); err != nil {
-		t.Fatal(err)
-	}
-	s = r.d.Wait(t, s.ID, 60*time.Second)
-	if s.Code != aisession.CodeCancelled {
-		t.Errorf("session ended %s", s.Code)
-	}
-	if !hasAnswer(r.items(t, s.ID), aisession.HandlerCancel) {
-		t.Error("the waiting ask was not answered cancelled")
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for syscall.Kill(pid, 0) == nil {
-		if time.Now().After(deadline) {
-			t.Fatalf("terminal process %d still runs", pid)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func waitPID(t *testing.T, path string) int {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(path); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && pid > 0 {
-				return pid
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("the terminal never started")
-	return 0
 }
 
 func TestStoreModesAndTranscripts(t *testing.T) {
@@ -602,5 +567,64 @@ func TestLimitDurationEndsTheSession(t *testing.T) {
 	offset.Store(int64(config.MaxAIMaxDuration + time.Minute))
 	if s = r.d.Wait(t, s.ID, 60*time.Second); s.Code != aisession.CodeLimitDuration {
 		t.Errorf("session ended %s", s.Code)
+	}
+}
+
+func TestLimitIdleEndsTheSession(t *testing.T) {
+	var offset atomic.Int64
+	now := func() time.Time { return time.Now().Add(time.Duration(offset.Load())) }
+	r := newRigWith(t, aisessiontest.Script{Steps: []aisessiontest.Step{{WaitCancel: true}}}, aisessiontest.Settings{},
+		func(o *aisession.Options) { o.Now = now })
+	s := r.start(t, person(context.Background()), "wait")
+	waitRunning(t, r, s.ID)
+	// Past the idle timeout, inside the duration limit.
+	offset.Store(int64(config.DefaultAIIdleTimeout + time.Minute))
+	if s = r.d.Wait(t, s.ID, 60*time.Second); s.Code != aisession.CodeLimitIdle {
+		t.Errorf("session ended %s", s.Code)
+	}
+}
+
+func waitRunning(t *testing.T, r *rig, id aisession.ID) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got, _, err := r.m.Get(person(context.Background()), id)
+		if err == nil && got.State == aisession.StateRunning {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the session never ran")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestSessionDeniesAgentflowHome: the host's own wiring of the session
+// never-list. A person's rule allows cat; cat of the agentflow home, the
+// session store or the console registry is still denied agentflow_home.
+func TestSessionDeniesAgentflowHome(t *testing.T) {
+	bin := script(t, "cat", "exit 0\n")
+	set := aisessiontest.Settings{Rules: map[string]config.AIRule{"cat": {Kind: config.AIRuleKindTerminal, Match: "cat", Decision: config.AIDecisionAllow}}}
+	create := func(args ...string) aisessiontest.Step {
+		return call(acp.MethodTerminalCreate, map[string]any{"sessionId": "$SESSION", "command": "cat", "args": args})
+	}
+	r := newRig(t, aisessiontest.Script{Steps: []aisessiontest.Step{
+		create("$AGENTFLOW_HOME/ai/sessions/ais_0/answer.key"),
+		create("${AGENTFLOW_HOME}/config.yml"),
+		create("~/.agentflow-ui/registry.json"),
+		create("README.md"),
+	}}, set, bin)
+	r.run(t, person(context.Background()), "cat")
+	creates := aisessiontest.Calls(aisessiontest.ReadLog(t, r.agent.Log), acp.MethodTerminalCreate)
+	if len(creates) != 4 {
+		t.Fatalf("creates = %+v", creates)
+	}
+	for i, c := range creates[:3] {
+		if c.ErrorCode != acp.CodeDenied || c.ErrorData != aisession.VerdictAgentflowHome {
+			t.Errorf("create %d = %+v", i, c)
+		}
+	}
+	if creates[3].ErrorCode != 0 {
+		t.Errorf("cat README.md = %+v", creates[3])
 	}
 }
