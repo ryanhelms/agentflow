@@ -128,8 +128,8 @@ func Compose(l Layers) ([]Layered, []Problem) {
 		}
 		cur.Definition = merged
 		cur.Sources = append(cur.Sources, source)
-		switch {
-		case layer == harnessdef.LayerPlugin:
+		switch layer {
+		case harnessdef.LayerPlugin:
 			// A new ID: the plugin chose every launch field, empty or not.
 			cur.launch = launchOrigin{command: source, args: source, version: source}
 		default:

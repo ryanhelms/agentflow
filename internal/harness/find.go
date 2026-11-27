@@ -22,13 +22,13 @@ import (
 // checks first; a skipped entry is reported once with its reason.
 
 type finder struct {
-	path    string   // the PATH value
-	repos   []string // resolved worktree roots of the repositories agentflow works in
+	path  string   // the PATH value
+	repos []string // resolved worktree roots of the repositories agentflow works in
 	// reposUnknown: the repositories could not be told, so every PATH
 	// entry counts as inside one (fail closed).
 	reposUnknown bool
-	windows bool
-	guard   func(string) error
+	windows      bool
+	guard        func(string) error
 }
 
 type pathEntry struct {
