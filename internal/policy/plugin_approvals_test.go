@@ -26,7 +26,7 @@ func TestPersonApprovesAPluginRequestAndThePluginResumes(t *testing.T) {
 		t.Fatalf("plugin request: %+v %v", d, err)
 	}
 	id := d.Approval.OperationID
-	if err := plug.DescribePluginRequest(id, PluginRequest{Plugin: "forged", Command: "notify", Subject: "notify ci.failed‮\x1b[31m\nsecond", Branch: "feat"}); err != nil {
+	if err := plug.DescribePluginRequest(id, PluginRequest{Plugin: "forged", Command: "notify", Subject: "notify ci.failed\u202e\x1b[31m\nsecond", Branch: "feat"}); err != nil {
 		t.Fatal(err)
 	}
 	// Only the first description sticks.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/bus/store"
+	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"github.com/ryanhelms/agentflow/internal/watch"
 )
 

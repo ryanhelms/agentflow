@@ -135,7 +135,7 @@ func (h *Host) watchApprovals(ctx context.Context) error {
 	}
 	go func() {
 		<-ctx.Done()
-		sub.Close()
+		_ = sub.Close()
 	}()
 	go func() {
 		for e := range sub.Events() {
