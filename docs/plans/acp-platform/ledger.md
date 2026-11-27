@@ -13,7 +13,7 @@ Phase gates:
 | 3 | #59 (contract, issue #52) | `develop-p3` at `c555ac4` | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | done; promoted to `main` by auto-promote, released as v0.57.0 on 2026-11-26 |
 | 4 | #72 (contract, issue #68) | `develop-p4` at `33f5ffd` | `config set --dry-run` flags a loosening edit; `console.autonomy: suggest` blocks an autonomy raise; the Settings page review with loosening ticks | done; promoted to `main`, released as v0.58.0 on 2026-11-26 |
 | 5 | #82 (contract, issue #77) | `develop-p5` at `013e2f4` | on an isolated build both sample plugins installed; a failed commit produced a `timeline-hints` annotation; `ci-notify` approve-then-run-once is covered by `TestApprovedPluginWriteRunsOnceThroughTheDaemon` | done; promoted to `main` by auto-promote (`f0928d4`), released as v0.59.0 (`e282e6d`) on 2026-11-26 |
-| 6 | #118 (contract #104, issue #97) | | `ai harnesses --probe` and `ai doctor` show every state with its fix against the fake ACP agent and fake CLI, including a sign-in check (`signed_out`, and `unknown` with a credential variable set); an agent's probe is refused while `auto_probe` is off; the Harnesses page follows a harness being removed and added again | lanes 6.1 to 6.4 merged into `develop` through #118 (with #108; contract #104; home fix #106); gate pending: #120 (security re-review fixes) is open, no `develop-p6` tag yet |
+| 6 | #118 (contract #104, issue #97) | `develop-p6` at `b4389ac` | `ai harnesses --probe` and `ai doctor` show every state with its fix against the fake ACP agent and fake CLI, including a sign-in check (`signed_out`, and `unknown` with a credential variable set); an agent's probe is refused while `auto_probe` is off; the Harnesses page follows a harness being removed and added again | done: lanes merged through #118 (with #108; contract #104; home fix #106) and the security re-review fixes #126 (issue #120); tagged `develop-p6` at `b4389accd8d85dae92a06079a265d223c20ee3b5`, released as v0.60.0. Gate: `make check` green, `make e2e` 26/26, promotion dry run passed, demo steps 1, 2 and 4 and the env-credential case run live with the fake agent; step 3 (live remove and restore) not run live because the console daemon registry ignores `AGENTFLOW_HOME`, covered by `TestHarnessProductionWiring`. Open: #111, #117, #119 |
 | 7 | #127 (contract, issue #121) | | with the fake ACP agent only: `ai run` streams a session in a task worktree; reads outside the worktree are denied; control-file writes and terminals ask; an agent cannot allow; the running cap and cancel hold; the AI panel follows a session (Go tests, since a live console would reach the owner's daemon) | contract in review |
 
 Lanes:
@@ -50,10 +50,10 @@ Lanes:
 | 5.4 | Plugins page: installed plugins, status, what each adds, live health | F | #81 | #84 | done |
 | 5.5 | `plugin approve` and the host's resume of an approved plugin write; `requested_by` on approvals | O | #91 | #92, #94, #96 | done |
 | 6.0 | Phase 6 contract ADR: `Harness`, definitions and layers, pinned registry copy, `initialize` slice, launch profile, sign-in check, states and fixes, config keys, events, harnesses projection, commands, security, ownership | O | #97 | #104 | done |
-| 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | #100 | #108, #118 | merged |
-| 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | #101 | #118 | merged |
-| 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | #102 | #118 | merged |
-| 6.4 | Harnesses page: states, fixes, sign-in guidance | F | #103 | #118 | merged |
+| 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | #100 | #108, #118 | done |
+| 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | #101 | #118 | done |
+| 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | #102 | #118 | done |
+| 6.4 | Harnesses page: states, fixes, sign-in guidance | F | #103 | #118 | done |
 | 7.0 | Phase 7 contract ADR: ACP session types, client and fake agent, session lifecycle and host, session environment, permission chain, file and terminal access, who may start and answer, repository influence, limits, store and retention, events, AI projection, config keys, session MCP server, commands, AI panel, test guard, demo and gate, ownership, security, owner questions | O | #121 | #127 | in review |
 | 7.1 | ACP v1 client and fake ACP agent for tests | O | #122 | | pending |
 | 7.2 | Background sessions (Process Manager), session store, permission chain, worktree-only file and terminal access | O | #123 | | pending |
@@ -89,6 +89,6 @@ Phase 11 hardening backlog (found in phase 5, left for 11.1):
 Outside the backlog:
 
 - A personal home that a repository's environment points inside the repository (`AGENTFLOW_HOME` set by direnv), issue #105, is fixed by #106.
-- Phase 6 security re-review findings (versioned interpreters in plugin harnesses; the version command next to Probe) are issue #120, to fix before `develop-p6` is tagged.
-- Phase 7 waits for the owner's answers to the open questions in the ADR's "Phase 7" section before lanes 7.2 and 7.3 build the parts they change.
+- Phase 6 security re-review findings (versioned interpreters in plugin harnesses; the version command next to Probe), issue #120, are fixed by #126, merged before `develop-p6`.
+- The owner answered the phase 7 open questions on #127; the ADR's "Phase 7 owner decisions" records them (6, 8, 11 and 12 taken as recommended, not owner-confirmed).
 - The test cleanup race in `internal/plugin` that failed the first v0.59.0 release run is fixed by #99.
