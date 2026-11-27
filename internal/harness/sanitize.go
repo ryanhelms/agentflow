@@ -33,7 +33,7 @@ const (
 	MethodTerminal = "terminal"
 )
 
-var signInEnvName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+var guidanceEnvName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
 // SignInGuidance turns advertised methods into Harness.SignIn: at most
 // MaxSignInMethods, text sanitized and clamped, unknown types and methods
@@ -93,7 +93,7 @@ func terminalCommand(command string, args []string, m AuthMethod) (string, bool)
 	}
 	names := make([]string, 0, len(m.Env))
 	for name, value := range m.Env {
-		if !signInEnvName.MatchString(name) || harnessdef.LaunchSafetyName(name) ||
+		if !guidanceEnvName.MatchString(name) || harnessdef.LaunchSafetyName(name) ||
 			len(value) > MaxSignInEnvValue || !harnessdef.ValidArg(value) {
 			return "", false
 		}
