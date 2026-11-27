@@ -134,6 +134,10 @@ run_claude() { # run_claude <out.jsonl> <prompt> [allowedTools...]
     --allowedTools "$@" </dev/null >"$out" 2>"$out.err" || true
 }
 
+echo "0. worktree hooks"
+commit_refused() { ! git -C "$1" commit -q --allow-empty -m "chore(PLAT-1): blocked"; }
+check "commit in the primary checkout refused" commit_refused "$repo"
+
 echo "1. plugin loads"
 run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"
 init=$(jq -c 'select(.type=="system" and .subtype=="init")' "$tmp/1.jsonl")

@@ -77,7 +77,7 @@ func lex(s string) lexed {
 					body, n := balanced(s[i+1:])
 					out.subs = append(out.subs, body)
 					cur.WriteString("$(…)")
-					i += n
+					i += n + 1 // to the closing parenthesis
 				case s[i] == '`':
 					end := strings.IndexByte(s[i+1:], '`')
 					if end < 0 {
@@ -95,7 +95,7 @@ func lex(s string) lexed {
 			out.subs = append(out.subs, body)
 			cur.WriteString("$(…)")
 			started = true
-			i += n
+			i += n + 1 // to the closing parenthesis
 		case c == '`':
 			end := strings.IndexByte(s[i+1:], '`')
 			if end < 0 {
@@ -149,6 +149,13 @@ func lex(s string) lexed {
 			}
 		case c == '(' || c == ')':
 			op(string(c))
+		case (c == '<' || c == '>') && i+1 < len(s) && s[i+1] == '(':
+			// <(...) and >(...) run the command inside, like $(...).
+			body, n := balanced(s[i+1:])
+			out.subs = append(out.subs, body)
+			cur.WriteString(string(c) + "(…)")
+			started = true
+			i += n + 1 // to the closing parenthesis
 		case c == '<' || c == '>':
 			if started && allDigits(cur.String()) {
 				cur.Reset()
@@ -182,7 +189,7 @@ func lex(s string) lexed {
 }
 
 // balanced returns the body of the parenthesised group at the start of s and the
-// number of bytes it spans, including both parentheses.
+// index of its closing parenthesis (len(s)-1 when the group is not closed).
 func balanced(s string) (string, int) {
 	depth := 0
 	quote := byte(0)

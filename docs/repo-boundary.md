@@ -31,10 +31,14 @@ agentflow finds the target repository of a command from:
   `GIT_WORK_TREE` variables;
 - `cd DIR` and `pushd DIR` earlier in the same command line, including `(cd DIR && ...)`;
 - `gh -R`/`--repo`, the `GH_REPO` variable, and `github.com/OWNER/NAME/...` URLs in the
-  arguments (`gh pr merge https://github.com/OWNER/NAME/pull/5`);
+  arguments (`gh pr merge https://github.com/OWNER/NAME/pull/5`). gh acts on the
+  repository of a URL even when `-R` or `GH_REPO` names another, so a GitHub URL given
+  as an argument (not as a flag's value, such as `--body`) must name the home repository
+  too. `gh api` paths are checked only in the `repos/OWNER/NAME/...` form;
 - `gh api repos/OWNER/NAME/...`; `{owner}/{repo}` placeholders mean the current folder's
   repository;
-- `bash -c`, `sh -c` and `zsh -c` scripts, which are checked the same way.
+- `bash -c`, `sh -c` and `zsh -c` scripts, and the commands inside `$(...)`, backquotes,
+  `<(...)` and `>(...)`, which are checked the same way.
 
 Reads stay allowed because a coordinator needs to see the state of other repositories
 (a PR's checks, a branch's log) to decide what to delegate. Reads change nothing there.

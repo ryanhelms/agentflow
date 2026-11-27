@@ -930,7 +930,10 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`, in
   `--convention-only` mode too. With
   `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
-  `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
+  `main` or `master`, as one plain command; other spellings of a merge, such as
+  `gh -R OWNER/NAME pr merge`, a second command on another line or `gh api`, are refused.
+  `agentflow finish` and `sweep` keep a branch that holds commits the merged PR did not
+  include. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
   checkout. [Task worktrees](docs/worktrees.md)
 - **Repository boundary.** A session changes only the repository it runs in. The pre-bash
