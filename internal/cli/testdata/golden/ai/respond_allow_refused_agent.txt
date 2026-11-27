@@ -1,0 +1,6 @@
+$ agentflow ai respond <session-1> <ask-2> --allow
+--- stdin
+y
+--- stdout
+--- error
+ai respond --allow allows what an AI session asked for, so an AI agent may not run it (CLAUDECODE is set): run this in your own terminal
