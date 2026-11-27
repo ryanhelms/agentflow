@@ -325,3 +325,75 @@ func harnessWait(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// TestHarnessSourceAnnouncesProbes: a console probe publishes
+// harness.changed (trigger probe) for each probed ID when it starts and
+// again from the pass after it ends, even when nothing changed. An ID with
+// a real change in that pass gets its one diff event; an ID that is not
+// published gets none.
+func TestHarnessSourceAnnouncesProbes(t *testing.T) {
+	rep := harnessReport(harnessFound("gemini", harness.StateNative, "ok", "0.71.1"), harnessFound("goose", harness.StateNative, "none", "1.0.0"))
+	det := &fakeHarnessDetector{reports: []harness.Report{rep}}
+	rec := &harnessRecorder{}
+	src := &HarnessSource{Detector: det, Bus: rec}
+	src.pass(context.Background(), HarnessTriggerStart)
+	rec.take()
+
+	payloads := func(events []bus.Event) []bus.HarnessChanged {
+		var out []bus.HarnessChanged
+		for _, e := range events {
+			if e.Type != bus.TypeHarnessChanged {
+				t.Fatalf("event %s", e.Type)
+			}
+			var p bus.HarnessChanged
+			_ = json.Unmarshal(e.Payload, &p)
+			out = append(out, p)
+		}
+		return out
+	}
+	src.AnnounceProbe(context.Background(), []string{"gemini", "unknown-id"})
+	start := payloads(rec.take())
+	if len(start) != 1 || start[0].Harness != "gemini" || start[0].Trigger != HarnessTriggerProbe || start[0].State != "native" || start[0].Previous != "native" {
+		t.Fatalf("start: %+v", start)
+	}
+	// Nothing changed in the pass after the probe: one event per probed ID.
+	src.TriggerProbed([]string{"gemini", "unknown-id"})
+	src.pass(context.Background(), HarnessTriggerFocus)
+	end := payloads(rec.take())
+	if len(end) != 1 || end[0].Harness != "gemini" || end[0].Trigger != HarnessTriggerProbe {
+		t.Fatalf("end: %+v", end)
+	}
+	// The IDs are used once.
+	src.pass(context.Background(), HarnessTriggerPoll)
+	if ev := rec.take(); len(ev) != 0 {
+		t.Fatalf("a later pass: %v", harnessTypes(ev))
+	}
+	// A probed ID that changed gets only its diff event.
+	det.mu.Lock()
+	det.reports = []harness.Report{harnessReport(harnessFound("gemini", harness.StateNative, "ok", "0.71.1"), harnessFound("goose", harness.StateNative, "ok", "1.0.0"))}
+	det.mu.Unlock()
+	src.TriggerProbed([]string{"goose", "gemini"})
+	src.pass(context.Background(), HarnessTriggerProbe)
+	got := payloads(rec.take())
+	if len(got) != 2 || got[0].Harness != "goose" || got[0].ProbeStatus != "ok" || got[1].Harness != "gemini" {
+		t.Fatalf("changed: %+v", got)
+	}
+}
+
+// TestHarnessSourceKeepsProbeStatus: the stored snapshot keeps the probe
+// status, so after a restart a probe-status change is still published.
+func TestHarnessSourceKeepsProbeStatus(t *testing.T) {
+	store := harness.NewFileStore(t.TempDir())
+	rec := &harnessRecorder{}
+	src := &HarnessSource{Detector: &fakeHarnessDetector{reports: []harness.Report{harnessReport(harnessFound("gemini", harness.StateNative, "none", "0.71.1"))}}, Store: store, Bus: rec}
+	src.pass(context.Background(), HarnessTriggerStart)
+	rec.take()
+	if p, err := store.Published(); err != nil || p["gemini"].ProbeStatus != "none" {
+		t.Fatalf("published %+v %v", p, err)
+	}
+	src2 := &HarnessSource{Detector: &fakeHarnessDetector{reports: []harness.Report{harnessReport(harnessFound("gemini", harness.StateNative, "ok", "0.71.1"))}}, Store: store, Bus: rec}
+	src2.pass(context.Background(), HarnessTriggerStart)
+	if got := harnessTypes(rec.take()); strings.Join(got, ",") != "harness.changed" {
+		t.Fatalf("after restart: %v", got)
+	}
+}

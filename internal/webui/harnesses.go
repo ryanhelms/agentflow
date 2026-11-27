@@ -50,13 +50,15 @@ var harnessIDRule = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 var harnessCommands = func() *command.Registry { return command.Default }
 
 // personProbeContext marks a console probe's context as a person's
-// request. WIRING POINT (lane 6.3, PR #110): once app.WithHarnessRequester
-// is on develop, this becomes
-//
-//	return app.WithHarnessRequester(ctx, harness.RequesterPerson)
-//
-// Until then ai.harnesses counts a console probe as an agent's.
-var personProbeContext = func(ctx context.Context) context.Context { return ctx }
+// request, run under the daemon's own Detector. Only this handler, behind
+// the console's session, origin and request-header checks, calls it.
+func personProbeContext(ctx context.Context, d harness.Detector) context.Context {
+	ctx = app.WithHarnessRequester(ctx, harness.RequesterPerson)
+	if d != nil {
+		ctx = app.WithHarnessDetector(ctx, d)
+	}
+	return ctx
+}
 
 // harnessLimits are the per-console rate limits, by server.
 var harnessLimits struct {
@@ -153,8 +155,13 @@ func (s *server) harnessesProbe(w http.ResponseWriter, r *http.Request) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// The page learns that the probe started (its cards show "probing")
+	// even when nothing else changes: harness.changed, trigger probe, for
+	// each probed ID now, and again from the pass after the probe ends.
+	rt.source.AnnounceProbe(ctx, ids)
 	go func() {
-		defer rt.source.Trigger(watch.HarnessTriggerProbe)
+		// done runs first, so the pass after the probe has probing cleared.
+		defer rt.source.TriggerProbed(ids)
 		defer done()
 		a, err := app.Open(ctx, dir, harnessesClient)
 		if err != nil {
@@ -162,7 +169,7 @@ func (s *server) harnessesProbe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		inv := command.NewInvoker(command.Options{Auditor: command.AuditLog{}})
-		res := jc.InvokeJSON(personProbeContext(ctx), inv, a, input, "", command.Origin{Source: "daemon", Client: harnessesClient})
+		res := jc.InvokeJSON(personProbeContext(ctx, rt.detector), inv, a, input, "", command.Origin{Source: "daemon", Client: harnessesClient})
 		if res.Err != nil && !errors.Is(res.Err, context.Canceled) {
 			fmt.Fprintln(os.Stderr, "agentflow: harness probe failed")
 		}

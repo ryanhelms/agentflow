@@ -312,7 +312,7 @@ func TestDaemonHarnessSource(t *testing.T) {
 	old := newHarnessOptions
 	t.Cleanup(func() { newHarnessOptions = old })
 	var u *userRuntime
-	newHarnessOptions = func() HarnessOptions {
+	newHarnessOptions = func(func() []string) HarnessOptions {
 		return HarnessOptions{Detector: det, AutoProbe: func() bool { return false }}
 	}
 	u = startUserRuntime(t, storetest.New(bus.GlobalRepo))

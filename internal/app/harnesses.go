@@ -13,18 +13,48 @@ import (
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/harness"
+	"github.com/ryanhelms/agentflow/internal/version"
 )
 
 // The AI harness operations (ADR "Phase 6 commands"). Both are reads: they
 // write nothing but the Detector's own cache under the agentflow home, and
 // what a probe may run is the Detector's rule ("Phase 6 who may probe").
 
-// ErrNoHarnessDetector is returned while no Detector is wired in.
+// ErrNoHarnessDetector is returned when no Detector can be built.
 var ErrNoHarnessDetector = errors.New("harness detection is not available in this agentflow build")
 
-// NewHarnessDetector builds the Detector the harness operations of a use.
-// Tests replace it with a fake.
-var NewHarnessDetector = func(*App) (harness.Detector, error) { return nil, ErrNoHarnessDetector }
+// NewHarnessDetector builds the Detector the harness operations of a use:
+// harness.Production over a's agentflow home, with PATH entries inside any
+// worktree of a's repository skipped. Tests replace it with a fake.
+var NewHarnessDetector = func(a *App) (harness.Detector, error) {
+	dir := ""
+	if a.Repo != nil {
+		dir = a.Repo.Dir
+	}
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("harness detection: %w", err)
+		}
+		dir = wd
+	}
+	d, _, err := harness.Production(a.Home, version.Version, func() []string { return []string{dir} })
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+type harnessDetectorKey struct{}
+
+// WithHarnessDetector makes the harness operations under ctx use d instead
+// of NewHarnessDetector. The console daemon sets it for a console probe, so
+// the probe runs under the daemon's Detector: its PATH rules skip every
+// repository the daemon serves, and it shares the daemon's prober and its
+// limits. Like the requester, it is never part of an operation's input.
+func WithHarnessDetector(ctx context.Context, d harness.Detector) context.Context {
+	return context.WithValue(ctx, harnessDetectorKey{}, d)
+}
 
 type harnessRequesterKey struct{}
 
@@ -57,9 +87,12 @@ type HarnessQuery struct {
 
 // Harnesses detects the ACP harnesses installed on this machine.
 func (a *App) Harnesses(ctx context.Context, q HarnessQuery) (harness.Report, error) {
-	d, err := NewHarnessDetector(a)
-	if err != nil {
-		return harness.Report{}, err
+	d, _ := ctx.Value(harnessDetectorKey{}).(harness.Detector)
+	if d == nil {
+		var err error
+		if d, err = NewHarnessDetector(a); err != nil {
+			return harness.Report{}, err
+		}
 	}
 	r, err := d.Detect(ctx, harness.DetectOptions{All: q.All, IDs: q.IDs, Probe: q.Probe, Requester: harnessRequester(ctx)})
 	if err != nil {

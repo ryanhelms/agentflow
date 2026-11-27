@@ -511,17 +511,66 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
-// NewForWorkDir is New with production defaults for a command run in
-// workDir: PATH entries inside any worktree of the repository containing
-// workDir are skipped. It is what internal/app sets as
-// app.NewHarnessDetector. Lane 6.2 replaces the in-memory Store and
-// NoProber by wiring its own in Options.
-func NewForWorkDir(workDir string) Detector {
-	return New(Options{WorkDirs: func() []string { return []string{workDir} }})
+// NewForWorkDir is the production Detector for a command run in workDir:
+// cache.json, the ACP prober and the sign-in check of the agentflow home
+// (Production), with PATH entries inside any worktree of the repository
+// containing workDir skipped. Without a usable home it probes nothing.
+func NewForWorkDir(workDir, version string) Detector {
+	d, _, _ := Production("", version, func() []string { return []string{workDir} })
+	return d
 }
 
-// NoProber is the Prober until lane 6.2's probe is wired: it runs nothing
-// and returns probe status none.
+// Production is the production Detector and its Store. home "" means
+// config.HomeDir(). The Store, the Prober and the sign-in check all use the
+// one home that detection reads its settings from, so a probe's data
+// directory, its log and cache.json are never relative to the working
+// directory. When the home cannot be found, or is not absolute, the
+// Detector has no Prober and no sign-in check (probe status none,
+// sign-in unknown) and err says why; it still lists what is on PATH.
+func Production(home, version string, workDirs func() []string) (Detector, Store, error) {
+	if home == "" {
+		h, err := config.HomeDir()
+		if err != nil {
+			return New(Options{WorkDirs: workDirs}), NewMemoryStore(), fmt.Errorf("harness: agentflow home: %w", err)
+		}
+		home = h
+	}
+	if !filepath.IsAbs(home) {
+		return New(Options{WorkDirs: workDirs}), NewMemoryStore(), errors.New("harness: the agentflow home is not an absolute path")
+	}
+	store := NewFileStore(home)
+	return New(Options{
+		Home:     home,
+		WorkDirs: workDirs,
+		Store:    store,
+		Prober:   NewProber(home, version, store),
+		SignIn:   NewSignInCheck(home),
+	}), store, nil
+}
+
+// Settings are the effective personal ai.harnesses values of one agentflow
+// home, read fresh from its config.yml.
+type Settings struct {
+	AutoProbe    bool
+	SignInCheck  bool
+	PollInterval time.Duration
+	ProbeTimeout time.Duration
+}
+
+// ReadSettings reads the settings the way a detection pass does: with an
+// unsafe or unreadable home, or a config.yml that does not load, both
+// toggles count as off. home "" means config.HomeDir().
+func ReadSettings(home string) Settings {
+	st, _ := (&detector{o: Options{Home: home}}).settings()
+	out := Settings{AutoProbe: st.autoProbe, SignInCheck: st.signInCheck, PollInterval: DefaultPollInterval, ProbeTimeout: st.timeout}
+	if st.user != nil {
+		out.PollInterval = st.user.AI.Harnesses.EffectivePollInterval()
+	}
+	return out
+}
+
+// NoProber runs nothing and returns probe status none. New uses it when
+// Options.Prober is nil.
 type NoProber struct{}
 
 // Probe returns status none, code not_probed.
@@ -529,8 +578,8 @@ func (NoProber) Probe(context.Context, Found, time.Duration) ProbeRecord {
 	return ProbeRecord{Status: ProbeNone, Code: CodeNotProbed}
 }
 
-// MemoryStore is a Store in memory, for tests and until lane 6.2's
-// cache.json is wired. It is safe for concurrent use.
+// MemoryStore is a Store in memory, for tests and for New without
+// Options.Store. It is safe for concurrent use.
 type MemoryStore struct {
 	mu        sync.Mutex
 	records   map[string]ProbeRecord

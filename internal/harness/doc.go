@@ -17,10 +17,10 @@
 // (acpregistry, overlay.yml, registry.go), the PATH finder (find.go), the
 // version command and probe launch profile (version.go), the state table
 // (state.go), fix text (fix.go) and the Detector (detect.go: New,
-// NewForWorkDir). Lane 6.2 implements the Prober (probe.go), the Store
-// (cache.go) and the SignInChecker (signin.go) and wires them through
-// Options; until then the Detector probes nothing (NoProber) and keeps its
-// records in memory.
+// NewForWorkDir, Production). Lane 6.2 implements the Prober (probe.go),
+// the Store (cache.go) and the SignInChecker (signin.go). Production wires
+// all three over one agentflow home; the CLI (internal/app) and the console
+// daemon (internal/webui) both build their Detector with it.
 //
 // Tests that reach detection set their PATH with harnesstest.PATH.
 package harness

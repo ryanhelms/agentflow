@@ -69,10 +69,14 @@ type HarnessSource struct {
 	snapshot map[string]harnessView // what was last published, by ID
 	seeded   bool
 	passes   int
+	// probed are the IDs of console probes that ended; the next pass
+	// publishes harness.changed (trigger probe) for each, changed or not.
+	probed map[string]bool
 }
 
 // harnessView is what a published event says about one harness. Probe is
-// "" when it comes from the stored snapshot (which has no probe status).
+// "" when it comes from a stored snapshot written before the snapshot kept
+// the probe status.
 type harnessView struct {
 	State   harness.State
 	Code    string
@@ -121,6 +125,73 @@ func (s *HarnessSource) Trigger(trigger string) {
 	case s.wake <- struct{}{}:
 	default:
 	}
+}
+
+// AnnounceProbe publishes harness.changed (trigger probe) for each of ids
+// that the last pass published, with its current state, when a console
+// probe starts. The projection then shows those IDs as probing. Nothing
+// is detected or started here.
+func (s *HarnessSource) AnnounceProbe(ctx context.Context, ids []string) {
+	if s.Bus == nil {
+		return
+	}
+	s.mu.Lock()
+	rep, have := s.last, s.have
+	snap := make(map[string]harnessView, len(s.snapshot))
+	for k, v := range s.snapshot {
+		snap[k] = v
+	}
+	s.mu.Unlock()
+	if !have {
+		return
+	}
+	for _, e := range probeEvents(rep, snap, ids, nil) {
+		e.Time = s.now().UTC()
+		if _, err := s.Bus.Publish(ctx, e); err != nil && ctx.Err() == nil {
+			s.reportError(fmt.Errorf("harness events: %w", err))
+		}
+	}
+}
+
+// TriggerProbed asks for a pass after a console probe of ids ended. That
+// pass publishes harness.changed (trigger probe) for each of them that is
+// still found, even when nothing changed, so the page learns the probe
+// landed. IDs collect until a pass runs, so a focus or config trigger in
+// between does not lose them.
+func (s *HarnessSource) TriggerProbed(ids []string) {
+	s.init()
+	s.mu.Lock()
+	if s.probed == nil {
+		s.probed = map[string]bool{}
+	}
+	for _, id := range ids {
+		s.probed[id] = true
+	}
+	s.mu.Unlock()
+	s.Trigger(HarnessTriggerProbe)
+}
+
+// probeEvents are harness.changed events, trigger probe, for each of ids
+// in rep that is in the published snapshot and has no event in already.
+func probeEvents(rep harness.Report, snapshot map[string]harnessView, ids []string, already map[string]bool) []bus.Event {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	var events []bus.Event
+	for _, h := range rep.Harnesses {
+		if !want[h.ID] || already[h.ID] {
+			continue
+		}
+		cur, ok := snapshot[h.ID]
+		if !ok {
+			continue
+		}
+		payload := bus.HarnessChanged{Harness: h.ID, Kind: string(h.Kind), State: string(cur.State), Previous: string(cur.State), Code: cur.Code,
+			ProbeStatus: HarnessProbeOutcome(h.Probe), SignIn: harnessCode(h.Auth.Status), Version: cur.Version, Source: harnessSource(h.Sources), Trigger: HarnessTriggerProbe}
+		events = append(events, harnessEvent(bus.TypeHarnessChanged, payload))
+	}
+	return events
 }
 
 func (s *HarnessSource) interval() time.Duration {
@@ -204,6 +275,27 @@ func (s *HarnessSource) pass(ctx context.Context, trigger string) {
 	}
 	s.seed()
 	events, next := harnessDiff(s.snapshotCopy(), rep, trigger)
+	s.mu.Lock()
+	probed := s.probed
+	s.probed = nil
+	s.mu.Unlock()
+	if len(probed) > 0 {
+		already := map[string]bool{}
+		for _, e := range events {
+			var p struct {
+				Harness string `json:"harness"`
+			}
+			if json.Unmarshal(e.Payload, &p) == nil {
+				already[p.Harness] = true
+			}
+		}
+		ids := make([]string, 0, len(probed))
+		for id := range probed {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		events = append(events, probeEvents(rep, next, ids, already)...)
+	}
 
 	s.mu.Lock()
 	s.last, s.have = rep, true
@@ -224,7 +316,7 @@ func (s *HarnessSource) pass(ctx context.Context, trigger string) {
 	if len(events) > 0 && s.Store != nil {
 		stored := map[string]harness.PublishedState{}
 		for id, v := range next {
-			stored[id] = harness.PublishedState{State: v.State, Code: v.Code, Version: v.Version}
+			stored[id] = harness.PublishedState{State: v.State, Code: v.Code, Version: v.Version, ProbeStatus: v.Probe}
 		}
 		if err := s.Store.SetPublished(stored); err != nil {
 			s.reportError(fmt.Errorf("harness snapshot: %w", err))
@@ -251,7 +343,7 @@ func (s *HarnessSource) seed() {
 	}
 	for id, p := range stored {
 		if p.State != "" && p.State != harness.StateNotInstalled {
-			s.snapshot[id] = harnessView{State: p.State, Code: p.Code, Version: p.Version}
+			s.snapshot[id] = harnessView{State: p.State, Code: p.Code, Version: p.Version, Probe: p.ProbeStatus}
 		}
 	}
 }

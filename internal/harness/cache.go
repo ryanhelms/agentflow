@@ -169,7 +169,7 @@ func (s *FileStore) SetPublished(m map[string]PublishedState) error {
 		if !cacheIDRule.MatchString(id) {
 			continue
 		}
-		clean[id] = PublishedState{State: p.State, Code: cacheCode(p.Code), Version: cacheVersion(p.Version)}
+		clean[id] = PublishedState{State: p.State, Code: cacheCode(p.Code), Version: cacheVersion(p.Version), ProbeStatus: cacheCode(p.ProbeStatus)}
 	}
 	return s.update(func(f *cacheFile) { f.Published = clean })
 }

@@ -3,13 +3,18 @@ package webui
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/harness"
+	"github.com/ryanhelms/agentflow/internal/version"
 	"github.com/ryanhelms/agentflow/internal/watch"
 )
 
@@ -45,24 +50,85 @@ type HarnessOptions struct {
 	PollInterval func() time.Duration
 }
 
-// newHarnessOptions gives the source's production dependencies. In a test
+// newHarnessOptions gives the source's production dependencies. workDirs
+// lists the directories of every repository the daemon serves; the
+// Detector skips PATH entries inside any of their worktrees. In a test
 // binary it gives no Detector unless a test replaces it, so no daemon test
 // reaches detection by accident ("Phase 6 test guard").
-var newHarnessOptions = func() HarnessOptions {
+var newHarnessOptions = func(workDirs func() []string) HarnessOptions {
 	if testing.Testing() {
 		return HarnessOptions{}
 	}
-	return productionHarnessOptions()
+	return productionHarnessOptions(workDirs)
 }
 
-// productionHarnessOptions gives no Detector until lane 6.1's Detector and
-// configuration keys merge; then it returns harness.Detector over
-// NewProber, NewSignInCheck and NewFileStore of the agentflow home.
-func productionHarnessOptions() HarnessOptions { return HarnessOptions{} }
+// productionHarnessOptions is harness.Production over the agentflow home:
+// cache.json, the ACP prober and the sign-in check, with the daemon's
+// served repositories as the work directories. auto_probe and
+// poll_interval are read from the personal config.yml on every pass, so a
+// change applies without a restart. Without a usable home it starts no
+// source.
+func productionHarnessOptions(workDirs func() []string) HarnessOptions {
+	home, err := config.HomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agentflow: harness detection is off:", err)
+		return HarnessOptions{}
+	}
+	d, store, err := harness.Production(home, version.Version, workDirs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agentflow: harness detection is off:", err)
+		return HarnessOptions{}
+	}
+	return HarnessOptions{
+		Detector:     d,
+		Store:        store,
+		AutoProbe:    func() bool { return harness.ReadSettings(home).AutoProbe },
+		PollInterval: func() time.Duration { return harness.ReadSettings(home).PollInterval },
+	}
+}
+
+type harnessWorkDirsKey struct{}
+
+// withHarnessWorkDirs gives the runtime's harness source the daemon's
+// registered worktrees (the daemon's index, which it reads under its own
+// lock), so the first pass already skips the repositories registered
+// before any of them is attached.
+func withHarnessWorkDirs(ctx context.Context, dirs func() []string) context.Context {
+	return context.WithValue(ctx, harnessWorkDirsKey{}, dirs)
+}
+
+// harnessWorkDirs is every served directory: the daemon's registered
+// worktrees and every worktree attached to the runtime.
+func (rt *eventRuntime) harnessWorkDirs() []string {
+	var out []string
+	if f, ok := rt.ctx.Value(harnessWorkDirsKey{}).(func() []string); ok && f != nil {
+		out = append(out, f()...)
+	}
+	rt.mu.Lock()
+	repos := make([]*repoEvents, 0, len(rt.repos))
+	for _, r := range rt.repos {
+		repos = append(repos, r)
+	}
+	rt.mu.Unlock()
+	for _, r := range repos {
+		r.mu.Lock()
+		for _, w := range r.worktrees {
+			if w.Root != "" {
+				out = append(out, w.Root)
+			}
+		}
+		r.mu.Unlock()
+	}
+	sort.Strings(out)
+	return slices.Compact(out)
+}
 
 // harnessesRuntime is what the projection and the endpoints read.
 type harnessesRuntime struct {
 	source *watch.HarnessSource
+	// detector is the source's Detector; console probes run under it
+	// (app.WithHarnessDetector), so they follow the daemon's PATH rules.
+	detector harness.Detector
 	// ctx is the source's context: console probes run under it, not under
 	// the request's, which ends with the 202 answer.
 	ctx context.Context
@@ -126,7 +192,7 @@ type harnessesExtension struct {
 }
 
 func (x *harnessesExtension) start(rt *eventRuntime) error {
-	o := newHarnessOptions()
+	o := newHarnessOptions(rt.harnessWorkDirs)
 	if o.Detector == nil {
 		setHarnesses(harnessesRuntime{})
 		return nil // no detector in this build: no source runs
@@ -139,7 +205,7 @@ func (x *harnessesExtension) start(rt *eventRuntime) error {
 	}
 	x.source = src
 	ctx, cancel := context.WithCancel(rt.ctx)
-	setHarnesses(harnessesRuntime{source: src, ctx: ctx})
+	setHarnesses(harnessesRuntime{source: src, detector: o.Detector, ctx: ctx})
 	x.cancel, x.done = cancel, make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
