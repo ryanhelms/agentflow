@@ -2449,7 +2449,7 @@ No other pinned harness has a verified status command:
 **People who sign in with an environment variable.** The check never passes credential variables, so a CLI that would use one says "signed out". So agentflow never reports `signed_out` when the parent environment has a variable that could sign the harness in:
 
 - the definition's `credential_env` names, verbatim from the vendor's source or documentation. Verified: for `codex-acp`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_ACCESS_TOKEN` (`codex-rs/login/src/auth/manager.rs` at the commit above). For `claude-acp`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_FOUNDRY_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK` and `ANTHROPIC_AWS_API_KEY` (Claude Code environment variable reference). Lane 6.1 adds `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` only after it finds them verbatim on that page.
-- and, for every harness, any variable whose name ends in `_API_KEY`, `_AUTH_TOKEN`, `_ACCESS_TOKEN` or `_OAUTH_TOKEN`.
+- and, for every harness, any variable whose name ends in `_API_KEY`, `_AUTH_TOKEN`, `_ACCESS_TOKEN`, `_OAUTH_TOKEN` or `_REFRESH_TOKEN` (the last added by the security review amendments).
 
 Only the name's presence (non-empty) is checked; the value is never read. With one present, a `signed_out` answer becomes `unknown` with code `env_credential`, and the page says "You may be signed in with an environment variable; agentflow cannot check that." This errs towards `unknown`, never towards a false `signed_out`. The daemon checks its own environment, which may differ from the shell where the person runs the harness; the same note applies.
 
@@ -3008,6 +3008,34 @@ export AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
 **A repository `ai:` key is accepted and ignored**, not a `syntax` problem. The repository loader keeps unknown keys aside, as for every key it does not know, and no harness code reads the repository layer. Making it an error would fail every command in that repository, which is a larger change than phase 6 makes.
 
 **`Found.BaseFound` is a `*Found`** (as amended in the `Found` type above). The sign-in check starts the base file the finder found and checked (its `Path`, resolved `Target` and `PathDir`), and its `Identity` decides when a stored verdict is due again.
+
+### Phase 6 security review amendments
+
+*Amendment from the independent security review of the phase 6 integration (PR #116).* These change the sections above; where they differ, this section wins.
+
+**1. A plugin's harness is started only by a person's own probe** (changes "Phase 6 who may probe" and decision 9).
+- A declarative plugin promises to run no code, but a harness entry names a PATH program with arguments (`command`, `args`, `version_args`), and `auto_probe` is on by default. So a harness whose command, args or version_args were chosen by a plugin layer is never started by the daemon or for an agent, whatever `auto_probe` says. Only a person's `--probe` (terminal or console button) starts it.
+- `harness.Layered.PluginLaunch` records the plugin. A plugin adds only new IDs, so it chose all three launch fields unless the person's override sets each again (`no_version` counts for `version_args`).
+- Until a person probes it, such a harness has probe `refused`, code `plugin_launch` (new), the note `plugin_launch` (new), and the fix "A plugin chose the command or its arguments, so agentflow never probes it automatically or for an agent. Probe it yourself if you trust it." with `agentflow ai harnesses --probe --id <id>`. The page shows the same.
+- `plugin add`'s summary shows, per harness, the command and args, the version command (`--version` by default) or "no version command", and that it runs only when you probe it yourself.
+- `harnessdef.Validate` refuses, in a **plugin** layer only, any `args` or `version_args` value with an absolute path (also after `=` or `,`), a value part starting with `@`, `..`, `~`, `\` or any `:` (URLs, `host:path`, Windows drive letters) (`harnessdef.PluginArgRefused`, code `args`). The definition is left out whole with a problem, so nothing runs. The review's reproduction (a plugin naming `rsync` with a path and a URL in `version_args`) is `TestDetectPluginCannotPointAProgramAtAPathOrURL`.
+
+**2. More sign-in variables** (changes "People who sign in with an environment variable").
+- `codex-acp` `credential_env` adds `OPENAI_FEDERATION_RULE_ID`, `OPENAI_IDENTITY_TOKEN_FILE`, `OPENAI_IDENTITY_TOKEN_SOURCE`, `OPENAI_SPIFFE_AUDIENCE` and `OPENAI_SPIFFE_ID`, verified in `openai/codex` at `bee5dc55ac118d9136171fed55ffd89af26f8d21`: `codex-rs/login/src/auth/workload_identity.rs` uses them, and `codex-rs/protocol/src/shell_environment.rs` defines each name verbatim.
+- `claude-acp` `credential_env` adds `CLAUDE_CODE_USE_FOUNDRY`, `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_MANTLE`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD`, `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_PROFILE` and `CLAUDE_CODE_OAUTH_REFRESH_TOKEN`, each found verbatim on <https://code.claude.com/docs/en/env-vars> on 2026-11-27 (with `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX`, which lane 6.1 already added).
+- The generic credential suffixes are `_API_KEY`, `_AUTH_TOKEN`, `_ACCESS_TOKEN`, `_OAUTH_TOKEN` and `_REFRESH_TOKEN`.
+
+**3. The `inside_repository` check fails closed** (changes "Phase 6 finding a harness on PATH").
+- `harness.RepositoryWorktrees` adds each work directory's enclosing repository root (found by walking up for `.git`) even when `git worktree list` fails, and the superproject of a submodule (`git rev-parse --show-superproject-working-tree`, with its worktrees).
+- When the enclosing repository cannot be told (a folder on the way cannot be read), every PATH entry is skipped as `inside_repository`.
+
+**4. Configuration text never reaches a problem.**
+- A `config.yml` that does not load gives "Your config.yml does not load (line N), so agentflow ignores your harness settings. Check its syntax." The YAML error text, which can quote values, is dropped.
+- An override key that breaks the ID rule is shown as `(invalid ID)` in `Problem.ID` and in the message (`harnessdef.SafeID`).
+
+**5. Tests and `make e2e`.**
+- The demo's step 3 is a Go test (`TestHarnessProductionWiring`) because the live step would reach the owner's running console daemon: removing the fake base CLI publishes `harness.removed` and drops the harness from the projection in one pass, and restoring it publishes `harness.detected`.
+- The console daemon's registry is the OS account's `~/.agentflow-ui`, not `AGENTFLOW_HOME`. So `scripts/e2e-claude.sh` exports `CONTINUOUS_INTEGRATION=1`, which suppresses only the automatic console, and fails when any fixture path appears in that registry. `make e2e` therefore cannot start or reuse a console daemon that would probe with the person's real settings.
 
 ### Phase 6 amendments to earlier contracts
 

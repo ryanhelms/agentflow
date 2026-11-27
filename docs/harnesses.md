@@ -87,6 +87,15 @@ agentflow reports `unknown`, not signed out, because you may sign in with it.
 
 A refused request returns `probe_refused: needs_person` with the cached results.
 
+A harness that a plugin defines is different: agentflow never starts it on its own
+or for an agent, whatever the settings say. Only your own probe runs it (probe
+`refused`, code `plugin_launch`, until you do). `agentflow plugin add` shows the
+exact command, arguments and version command it would run, and a plugin's arguments
+may not hold an absolute path, `..`, `~`, a `:` (URLs, `host:path`, drive letters)
+or a value starting with `@`. If your own override sets the command, the arguments
+and the version arguments (or `no_version`) again, the harness is yours and follows
+the rules above.
+
 Two settings control this. Both are **on by default**. Change them on the Settings
 page (group **AI harnesses**) or from the terminal:
 

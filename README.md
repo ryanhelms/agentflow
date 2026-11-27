@@ -879,7 +879,9 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   environment without tokens or keys. The sign-in status command is the exception: it
   runs with your real home folder, and agentflow keeps only its verdict, never its
   output. Who asked is set by agentflow, not by the caller's input: MCP calls count as
-  an agent, and an agent can probe only while `ai.harnesses.auto_probe` is on.
+  an agent, and an agent can probe only while `ai.harnesses.auto_probe` is on. A
+  harness a plugin defines is never probed automatically or for an agent, only when you
+  probe it yourself, and its arguments may not hold a path, host or URL.
   [AI harnesses](docs/harnesses.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
