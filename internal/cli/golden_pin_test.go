@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ryanhelms/agentflow/internal/goldentest"
+	"github.com/ryanhelms/agentflow/internal/hooks"
 	"github.com/ryanhelms/agentflow/internal/version"
 )
 
@@ -33,6 +36,15 @@ func TestGoldenPin(t *testing.T) {
 	workflow := []byte("jobs:\n  lint:\n    uses: ryanhelms/agentflow/.github/workflows/jira-key.yml@" +
 		strings.Repeat("0123456789", 4) + " # v0.60.0\n")
 	// Each scenario runs pin --check, pin and pin --check again.
+	// exit checks that pin --check exits 1 when something is behind, and 0 otherwise.
+	exit := func(r goldentest.Run, behind bool) goldentest.Run {
+		t.Helper()
+		var e *hooks.ExitError
+		if got := errors.As(r.Err, &e) && e.Code == 1; got != behind || (!behind && r.Err != nil) {
+			t.Errorf("%s: err = %v, want exit 1 = %v", r.Command, r.Err, behind)
+		}
+		return r
+	}
 	scenario := func(name string, files map[string][]byte) {
 		t.Helper()
 		dir := t.TempDir()
@@ -42,9 +54,9 @@ func TestGoldenPin(t *testing.T) {
 		}
 		t.Chdir(dir)
 		g := newGoldenCLI(t)
-		g.check("pin/"+name+"_check.txt", g.run("", "pin", "--check"))
+		g.check("pin/"+name+"_check.txt", exit(g.run("", "pin", "--check"), true))
 		g.check("pin/"+name+"_apply.txt", g.run("", "pin"))
-		g.check("pin/"+name+"_recheck.txt", g.run("", "pin", "--check"))
+		g.check("pin/"+name+"_recheck.txt", exit(g.run("", "pin", "--check"), false))
 	}
 
 	// Only the workflow: today's output, unchanged.

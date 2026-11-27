@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -212,7 +213,7 @@ func TestRefreshLaunchers(t *testing.T) {
 	if data, _ := os.ReadFile(launcher); !bytes.Equal(data, launcherTemplate(t, ".agentflow/bin/agentflow")) {
 		t.Error("the outdated launcher was not replaced with the template")
 	}
-	if info, _ := os.Stat(launcher); info.Mode().Perm() != 0o755 {
+	if info, _ := os.Stat(launcher); runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
 		t.Errorf("launcher mode = %v, want 0755", info.Mode().Perm())
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, ".githooks", "commit-msg")); !bytes.Equal(data, crlf) {
