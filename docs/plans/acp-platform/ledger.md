@@ -59,10 +59,11 @@ Lanes:
 | 7.2 | Background sessions (Process Manager), session store, permission chain, worktree-only file and terminal access | O | #123 | #132 (contract), #137 (in #138) | done |
 | 7.3 | `ai run/status/respond/cancel` commands; agentflow's own MCP server passed to the harness, with a guard against starting sessions without limit | S | #124 | #136 (in #138) | done |
 | 7.4 | AI panel: streaming output, tool calls, plan view, permission prompts | F | #125 | #134 (in #138) | done |
-| 8.1 | Feature framework, routing settings (`ai.features.<name>.harness`), prompt context as data | O | | | pending |
-| 8.2 | Commit and PR drafting; acceptance-criteria check (after 8.1) | S | | | pending |
-| 8.3 | Ticket from text; review-thread replies (after 8.1) | S | | | pending |
-| 8.4 | "Draft with AI" controls and draft review UI | F | | | pending |
+| 8.0 | Phase 8 contract ADR: feature framework (Template Method), prompt context and filtering, draft session profile, answer parsing, candidates, who may request, `ai.draft` command and tool, `--ai`, events, AI projection and console routes, draft review UI data and states, config keys, fake agent modes, test guard, demo and gate, ownership, security, owner questions, plan corrections | O | #151 | | in progress |
+| 8.1 | Feature framework (`internal/ai`), routing settings (`ai.features.<id>.harness`), prompt context as data; draft profile in `internal/aisession`; `ai draft` and `agentflow_ai_draft`; `ai.draft.finished`; drafts in the `ai` projection and console routes; fake agent draft modes | O | | | pending |
+| 8.2 | Commit and PR drafting; acceptance-criteria check; `--ai` on `commit`, `pr` and `ac` (after 8.1) | S | | | pending |
+| 8.3 | Ticket from text; review-thread replies (feature `reply`); `--ai` on `task create` and `review reply` (after 8.1) | S | | | pending |
+| 8.4 | "Draft with AI" request and draft review view on the AI page (no apply in phase 8) | F | | | pending |
 | 9.1 | ACP transport for `delegate`; agents come from the harness registry | O | | | pending |
 | 9.2 | Second opinion | O | | | pending |
 | 9.3 | Fan-out comparison | O | | | pending |
