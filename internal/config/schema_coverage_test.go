@@ -45,6 +45,16 @@ var loosening = map[string]Loosening{
 	"personal:ai.harnesses.auto_probe":      LoosensEnable,
 	"personal:ai.harnesses.sign_in_check":   LoosensEnable,
 	"personal:ai.harnesses.disabled":        LoosensShrink,
+	"personal:ai.sessions.agent_start":      LoosensEnable,
+	"personal:ai.sessions.home":             LoosensEnable,
+	"personal:ai.sessions.max_running":      LoosensEnable,
+	"personal:ai.sessions.max_duration":     LoosensEnable,
+	"personal:ai.sessions.unasked":          LoosensEnable,
+	"personal:ai.sessions.agentflow_mcp":    LoosensEnable,
+	"personal:ai.permissions.rules":         LoosensEnable,
+	"repo:ai.sessions.disabled":             LoosensShrink,
+	"repo:ai.permissions.ask":               LoosensShrink,
+	"repo:ai.permissions.deny":              LoosensShrink,
 }
 
 // approvalWindows are the duration fields whose limits the code checks
@@ -391,9 +401,14 @@ func loosensSuits(l Loosening, w Widget, s Field) bool {
 	case LoosensLonger:
 		return w == WidgetDuration
 	case LoosensEnable:
-		return w == WidgetToggle
+		// A toggle turned on; phase 7 also marks a select, stepper, duration
+		// or rule table whose loosening cases are code in
+		// internal/settings/checks.go (ADR "Phase 7 configuration keys").
+		return w == WidgetToggle || w == WidgetSelect || w == WidgetStepper || w == WidgetDuration || w == WidgetKVTable
 	case LoosensShrink:
-		return w == WidgetChips || w == WidgetBranchPicker || w == WidgetKVTable
+		// A toggle under shrink is a repository restriction turned off
+		// (repo:ai.sessions.disabled).
+		return w == WidgetChips || w == WidgetBranchPicker || w == WidgetKVTable || w == WidgetToggle
 	}
 	return false
 }

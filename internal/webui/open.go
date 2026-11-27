@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
@@ -21,8 +22,14 @@ type OpenResult struct {
 	Reused bool `json:"reused"`
 }
 
+// startup is what a console child reports on its readiness pipe: that it
+// is ready, or why it failed. It never carries a sign-in link or ticket:
+// the starter asks the daemon for the link through the encrypted control
+// request, which needs the private registry key (ADR, phase 7 integration
+// amendment on the console link). URL is filled in by the starter only.
 type startup struct {
-	URL    string `json:"url,omitempty"`
+	Ready  bool   `json:"ready,omitempty"`
+	URL    string `json:"-"`
 	Reused bool   `json:"reused,omitempty"`
 	Error  string `json:"error,omitempty"`
 }
@@ -76,26 +83,56 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 	if err != nil {
 		return startup{}, fmt.Errorf("locate agentflow executable: %w", err)
 	}
-	cmd := exec.Command(exe, "ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port))
+	cmd, err := consoleChild(exe, []string{"ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port)})
+	if err != nil {
+		return startup{}, err
+	}
 	cmd.Dir = dir
 	// Resolve custom relative socket paths in the caller's directory before
 	// the daemon starts in the repository selected by the CLI.
 	if socket := commanderSocket(); socket != "" {
 		cmd.Env = append(os.Environ(), "AGENT_COMMANDER_SOCKET="+socket)
 	}
-	return startAndWait(ctx, cmd)
+	ready, err := startAndWait(ctx, cmd)
+	if err != nil {
+		return startup{}, err
+	}
+	// The child said only that it is ready. The link comes from the daemon
+	// itself, over the control request.
+	address, found, err = findConsole(ctx, dir, dest, mode, port)
+	if err != nil {
+		return startup{}, err
+	}
+	if !found {
+		return startup{}, errors.New("the console reported ready but is not registered")
+	}
+	return startup{Ready: true, URL: address, Reused: ready.Reused}, nil
 }
 
-// ServeChild is the private stdout handshake between two copies of agentflow.
-// Closing the pipe after readiness leaves the child with no MCP descriptors.
+// consoleChild builds the `agentflow ui --serve-child` command that starts
+// a console daemon. A test binary is not agentflow, so it never runs one:
+// tests replace consoleChild with a child mode of their own that serves
+// from a temporary registry.
+var consoleChild = func(exe string, args []string) (*exec.Cmd, error) {
+	if testing.Testing() {
+		return nil, errors.New("webui: test guard: a test never re-executes its binary as the console; replace consoleChild")
+	}
+	return exec.Command(exe, args...), nil
+}
+
+// ServeChild is the readiness handshake between two copies of agentflow:
+// it reports only that the console is ready (or why it failed), never a
+// link or a ticket, so whoever runs `agentflow ui --serve-child` gets
+// nothing it could sign in with. Closing the pipe after readiness leaves
+// the child with no MCP descriptors.
 func ServeChild(ctx context.Context, dest Destination, mode string, port int, pipe *os.File) error {
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	defer pipe.Close()
 	sent := false
-	err := serveAt(ctx, ".", port, dest, func(address string, reused bool) {
+	err := serveChildAt(ctx, ".", port, dest, func(_ string, reused bool) {
 		sent = true
-		if err := json.NewEncoder(pipe).Encode(startup{URL: address, Reused: reused}); err != nil {
+		if err := json.NewEncoder(pipe).Encode(startup{Ready: true, Reused: reused}); err != nil {
 			stop()
 		}
 		_ = pipe.Close()
@@ -144,8 +181,8 @@ func startAndWait(ctx context.Context, cmd *exec.Cmd) (startup, error) {
 		if ready.Error != "" {
 			return startup{}, errors.New(ready.Error)
 		}
-		if ready.URL == "" && !ready.Reused {
-			return startup{}, errors.New("console did not return a launch address")
+		if !ready.Ready {
+			return startup{}, errors.New("console did not report readiness")
 		}
 		return ready, nil
 	}
@@ -158,7 +195,7 @@ func OpenBrowser(ctx context.Context, address string) error {
 		return err
 	}
 	done := make(chan error, 1)
-	go func() { done <- nativeoauth.OpenBrowser(context.WithoutCancel(ctx), address) }()
+	go func() { done <- nativeoauth.OpenBrowserEnv(context.WithoutCancel(ctx), address, openerEnv()) }()
 	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {

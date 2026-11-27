@@ -49,6 +49,8 @@ func ErrorCode(err error) string {
 		return "approval_pending"
 	case errors.Is(err, ErrToken):
 		return "invalid_token"
+	case errors.Is(err, ErrSessionReadOnly):
+		return "session_read_only"
 	default:
 		return ""
 	}
@@ -106,14 +108,46 @@ const (
 // PluginClientPrefix belongs to the plugin host (NewPluginGate).
 var ErrReservedClient = errors.New(`client names that start with "plugin:" are reserved for the agentflow plugin host`)
 
+// SessionClientPrefix starts the client name of an AI session's own calls
+// (ADR, "Phase 7 agentflow's MCP server in a session"): the MCP server agentflow
+// passes to a harness, client "ai-session:<session ID>".
+const SessionClientPrefix = "ai-session:"
+
+// ErrReservedSessionClient: a caller named itself an AI session. Only
+// NewSessionGate makes such a gate.
+var ErrReservedSessionClient = errors.New(`client names that start with "ai-session:" are reserved for agentflow's own AI sessions`)
+
+// ErrSessionReadOnly: an AI session's own client asked for an operation that
+// is not a read. A session's client may only read (code session_read_only).
+var ErrSessionReadOnly = errors.New("an AI session may only use agentflow's read-only operations")
+
 // NewGate opens the same per-user secret across restarts and concurrent clients.
-// It refuses a client name with PluginClientPrefix: only NewPluginGate makes
-// a plugin's gate.
+// It refuses a client name with PluginClientPrefix or SessionClientPrefix:
+// only NewPluginGate makes a plugin's gate, and only NewSessionGate a
+// session's.
 func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
 	if strings.HasPrefix(client, PluginClientPrefix) {
 		return nil, ErrReservedClient
 	}
+	if strings.HasPrefix(client, SessionClientPrefix) {
+		return nil, ErrReservedSessionClient
+	}
 	return newGate(dir, a, client)
+}
+
+// NewSessionGate opens AI session id's gate, client SessionClientPrefix + id.
+// Only app.OpenSession calls it. The gate refuses every operation that is
+// not a read (ErrSessionReadOnly), whatever the autonomy level.
+func NewSessionGate(dir string, a config.Autonomy, id string) (*Gate, error) {
+	if id == "" || strings.ContainsAny(id, ": \t\r\n/\\") {
+		return nil, fmt.Errorf("%q is not an AI session ID", id)
+	}
+	return newGate(dir, a, SessionClientPrefix+id)
+}
+
+// IsSessionClient reports whether client is an AI session's own client.
+func IsSessionClient(client string) bool {
+	return strings.HasPrefix(client, SessionClientPrefix)
 }
 
 // NewPluginGate opens plugin id's gate, client PluginClientPrefix + id. Only
@@ -556,6 +590,9 @@ func (g *Gate) Cancel(id, token string) error {
 }
 
 func (g *Gate) updatePending(id, token, state string) (Approval, error) {
+	if IsSessionClient(g.Client) {
+		return Approval{}, ErrSessionReadOnly
+	}
 	var r approvalRecord
 	err := g.locked(func() error {
 		signed, bearer, err := g.credential(token)

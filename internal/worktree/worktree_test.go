@@ -231,7 +231,7 @@ func TestFinishSquashMergedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.State != StateWouldFinish || plan.Primary != primary || len(plan.Actions) != 4 || !strings.Contains(plan.Actions[3], "push origin --delete issue-2-api") {
+	if plan.State != StateWouldFinish || plan.Primary != primary || len(plan.Actions) != 4 || !strings.Contains(plan.Actions[3], "--force-with-lease=refs/heads/issue-2-api:"+head+" origin :refs/heads/issue-2-api") {
 		t.Fatalf("plan %+v", plan.Outcome)
 	}
 	if _, err := os.Stat(dir); err != nil {
@@ -246,6 +246,9 @@ func TestFinishSquashMergedWorktree(t *testing.T) {
 	}
 	if refs := git(t, primary, "for-each-ref", "--format=%(refname)", "refs/heads/issue-2-api"); refs != "" {
 		t.Fatalf("local branch remains: %s", refs)
+	}
+	if cfg, _ := exec.Command("git", "-C", primary, "config", "--get-regexp", `^branch\.issue-2-api\.`).Output(); len(cfg) != 0 {
+		t.Fatalf("branch config remains: %s", cfg)
 	}
 	if remote := git(t, primary, "ls-remote", "--heads", "origin", "issue-2-api"); remote != "" {
 		t.Fatalf("remote branch remains: %s", remote)
@@ -285,6 +288,30 @@ func TestFinishRefusals(t *testing.T) {
 	}
 	if _, err := PlanFinish(ctx, primary, "", opt); err == nil || !strings.Contains(err.Error(), "primary checkout") {
 		t.Fatalf("finish in the primary checkout: %v", err)
+	}
+}
+
+func TestFinishRefusesCommitsAfterMergedPR(t *testing.T) {
+	_, primary := fixture(t)
+	s := Resolve(&config.Repo{}, &config.User{})
+	dir := addWorktree(t, s, primary, "issue-3")
+	commitFile(t, dir, "a.go")
+	git(t, dir, "push", "-q", "-u", "origin", "issue-3")
+	head := git(t, dir, "rev-parse", "HEAD")
+	squashMerge(t, primary, "issue-3")
+	commitFile(t, dir, "b.go") // follow-up work, pushed but in no merged PR
+	git(t, dir, "push", "-q", "origin", "issue-3")
+	opt := Options{Protected: config.DefaultProtected, GH: fakeGH(map[string]string{
+		"issue-3": `{"state":"MERGED","mergedAt":"x","baseRefName":"develop","headRefOid":"` + head + `"}`,
+	})}
+	_, err := PlanFinish(t.Context(), dir, "", opt)
+	var refused *RefusedError
+	if !errors.As(err, &refused) || refused.Outcome.State != StateUnmerged || !strings.Contains(refused.Outcome.Detail, "after the merged PR") {
+		t.Fatalf("finish with commits after the merged PR: %v", err)
+	}
+	res, err := PlanSweep(t.Context(), []string{primary}, opt)
+	if err != nil || len(res.Plans()) != 0 {
+		t.Fatalf("sweep planned %d finishes: %v", len(res.Plans()), err)
 	}
 }
 

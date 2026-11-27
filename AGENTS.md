@@ -65,11 +65,13 @@ contains `@AGENTS.md` so Claude Code loads this file.
 The ACP platform program is running. Its goal, plan and ledger are in
 [docs/plans/acp-platform/](docs/plans/acp-platform/).
 
-> **Goal:** Deliver the ACP platform program in `docs/plans/acp-platform/plan.md` to `develop`, phase by phase. Each phase starts with its ADR contract, runs its lanes in parallel (one issue, worktree and PR each), and ends at its gate: all lanes merged, `make check` green, the phase demo working, tag `develop-pN`, ledger updated. Continue until phase 11 is done, then stop and ask the owner to run `agentflow promote`.
+> **Goal:** Complete all remaining work, then make the repository public: phases 7 to 11 of `docs/plans/acp-platform/plan.md` on `develop`, the open backlog, the launcher fix (#129) and the publishing clean-up (#130). The full goal is [goal.md](docs/plans/acp-platform/goal.md).
 >
 > **Rules for every agent:** Follow `AGENTS.md`. Use the GoF and EIP patterns named in the ADR. Every MCP tool has a CLI command. Every UI update arrives over the SSE event stream. Every config option has a structured control. Never merge into or push to `main`, and never run `agentflow promote`. Tests never call real external services or harnesses.
 >
-> **Stop and wait for the owner when:** a compatibility contract would break; a dependency other than `fsnotify` is needed; a security finding can't be fixed in its lane; a plan decision turns out wrong; or a step needs secrets, credentials or another repository.
+> **Only the coordinator** merges, tags, releases and publishes. No other agent changes the repository's visibility or settings.
+>
+> **Stop and wait for the owner when:** a compatibility contract would break or a change needs `!`; a dependency other than `fsnotify` is needed; a security finding can't be fixed; a plan decision turns out wrong; a step needs secrets, credentials or another repository; a choice would change what agents may do, what leaves the owner's machine, or what gets deleted; or the publishing scan finds a secret or private data the owner has not accepted.
 
 While the program is active:
 
@@ -77,8 +79,8 @@ While the program is active:
 - Only the coordinator merges into `develop`.
 - At a passing phase gate the coordinator tags the `develop` commit `develop-pN`. CI
   (`.github/workflows/auto-promote.yml`) then checks it and merges it into `main` and
-  releases. The goal's "ask the owner to run `agentflow promote`" still applies to
-  breaking changes and to anything the workflow refuses.
+  releases. The owner runs `agentflow promote` only for breaking changes and for
+  anything the workflow refuses.
 - Agents never merge into or push to `main` and never run `agentflow promote`. CI does
   the promotion. Don't edit `CHANGELOG.md`, the README version marker or the plugin
   manifest versions on `develop`: releases write them on `main`, and an edit on `develop`
@@ -194,7 +196,11 @@ These are used by other repos and clients. Changing them is a breaking change:
 - MCP tool names and input fields (`agentflow_*`, `confirm_token`).
 - The install layout `${XDG_CACHE_HOME:-~/.cache}/agentflow/<version>/agentflow` with a
   `current` symlink (Windows: `%LOCALAPPDATA%\agentflow\current.txt`), which the launchers
-  in `templates/repo/.agentflow/bin/` depend on.
+  in `templates/repo/.agentflow/bin/` depend on. A cache root inside a git working tree
+  or git directory is never used (issue #129): every script that finds or installs the
+  binary carries the same fenced `agentflow cache root` block, `update.CacheRoot` applies
+  the same rule through `config.UserDir` (`update.ActiveBinary` mirrors `af_installed`), and tests in `internal/setup` and
+  `internal/update` keep the copies identical and the answers equal. Change them together.
 - `bin/next-version.sh` must give the same result as `internal/release` (`agentflow release
   version`). Change both together and test both.
 - Config schemas: `.agentflow/config.yml`, `.agentflow/releases.yml`, `flow-map.yml`,

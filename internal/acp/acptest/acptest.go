@@ -12,7 +12,8 @@
 //	}
 //
 // cmd/fake-acp is a standalone fake for the phase demo, built by hand.
-// Lane 7.1 adds session scripts.
+// Lane 7.1 adds session scripts (Script.Session, session.go) and the
+// scripts the phase 7 demo uses (scripts.go).
 package acptest
 
 import (
@@ -73,6 +74,14 @@ type Script struct {
 	// Spawn starts a grandchild that sleeps until killed and logs its PID
 	// (LogEntry.Spawned), to show the probe kills the process group.
 	Spawn bool
+
+	// Lane 7.1 addition: Session, when set, makes the fake answer the
+	// session methods and play the script after session/prompt (session.go).
+	// Without it every session method gets -32601, as in phase 6.
+	Session *SessionScript `json:",omitempty"`
+	// LogStderr writes the log lines to stderr when Log is empty (fake-acp's
+	// session modes: the session host keeps the harness's stderr).
+	LogStderr bool `json:",omitempty"`
 }
 
 // LogEntry is one line of Script.Log.
@@ -86,6 +95,13 @@ type LogEntry struct {
 	Asked   string          `json:"asked,omitempty"`
 	Code    int             `json:"code,omitempty"`
 	Spawned int             `json:"spawned,omitempty"`
+	// Lane 7.1: for an ask (Asked), the answer's data.code when it was an
+	// error, the result when it was not, and whether the ask was skipped
+	// (a wait or release before any terminal was created). Code is -1 when
+	// no answer came.
+	ErrData string          `json:"err_data,omitempty"`
+	Answer  json.RawMessage `json:"answer,omitempty"`
+	Skipped bool            `json:"skipped,omitempty"`
 }
 
 // ReadLog reads a Script.Log file. A missing file is no entries.
@@ -232,15 +248,29 @@ func Run(name string, s Script, args []string, in io.Reader, out io.WriteCloser,
 		}
 	}
 	lg := &logger{path: s.Log}
+	if s.Log == "" && s.LogStderr {
+		lg.w = errOut
+	}
 	wd, _ := os.Getwd()
 	lg.write(LogEntry{Args: append([]string{}, args...), Env: envNames(), Dir: wd})
 
 	var conn jsonrpc.Conn
 	ready := make(chan struct{})
 	var outMu sync.Mutex
+	var play *player
+	limits := jsonrpc.Limits{}
+	if s.Session != nil {
+		play = newPlayer(s.Session, lg, func() jsonrpc.Conn { return conn })
+		limits = sessionLimits
+	}
 	h := jsonrpc.HandlerFunc(func(ctx context.Context, r *jsonrpc.Request) (any, error) {
 		<-ready
 		lg.write(LogEntry{Method: r.Method, Params: r.Params, Notify: r.Notification()})
+		if play != nil && r.Method != acp.MethodInitialize {
+			if result, ok, err := play.handle(ctx, r); ok {
+				return result, err
+			}
+		}
 		if r.Method != acp.MethodInitialize {
 			return nil, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found"}
 		}
@@ -285,7 +315,7 @@ func Run(name string, s Script, args []string, in io.Reader, out io.WriteCloser,
 		ok := OK()
 		return ok, nil
 	})
-	conn = jsonrpc.NewConn(in, out, h, jsonrpc.Limits{})
+	conn = jsonrpc.NewConn(in, out, h, limits)
 	close(ready)
 	<-conn.Done()
 	return 0
@@ -294,16 +324,21 @@ func Run(name string, s Script, args []string, in io.Reader, out io.WriteCloser,
 type logger struct {
 	mu   sync.Mutex
 	path string
+	w    io.Writer // used when path is empty
 }
 
 func (l *logger) write(e LogEntry) {
-	if l.path == "" {
+	if l.path == "" && l.w == nil {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	b, err := json.Marshal(e)
 	if err != nil {
+		return
+	}
+	if l.path == "" {
+		_, _ = l.w.Write(append(b, '\n'))
 		return
 	}
 	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)

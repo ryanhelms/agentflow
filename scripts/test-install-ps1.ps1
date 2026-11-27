@@ -5,6 +5,8 @@ $installer = (Get-Item -LiteralPath (Join-Path $PSScriptRoot '../install.ps1')).
 $pwsh = (Get-Process -Id $PID).Path
 $windows = $env:OS -eq 'Windows_NT'
 $temp = (New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName()))).FullName
+# The cache check refuses paths through links (macOS /var is one), so use the physical path.
+if (!$windows) { $temp = (& /bin/sh -c 'cd -P -- "$1" && pwd -P' sh $temp) }
 $original = (Get-Location).Path
 $vars = @{}
 foreach ($key in 'PATH','LOCALAPPDATA','DF_TEST_SHELL','DF_TEST_TEMP','GIT_DIR','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_INDEX_FILE') {
@@ -199,6 +201,91 @@ exit 0
             Assert ($res.Code -ne 0 -and $res.Text -notmatch 'verified-from-cache') "Executed an unverified release in $mode."
             Assert ([IO.File]::ReadAllText($pointer) -eq $staleDir) "Changed the prior installation after $mode."
         }
+    }
+    # A repository-set LOCALAPPDATA is never used to find or install the binary (#129).
+    # Only the checks run here: the account's own folder is computed, never read.
+    $launcherText = [IO.File]::ReadAllText($sourceLauncher)
+    $begin = $launcherText.IndexOf('# >>> agentflow cache root')
+    $end = $launcherText.IndexOf('# <<< agentflow cache root')
+    Assert ($begin -ge 0 -and $end -gt $begin) 'The launcher has no cache-root block.'
+    . ([scriptblock]::Create($launcherText.Substring($begin, $end - $begin)))
+    $evil = Join-Path $temp 'evil repo'
+    [IO.Directory]::CreateDirectory($evil) | Out-Null
+    & git -C $evil init -q
+    Assert ($LASTEXITCODE -eq 0) 'git init failed.'
+    $outside = [IO.Directory]::CreateDirectory((Join-Path $temp 'outside')).FullName
+    Assert ($null -eq (Get-AgentflowInsideRepository (Join-Path $outside 'agentflow'))) 'Refused a cache outside every repository.'
+    foreach ($inside in (Join-Path $evil '.cache/agentflow'), (Join-Path $evil '.git/agentflow')) {
+        Assert ((Get-AgentflowInsideRepository $inside) -match 'is inside the repository') "Accepted a cache inside a repository: $inside"
+    }
+    Assert ((Get-AgentflowInsideRepository 'relative/agentflow') -match 'cannot be checked') 'Accepted a relative cache.'
+    Assert ((Get-AgentflowInsideRepository (Join-Path $evil '../outside/agentflow')) -match 'cannot be checked') 'Accepted a .. cache.'
+    $env:LOCALAPPDATA = Join-Path $evil '.cache'
+    $root = Get-AgentflowCacheRoot 2>$null
+    $own = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'agentflow'
+    Assert ($root -eq $own) "Used the repository-set LOCALAPPDATA: $root"
+    $env:LOCALAPPDATA = $outside
+    Assert ((Get-AgentflowCacheRoot) -eq (Join-Path $outside 'agentflow')) 'Changed a cache outside every repository.'
+    $planted = Join-Path $evil 'agentflow'
+    $plantedVersion = [IO.Directory]::CreateDirectory((Join-Path $planted '1.2.3')).FullName
+    [IO.File]::WriteAllText((Join-Path $plantedVersion 'agentflow.exe'), 'planted')
+    [IO.File]::WriteAllText((Join-Path $planted 'current.txt'), $plantedVersion)
+    function Get-Warning([scriptblock]$Block) {
+        # Runs $Block and returns what it wrote to [Console]::Error.
+        $old = [Console]::Error
+        $writer = [IO.StringWriter]::new()
+        [Console]::SetError($writer)
+        try { $null = & $Block } finally { [Console]::SetError($old) }
+        return $writer.ToString()
+    }
+    function New-TestLink([string]$Path, [string]$Target) {
+        $type = if ($windows) { 'Junction' } else { 'SymbolicLink' }
+        New-Item -ItemType $type -Path $Path -Target $Target | Out-Null
+    }
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $planted)) 'Would run a binary from inside a repository.' }
+    Assert ($warning -match 'is inside the repository') "No repository reason for a cache inside a repository: $warning"
+    $pointedAway = [IO.Directory]::CreateDirectory((Join-Path $outside 'agentflow')).FullName
+    [IO.File]::WriteAllText((Join-Path $pointedAway 'current.txt'), $plantedVersion)
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $pointedAway)) 'Followed current.txt out of the cache.' }
+    Assert ($warning -match 'does not name a version folder') "No reason for a pointer out of the cache: $warning"
+    # A version folder in the cache that is a link into a repository: the link check refuses it.
+    $linkedRoot = [IO.Directory]::CreateDirectory((Join-Path $outside 'linked-cache')).FullName
+    New-TestLink (Join-Path $linkedRoot '1.2.3') $plantedVersion
+    [IO.File]::WriteAllText((Join-Path $linkedRoot 'current.txt'), (Join-Path $linkedRoot '1.2.3'))
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $linkedRoot)) 'Followed current.txt into a repository.' }
+    Assert ($warning -match 'goes through the link') "No link reason for a version folder that links into a repository: $warning"
+    # A version folder directly in a cache outside every repository runs.
+    $goodRoot = Join-Path $outside 'good-cache'
+    $goodVersion = [IO.Directory]::CreateDirectory((Join-Path $goodRoot '1.2.3')).FullName
+    [IO.File]::WriteAllText((Join-Path $goodVersion 'agentflow.exe'), 'good')
+    [IO.File]::WriteAllText((Join-Path $goodRoot 'current.txt'), $goodVersion)
+    Assert ((Get-AgentflowActive $goodRoot) -eq $goodVersion) 'Refused a version folder in a cache outside every repository.'
+    # A dangling link cannot be checked: its target could be created inside a repository.
+    $gone = [IO.Directory]::CreateDirectory((Join-Path $evil 'gone')).FullName
+    $dangling = Join-Path $outside 'dangling'
+    New-TestLink $dangling $gone
+    Remove-Item -LiteralPath $gone -Recurse -Force
+    Assert ((Get-AgentflowInsideRepository (Join-Path $dangling 'agentflow')) -match 'cannot be checked') 'Accepted a cache through a dangling link.'
+    Assert ((Get-AgentflowInsideRepository $dangling) -match 'cannot be checked') 'Accepted a dangling link as the cache.'
+    $env:LOCALAPPDATA = $dangling
+    Assert ((Get-AgentflowCacheRoot 2>$null) -eq $own) 'Used a LOCALAPPDATA that is a dangling link.'
+    # The account's own cache behind a link (a profile behind a junction) still runs. Off
+    # Windows, .NET takes the local application data folder from XDG_DATA_HOME.
+    if (!$windows) {
+        $realLocal = [IO.Directory]::CreateDirectory((Join-Path $temp 'real-local')).FullName
+        $linkedLocal = Join-Path $temp 'linked-local'
+        New-TestLink $linkedLocal $realLocal
+        $oldData = $env:XDG_DATA_HOME
+        $env:XDG_DATA_HOME = $linkedLocal
+        try {
+            if ([Environment]::GetFolderPath('LocalApplicationData') -eq $linkedLocal) {
+                $ownRoot = Join-Path $linkedLocal 'agentflow'
+                $ownVersion = [IO.Directory]::CreateDirectory((Join-Path $ownRoot '1.2.3')).FullName
+                [IO.File]::WriteAllText((Join-Path $ownVersion 'agentflow.exe'), 'own')
+                [IO.File]::WriteAllText((Join-Path $ownRoot 'current.txt'), $ownVersion)
+                Assert ((Get-AgentflowActive $ownRoot) -eq $ownVersion) 'Refused the account''s own cache behind a link.'
+            }
+        } finally { $env:XDG_DATA_HOME = $oldData }
     }
     'PowerShell project installer tests passed.'
 } finally {

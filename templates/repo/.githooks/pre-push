@@ -7,8 +7,121 @@
 # AGENTFLOW_ALLOW_PROMOTE=1 allows a push to main or master for a release promotion only.
 set -euo pipefail
 
-cache="${XDG_CACHE_HOME:-$HOME/.cache}/agentflow/current/agentflow"
-if [ -x "$cache" ]; then
+# >>> agentflow cache root (the same block is in every script that finds the binary)
+# A repository's environment (a client's per-project settings, direnv) can set HOME or
+# XDG_CACHE_HOME, so the install cache is never taken from inside a git working tree or
+# git directory, unless that tree's root is the account's own home (a dotfiles
+# repository). Links are followed first, and the physical path that was checked is the
+# one used. A dangling link cannot be checked. Only the file system is read, never git,
+# so GIT_DIR and the other git variables cannot change the answer. Messages go to stderr.
+af_account_home() { # the account's home from the user database, never $HOME
+  af_u=$(id -un 2>/dev/null) || return 1
+  case $af_u in '' | -* | *[!A-Za-z0-9._-]*) return 1 ;; esac
+  af_h=
+  eval "af_h=~$af_u"
+  case $af_h in /*) printf '%s\n' "$af_h" ;; *) return 1 ;; esac
+}
+af_physical() { # the absolute, physical form of $1, which need not exist
+  case $1 in /*) ;; *) return 1 ;; esac
+  case $1/ in */./* | */../*) return 1 ;; esac
+  af_p=$1 af_t=
+  while [ ! -d "$af_p" ]; do
+    if [ -e "$af_p" ] || [ -L "$af_p" ]; then return 1; fi
+    af_b=${af_p##*/}
+    af_p=${af_p%/*}
+    if [ -n "$af_b" ]; then af_t=/$af_b$af_t; fi
+    if [ -z "$af_p" ]; then af_p=/; fi
+  done
+  af_p=$(cd -P -- "$af_p" 2>/dev/null && pwd -P) || return 1
+  af_p=${af_p%/}$af_t
+  printf '%s\n' "${af_p:-/}"
+}
+af_repo() { # the nearest git working tree or git directory at or above $1 (physical)
+  af_d=$1
+  while :; do
+    if [ -d "$af_d" ] && [ ! -x "$af_d" ]; then return 2; fi
+    if [ -e "$af_d/.git" ] || [ -L "$af_d/.git" ] || { [ -f "$af_d/HEAD" ] &&
+      [ ! -L "$af_d/HEAD" ] && [ -d "$af_d/objects" ] && [ -d "$af_d/refs" ]; }; then
+      printf '%s\n' "$af_d"
+      return 0
+    fi
+    if [ "$af_d" = / ]; then return 1; fi
+    af_d=${af_d%/*}
+    if [ -z "$af_d" ]; then af_d=/; fi
+  done
+}
+af_inside() { # succeeds, with the reason in af_why, when $1 is inside a repository
+  # Sets af_r to the physical path it checked.
+  af_r=$(af_physical "$1") || { af_why='cannot be checked (its path is not absolute and physical, or it is a dangling link)'; return 0; }
+  af_s=0
+  af_root=$(af_repo "$af_r") || af_s=$?
+  case $af_s in
+    0) ;;
+    1) return 1 ;;
+    *) af_why='cannot be checked (a folder above it cannot be read)'; return 0 ;;
+  esac
+  if [ -n "$2" ] && [ "$af_root" = "$(af_physical "$2" || :)" ]; then return 1; fi
+  af_why="is inside the repository $af_root"
+}
+af_own_root() { # prints the physical form of the account's own cache root $1
+  af_physical "$1" || printf '%s\n' "$1"
+}
+af_cache_root() { # prints the physical install cache root: ${XDG_CACHE_HOME:-$HOME/.cache}/agentflow
+  af_src=XDG_CACHE_HOME af_c=${XDG_CACHE_HOME:-}
+  if [ -z "$af_c" ]; then af_src=HOME af_c=${HOME:-}; fi
+  if [ -n "$af_c" ]; then
+    if [ "$af_src" = HOME ]; then af_c=$af_c/.cache; fi
+    af_c=$af_c/agentflow
+  fi
+  af_a=$(af_account_home) || af_a=
+  af_own=
+  if [ -n "$af_a" ]; then af_own=$af_a/.cache/agentflow; fi
+  if [ -z "$af_c" ] && [ -n "$af_own" ]; then
+    af_own_root "$af_own"
+    return 0
+  elif [ -z "$af_c" ]; then
+    af_why='is not set'
+  elif [ -n "$af_own" ] && af_v=$(af_physical "$af_c") && [ "$af_v" = "$(af_physical "$af_own" || echo -)" ]; then
+    printf '%s\n' "$af_v"
+    return 0
+  elif ! af_inside "$af_c" "$af_a"; then
+    printf '%s\n' "$af_r"
+    return 0
+  fi
+  if [ -z "$af_own" ]; then
+    printf 'agentflow: not using the cache %s (from %s): it %s, and the account home cannot be found to use instead; set %s to a folder outside every repository\n' "$af_c" "$af_src" "$af_why" "$af_src" >&2
+    return 1
+  fi
+  printf 'agentflow: ignoring the cache %s (from %s): it %s, so a repository could supply the agentflow binary. Using %s instead.\n' "$af_c" "$af_src" "$af_why" "$af_own" >&2
+  af_own_root "$af_own"
+}
+af_installed() { # prints the checked binary under the cache root $1 (from af_cache_root)
+  if [ ! -x "$1/current/agentflow" ]; then return 1; fi
+  af_a=$(af_account_home) || af_a=
+  af_k=$(af_physical "$1") || af_k=-
+  af_v=$(af_physical "$1/current") || af_v=
+  af_n=${af_v##*/}
+  case $af_n in
+    *[!0-9A-Za-z.+-]* | '') af_n= ;;
+    [0-9]*.[0-9]*.[0-9]* | v[0-9]*.[0-9]*.[0-9]*) ;;
+    *) af_n= ;;
+  esac
+  # A version folder directly in the root (no link on the way, not a linked binary) is
+  # used when the root is the account's own cache or outside every repository, even
+  # when the account's home is inside another repository.
+  if [ -n "$af_n" ] && [ "${af_v%/*}" = "$af_k" ] && [ ! -L "$af_v/agentflow" ] &&
+    { { [ -n "$af_a" ] && [ "$af_k" = "$(af_physical "$af_a/.cache/agentflow" || echo -)" ]; } || ! af_inside "$af_k" "$af_a"; }; then
+    printf '%s\n' "$af_v/agentflow"
+    return 0
+  fi
+  if af_inside "$1/current" "$af_a"; then
+    printf 'agentflow: not running %s: it %s\n' "$1/current/agentflow" "$af_why" >&2
+    return 1
+  fi
+  printf '%s\n' "$af_r/agentflow"
+}
+# <<< agentflow cache root
+if home=$(af_cache_root) && cache=$(af_installed "$home"); then
   exec "$cache" hook pre-push "$@"
 elif command -v agentflow >/dev/null 2>&1; then
   exec agentflow hook pre-push "$@"

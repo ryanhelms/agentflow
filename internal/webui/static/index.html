@@ -20,6 +20,7 @@
   <script src="live-panels.js" defer></script>
   <script src="plugins.js" defer></script>
   <script src="harnesses.js" defer></script>
+  <script src="ai-panel.js" defer></script>
   <script src="timeline.js" defer></script>
   <script src="settings-widgets.js" defer></script>
   <script src="settings.js" defer></script>
@@ -65,6 +66,7 @@
         <a href="#autonomy" data-page="autonomy" class="nav-sub"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
         <a href="#plugins" data-page="plugins"><span class="nav-icon ico-plugin" aria-hidden="true"></span>Plugins<span id="plugins-nav-count" class="nav-count" aria-hidden="true" hidden></span><span id="plugins-nav-label" class="sr-only"></span></a>
         <a href="#harnesses" data-page="harnesses"><span class="nav-icon ico-harness" aria-hidden="true"></span>Harnesses</a>
+        <a href="#ai" data-page="ai"><span class="nav-icon ico-ai" aria-hidden="true"></span>AI sessions<span id="ai-nav-count" class="nav-count" aria-hidden="true" hidden></span><span id="ai-nav-label" class="sr-only"></span></a>
         <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
         <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
       </nav>
@@ -285,6 +287,86 @@
               <pre data-command>agentflow ai harnesses --all</pre>
               <p>If a harness is installed and does not show here, this lists what Agentflow checked and what it skipped.</p>
               <pre data-command>agentflow ai doctor</pre>
+            </section>
+          </div>
+        </section>
+        <section id="page-ai" aria-labelledby="ai-title" hidden>
+          <div class="page-heading"><h1 id="ai-title" tabindex="-1">AI sessions</h1><p>A session runs a coding agent for one prompt in a task worktree of this repository. This page shows each session as it runs. Here you answer what an agent asks and cancel a session. You start a session in a terminal, not on this page.</p></div>
+          <div class="ai-note-slot">
+            <p id="ai-note" class="live-note" hidden></p>
+            <p id="ai-wait" class="muted">Waiting for live updates…</p>
+          </div>
+          <div id="ai-body" hidden>
+            <p id="ai-summary" class="muted ai-summary" hidden></p>
+            <div id="ai-layout" class="ai-layout" hidden>
+              <section class="ai-sessions" aria-labelledby="ai-sessions-title">
+                <h2 id="ai-sessions-title">Sessions</h2>
+                <ul id="ai-session-list" class="ai-session-list" aria-labelledby="ai-sessions-title"></ul>
+              </section>
+              <article id="ai-session" class="panel ai-session" aria-labelledby="ai-session-title" hidden>
+                <header class="ai-session-head">
+                  <h2 id="ai-session-title" tabindex="-1"><span id="ai-session-name"></span></h2>
+                  <span id="ai-session-state" class="tag ai-state" data-tone="neutral"><span class="state-mark" aria-hidden="true"></span><span class="ai-state-text"></span></span>
+                </header>
+                <p id="ai-session-detail" class="ai-session-detail"></p>
+                <section id="ai-asks" class="ai-asks" aria-labelledby="ai-asks-title" hidden>
+                  <h3 id="ai-asks-title"></h3>
+                  <p class="ai-asks-lead">Read each request before you answer. Only you can allow a request, and “Allow once” allows this one request only.</p>
+                  <ul id="ai-ask-list" class="ai-ask-list" aria-labelledby="ai-asks-title"></ul>
+                </section>
+                <dl id="ai-session-facts" class="ai-facts"></dl>
+                <details id="ai-session-more" class="ai-more ai-session-more"><summary>Session details</summary><dl id="ai-session-details" class="ai-facts"></dl></details>
+                <div id="ai-cancel" class="ai-cancel" hidden>
+                  <button id="ai-cancel-open" class="button secondary small" type="button">Cancel session</button>
+                  <div id="ai-cancel-confirm" class="ai-cancel-confirm" role="group" aria-labelledby="ai-cancel-question" hidden>
+                    <p id="ai-cancel-question">Cancel this session? The agent stops, and requests that wait for you are rejected. Files it already changed stay as they are.</p>
+                    <div class="ai-cancel-actions">
+                      <button id="ai-cancel-no" class="button secondary small" type="button">Keep it running</button>
+                      <button id="ai-cancel-yes" class="button secondary small ai-danger" type="button">Cancel the session</button>
+                    </div>
+                  </div>
+                  <p id="ai-cancel-status" class="ai-cancel-status" role="status" hidden></p>
+                </div>
+                <section id="ai-prompt" class="ai-part" aria-labelledby="ai-prompt-title" hidden>
+                  <h3 id="ai-prompt-title">Prompt</h3>
+                  <div id="ai-prompt-body"></div>
+                </section>
+                <section id="ai-plan" class="ai-part" aria-labelledby="ai-plan-title" hidden>
+                  <h3 id="ai-plan-title">The agent's plan <span id="ai-plan-count" class="ai-count"></span></h3>
+                  <ol id="ai-plan-list" class="ai-plan-list" aria-labelledby="ai-plan-title"></ol>
+                </section>
+                <section class="ai-part" aria-labelledby="ai-stream-title">
+                  <h3 id="ai-stream-title">What the agent did</h3>
+                  <p class="muted ai-hint">Messages, thoughts and descriptions here are the agent's own text, shown as plain text. Agentflow did not check them, and no address in them is a link. The other lines are Agentflow's notes.</p>
+                  <div id="ai-truncated" class="ai-truncated" hidden></div>
+                  <div id="ai-stream" class="ai-stream" tabindex="0" role="region" aria-labelledby="ai-stream-title">
+                    <p id="ai-items-none" class="muted" hidden></p>
+                    <ol id="ai-items" class="ai-items" aria-labelledby="ai-stream-title"></ol>
+                  </div>
+                  <button id="ai-latest" class="button secondary small ai-latest" type="button" hidden></button>
+                </section>
+                <section id="ai-commands" class="ai-part" aria-labelledby="ai-commands-title" hidden>
+                  <h3 id="ai-commands-title">Commands Agentflow ran for the agent</h3>
+                  <ul id="ai-command-list" class="ai-command-list" aria-labelledby="ai-commands-title"></ul>
+                </section>
+                <section id="ai-changed" class="ai-part" aria-labelledby="ai-changed-title" hidden>
+                  <h3 id="ai-changed-title">Changed files <span id="ai-changed-count" class="ai-count"></span></h3>
+                  <p id="ai-changed-none" class="muted" hidden></p>
+                  <p id="ai-changed-hint" class="muted ai-hint" hidden>These files in the worktree differed from the last commit when the session ended. A harness can change files without telling Agentflow, so review them before you commit.</p>
+                  <ul id="ai-changed-list" class="ai-paths ai-changed-list" aria-labelledby="ai-changed-title"></ul>
+                </section>
+                <section class="ai-part" aria-labelledby="ai-totals-title">
+                  <h3 id="ai-totals-title">Totals</h3>
+                  <dl id="ai-totals" class="ai-facts"></dl>
+                </section>
+              </article>
+            </div>
+            <section class="panel ai-start" aria-labelledby="ai-start-title">
+              <div class="section-heading"><h2 id="ai-start-title">Start a session in a terminal</h2></div>
+              <p id="ai-start-lead" hidden>No session has run in this repository yet.</p>
+              <p>Run this in a task worktree, not in the main checkout. Put the ID of a ready harness in place of HARNESS and your task in place of PROMPT. Agentflow shows what it will start and asks you before it does.</p>
+              <pre data-command>agentflow ai run --harness HARNESS "PROMPT"</pre>
+              <p class="muted ai-hint">The <a href="#harnesses">Harnesses page</a> lists the harnesses that are ready. This page starts no session.</p>
             </section>
           </div>
         </section>

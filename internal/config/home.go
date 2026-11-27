@@ -253,7 +253,8 @@ func sameDir(a, b string) bool {
 // resolvePath returns the absolute, physical form of p, which need not exist:
 // links in its longest existing prefix are followed before any ".." after
 // them is applied, as the file system would. ok is false when that cannot be
-// done (a link loop, a file used as a folder, no working directory).
+// done (a link loop, a dangling link, a file used as a folder, no working
+// directory).
 func resolvePath(p string) (string, bool) {
 	if !filepath.IsAbs(p) {
 		wd, err := os.Getwd()
@@ -271,6 +272,9 @@ func resolvePath(p string) (string, bool) {
 		}
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", false
+		}
+		if _, lerr := os.Lstat(strings.TrimRight(cur, string(filepath.Separator))); lerr == nil {
+			return "", false // cur exists but does not resolve: a dangling link
 		}
 		parent, base := filepath.Split(strings.TrimRight(cur, string(filepath.Separator)))
 		if parent == "" || parent == cur {

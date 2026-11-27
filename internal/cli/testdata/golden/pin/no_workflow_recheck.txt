@@ -1,0 +1,5 @@
+$ agentflow pin --check
+--- stdout
+The stock launcher files are up to date; this repository has no .github/workflows/agentflow.yml.
+--- stderr
+agentflow: .githooks/commit-msg: left it unchanged: it differs from every file agentflow shipped; to replace it, review it and copy https://github.com/ryanhelms/agentflow/blob/v0.61.0/templates/repo/.githooks/commit-msg by hand

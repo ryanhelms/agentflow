@@ -1,0 +1,4 @@
+$ agentflow ai run --harness demo --json "say hi"
+--- stdout
+--- error
+Sessions run only in a task worktree, never in the primary checkout. (primary_checkout). Run agentflow start <task> --worktree and start the session in the worktree it prints.

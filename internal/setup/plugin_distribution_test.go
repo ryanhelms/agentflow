@@ -84,6 +84,17 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 	}
 	cache := t.TempDir()
 	pluginFixture(t, cache)
+	// A launcher that refuses the fixture goes on to download a release. This gh comes
+	// first on PATH and fails, so the test never calls GitHub.
+	stubs := t.TempDir()
+	stub, script := "gh", "#!/bin/sh\necho 'test stub gh: no downloads' >&2\nexit 1\n"
+	if runtime.GOOS == "windows" {
+		stub, script = "gh.cmd", "@echo test stub gh: no downloads 1>&2\r\n@exit /b 1\r\n"
+	}
+	if err := os.WriteFile(filepath.Join(stubs, stub), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	search := stubs + string(os.PathListSeparator) + os.Getenv("PATH")
 	tmp := filepath.Join(t.TempDir(), "launcher with 'quotes' & spaces")
 	if err := os.Mkdir(tmp, 0o700); err != nil {
 		t.Fatal(err)
@@ -107,7 +118,7 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 			}
 			cmd := exec.CommandContext(t.Context(), node, entry.Args...)
 			cmd.Dir = target
-			cmd.Env = append(os.Environ(), "XDG_CACHE_HOME="+cache, "LOCALAPPDATA="+cache, "TMPDIR="+tmp, "TEMP="+tmp, "TMP="+tmp)
+			cmd.Env = append(os.Environ(), "PATH="+search, "XDG_CACHE_HOME="+cache, "LOCALAPPDATA="+cache, "TMPDIR="+tmp, "TEMP="+tmp, "TMP="+tmp)
 			got, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("run plugin server: %v: %s", err, got)
@@ -125,12 +136,18 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 
 func pluginFixture(t *testing.T, cache string) {
 	t.Helper()
-	active := filepath.Join(cache, "agentflow", "current")
+	// The install layout: <cache>/agentflow/<version>, named by the current link, or by
+	// current.txt on Windows. The launchers refuse a pointer to any other folder.
+	root := filepath.Join(cache, "agentflow")
+	active := filepath.Join(root, "1.0.0")
 	if err := os.MkdirAll(active, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if runtime.GOOS != "windows" {
 		if err := os.WriteFile(filepath.Join(active, "agentflow"), []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("1.0.0", filepath.Join(root, "current")); err != nil {
 			t.Fatal(err)
 		}
 		return

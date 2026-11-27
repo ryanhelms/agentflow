@@ -174,6 +174,10 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 	}
 	switch cmd {
+	case "ai":
+		if len(args) > 0 && args[0] == "host" {
+			return runAIHost(ctx, args[1:])
+		}
 	case "policy":
 		return runPolicy(ctx, args)
 	case "push":
@@ -185,8 +189,12 @@ func run(ctx context.Context, cmd string, args []string) error {
 		client := fs.String("client", "", "calling client name")
 		uiOnly := fs.Bool("ui-only", false, "expose only agentflow_ui_open for local console requests")
 		autoOpen := fs.Bool("auto-open", false, "the host explicitly identifies an interactive lead session; open its local console at startup")
+		session := fs.String("session", "", "serve AI session ID's read-only tools (agentflow passes this to a harness)")
 		if err := fs.Parse(args); err != nil {
 			return err
+		}
+		if *session != "" {
+			return mcpserver.ServeSession(ctx, *session)
 		}
 		u, _ := newUpdater(ctx)
 		return mcpserver.Serve(ctx, *client, u, *uiOnly, *autoOpen)
@@ -532,7 +540,7 @@ func runRemove(ctx context.Context, args []string) error {
 
 func runPin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("pin", flag.ContinueOnError)
-	check := fs.Bool("check", false, "report only; exit 1 when the workflow is behind this release")
+	check := fs.Bool("check", false, "report only; exit 1 when the workflow or a stock launcher file is behind this release")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -542,21 +550,49 @@ func runPin(ctx context.Context, args []string) error {
 		return err
 	}
 	res, err := setup.Pin(repo.Dir, *check)
-	if err != nil {
+	if res == nil {
 		return err
 	}
+	// With an error, res still lists everything pin changed before and after it.
 	from := res.From
 	if from == "" {
 		from = "floating refs"
 	}
 	switch {
+	case res.File == "":
 	case !res.Changed:
 		fmt.Printf("%s is pinned to %s already.\n", res.File, res.To)
 	case *check:
 		fmt.Printf("%s: %s, agentflow %s is installed. Run agentflow pin.\n", res.File, from, res.To)
-		return &hooks.ExitError{Code: 1}
 	default:
 		fmt.Printf("%s: %s -> %s. Commit it on a branch as `chore: pin agentflow workflows to %s` and open a PR.\n", res.File, from, res.To, res.To)
+	}
+	updated := false
+	for _, f := range res.Launchers {
+		switch f.State {
+		case setup.LauncherOutdated:
+			fmt.Printf("%s is a stock file from an older release. Run agentflow pin.\n", f.Path)
+		case setup.LauncherUpdated:
+			fmt.Printf("%s: replaced the stock file with the one from %s.\n", f.Path, res.To)
+			updated = true
+		case setup.LauncherCurrent:
+		case setup.LauncherFailed:
+			fmt.Fprintf(os.Stderr, "agentflow: %s is a stock file from an older release, but %s\n", f.Path, f.Detail)
+		default:
+			fmt.Fprintf(os.Stderr, "agentflow: %s: %s\n", f.Path, f.Detail)
+		}
+	}
+	if updated && !res.Changed {
+		fmt.Printf("Commit the launcher files on a branch as `chore: update agentflow launchers to %s` and open a PR.\n", res.To)
+	}
+	if res.File == "" && !res.Behind() {
+		fmt.Printf("The stock launcher files are up to date; this repository has no %s.\n", setup.CallerWorkflow)
+	}
+	if err != nil {
+		return err
+	}
+	if *check && res.Behind() {
+		return &hooks.ExitError{Code: 1}
 	}
 	return nil
 }
