@@ -3,6 +3,7 @@ package aisession
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -264,10 +265,105 @@ func (l *neverLink) namesProtected(cmd *Command, env []acp.EnvVariable) bool {
 						}
 					}
 				}
+				if sameFileInside(cand, protect) {
+					return true
+				}
 			}
 		}
 	}
 	return false
+}
+
+// sameFileInside reports whether cand names a place under a protected
+// folder by file identity rather than by spelling: an existing ancestor of
+// cand is the same file (os.SameFile) as a protected folder, so a link or a
+// spelling the file system folds (APFS opens .agentfl-ligature-ow-ui as
+// .agentflow-ui) is caught. When the rest of cand does not exist yet, an
+// existing ancestor that is the same file as a protected folder's ancestor
+// and a rest whose non-ASCII spelling could name that folder (macOS,
+// Windows) count too.
+func sameFileInside(cand string, protect []string) bool {
+	type folder struct {
+		info  os.FileInfo
+		chain []string // the protected folder's components below each ancestor
+	}
+	var folders [][]folder
+	for _, p := range protect {
+		var anc []folder
+		cur, below := filepath.Clean(p), []string(nil)
+		for {
+			if info, err := os.Stat(cur); err == nil {
+				anc = append(anc, folder{info: info, chain: slices.Clone(below)})
+			}
+			parent := filepath.Dir(cur)
+			if parent == cur {
+				break
+			}
+			below = append([]string{filepath.Base(cur)}, below...)
+			cur = parent
+		}
+		folders = append(folders, anc)
+	}
+	cur, tail := filepath.Clean(cand), []string(nil)
+	for {
+		if info, err := os.Stat(cur); err == nil {
+			for _, anc := range folders {
+				for _, f := range anc {
+					if !os.SameFile(info, f.info) {
+						continue
+					}
+					if len(f.chain) == 0 {
+						return true // cur is the protected folder itself
+					}
+					if foldCase() && couldName(tail, f.chain) {
+						return true
+					}
+				}
+			}
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return false
+		}
+		tail = append([]string{filepath.Base(cur)}, tail...)
+		cur = parent
+	}
+}
+
+// couldName reports whether the components tail could name want on a file
+// system that folds: equal ignoring case, or a non-ASCII component whose
+// non-ASCII runes, read as any text, match. It only widens what is denied.
+func couldName(tail, want []string) bool {
+	if len(tail) < len(want) {
+		return false
+	}
+	hasNonASCII := false
+	for i, w := range want {
+		c := tail[i]
+		if strings.EqualFold(c, w) {
+			continue
+		}
+		if !nonASCII(c) {
+			return false
+		}
+		hasNonASCII = true
+		var b strings.Builder
+		for _, r := range strings.ToLower(c) {
+			switch {
+			case r >= 0x80:
+				b.WriteByte('*')
+			case strings.ContainsRune(`*?[\`, r):
+				b.WriteByte('\\')
+				b.WriteRune(r)
+			default:
+				b.WriteRune(r)
+			}
+		}
+		if ok, err := path.Match(b.String(), strings.ToLower(w)); err != nil || !ok {
+			return false
+		}
+	}
+	return hasNonASCII
 }
 
 // wordParts: the word, the value of NAME=value or --flag=value, and every

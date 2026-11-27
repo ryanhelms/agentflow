@@ -147,3 +147,38 @@ func writeTestFile(t *testing.T, p, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestAgentflowHomeFoldedSpellings(t *testing.T) {
+	SetFoldForTest(t, true)
+	ctx := context.Background()
+	c := newChainRig(t)
+	ui := filepath.Join(filepath.Dir(c.home), ".agentflow-ui")
+	writeTestFile(t, filepath.Join(ui, "registry.json"), "{}")
+	writeTestFile(t, filepath.Join(c.home, "ai", "sessions", "ais_1", "answer.key"), "k")
+	rules := map[string]config.AIRule{"cat": {Kind: config.AIRuleKindTerminal, Match: "cat", Decision: config.AIDecisionAllow}}
+	u := userWith(rules, config.Autonomy{})
+	homeName := filepath.Base(c.home)
+	folded := []string{
+		filepath.Join(filepath.Dir(c.home), ".agentﬂow-ui", "registry.json"),
+		filepath.Join(filepath.Dir(c.home), ".agentﬂow-ui", "new.json"),
+		"~/.agentﬂow-ui/registry.json",
+		"~/" + homeName + "/ai/ſessions/ais_1/answer.key",
+	}
+	for _, arg := range folded {
+		if v := Run(ctx, c.chain(t, u, nil, ""), c.term("cat", arg)); v.Decision != Deny || v.Code != VerdictAgentflowHome {
+			t.Errorf("cat %s = %+v, want deny agentflow_home", arg, v)
+		}
+	}
+	// A link elsewhere that leads into the home is the same folder.
+	if runtime.GOOS != "windows" {
+		alias := filepath.Join(t.TempDir(), "alias")
+		link(t, c.home, alias)
+		if v := Run(ctx, c.chain(t, u, nil, ""), c.term("cat", filepath.Join(alias, "ai", "sessions", "ais_1", "answer.key"))); v.Decision != Deny || v.Code != VerdictAgentflowHome {
+			t.Errorf("cat through a link = %+v, want deny agentflow_home", v)
+		}
+	}
+	// An ordinary non-ASCII file elsewhere is not the home.
+	if v := Run(ctx, c.chain(t, u, nil, ""), c.term("cat", filepath.Join(c.wt, "src", "ſ.txt"))); v.Decision == Deny {
+		t.Errorf("cat src/ſ.txt = %+v, want no agentflow_home deny", v)
+	}
+}
