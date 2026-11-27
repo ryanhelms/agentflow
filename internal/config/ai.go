@@ -1,10 +1,15 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 )
@@ -304,4 +309,39 @@ func ValidateAIRule(name string, r AIRule) error {
 		}
 	}
 	return nil
+}
+
+// AccountHome is the OS account's home from the password database (os/user),
+// never $HOME; OverrideAccountHome replaces it in tests. ACP sessions give
+// the harness this HOME ("Phase 7 session environment").
+func AccountHome() (string, error) { return accountHome() }
+
+// LoadUserAt reads <home>/config.yml the way LoadUser reads the default
+// home's, for a caller that was given its agentflow home (an ACP session).
+// A missing file gives the defaults.
+func LoadUserAt(home string) (*User, error) {
+	u := &User{}
+	b, err := os.ReadFile(filepath.Join(home, "config.yml"))
+	if err == nil {
+		if err := yaml.Unmarshal(b, u); err != nil {
+			return nil, fmt.Errorf("config.yml: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
+		return nil, fmt.Errorf("config.yml: %w", err)
+	}
+	if err := ValidateAI(u.AI); err != nil {
+		return nil, fmt.Errorf("config.yml: %w", err)
+	}
+	if u.Autonomy.Local == "" {
+		u.Autonomy.defaultLocal = true
+		u.Autonomy.Local = Confirm
+	}
+	if u.Autonomy.Remote == "" {
+		u.Autonomy.defaultRemote = true
+		u.Autonomy.Remote = Confirm
+	}
+	return u, nil
 }

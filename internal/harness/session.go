@@ -119,3 +119,54 @@ func Ready(h Harness) bool {
 // it allows everything. The session host calls it on the harness file
 // right before jsonrpc.Launch, and on every terminal program.
 func GuardPath(path string) error { return testGuard(path) }
+
+// SessionPATH returns the entries of pathValue that pass the phase 6 PATH
+// checks (relative, missing, inside_repository against every worktree of
+// the repositories containing workDirs, node_modules, unsafe_permissions),
+// cleaned and without duplicates, in order. When the repositories cannot be
+// told, every entry counts as inside one (fail closed). In a test binary an
+// entry outside the temporary directory fails with ErrTestGuard.
+func SessionPATH(ctx context.Context, pathValue string, workDirs []string) ([]string, []SkippedDir, error) {
+	repos, known := RepositoryWorktrees(ctx, workDirs...)
+	fd := newFinder(pathValue, repos)
+	fd.reposUnknown = !known
+	var skipped []SkippedDir
+	entries, err := fd.entries(func(dir, reason string) { skipped = append(skipped, SkippedDir{Dir: dir, Reason: reason}) })
+	if err != nil {
+		return nil, skipped, err
+	}
+	out := make([]string, 0, len(entries))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if !seen[e.dir] {
+			seen[e.dir] = true
+			out = append(out, e.dir)
+		}
+	}
+	return out, skipped, nil
+}
+
+// SessionProgramOK reports whether p, an absolute path, passes the phase 6
+// file checks (a regular, executable file whose resolved target is not
+// writable by others) and neither p nor its target is inside a worktree of
+// the repositories containing workDirs. The session uses it for SHELL.
+func SessionProgramOK(ctx context.Context, p string, workDirs []string) bool {
+	if p == "" || !filepath.IsAbs(p) {
+		return false
+	}
+	repos, known := RepositoryWorktrees(ctx, workDirs...)
+	fd := newFinder("", repos)
+	fd.reposUnknown = !known
+	if fd.insideRepository(resolved(filepath.Dir(p))) {
+		return false
+	}
+	hit, err := fd.absolute(p, func(string, string) {})
+	if err != nil || hit == nil || hit.shim {
+		return false
+	}
+	return !fd.insideRepository(hit.Target)
+}
+
+// HomeUnsafe reports whether the agentflow home fails the phase 6 home
+// checks: not owned by this user, or writable by others.
+func HomeUnsafe(dir string) bool { return homeUnsafe(dir) }

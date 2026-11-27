@@ -99,19 +99,22 @@ type AITerminal struct {
 }
 
 type AIAsk struct {
-	ID          string     `json:"id"`
-	Kind        string     `json:"kind"`
-	ToolKind    string     `json:"tool_kind,omitempty"`
-	Title       string     `json:"title,omitempty"` // the agent's words
-	Paths       []string   `json:"paths,omitempty"`
-	Line        string     `json:"line,omitempty"`
-	Cwd         string     `json:"cwd,omitempty"`
-	EnvNames    []string   `json:"env_names,omitempty"`
-	Options     []AIOption `json:"options,omitempty"`
-	Reason      string     `json:"reason"`
-	CanAllow    bool       `json:"can_allow"`
-	ExpiresAt   time.Time  `json:"expires_at"`
-	Fingerprint string     `json:"fingerprint"`
+	ID       string     `json:"id"`
+	Kind     string     `json:"kind"`
+	ToolKind string     `json:"tool_kind,omitempty"`
+	Title    string     `json:"title,omitempty"` // the agent's words
+	Paths    []string   `json:"paths,omitempty"`
+	Line     string     `json:"line,omitempty"`
+	Cwd      string     `json:"cwd,omitempty"`
+	EnvNames []string   `json:"env_names,omitempty"`
+	Options  []AIOption `json:"options,omitempty"`
+	// Diff, for an fs_write ask: what the write would change (phase 7
+	// amendment). Not redacted.
+	Diff        *AIDiff   `json:"diff,omitempty"`
+	Reason      string    `json:"reason"`
+	CanAllow    bool      `json:"can_allow"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	Fingerprint string    `json:"fingerprint"`
 }
 
 type AIOption struct {
