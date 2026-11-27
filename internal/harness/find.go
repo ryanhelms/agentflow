@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/gitx"
 	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 	"github.com/ryanhelms/agentflow/internal/worktree"
 )
@@ -22,6 +24,9 @@ import (
 type finder struct {
 	path    string   // the PATH value
 	repos   []string // resolved worktree roots of the repositories agentflow works in
+	// reposUnknown: the repositories could not be told, so every PATH
+	// entry counts as inside one (fail closed).
+	reposUnknown bool
 	windows bool
 	guard   func(string) error
 }
@@ -228,6 +233,9 @@ func (f *finder) candidates(name string) []string {
 }
 
 func (f *finder) insideRepository(real string) bool {
+	if f.reposUnknown {
+		return true
+	}
 	for _, r := range f.repos {
 		if inside(real, r) {
 			return true
@@ -246,32 +254,59 @@ func hasSegment(p, seg string) bool {
 }
 
 // RepositoryWorktrees returns the resolved roots of every worktree of the
-// repositories that contain dirs. A directory that is in no repository adds
-// nothing. The finder skips PATH entries inside these roots
-// (inside_repository).
-func RepositoryWorktrees(ctx context.Context, dirs ...string) []string {
-	var out []string
+// repositories that contain dirs, and of their superprojects when a dir is
+// inside a submodule. A directory that is in no repository adds nothing.
+// The finder skips PATH entries inside these roots (inside_repository).
+//
+// It fails closed: when git cannot list a repository's worktrees, the
+// repository's own root (found by walking up for .git) is used; when even
+// that cannot be told, known is false and the finder skips every PATH
+// entry as inside_repository.
+func RepositoryWorktrees(ctx context.Context, dirs ...string) (roots []string, known bool) {
+	known = true
 	seen := map[string]bool{}
-	for _, d := range dirs {
-		if d == "" {
-			continue
-		}
-		list, err := worktree.List(ctx, d)
+	add := func(p string) {
+		real, err := filepath.EvalSymlinks(p)
 		if err != nil {
-			continue
+			real = filepath.Clean(p)
 		}
-		for _, e := range list {
-			real, err := filepath.EvalSymlinks(e.Path)
-			if err != nil {
-				real = filepath.Clean(e.Path)
+		if !seen[real] {
+			seen[real] = true
+			roots = append(roots, real)
+		}
+	}
+	visited := map[string]bool{}
+	var visit func(d string, depth int)
+	visit = func(d string, depth int) {
+		if d == "" || visited[d] || depth > 8 {
+			return
+		}
+		visited[d] = true
+		repo, inside, ok := config.EnclosingRepository(d)
+		switch {
+		case !ok:
+			known = false
+			return
+		case !inside:
+			return
+		}
+		add(repo)
+		if list, err := worktree.List(ctx, d); err == nil {
+			for _, e := range list {
+				add(e.Path)
 			}
-			if !seen[real] {
-				seen[real] = true
-				out = append(out, real)
+		}
+		// A submodule's superproject is a repository agentflow works in too.
+		if out, err := (&gitx.Repo{Dir: d}).Git(ctx, "rev-parse", "--show-superproject-working-tree"); err == nil {
+			if super := strings.TrimSpace(out); super != "" {
+				visit(super, depth+1)
 			}
 		}
 	}
-	return out
+	for _, d := range dirs {
+		visit(d, 0)
+	}
+	return roots, known
 }
 
 // identityFields are hashed into a harness's identity.

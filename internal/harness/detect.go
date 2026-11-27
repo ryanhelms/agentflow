@@ -163,7 +163,10 @@ func (d *detector) Detect(ctx context.Context, o DetectOptions) (Report, error) 
 	if d.o.WorkDirs != nil {
 		dirs = d.o.WorkDirs()
 	}
-	res, err := newFinder(pathValue, RepositoryWorktrees(ctx, dirs...)).run(defs)
+	repos, known := RepositoryWorktrees(ctx, dirs...)
+	fd := newFinder(pathValue, repos)
+	fd.reposUnknown = !known
+	res, err := fd.run(defs)
 	if err != nil {
 		return Report{}, fmt.Errorf("harness: detection: %w", err)
 	}

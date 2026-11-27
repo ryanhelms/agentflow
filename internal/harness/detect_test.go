@@ -643,3 +643,69 @@ func TestDetectPersonalOverrideTakesOverAPluginLaunch(t *testing.T) {
 		t.Fatalf("all three: %+v", defs)
 	}
 }
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "protocol.file.allow=always", "-c", "init.defaultBranch=main"}, args...)...)
+	cmd.Dir = dir
+	// git submodule is a shell script: give this setup command (never
+	// detection) the system tools.
+	cmd.Env = append(os.Environ(), "PATH="+os.Getenv("PATH")+string(filepath.ListSeparator)+"/usr/bin"+string(filepath.ListSeparator)+"/bin")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// TestRepositoryWorktreesFailsClosed: a repository git cannot list still
+// counts (its root, found by walking up), a submodule's superproject counts,
+// and a directory whose repository cannot be told makes every PATH entry
+// count as inside one.
+func TestRepositoryWorktreesFailsClosed(t *testing.T) {
+	newEnv(t, harnesstest.Settings{}) // a fake PATH with git, and fresh homes
+	ctx := context.Background()
+
+	broken := t.TempDir()
+	if err := os.WriteFile(filepath.Join(broken, ".git"), []byte("gitdir: /nonexistent/agentflow-test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(broken, "deep")
+	if err := os.Mkdir(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	roots, known := RepositoryWorktrees(ctx, sub)
+	if real, _ := filepath.EvalSymlinks(broken); !known || !slices.Contains(roots, real) {
+		t.Fatalf("broken repository: %v %v", roots, known)
+	}
+
+	super := t.TempDir()
+	gitRun(t, super, "init", "-q")
+	inner := t.TempDir()
+	gitRun(t, inner, "init", "-q")
+	gitRun(t, inner, "commit", "-q", "--allow-empty", "-m", "init")
+	gitRun(t, super, "submodule", "add", "-q", inner, "mod")
+	roots, known = RepositoryWorktrees(ctx, filepath.Join(super, "mod"))
+	if real, _ := filepath.EvalSymlinks(super); !known || !slices.Contains(roots, real) {
+		t.Fatalf("submodule: the superproject is missing: %v %v", roots, known)
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every folder")
+	}
+	locked := t.TempDir()
+	dir := filepath.Join(locked, "x")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o700) })
+	if _, known := RepositoryWorktrees(ctx, dir); known {
+		t.Fatal("an unreadable folder counted as no repository")
+	}
+	f := newFinder("", nil)
+	f.reposUnknown = true
+	if !f.insideRepository(t.TempDir()) {
+		t.Fatal("an unknown repository set does not skip every entry")
+	}
+}
