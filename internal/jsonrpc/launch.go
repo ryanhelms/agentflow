@@ -33,7 +33,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := resolveDir(s.Dir, root, s.Env, s.DataDir)
+	dir, err := resolveDirAllow(s.Dir, root, s.Env, s.DataDir, s.AllowDir)
 	if err != nil {
 		return nil, err
 	}
@@ -192,6 +192,41 @@ func resolveDir(dir, root string, env []string, dataDir string) (string, error) 
 		return real, nil
 	}
 	return "", errors.New("jsonrpc: launch: the working directory is outside the root and the data directory")
+}
+
+// resolveDirAllow is resolveDir with LaunchSpec.AllowDir (phase 7: only
+// the session profile sets it): one more absolute, existing directory the
+// working directory may be inside, links resolved. Empty means resolveDir
+// alone. The data directory rules still apply when it is set.
+func resolveDirAllow(dir, root string, env []string, dataDir, allowDir string) (string, error) {
+	if allowDir == "" {
+		return resolveDir(dir, root, env, dataDir)
+	}
+	if !filepath.IsAbs(allowDir) {
+		return "", errors.New("jsonrpc: launch: the allowed directory must be absolute")
+	}
+	allow, err := filepath.EvalSymlinks(allowDir)
+	if err != nil {
+		return "", fmt.Errorf("jsonrpc: launch: resolve allowed directory: %w", err)
+	}
+	if info, err := os.Stat(allow); err != nil || !info.IsDir() {
+		return "", errors.New("jsonrpc: launch: the allowed directory is not a directory")
+	}
+	got, err := resolveDir(dir, root, env, dataDir)
+	if err == nil {
+		return got, nil
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return "", err
+	}
+	real, rerr := filepath.EvalSymlinks(dir)
+	if rerr != nil {
+		return "", err
+	}
+	if info, serr := os.Stat(real); serr != nil || !info.IsDir() || !within(real, allow) {
+		return "", err
+	}
+	return real, nil
 }
 
 func envDataDir(env []string) string {
