@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ const SessionClientPrefix = "ai-session:"
 // manager is the production Manager.
 type manager struct {
 	o  Options
+	mu sync.Mutex // guards st: concurrent calls share one store
 	st *fileStore
 }
 
@@ -40,6 +42,8 @@ func NewManager(o Options) Manager {
 }
 
 func (m *manager) store() (*fileStore, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.st != nil {
 		return m.st, nil
 	}
