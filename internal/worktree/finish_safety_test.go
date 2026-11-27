@@ -89,6 +89,10 @@ func TestFinishRefusesMergedPRWithoutHead(t *testing.T) {
 	})}
 	_, err := PlanFinish(t.Context(), dir, "", opt)
 	wantRefused(t, err, "no head commit")
+	res, err := PlanSweep(t.Context(), []string{primary}, opt)
+	if err != nil || len(res.Plans()) != 0 || !strings.Contains(res.Worktrees[0].Detail, "no head commit") {
+		t.Fatalf("sweep %+v %v", res, err)
+	}
 }
 
 // When origin cannot be read, the plan falls back to the last fetched remote

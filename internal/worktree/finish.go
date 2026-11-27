@@ -104,8 +104,9 @@ type Plan struct {
 // RefusedError explains why a worktree cannot be finished yet.
 type RefusedError struct {
 	Outcome Outcome
-	// beyond is set when the branch was merged but holds later work.
-	beyond bool
+	// merged is set when the PR or branch was merged but finish still keeps it,
+	// so sweep reports why.
+	merged bool
 }
 
 func (e *RefusedError) Error() string {
@@ -224,7 +225,8 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 	pr := c.pullRequest(ctx, branch)
 	merged, how, into := c.merged(ctx, branch, local, pr)
 	if !merged {
-		return refuse(StateUnmerged, how)
+		p.State, p.Detail = StateUnmerged, how
+		return p, &RefusedError{Outcome: p.Outcome, merged: pr != nil && pr.HeadRefOid == "" && (strings.EqualFold(pr.State, "MERGED") || pr.MergedAt != "")}
 	}
 	if local {
 		if n := c.unpushed(ctx, branch, pr); n > 0 {
@@ -236,7 +238,7 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 	for _, tip := range []struct{ where, sha string }{{"local branch", localTip}, {"origin/" + branch, remoteTip}} {
 		if tip.sha != "" && !c.contains(ctx, into, tip.sha) {
 			p.State, p.Detail = StateUnmerged, beyondDetail(tip.where, into, pr)
-			return p, &RefusedError{Outcome: p.Outcome, beyond: true}
+			return p, &RefusedError{Outcome: p.Outcome, merged: true}
 		}
 	}
 	p.localTip, p.remoteTip = localTip, remoteTip
@@ -499,7 +501,7 @@ func (c *checker) inspect(ctx context.Context, e *Entry, res *SweepResult) Outco
 	o = refused.Outcome
 	if o.State == StateUnmerged {
 		o.State = StateActive
-		if !refused.beyond {
+		if !refused.merged {
 			o.Detail = ""
 		}
 		if n := c.unpushed(ctx, e.Branch, nil); n > 0 {

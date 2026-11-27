@@ -77,7 +77,7 @@ func lex(s string) lexed {
 					body, n := balanced(s[i+1:])
 					out.subs = append(out.subs, body)
 					cur.WriteString("$(…)")
-					i += n
+					i += n + 1 // to the closing parenthesis
 				case s[i] == '`':
 					end := strings.IndexByte(s[i+1:], '`')
 					if end < 0 {
@@ -95,7 +95,7 @@ func lex(s string) lexed {
 			out.subs = append(out.subs, body)
 			cur.WriteString("$(…)")
 			started = true
-			i += n
+			i += n + 1 // to the closing parenthesis
 		case c == '`':
 			end := strings.IndexByte(s[i+1:], '`')
 			if end < 0 {
@@ -155,7 +155,7 @@ func lex(s string) lexed {
 			out.subs = append(out.subs, body)
 			cur.WriteString(string(c) + "(…)")
 			started = true
-			i += n
+			i += n + 1 // to the closing parenthesis
 		case c == '<' || c == '>':
 			if started && allDigits(cur.String()) {
 				cur.Reset()

@@ -274,7 +274,8 @@ func (st *state) simple(words []string, depth int) *Refusal {
 		}
 		return st.c.Getenv(k)
 	}
-	name, args := filepath.Base(words[0]), words[1:]
+	// zsh runs =gh as the gh on PATH.
+	name, args := filepath.Base(strings.TrimPrefix(words[0], "=")), words[1:]
 	switch name {
 	case "cd", "pushd":
 		if name == "pushd" {
@@ -691,10 +692,17 @@ func (st *state) gh(args []string, lookup func(string) string, cmd string) *Refu
 		}
 		target = repo
 	}
-	if st.sameAsHome(target) {
-		return nil
+	if !st.sameAsHome(target) {
+		return st.refuse(cmd, target)
 	}
-	return st.refuse(cmd, target)
+	// gh takes the repository from a URL argument even when -R or GH_REPO names
+	// another one, so every URL must name home too.
+	for _, p := range positional[1:] {
+		if slug := slugFromURL(p); slug != "" && !st.sameAsHome(Repo{Slug: slug}) {
+			return st.refuse(cmd, Repo{Slug: slug})
+		}
+	}
+	return nil
 }
 
 // ghSlug normalises [HOST/]OWNER/REPO or a URL to lower-case owner/name.

@@ -210,9 +210,35 @@ func TestPreBashRefusesEveryMergeSpelling(t *testing.T) {
 		"gh 'pr' merge 13",
 		"cat <(gh pr -R ryanhelms/agent-commander merge 13)",
 		"gh api -X PUT repos/ryanhelms/agent-commander/pulls/13/merge",
+		"=gh -R ryanhelms/agent-commander pr merge 13",
+		"$GH -R ryanhelms/agent-commander pr merge 13",
+		"$(which gh) pr -R ryanhelms/agent-commander merge 13",
 	} {
 		if got, stderr := preBashIn(t, cmd, home); got != 2 || !strings.Contains(stderr, "human decision") {
 			t.Errorf("%q: exit %d: %s", cmd, got, stderr)
+		}
+	}
+	// Asking whether a PR is merged is a read.
+	if got, stderr := preBashIn(t, "gh api repos/ryanhelms/agent-commander/pulls/13/merge", home); got != 0 {
+		t.Errorf("GET of the merge endpoint: exit %d: %s", got, stderr)
+	}
+}
+
+// gh merges the PR a URL names even when -R or GH_REPO names this repository,
+// so the URL decides, in every mode.
+func TestPreBashMergeURLOfAnotherRepository(t *testing.T) {
+	home, _, _ := twoRepos(t)
+	fakeBases(t, map[string]map[string]string{"": {"https://github.com/ryanhelms/agentflow/pull/13": "develop"}})
+	for _, conventionOnly := range []bool{false, true} {
+		for _, cmd := range []string{
+			"gh pr merge https://github.com/ryanhelms/agentflow/pull/13 --squash -R ryanhelms/agent-commander",
+			"GH_REPO=ryanhelms/agent-commander gh pr merge https://github.com/ryanhelms/agentflow/pull/13 --squash",
+		} {
+			b, _ := json.Marshal(map[string]any{"cwd": home, "tool_input": map[string]string{"command": cmd}})
+			var stderr bytes.Buffer
+			if got := exitCode(PreBash(t.Context(), bytes.NewReader(b), &stderr, conventionOnly)); got != 2 || !strings.Contains(stderr.String(), "agentflow delegate") {
+				t.Errorf("convention-only=%v %q: exit %d: %s", conventionOnly, cmd, got, stderr.String())
+			}
 		}
 	}
 }
@@ -220,15 +246,16 @@ func TestPreBashRefusesEveryMergeSpelling(t *testing.T) {
 func TestParseMerge(t *testing.T) {
 	t.Setenv("GH_REPO", "")
 	for cmd, want := range map[string]mergeCommand{
-		"gh pr merge 12 --squash":                                  {pr: "12"},
-		"gh pr merge --squash -t \"feat: x\" feat-1":               {pr: "feat-1"},
-		"gh pr merge --auto --squash":                              {},
-		"gh pr merge https://github.com/o/r/pull/3":                {pr: "https://github.com/o/r/pull/3"},
-		"gh pr merge 5 --body -Ro/x -R o/r":                        {pr: "5", repo: "o/r"},
-		"gh pr merge --subject='feat: x' --repo=o/r -- 5":          {pr: "5", repo: "o/r"},
-		"GH_REPO=o/r gh pr merge 5":                                {pr: "5", repo: "o/r"},
-		"GH_REPO=o/r gh pr merge 5 -R O/R -R o/r":                  {pr: "5", repo: "O/R"},
-		"gh pr merge --match-head-commit abc --author-email a@b 5": {pr: "5"},
+		"gh pr merge 12 --squash":                                     {pr: "12"},
+		"gh pr merge --squash -t \"feat: x\" feat-1":                  {pr: "feat-1"},
+		"gh pr merge --auto --squash":                                 {},
+		"gh pr merge https://github.com/o/r/pull/3":                   {pr: "https://github.com/o/r/pull/3"},
+		"gh pr merge https://github.com/O/R/pull/3 -R github.com/o/r": {pr: "https://github.com/O/R/pull/3", repo: "github.com/o/r"},
+		"gh pr merge 5 --body -Ro/x -R o/r":                           {pr: "5", repo: "o/r"},
+		"gh pr merge --subject='feat: x' --repo=o/r -- 5":             {pr: "5", repo: "o/r"},
+		"GH_REPO=o/r gh pr merge 5":                                   {pr: "5", repo: "o/r"},
+		"GH_REPO=o/r gh pr merge 5 -R O/R -R o/r":                     {pr: "5", repo: "O/R"},
+		"gh pr merge --match-head-commit abc --author-email a@b 5":    {pr: "5"},
 	} {
 		got, err := parseMerge(cmd)
 		if err != nil || got != want {
@@ -238,6 +265,7 @@ func TestParseMerge(t *testing.T) {
 	for _, cmd := range []string{
 		"cd x && gh pr merge 5", "gh pr merge 5 -sR o/r", "gh pr merge -sb 5 6", "gh pr merge 5 --body",
 		"gh pr merge 5 -R o/r -R o/s", "env gh pr merge 5", "gh -R o/r pr merge 5", "gh pr merge 5 6",
+		"gh pr merge https://github.com/o/x/pull/5 -R o/r", "GH_REPO=o/r gh pr merge https://github.com/o/x/pull/5",
 	} {
 		if got, err := parseMerge(cmd); err == nil {
 			t.Errorf("parseMerge(%q) = %+v, want an error", cmd, got)

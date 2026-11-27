@@ -583,7 +583,22 @@ func parseMerge(cmd string) (mergeCommand, error) {
 	default:
 		m.repo = os.Getenv("GH_REPO")
 	}
+	// gh merges the PR a URL names, whatever -R or GH_REPO says; a command that
+	// names two repositories is refused.
+	if strings.Contains(m.pr, "://") && (len(repos) > 0 || hasEnv) && !urlInRepo(m.pr, m.repo) {
+		return m, errors.New("the PR URL names another repository than -R or GH_REPO")
+	}
 	return m, nil
+}
+
+// urlInRepo reports whether a PR URL belongs to repo ([HOST/]OWNER/NAME).
+func urlInRepo(url, repo string) bool {
+	parts := strings.Split(strings.Trim(strings.ToLower(repo), "/"), "/")
+	if len(parts) < 2 {
+		return false
+	}
+	slug := parts[len(parts)-2] + "/" + strings.TrimSuffix(parts[len(parts)-1], ".git")
+	return strings.Contains(strings.ToLower(url), "/"+slug+"/pull/")
 }
 
 // PrePush is the git pre-push hook. It reads "<local ref> <local sha> <remote ref>

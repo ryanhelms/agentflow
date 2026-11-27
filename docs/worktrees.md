@@ -157,8 +157,10 @@ local hooks next to `commit-msg` and sets `core.hooksPath=.githooks`:
 
 The Claude Code PreToolUse hook keeps the never-list. It treats every spelling of a merge as a
 merge: `gh pr merge` with quoted words, `gh -R OWNER/NAME pr merge`, `gh pr -R OWNER/NAME merge`,
-a merge inside `bash -c`, `$(...)`, `<(...)` or `>(...)`, and `gh api` with a
-`pulls/N/merge` endpoint or a `mergePullRequest` or `enablePullRequestAutoMerge` mutation.
+zsh's `=gh`, a program named through a variable or substitution (`$GH`, `$(which gh)`), a
+merge inside `bash -c`, `$(...)`, `<(...)` or `>(...)`, a write to the `gh api`
+`pulls/N/merge` endpoint, and a `mergePullRequest` or `enablePullRequestAutoMerge`
+mutation. A GET of `pulls/N/merge`, which only asks whether the PR is merged, stays allowed.
 
 With `policy.coordinator_merge: true` it allows a merge when the PR's base, read with
 `gh pr view`, is not `main` or `master`. It looks the PR up in the repository the command
@@ -176,7 +178,8 @@ It refuses the merge as a human decision when the command:
 - is not `gh pr merge` itself, such as `gh -R OWNER/NAME pr merge`, `gh api` or a wrapper
   like `env` or `sudo`; only `GH_REPO=OWNER/NAME` may come before `gh`
 - uses a flag `gh pr merge` does not have, or groups short flags (`-sR OWNER/NAME`)
-- names more than one PR, or two different repositories
+- names more than one PR, or two different repositories, including a PR URL of another
+  repository than `-R` or `GH_REPO`
 
 It does not see a merge through a `gh` alias, a script, a GraphQL query read from a file
 (`-F query=@file`), or another HTTP client such as `curl`.

@@ -31,7 +31,9 @@ agentflow finds the target repository of a command from:
   `GIT_WORK_TREE` variables;
 - `cd DIR` and `pushd DIR` earlier in the same command line, including `(cd DIR && ...)`;
 - `gh -R`/`--repo`, the `GH_REPO` variable, and `github.com/OWNER/NAME/...` URLs in the
-  arguments (`gh pr merge https://github.com/OWNER/NAME/pull/5`);
+  arguments (`gh pr merge https://github.com/OWNER/NAME/pull/5`). gh acts on the
+  repository of a URL even when `-R` or `GH_REPO` names another, so a URL must name the
+  home repository too;
 - `gh api repos/OWNER/NAME/...`; `{owner}/{repo}` placeholders mean the current folder's
   repository;
 - `bash -c`, `sh -c` and `zsh -c` scripts, and the commands inside `$(...)`, backquotes,
