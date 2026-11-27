@@ -532,7 +532,7 @@ func runRemove(ctx context.Context, args []string) error {
 
 func runPin(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("pin", flag.ContinueOnError)
-	check := fs.Bool("check", false, "report only; exit 1 when the workflow is behind this release")
+	check := fs.Bool("check", false, "report only; exit 1 when the workflow or a stock launcher file is behind this release")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -550,13 +550,35 @@ func runPin(ctx context.Context, args []string) error {
 		from = "floating refs"
 	}
 	switch {
+	case res.File == "":
 	case !res.Changed:
 		fmt.Printf("%s is pinned to %s already.\n", res.File, res.To)
 	case *check:
 		fmt.Printf("%s: %s, agentflow %s is installed. Run agentflow pin.\n", res.File, from, res.To)
-		return &hooks.ExitError{Code: 1}
 	default:
 		fmt.Printf("%s: %s -> %s. Commit it on a branch as `chore: pin agentflow workflows to %s` and open a PR.\n", res.File, from, res.To, res.To)
+	}
+	updated := false
+	for _, f := range res.Launchers {
+		switch f.State {
+		case setup.LauncherOutdated:
+			fmt.Printf("%s is a stock file from an older release. Run agentflow pin.\n", f.Path)
+		case setup.LauncherUpdated:
+			fmt.Printf("%s: replaced the stock file with the one from %s.\n", f.Path, res.To)
+			updated = true
+		case setup.LauncherCurrent:
+		default:
+			fmt.Fprintf(os.Stderr, "agentflow: %s: %s\n", f.Path, f.Detail)
+		}
+	}
+	if updated && !res.Changed {
+		fmt.Printf("Commit the launcher files on a branch as `chore: update agentflow launchers to %s` and open a PR.\n", res.To)
+	}
+	if res.File == "" && !res.Behind() {
+		fmt.Printf("The stock launcher files are up to date; this repository has no %s.\n", setup.CallerWorkflow)
+	}
+	if *check && res.Behind() {
+		return &hooks.ExitError{Code: 1}
 	}
 	return nil
 }

@@ -1,0 +1,6 @@
+$ agentflow pin
+--- stdout
+.agentflow/bin/agentflow: replaced the stock file with the one from v0.61.0.
+Commit the launcher files on a branch as `chore: update agentflow launchers to v0.61.0` and open a PR.
+--- stderr
+agentflow: .githooks/commit-msg: left it unchanged: it differs from every file agentflow shipped; to replace it, review it and copy https://github.com/ryanhelms/agentflow/blob/v0.61.0/templates/repo/.githooks/commit-msg by hand

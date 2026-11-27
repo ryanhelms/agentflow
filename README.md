@@ -172,9 +172,14 @@ init:
 
 **Updating the pinned workflows.** `agentflow pin` (or `/agentflow:pin`) moves every
 `ryanhelms/agentflow` reference in `.github/workflows/agentflow.yml` to the release you have
-installed; commit it in a PR. `agentflow pin --check` and `agentflow doctor` report a pin
-that is behind, and the Claude Code session hook offers `/agentflow:pin` when it is. No
-Dependabot or GitHub App access is needed.
+installed; commit it in a PR. It also replaces `.agentflow/bin/agentflow`,
+`.agentflow/bin/agentflow.ps1`, `.githooks/commit-msg` and `.githooks/pre-push` with this
+release's files, but only where a file is byte-for-byte a stock file from an older agentflow
+release. It warns about a changed file, a link or a linked folder and leaves it alone, and
+it never creates a missing file. `agentflow pin --check` exits 1 when the workflow or a
+stock file is behind. `agentflow doctor` reports a workflow pin that is behind, and the
+Claude Code session hook offers `/agentflow:pin` when it is. No Dependabot or GitHub App
+access is needed.
 
 **Removing agentflow.** Preview the affected files with `agentflow remove --dry-run`,
 then run `agentflow remove` or use `/agentflow:manager remove`. Removal cleans up
@@ -918,12 +923,11 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   location keeps the same layout. A repository that can set `PATH`, or that commits its
   own `.agentflow/bin/agentflow` or `.githooks`, still runs its own code: those are
   repository files, and the Claude Code plugin runs a repository's launcher on purpose.
-  A repository set up before this change keeps its old, unchecked launcher and hooks:
-  `agentflow init` leaves existing files alone and `agentflow pin` changes only
-  workflows. Replace `.agentflow/bin/agentflow`, `.agentflow/bin/agentflow.ps1`,
-  `.githooks/commit-msg` and `.githooks/pre-push` there with the files from this
-  release. Don't use `agentflow init --force` for this: it also overwrites
-  `.agentflow/config.yml` and the pinned workflow. The Claude Code and Codex plugins get
+  In a repository set up before this change, `agentflow pin` replaces the old launchers
+  and hooks with the checked ones when they are unchanged stock files. It warns about
+  each one you changed: replace those by hand with the file from this release. Don't use
+  `agentflow init --force` for this: it also overwrites `.agentflow/config.yml` and the
+  pinned workflow. The Claude Code and Codex plugins get
   the check when the plugin updates, but in a repository that commits a launcher the
   Claude Code plugin runs that launcher.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
