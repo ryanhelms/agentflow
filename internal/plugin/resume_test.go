@@ -3,12 +3,17 @@ package plugin_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 	"github.com/ryanhelms/agentflow/internal/plugin"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/policy"
@@ -152,7 +157,7 @@ func TestApprovalOverflowSettlesEveryHeldCall(t *testing.T) {
 	if _, err := person.ApprovePluginRequest(id); err != nil {
 		t.Fatal(err)
 	}
-	f.h.ApprovalEventForTest(t.Context(), bus.Event{Type: bus.TypeStreamOverflow, Payload: json.RawMessage(`{"subscription":"plugin-host/approvals","dropped":300}`)})
+	f.h.ApprovalEventForTest(t.Context(), overflowed)
 	select {
 	case in := <-f.ran:
 		if in.Signal != "ci.failed" {
@@ -247,4 +252,173 @@ func TestHostAndPluginResumeRunTheWriteOnce(t *testing.T) {
 			t.Fatalf("%d op.failed for the loser", n)
 		}
 	})
+}
+
+// holdWrites makes notify's Run wait until release is called or its context
+// ends, and reports on ended what its context said then.
+func holdWrites(t *testing.T, f *fixture) (release func(), ended chan error) {
+	t.Helper()
+	gate := make(chan struct{})
+	release = sync.OnceFunc(func() { close(gate) })
+	t.Cleanup(release) // before the fixture's Stop
+	ended = make(chan error, 1)
+	f.hold = func(ctx context.Context) error {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+		}
+		ended <- ctx.Err()
+		return ctx.Err()
+	}
+	return release, ended
+}
+
+// stopping stops h in the background; the channel closes when Stop returns.
+func stopping(h *plugin.Host) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		h.Stop()
+		close(done)
+	}()
+	return done
+}
+
+func waitsForTheWrite(t *testing.T, stopped <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while an approved write was running")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func returns(t *testing.T, stopped <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop never returned")
+	}
+}
+
+// audited fails unless audit.log already says how the notify of approval id
+// ended: the gate's last write for the call.
+func audited(t *testing.T, f *fixture, id, result string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(f.gateDir, "audit.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		var e struct {
+			Operation   string `json:"operation"`
+			OperationID string `json:"operation_id"`
+			Result      string `json:"result"`
+		}
+		if json.Unmarshal([]byte(line), &e) == nil && e.Operation == "notify" && e.OperationID == id && e.Result == result {
+			return
+		}
+	}
+	t.Fatalf("no %s audit line for %s:\n%s", result, id, raw)
+}
+
+var overflowed = bus.Event{Type: bus.TypeStreamOverflow, Payload: json.RawMessage(`{"subscription":"plugin-host/approvals","dropped":300}`)}
+
+// Stop returns only after an approved write the host is running has ended and
+// been audited. The daemon cancels its context before it stops the host: that
+// does not cut the write off.
+func TestStopWaitsForAResumedWrite(t *testing.T) {
+	f := newFixture(t, nil)
+	release, ended := holdWrites(t, f)
+	id, person := heldApproval(t, f)
+	if _, err := person.ApprovePluginRequest(id); err != nil {
+		t.Fatal(err)
+	}
+	daemon, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	f.h.ApprovalEventForTest(daemon, overflowed)
+	<-f.ran
+	cancel()
+	stopped := stopping(f.h)
+	waitsForTheWrite(t, stopped)
+	release()
+	returns(t, stopped)
+	if err := <-ended; err != nil {
+		t.Fatalf("the approved write was cut off: %v", err)
+	}
+	audited(t, f, id, "applied")
+}
+
+// A write that does not end holds Stop up for DrainTimeout only: then Stop
+// cancels it, and it is still audited before Stop returns.
+func TestStopBoundsTheWaitForAResumedWrite(t *testing.T) {
+	f := newFixture(t, nil)
+	_, ended := holdWrites(t, f)
+	id, person := heldApproval(t, f)
+	f.h.SetDrainTimeoutForTest(50 * time.Millisecond)
+	if _, err := person.ApprovePluginRequest(id); err != nil {
+		t.Fatal(err)
+	}
+	f.h.ApprovalEventForTest(t.Context(), overflowed)
+	<-f.ran
+	returns(t, stopping(f.h))
+	select {
+	case err := <-ended:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("the write's context: %v", err)
+		}
+	default:
+		t.Fatal("Stop returned without cancelling the write")
+	}
+	audited(t, f, id, "failed")
+}
+
+// Stop waits for an approved write the plugin resumes itself, too. Stop
+// closes the plugin's connection first: that does not cut the write off.
+func TestStopWaitsForAWriteThePluginResumes(t *testing.T) {
+	rc := &recorder{}
+	f := newFixture(t, rc.child("op.failed"))
+	release, ended := holdWrites(t, f)
+	invoke, id, cause := processHeld(t, f, rc)
+	answered := make(chan struct{})
+	go func() {
+		defer close(answered)
+		// The answer may be lost: Stop closes the plugin's connection.
+		_, _ = invoke(plugin.InvokeRequest{Command: "notify", Cause: cause, Input: json.RawMessage(`{"signal":"s"}`), Resume: id})
+	}()
+	<-f.ran
+	stopped := stopping(f.h)
+	waitsForTheWrite(t, stopped)
+	release()
+	returns(t, stopped)
+	if err := <-ended; err != nil {
+		t.Fatalf("the approved write was cut off: %v", err)
+	}
+	audited(t, f, id, "applied")
+	<-answered
+}
+
+// After Stop, neither the host nor a plugin's late request starts the
+// approved write.
+func TestNoResumeStartsAfterStop(t *testing.T) {
+	rc := &recorder{}
+	f := newFixture(t, rc.child("op.failed"))
+	_, id, cause := processHeld(t, f, rc)
+	f.h.Stop()
+
+	f.h.ApprovalEventForTest(t.Context(), overflowed)
+	noRun(t, f)
+	if len(f.h.Held()) != 1 {
+		t.Fatal("a stopped host settled a held call")
+	}
+	// The host's request handler, called directly: the answer to a request
+	// that arrives late must not depend on the closed connection.
+	raw, _ := json.Marshal(plugin.InvokeRequest{Command: "notify", Cause: cause, Input: json.RawMessage(`{"signal":"s"}`), Resume: id})
+	out, err := f.launch.Last().Proc.Spec.Handler.Handle(t.Context(), &jsonrpc.Request{ID: json.RawMessage(`1`), Method: plugin.MethodCommandInvoke, Params: raw})
+	if refusal(err) != plugin.RefuseNotReady {
+		t.Fatalf("a late resume: %+v %v", out, err)
+	}
+	if len(f.ran) != 0 {
+		t.Fatal("a write started after Stop")
+	}
 }

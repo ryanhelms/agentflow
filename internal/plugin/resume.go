@@ -33,7 +33,8 @@ import (
 // (CodeResumedByHost). Before it runs a call the host checks the plugin
 // again: the same installed version and hash that asked, still running,
 // still granted the command. When its approval subscription overflows it
-// settles every held call. Held calls do not survive a daemon restart.
+// settles every held call. Held calls do not survive a daemon restart. Stop
+// waits for a resume in flight (Host.drain) and no resume starts after it.
 
 // heldCall is one plugin write waiting for a person.
 type heldCall struct {
@@ -200,7 +201,7 @@ func (h *Host) watchApprovals(ctx context.Context) error {
 func (h *Host) approvalEvent(ctx context.Context, e bus.Event) {
 	if e.Type == bus.TypeStreamOverflow {
 		for _, id := range h.Held() {
-			go h.settle(ctx, id)
+			h.settleSoon(ctx, id)
 		}
 		return
 	}
@@ -209,8 +210,21 @@ func (h *Host) approvalEvent(ctx context.Context, e bus.Event) {
 		return // a malformed payload
 	}
 	if _, ok := h.peek(p.OperationID); ok {
-		go h.settle(ctx, p.OperationID)
+		h.settleSoon(ctx, p.OperationID)
 	}
+}
+
+// settleSoon runs settle on its own goroutine, which Stop waits for. After
+// Stop it does nothing.
+func (h *Host) settleSoon(ctx context.Context, id string) {
+	done, ok := h.begin()
+	if !ok {
+		return
+	}
+	go func() {
+		defer done()
+		h.settle(ctx, id)
+	}()
 }
 
 // settle reads held call id's approval and resumes it when approved, keeps
@@ -268,6 +282,11 @@ func (h *Host) resume(ctx context.Context, c heldCall, a *app.App) {
 	if !ok {
 		return
 	}
+	if ctx.Err() != nil {
+		return // the daemon is stopping: start nothing
+	}
+	ctx, release := h.approvedWrite(ctx)
+	defer release()
 	ctx, cancel := context.WithTimeout(ctx, InvokeTimeout)
 	defer cancel()
 	res := h.call(ctx, c.plugin, c.target, a, jc, c.input, c.approval, c.cause)

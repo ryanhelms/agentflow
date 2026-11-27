@@ -267,6 +267,17 @@ func (pr *process) handle(ctx context.Context, r *jsonrpc.Request) (result any, 
 		if err := strictParams(r.Params, &p); err != nil {
 			return nil, err
 		}
+		// This goroutine is not the runner's: Host.Stop waits for it here.
+		done, ok := pr.h.begin()
+		if !ok {
+			return nil, rpcRefusal(refuse(RefuseNotReady))
+		}
+		defer done()
+		if p.Resume != "" {
+			var release context.CancelFunc
+			ctx, release = pr.h.approvedWrite(ctx)
+			defer release()
+		}
 		res, err := pr.env.Invoke(ctx, p)
 		if err != nil {
 			return nil, rpcRefusal(err)

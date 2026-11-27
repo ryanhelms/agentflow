@@ -64,12 +64,14 @@ type Options struct {
 	// Now and After are the clock; nil means time.Now and time.After.
 	Now   func() time.Time
 	After func(time.Duration) <-chan time.Time
-	// PingInterval, PingTimeout, DeliverTimeout and InitializeTimeout default to the
-	// constants of the same names. Tests shorten them.
+	// PingInterval, PingTimeout, DeliverTimeout, InitializeTimeout and
+	// DrainTimeout default to the constants of the same names. Tests shorten
+	// them.
 	PingInterval      time.Duration
 	PingTimeout       time.Duration
 	DeliverTimeout    time.Duration
 	InitializeTimeout time.Duration
+	DrainTimeout      time.Duration
 }
 
 // Host runs the installed, enabled plugins (ADR, "Phase 5"). Every plugin
@@ -97,6 +99,13 @@ type Host struct {
 	limits   map[string]*rateLimits
 
 	held heldCalls // plugin writes waiting for a person (resume.go)
+
+	// calls are the calls on goroutines no runner waits for: resumes of held
+	// calls and process plugins' command.invoke. begin adds to it.
+	calls sync.WaitGroup
+	// abandoned ends when Stop stops waiting for calls.
+	abandoned context.Context
+	abandon   context.CancelFunc
 }
 
 // rateLimits are one plugin's invoke and publish token buckets.
@@ -139,6 +148,9 @@ func NewHost(o Options) *Host {
 	if o.InitializeTimeout <= 0 {
 		o.InitializeTimeout = InitializeTimeout
 	}
+	if o.DrainTimeout <= 0 {
+		o.DrainTimeout = DrainTimeout
+	}
 	if o.Commands == nil {
 		o.Commands = command.Default.Lookup
 	}
@@ -150,6 +162,7 @@ func NewHost(o Options) *Host {
 	}
 	h := &Host{o: o, runners: map[string]*runner{}, status: map[string]*Status{}, installed: map[string]manifest.Installed{},
 		disabled: map[bus.RepoID]map[string]bool{}, ctx: context.Background()}
+	h.abandoned, h.abandon = context.WithCancel(context.Background())
 	h.dl = openDeadLetter(filepath.Join(o.Home, manifest.PluginsDir, manifest.DeadLetterFile))
 	h.factories = factories(h)
 	h.invoker = func(target Worktree) command.Invoker {
@@ -270,8 +283,9 @@ func (h *Host) dropRunner(id string, r *runner) {
 	h.mu.Unlock()
 }
 
-// Stop stops every plugin (stopping, then stopped) and refuses later
-// reloads.
+// Stop stops every plugin (stopping, then stopped), refuses later reloads
+// and calls, and waits for the calls in flight: an approved write has ended
+// and been audited when Stop returns, unless it outlasted DrainTimeout.
 func (h *Host) Stop() {
 	h.reload.Lock()
 	defer h.reload.Unlock()
@@ -289,6 +303,53 @@ func (h *Host) Stop() {
 		go func() { defer wg.Done(); r.stop(false) }()
 	}
 	wg.Wait()
+	h.drain()
+}
+
+// begin admits one call that Stop waits for; the caller runs done when it
+// has ended. Once Stop has started it admits none.
+func (h *Host) begin() (done func(), ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		return nil, false
+	}
+	h.calls.Add(1) // under mu with stopped false, so never after drain's Wait
+	return h.calls.Done, true
+}
+
+// approvedWrite is the context an approved write runs under. parent ending
+// (the daemon stopping, a plugin's connection closing) does not cut it off:
+// a person approved it and the gate has consumed that approval. Only Stop
+// cancels it, once it stops waiting.
+func (h *Host) approvedWrite(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+	stop := context.AfterFunc(h.abandoned, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
+// drain waits for the calls in flight, at most DrainTimeout. Then it cancels
+// the approved writes still running and gives them ShutdownTimeout to record
+// how they ended.
+func (h *Host) drain() {
+	done := make(chan struct{})
+	go func() {
+		h.calls.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return
+	case <-time.After(h.o.DrainTimeout):
+	}
+	h.abandon()
+	select {
+	case <-done:
+	case <-time.After(ShutdownTimeout):
+	}
 }
 
 // Status returns every known plugin's status, sorted by ID.
