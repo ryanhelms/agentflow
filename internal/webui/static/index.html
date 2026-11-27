@@ -12,11 +12,13 @@
   <link rel="stylesheet" href="document-editor.css">
   <link rel="stylesheet" href="timeline.css">
   <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="plugins.css">
   <script src="typed-editor.js" defer></script>
   <script src="document-editor.js" defer></script>
   <script src="tab-navigation.js" defer></script>
   <script src="event-worker.js" defer></script>
   <script src="live-panels.js" defer></script>
+  <script src="plugins.js" defer></script>
   <script src="timeline.js" defer></script>
   <script src="settings-widgets.js" defer></script>
   <script src="settings.js" defer></script>
@@ -60,6 +62,7 @@
         <a href="#settings" data-page="settings"><span class="nav-icon ico-settings" aria-hidden="true"></span>Settings</a>
         <a href="#providers" data-page="providers" class="nav-sub"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
         <a href="#autonomy" data-page="autonomy" class="nav-sub"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
+        <a href="#plugins" data-page="plugins"><span class="nav-icon ico-plugin" aria-hidden="true"></span>Plugins<span id="plugins-nav-count" class="nav-count" aria-hidden="true" hidden></span><span id="plugins-nav-label" class="sr-only"></span></a>
         <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
         <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
       </nav>
@@ -194,6 +197,35 @@
               <p class="st-bar-facts"><span id="settings-last-text"></span><span id="settings-last-link"></span><span id="settings-undo-why" class="muted"></span></p>
               <div class="st-bar-actions"><button id="settings-undo" class="button secondary small" type="button">Undo</button></div>
             </div>
+          </div>
+        </section>
+        <section id="page-plugins" aria-labelledby="plugins-title" hidden>
+          <div class="page-heading"><h1 id="plugins-title" tabindex="-1">Plugins</h1><p>Plugins add event handlers and permission rules to Agentflow. They run in the console daemon on this computer, for every repository it serves.</p></div>
+          <div class="notice pg-trust" role="note" aria-labelledby="plugins-trust-title">
+            <p><strong id="plugins-trust-title">A plugin runs as you and is not sandboxed.</strong></p>
+            <p>A process plugin is a program on this computer: it can read your files and use the network. The permissions on a card limit what a plugin does through Agentflow, not what its program does by itself. Install only plugins whose code you trust.</p>
+          </div>
+          <p id="plugins-note" class="live-note" hidden></p>
+          <p id="plugins-wait" class="muted">Waiting for live updates…</p>
+          <div id="plugins-body" hidden>
+            <p id="plugins-host" class="notice error" hidden>The plugin host is not running in this console daemon, so no plugin runs. The cards show what is installed.</p>
+            <p id="plugins-summary" class="muted pg-summary" hidden></p>
+            <ul id="plugins-list" class="pg-list" aria-label="Installed plugins"></ul>
+            <section id="plugins-orphans" class="panel pg-orphans" aria-labelledby="plugins-orphans-title" hidden>
+              <div class="section-heading"><h2 id="plugins-orphans-title">Failed deliveries of plugins no longer installed</h2></div>
+              <ul id="plugins-orphan-list" class="pg-letter-list" aria-labelledby="plugins-orphans-title"></ul>
+            </section>
+            <section class="panel pg-add" aria-labelledby="plugins-add-title">
+              <div class="section-heading"><h2 id="plugins-add-title">Add a plugin</h2></div>
+              <p id="plugins-add-lead" hidden>Nothing is installed for your user on this computer.</p>
+              <p>Install a plugin from a folder or a YAML file on this computer. Replace <code>PATH</code> with its location. Agentflow lists every permission the plugin asks for and waits for you to confirm.</p>
+              <pre id="plugins-add-command"><code>agentflow plugin add PATH</code></pre>
+              <ul class="pg-add-notes">
+                <li>A new plugin is installed turned off. Turn it on in <a href="#settings">Settings</a>, in its own group.</li>
+                <li>Installing and removing are terminal commands only. No agent and no button in this console can do either.</li>
+                <li>Agentflow never downloads a plugin. It copies the files you point it to and checks them before every start.</li>
+              </ul>
+            </section>
           </div>
         </section>
         <section id="page-configuration" aria-labelledby="configuration-title" hidden>
