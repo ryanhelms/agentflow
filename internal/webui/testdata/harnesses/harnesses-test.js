@@ -85,6 +85,16 @@
       && H.authView({status:"signed_in",code:"ok"}).label === "Signed in","the sign-in verdicts are not told apart");
     check(H.skipReason("inside_repository") === "inside a repository Agentflow is working in" && H.skipReason("new_reason") === "new reason" && H.remaining(65000) === "1 min 05 s","reason codes or the countdown text are wrong");
 
+    // A sign-in command is offered only when it is a plain command line.
+    const offered = line => H.harnessesState(state([harness("x",{sign_in:[{method:"m",type:"terminal",name:"n",command:line}]})])).harnesses[0].signIn[0];
+    for (const line of ["x login; rm -rf ~","x login | sh","x login && y","x $(id)","x `id`","x login > f","x login < f","x (y)","x 'login'","x \"login\"","PATH=/tmp x login","LD_PRELOAD=a.so x login","DYLD_INSERT_LIBRARIES=a x login",
+      "NODE_OPTIONS=--require=a x login","http_proxy=h x login","GIT_SSH=a x login","lower=1 x login","OK=1 BASH_ENV=a x login","OK=1"," x login"]) {
+      check(offered(line).command === "" && offered(line).unsafe === true,"an unsafe sign-in command is offered: " + line);
+    }
+    for (const line of ["x login","x --cli auth login","X_PROFILE=work x acp login --token-stdin","A=1 B_2=two x login"]) check(offered(line).command === line && !offered(line).unsafe,"a plain sign-in command is refused: " + line);
+    // The fix command is Agentflow's own template and is not put through that check.
+    check(H.harnessesState(state([harness("x",{fix:{text:"t",command:"agentflow config set a.b='c d'"}})])).harnesses[0].fix.command === "agentflow config set a.b='c d'","a fix command is refused by the sign-in check");
+
     await until(() => !byID("connection-options").hidden,"the console did not ask for a session");
     const ticket = await (await fetch("/fixture/ticket",{method:"POST"})).text();
     location.hash = new URLSearchParams({launch:ticket,screen:"overview"}).toString();
@@ -162,8 +172,19 @@
       && !part("codex-acp","methods").textContent.includes("PATH=/tmp") && methods[2].textContent.includes("sign in with its own login"),"the sign-in methods are wrong: " + part("codex-acp","methods").textContent);
 
     // Not probed, a failed probe, incompatible and adapter missing each read differently.
-    check(card("cursor").dataset.mark === "idle" && shows("cursor","status") === "Not checked yet" && fact("cursor","probe").textContent === "Not run yet" && commands(part("cursor","fix")).join() === "agentflow ai harnesses --probe"
-      && shows("cursor","auth-detail").startsWith("Automatic probes are off"),"the unprobed card is wrong");
+    // A harness that was never started: its fix box holds its own Probe now button, not a terminal command,
+    // and the sign-in line does not repeat the fix.
+    check(card("cursor").dataset.mark === "idle" && shows("cursor","status") === "Not checked yet" && fact("cursor","probe").textContent === "Not run yet" && commands(part("cursor","fix")).length === 0
+      && part("cursor","fix").contains(part("cursor","probe")) && part("cursor","fix").querySelector(".hn-fix-text").textContent === "Not checked yet. Probe it to confirm it speaks ACP."
+      && shows("cursor","auth") === "Sign-in not known" && shows("cursor","auth-detail") === "" && !part("gemini","fix").contains(part("gemini","probe")) && !part("opencode","fix").contains(part("opencode","probe")),"the unprobed card is wrong");
+    const box = card("pi-acp").querySelector(".hn-command pre");
+    check(box.getAttribute("role") === "group" && box.getAttribute("aria-label") === "Fix command" && box.tabIndex === 0,"a command box that takes focus has no role or name");
+
+    // The summary leads to the group that needs attention.
+    const jump = byID("harnesses-summary").querySelector("button");
+    check(jump && jump.textContent === "5 need attention","the summary has no way to the Needs attention group");
+    jump.click();
+    check(document.activeElement === byID("harnesses-attention-title"),"the summary's button did not move focus to Needs attention");
     check(shows("opencode","status") === "Probe failed" && shows("opencode","version") === "Version not reported" && fact("opencode","probe").textContent.startsWith("No answer in time · ") && part("opencode","fix").querySelector("code").textContent === "opencode"
       && part("opencode","fix").querySelector(".hn-fix-text").textContent === "opencode did not answer within 5s. Probe again, or allow more time." && part("opencode","notes").textContent.includes("never applies them"),"the failed probe card is wrong");
     const repoLink = part("goose","fix").querySelector("a");
@@ -217,6 +238,8 @@
     check((await sent("probe"))[1].body === '{"ids":["cursor"]}',"the card's probe does not name its harness: " + (await sent("probe"))[1].body);
     await until(() => said() === "Probe requested for Cursor." && byID("harnesses-probe-error").hidden,"the probe request is not announced, or the old refusal stays");
     check(probeAll.getAttribute("aria-disabled") === "true" && probeCursor.getAttribute("aria-disabled") === "true" && !probeAll.disabled && byID("harnesses-probe-status").textContent === "Probe requested. The results arrive here.","the probe buttons do not wait");
+    // A card's button says beside it why it waits.
+    check(part("gemini","probe-status").textContent === "Probe requested. The results arrive here." && part("gemini","probe").getAttribute("aria-describedby") === part("gemini","probe-status").id && visible(part("gemini","probe-status")),"a waiting card button gives no reason");
     probeAll.click();
     part("gemini","probe").click();
     await pause(200);
@@ -230,6 +253,7 @@
     const moved = card("cursor");
     await post("emit",delta(4,"harness.changed",[entry(state([gemini,claude,mine,probed,codex,opencode,goose,pi],{skipped_path:skipped,problems,checked_at:at(0)}))]));
     await until(() => keys("ready") === "gemini,claude-acp,my-agent,cursor","the probed card did not move to Ready: " + keys("ready"));
+    check(/^You can probe again in /.test(part("claude-acp","probe-status").textContent) && moved.querySelector(".hn-actions").parentNode === moved,"the card does not count down beside its button, or the button stayed in a hidden fix box");
     check(card("cursor") === moved && document.activeElement === probeCursor && shows("cursor","status") === "Ready" && shows("cursor","probing") === "" && part("cursor","fix").hidden && moved.classList.contains("live-changed")
       && fact("cursor","status").classList.contains("live-changed") && !card("gemini").classList.contains("live-changed") && !fact("gemini","status").classList.contains("live-changed"),"the card was rebuilt, lost focus, or the change is not highlighted");
     await until(() => said() === "Harness Cursor: ready. Probe finished.","the result is not announced: " + said());
@@ -277,8 +301,12 @@
     await until(() => said() === "Harness Codex CLI: ready. Harness OpenCode found: probe failed.","the live change is not announced: " + said());
 
     // Automatic probes turned off in Settings shows here; the page itself changes nothing.
-    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,opencode,goose,pi],{auto_probe:false}))]));
+    const waiting = harness("waiting",{code:"not_probed",probe:{status:"refused",code:"needs_person"},acp:undefined,auth:{status:"unknown",code:"needs_person"},fix:{text:"Automatic probes are off. Probe it yourself, or turn them on.",command:"agentflow ai harnesses --probe"}});
+    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,waiting,opencode,goose,pi],{auto_probe:false}))]));
     await until(() => byID("harnesses-auto").textContent === "Off","automatic probes are not shown as off");
+    const turnOn = part("waiting","fix").querySelector("a");
+    check(shows("waiting","status") === "Not probed" && part("waiting","fix").querySelector(".hn-fix-text").textContent === "Automatic probes are off. Probe it yourself, or turn them on." && turnOn.textContent === "turn them on" && turnOn.getAttribute("href") === "#settings?group=ai"
+      && commands(part("waiting","fix")).length === 0 && part("waiting","fix").contains(part("waiting","probe")) && shows("waiting","auth-detail") === "","the card that waits for a person is wrong");
     check(byID("harnesses-auto").dataset.state === "off" && byID("harnesses-auto-detail").textContent.includes("only looks at files") && byID("harnesses-auto").classList.contains("live-changed"),"the automatic probes change is not shown");
 
     // Everything ready: the other group says that nothing needs attention.
@@ -295,6 +323,7 @@
     // A daemon without harness detection: a notice, no probe button and no check.
     await post("emit",delta(11,"config.layer.changed",[entry({detector:false,registry,auto_probe:true,harnesses:[],checked_at:""})]));
     await until(() => !byID("harnesses-detector").hidden,"a daemon without detection is not explained");
+    check(byID("harnesses-detector").textContent.includes("open it again with agentflow ui") && commands(byID("harnesses-detector")).join() === "agentflow ai harnesses","the page without detection does not say what to do");
     check(byID("harnesses-empty").hidden && byID("harnesses-probe").parentNode.hidden && byID("harnesses-summary").hidden && byID("harnesses-auto-detail").textContent.includes("does not detect harnesses"),"the page without detection is wrong");
     await until(() => said() === "Harness detection stopped.","the end of detection is not announced: " + said());
 

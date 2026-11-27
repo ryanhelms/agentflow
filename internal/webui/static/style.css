@@ -416,7 +416,14 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
 .hn-notes li { padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); overflow-wrap: anywhere; }
 .hn-about { margin-top: var(--s-3); }
 .hn-about-facts { margin-top: var(--s-3); }
-.hn-actions { margin-top: var(--s-4); }
+.hn-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); }
+.hn-fix .hn-actions { margin-top: var(--s-2); }
+/* The summary's way down to the group that needs attention: a button that reads as a link. */
+.hn-jump { padding: 0; border: 0; color: var(--accent); background: none; font-weight: 600; text-decoration: underline; text-underline-offset: .19em; }
+.hn-group > h2:focus-visible { outline-offset: 6px; }
+.hn-group > h2 { scroll-margin-top: var(--s-4); }
+.hn-off p + p { margin-top: var(--s-1); }
+.hn-off .hn-command pre, .hn-off code { background: var(--surface); }
 
 /* A terminal command to copy. It scrolls sideways before it wraps, so what is copied is what is shown. */
 .hn-command { display: flex; align-items: stretch; gap: var(--s-2); max-width: 44rem; margin: var(--s-2) 0 0; }

@@ -48,7 +48,7 @@
     command: "cursor-agent", args: ["acp"], path: "~/.local/bin/cursor-agent", version: "2026.11.20", registry_version: "2026.11.20",
     probe: probed ? {status: "ok", code: "ok", probed_at: at(0), duration_ms: 1304} : {status: "none", code: "not_probed"},
     ...(probed ? {acp: acp({agent_name: "cursor-agent"}), sign_in: [{method: "cursor-login", type: "agent", name: "Cursor account"}]} : {fix: {text: "Not checked yet. Probe it to confirm it speaks ACP.", command: "agentflow ai harnesses --probe"}}),
-    auth: {status: "unknown", code: probed ? "no_check" : "needs_person"}});
+    auth: {status: "unknown", code: "no_check"}});
   const opencode = {id: "opencode", name: "OpenCode", kind: "native", state: "native", code: "timeout", sources: ["registry", "personal"],
     command: "opencode", args: ["acp"], path: "~/.opencode/bin/opencode", version: "", version_code: "no_version", registry_version: "1.4.2",
     probe: {status: "failed", code: "timeout", probed_at: at(-420000), duration_ms: 5000}, auth: {status: "unknown", code: "no_check"},

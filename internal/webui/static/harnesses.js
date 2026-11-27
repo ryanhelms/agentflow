@@ -39,6 +39,27 @@
     const line = text(value);
     return line && line.length <= 512 && line === line.trim() && !unsafe.test(line) ? line : "";
   };
+  // A sign-in command comes from what a harness answered, so the page
+  // checks it again before it offers it (the report already did): no shell
+  // syntax, and no variable in front that changes which program runs, what
+  // it loads or what it trusts (ADR, "Phase 6 fix text").
+  const shellSyntax = /[;|&$`<>()'"\n\r]/;
+  const lookupNames = new Set(["PATH", "NODE_OPTIONS", "NODE_PATH", "PYTHONPATH", "PYTHONSTARTUP", "BASH_ENV", "ENV", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE", "GIT_SSH_COMMAND", "GIT_SSH"]);
+  const signInCommand = value => {
+    const line = commandLine(value);
+    if (!line || shellSyntax.test(line)) return "";
+    const tokens = line.split(" ");
+    let index = 0;
+    for (; index < tokens.length; index++) {
+      const assign = /^([A-Za-z_][A-Za-z0-9_]*)=/.exec(tokens[index]);
+      if (!assign) break;
+      const name = assign[1].toUpperCase();
+      if (assign[1] !== name || lookupNames.has(name) || name.startsWith("LD_") || name.startsWith("DYLD_")) return "";
+    }
+    // Something must be left to run after the variables.
+    return index < tokens.length && tokens[index] ? line : "";
+  };
   // A link is made only from an absolute https address without credentials.
   const httpsAddress = value => {
     const raw = text(value);
@@ -91,8 +112,8 @@
         signIn.push({
           method: shown(method.method, 64), type, name: shown(method.name, 64) || shown(method.method, 64) || "Sign in",
           description: shown(method.description, 256),
-          command: type === "terminal" && method.unsafe !== true ? commandLine(method.command) : "",
-          unsafe: type === "terminal" && (method.unsafe === true || !commandLine(method.command))
+          command: type === "terminal" && method.unsafe !== true ? signInCommand(method.command) : "",
+          unsafe: type === "terminal" && (method.unsafe === true || !signInCommand(method.command))
         });
       }
       harnesses.push({
@@ -353,7 +374,9 @@
       const box = element("div", "", "hn-command");
       const code = element("code", value);
       const pre = element("pre");
+      // A long command scrolls sideways; the box takes focus so the keyboard can scroll it.
       pre.tabIndex = 0;
+      pre.setAttribute("role", "group");
       pre.setAttribute("aria-label", what);
       pre.append(code);
       const button = element("button", "", "button secondary small");
@@ -429,19 +452,40 @@
       probe.dataset.part = "probe";
       probe.append(element("span", "Probe now", "hn-probe-label"));
       probe.addEventListener("click", () => requestProbe([card.dataset.key]));
-      actions.append(probe);
+      const wait = element("span", "", "hn-probe-status");
+      wait.id = "harness-" + number + "-probe-status";
+      wait.dataset.part = "probe-status";
+      probe.setAttribute("aria-describedby", wait.id);
+      actions.append(probe, wait);
 
       card.append(head, facts, slot("description", {tag: "p", klass: "hn-description"}), found, fix, signIn, notes, about, actions);
       return card;
+    }
+
+    // A harness that was found and never started needs one thing: a probe.
+    // Its fix box holds the card's own Probe now button instead of a
+    // terminal command.
+    function probeIsFix(harness) {
+      return current.detector && harness.probeable && (harness.state === "native" || harness.state === "adapter_installed")
+        && (harness.probe.code === "not_probed" || harness.probe.code === "needs_person" || harness.probe.status === "none");
     }
 
     function fixParts(harness) {
       const fix = harness.fix;
       const out = [];
       const sentence = element("p", "", "hn-fix-text");
-      sentence.append(...prose(fix?.text || meaning(harness)));
+      const words = fix?.text || meaning(harness);
+      const phrase = "turn them on";
+      const cut = harness.probe.code === "needs_person" ? words.indexOf(phrase) : -1;
+      if (cut >= 0) {
+        // "Automatic probes are off. Probe it yourself, or turn them on."
+        const link = element("a", phrase);
+        link.setAttribute("href", settingsRoute());
+        link.setAttribute("aria-label", "Turn on automatic probes in Settings");
+        sentence.append(...prose(words.slice(0, cut)), link, ...prose(words.slice(cut + phrase.length)));
+      } else sentence.append(...prose(words));
       out.push(sentence);
-      if (fix?.command) out.push(command(fix.command, "Fix command"));
+      if (fix?.command && !probeIsFix(harness)) out.push(command(fix.command, "Fix command"));
       if (fix?.url) {
         const line = element("p", "", "hn-fix-link");
         const link = element("a", fix.url);
@@ -511,7 +555,12 @@
       const fix = card.querySelector('[data-part="fix"]');
       fix.hidden = isReady && !harness.fix;
       fix.dataset.tone = shows.tone;
-      const fixed = fill(fix, isReady && !harness.fix ? "" : JSON.stringify([harness.fix, harness.fix ? "" : meaning(harness)]), () => isReady && !harness.fix ? [] : fixParts(harness));
+      const inFix = !fix.hidden && probeIsFix(harness);
+      // Taken before the box is refilled: refilling it detaches the button it holds.
+      const actions = card.querySelector(".hn-actions");
+      const fixed = fill(fix, isReady && !harness.fix ? "" : JSON.stringify([harness.fix, harness.fix ? "" : meaning(harness), inFix]), () => isReady && !harness.fix ? [] : fixParts(harness));
+      const home = inFix ? fix : card;
+      if (actions.parentNode !== home || (inFix && fixed)) home.append(actions);
       if (fixed && flash && !fix.hidden) mark(fix);
 
       // Sign-in: the verdict, then how to sign in. Shown for a harness
@@ -521,7 +570,9 @@
       const auth = authView(harness.auth);
       fact(card, "auth", auth.label, {state: auth.mark, flash});
       // The fix may already say the same sentence (env_credential).
-      fact(card, "auth-detail", harness.fix?.text.toLowerCase() === auth.detail.toLowerCase() ? "" : auth.detail);
+      // Automatic probes being off is already what the fix box says.
+      const repeats = harness.fix?.text.toLowerCase() === auth.detail.toLowerCase() || (harness.auth.code === "needs_person" && inFix);
+      fact(card, "auth-detail", repeats ? "" : auth.detail);
       fact(card, "auth-at", harness.auth.at ? "Checked " + clock(harness.auth.at, at) : "");
       if (harness.auth.at) card.querySelector('time[data-fact="auth-at"]').dateTime = new Date(harness.auth.at).toISOString();
       const methods = card.querySelector('[data-part="methods"]');
@@ -590,13 +641,26 @@
       }
     }
 
+    // "8 harnesses found · 3 ready · 5 need attention." The last part is a
+    // button that moves to the Needs attention group, which can be several
+    // screens down.
     function summary(state) {
       const total = state.harnesses.length;
-      if (!total) return "";
+      if (!total) return [];
       const fine = state.harnesses.filter(ready).length;
-      const parts = [plural(total, "harness", "harnesses") + " found", fine + " ready"];
-      if (total - fine) parts.push(total - fine === 1 ? "1 needs attention" : (total - fine) + " need attention");
-      return parts.join(" · ") + ".";
+      const out = [plural(total, "harness", "harnesses") + " found · " + fine + " ready"];
+      if (total - fine) {
+        const jump = element("button", total - fine === 1 ? "1 needs attention" : (total - fine) + " need attention", "hn-jump");
+        jump.type = "button";
+        jump.addEventListener("click", () => {
+          const title = find("harnesses-attention-title");
+          title.focus({preventScroll: true});
+          title.scrollIntoView({block: "start"});
+        });
+        out.push(" · ", jump);
+      }
+      out.push(".");
+      return out;
     }
 
     // The probe controls. A probe is rate limited per console, so the
@@ -627,6 +691,11 @@
       for (const button of probes) {
         if (blocked) button.setAttribute("aria-disabled", "true");
         else button.removeAttribute("aria-disabled");
+      }
+      // Each card says beside its own button why it waits.
+      for (const card of cards.values()) {
+        const wait = card.querySelector('[data-part="probe-status"]');
+        if (wait.textContent !== said) wait.textContent = said;
       }
       const none = !current.detector || !current.harnesses.some(harness => harness.probeable && found(harness));
       find("harnesses-probe").parentNode.hidden = none;
@@ -676,8 +745,13 @@
       const line = find("harnesses-summary");
       const totals = summary(state);
       const checked = state.checked ? "Checked at " + clock(state.checked, now()) + "." : "";
-      const sentence = [totals, checked].filter(Boolean).join(" ");
-      if (line.textContent !== sentence) line.textContent = sentence;
+      const sentence = totals.map(item => typeof item === "string" ? item : item.textContent).join("") + (totals.length && checked ? " " : "") + checked;
+      // Rebuilt only when the sentence changes, so the button in it keeps focus.
+      if (line.textContent !== sentence) {
+        const held = line.contains(document.activeElement);
+        line.replaceChildren(...totals, (totals.length && checked ? " " : "") + checked);
+        if (held) line.querySelector("button")?.focus({preventScroll: true});
+      }
       line.hidden = !sentence;
 
       // Cards: build the new ones, drop the ones that left, then place

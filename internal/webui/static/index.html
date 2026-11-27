@@ -235,7 +235,11 @@
           <p id="harnesses-note" class="live-note" hidden></p>
           <p id="harnesses-wait" class="muted">Waiting for live updates…</p>
           <div id="harnesses-body" hidden>
-            <p id="harnesses-detector" class="notice error" hidden>This console daemon does not detect harnesses, so the page has nothing live to show. Run <code>agentflow ai harnesses</code> in a terminal to list them.</p>
+            <div id="harnesses-detector" class="notice error hn-off" hidden>
+              <p><strong>This console daemon does not detect harnesses, so the page has nothing live to show.</strong></p>
+              <p>Update Agentflow, then stop the console and open it again with <code>agentflow ui</code>. Until then, list your harnesses in a terminal.</p>
+              <pre data-command>agentflow ai harnesses</pre>
+            </div>
             <section class="panel hn-header" aria-labelledby="harnesses-detection-title">
               <div class="hn-bar">
                 <div>
@@ -271,7 +275,7 @@
               <ul id="harnesses-ready-list" class="hn-list" aria-labelledby="harnesses-ready-title"></ul>
             </section>
             <section id="harnesses-attention" class="hn-group" aria-labelledby="harnesses-attention-title" hidden>
-              <h2 id="harnesses-attention-title">Needs attention <span id="harnesses-attention-count" class="hn-count"></span></h2>
+              <h2 id="harnesses-attention-title" tabindex="-1">Needs attention <span id="harnesses-attention-count" class="hn-count"></span></h2>
               <p id="harnesses-attention-none" class="muted">Nothing needs attention.</p>
               <ul id="harnesses-attention-list" class="hn-list" aria-labelledby="harnesses-attention-title"></ul>
             </section>

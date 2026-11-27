@@ -34,7 +34,7 @@ The **Detection** panel is above the groups.
 
 | Part | Shows |
 | --- | --- |
-| Summary | "8 harnesses found · 3 ready · 5 need attention. Checked at 14:02." |
+| Summary | "8 harnesses found · 3 ready · 5 need attention. Checked at 14:02." **5 need attention** is a button that moves focus to the Needs attention heading, which can be several screens down |
 | **Probe now** | probes every harness found; the line beside it says what a probe is doing |
 | Registry copy | the pinned registry commit (12 characters; the full commit is the tooltip), its date and the number of agents |
 | Automatic probes | **On** or **Off**, what that means, and the Settings link |
@@ -61,11 +61,11 @@ highlights survive.
 | Facts | the ID, the kind (its meaning is the tooltip), "Version 0.71.1" or "Version not reported", and "Registry lists 0.72.0" when it differs |
 | Description | the registry's description |
 | Runs, Found at, Base CLI | the command and its arguments, the path (`~/…`), and for an adapter its base CLI and where it is |
-| Fix | Agentflow's text for the state, the command with **Copy**, and the link. A ready harness has none |
+| Fix | Agentflow's text for the state, the command with **Copy**, and the link. A ready harness has none. For a harness that was never started, see "A harness that was not probed" |
 | Sign-in | the verdict, when it was checked, and **How to sign in** with each method |
 | Notes | `registry_env_ignored`; "The ACP registry has quarantined this agent", with `quarantine_reason` after a colon when the report sends one; or a note's own text |
 | Detection details | the state and its code, the probe result and time, the layers that define the harness, the ACP protocol version and agent, what it supports and what it does not |
-| **Probe now** | probes this harness (not shown for an adapter that is not installed) |
+| **Probe now** | probes this harness (not shown for an adapter that is not installed). The line beside it says why it waits |
 
 The page draws its own icon per kind, in CSS: a prompt in a window for `native`, a part
 attached to a window for `adapter`. No registry icon is loaded, and the page loads no image.
@@ -91,6 +91,15 @@ none for a harness that is not ready, `meaning()` in `harnesses.js` supplies one
 for the state and code. Add a sentence there, and a row to `probeCodes` and `authCodes`,
 when a lane adds a code.
 
+## A harness that was not probed
+
+A harness that was found and never started (probe `none`, or refused with `needs_person`)
+needs one thing: a probe. Its fix box holds the card's own **Probe now** button instead of
+the terminal command from the report. In "Automatic probes are off. Probe it yourself, or
+turn them on." the words "turn them on" link to the Settings group `ai`. The sign-in line
+then shows only "Sign-in not known", because why it is not known is what the fix box says.
+Without live detection the button is not there and the command shows.
+
 ## Sign-in: signed out is not "not known"
 
 The sign-in check answers one of three things, and the page keeps them apart by label,
@@ -107,8 +116,13 @@ signed in with an environment variable; agentflow cannot check that." When the f
 says it, it is not repeated.
 
 **How to sign in** lists the harness's sign-in methods. A `terminal` method shows its command
-with **Copy**. A method marked `unsafe`, or whose command is not one plain line, shows no
-command and says so. An `agent` method says to start the harness and use its own login. The
+with **Copy**. A method marked `unsafe`, or whose command does not pass the page's own check,
+shows no command and says to start the harness yourself. The check is a second line of
+defence behind the report's (`signInCommand` in `harnesses.js`): no `; | & $ < > ( )`,
+backtick, quote or line break, and no variable in front whose name is lowercase or changes
+which program runs, what it loads or what it trusts (`PATH`, `LD_*`, `DYLD_*`,
+`NODE_OPTIONS`, the proxy and certificate variables and the rest of the ADR's list). It
+applies to sign-in commands only; a fix command is Agentflow's own template. An `agent` method says to start the harness and use its own login. The
 list is open when the harness needs a sign-in and closed otherwise; your own toggle stays
 until that changes. The section is not shown for an adapter that is not installed.
 
@@ -126,6 +140,8 @@ sign-in status command where there is one. The console allows one probe a minute
 
 While a probe runs or the minute has not passed, every probe button has `aria-disabled`
 and stays in the tab order; pressing one announces the line instead of sending a request.
+The same line shows beside each card's button, which names it with `aria-describedby`, so
+a dimmed button always has its reason next to it.
 The countdown follows "Countdowns" in `live-stream.md`: one timer, once a second, only
 while it counts and the page is open. When the console refuses a probe, its message shows
 as text under the button and the buttons work again.
@@ -150,7 +166,7 @@ a probe request.
 | --- | --- |
 | Before the first snapshot | "Waiting for live updates…" |
 | Live, but no `harnesses` state | "The live stream has no harness state for this repository yet. …" |
-| The daemon runs no detection (`detector: false`) | an error notice with `agentflow ai harnesses`; no probe button, no check request |
+| The daemon runs no detection (`detector: false`) | an error notice that says to update Agentflow and open the console again with `agentflow ui`, and `agentflow ai harnesses` to copy; no probe button, no check request |
 | Nothing found | the panel **No ACP harnesses found on your PATH** with `agentflow ai harnesses --all` and `agentflow ai doctor` |
 | Nothing ready, or nothing needs attention | a sentence in that group |
 | Automatic probes off | **Off** in the header; unprobed harnesses read **Not checked yet** or **Not probed** with their fix |
@@ -162,7 +178,8 @@ a probe request.
 - The groups are sections with `h2` headings; each card is a list item named by its `h3`;
   sign-in is an `h4`. Details are native `<details>`, **Copy** and **Probe now** are
   buttons, and Settings is a link.
-- A command box can take focus, so a keyboard user can scroll a long command.
+- A command box can take focus, so a keyboard user can scroll a long command. It has
+  `role="group"` and a name ("Fix command", "Sign-in command").
 - When the card that holds focus is removed, focus moves to the page title. A card that
   moves between the groups keeps focus.
 - Changes are announced through `#live-announcer` while the page is open: a harness found
