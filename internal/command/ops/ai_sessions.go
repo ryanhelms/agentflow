@@ -745,7 +745,7 @@ func printAsk(w io.Writer, ask aisession.AskRecord) {
 	for _, o := range ask.Options {
 		fmt.Fprintf(w, "  option (the harness's words): %s [%s]\n", printable(o.Name), printable(string(o.Kind)))
 	}
-	printDiff(w, diffOf(ask))
+	printDiff(w, ask.Diff)
 	if !ask.CanAllow {
 		cannotAllow(w, ask)
 	}
@@ -762,33 +762,9 @@ func askSubject(line string, paths []string, title string) string {
 	}
 }
 
-// askDiff is the change a write ask carries ("diff": path, old_text,
-// new_text, cut). It is read from the record's JSON, so it follows the
-// session store's shape.
-type askDiff struct {
-	Path    string `json:"path"`
-	OldText string `json:"old_text"`
-	NewText string `json:"new_text"`
-	Cut     bool   `json:"cut"`
-}
-
-func diffOf(ask aisession.AskRecord) *askDiff {
-	b, err := json.Marshal(ask)
-	if err != nil {
-		return nil
-	}
-	var v struct {
-		Diff *askDiff `json:"diff"`
-	}
-	if json.Unmarshal(b, &v) != nil {
-		return nil
-	}
-	return v.Diff
-}
-
 // printDiff shows a write's change between markers that say it is the
 // harness's content, with terminal sequences removed.
-func printDiff(w io.Writer, d *askDiff) {
+func printDiff(w io.Writer, d *aisession.AskDiff) {
 	if d == nil {
 		return
 	}
@@ -866,6 +842,26 @@ var aiCancelSpec = command.Spec[aiCancelIn, app.AICancelResult]{
 	Run: func(ctx context.Context, a *app.App, in aiCancelIn) (any, error) {
 		return a.AICancel(aiRequester(ctx, a), aiOptions(a), aisession.ID(in.Session))
 	},
+}
+
+// Production wiring of the session layer: the Manager, and the session
+// lookup app.OpenSession uses for `agentflow mcp --session ID`.
+func init() {
+	app.NewAIManager = aisession.NewManager
+	app.SessionLookup = func(_ context.Context, home, id string) (string, bool, error) {
+		if !aisession.ValidID(id) {
+			return "", false, errors.New("not a session ID")
+		}
+		st, err := aisession.OpenStore(home)
+		if err != nil {
+			return "", false, err
+		}
+		s, err := st.Get(aisession.ID(id))
+		if err != nil {
+			return "", false, err
+		}
+		return s.Worktree, s.State == aisession.StateEnded, nil
+	}
 }
 
 func init() {
