@@ -22,9 +22,9 @@ import (
 // cancel a session through agentflow.
 
 // SessionTools are the only tools of a session's MCP server. Each must be a
-// registered operation of class read. The ADR's list also names
-// agentflow_commit_context, but that tool stages paths (class local, no
-// gate), so it is left out until the ADR is amended.
+// registered operation of class read. agentflow_commit_context is not one:
+// it stages paths (class local, no gate), so the ADR's integration
+// amendment of 2026-11-27 drops it from the list.
 var SessionTools = []string{
 	"agentflow_context",
 	"agentflow_scope_check",

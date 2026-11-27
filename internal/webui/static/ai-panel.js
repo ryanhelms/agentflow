@@ -115,7 +115,7 @@
     };
   }
 
-  const maxPreview = 70000; // a little over the 64 KiB the projection sends for each side
+  const maxPreview = 70000; // the longest side a card shows in full; the ask file holds up to 256 KiB, which only a terminal can allow
 
   function askState(raw) {
     raw = record(raw);

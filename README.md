@@ -812,7 +812,9 @@ harness sends agentflow is checked: the never-list, the worktree boundary, your
 it. Control-file writes and secret-file reads always ask you. An agent can start a
 session (turn off `ai.sessions.agent_start` to stop that), but its session asks you
 for every write and command, and an agent can only reject a request, never allow
-one. A session can never start a session. The harness's own tools stay outside
+one. **Cancel session** in the console's AI panel stops a session at once;
+`ai cancel` and `agentflow_ai_cancel` follow your autonomy policy. A session can
+never start a session. The harness's own tools stay outside
 these checks. [AI sessions](docs/ai-sessions.md) explains the checks, the limits and
 what agentflow cannot control.
 
@@ -946,9 +948,11 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
 - **AI sessions.** A session runs only in the worktree of the process that starts it,
   never in the primary checkout. It gets a listed environment without tokens, keys,
   `SSH_AUTH_SOCK`, proxy or `AGENTFLOW_*` variables; only the harness's own verified
-  sign-in variables pass. Every file and command request it sends agentflow goes
+  sign-in variables pass. Its `PATH` drops every entry inside a worktree of its own
+  repository or of any repository the console serves. Every file and command request it sends agentflow goes
   through the never-list, the worktree boundary, your rules and your policy, and is
-  denied when nothing allows it. Only a person allows a request: `agentflow_ai_respond`
+  denied when nothing allows it. Only a person allows a request, and an allow is bound
+  to the request as the person saw it (its fingerprint): `agentflow_ai_respond`
   can only reject, `ai respond --allow` refuses agents and non-terminals, and the
   pre-bash hook blocks agents from running it in every mode. The MCP server agentflow
   passes to a harness (`agentflow mcp --session ID`) has only read-only tools, and its

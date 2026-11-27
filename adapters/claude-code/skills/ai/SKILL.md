@@ -50,8 +50,8 @@ background and asks the user for every write and command.
 
 When `ai run` refuses, report the code and its fix and stop: `nested`,
 `agent_start_off`, `repo_disabled`, `primary_checkout` (give the user
-`agentflow start <task> --worktree`), `not_ready`, `plugin_launch`, or a
-`limit_*` code. Do not change a setting to get around a refusal.
+`agentflow start <task> --worktree`), `not_ready`, `plugin_launch`,
+`unsafe_environment`, `home_unsafe`, or a `limit_*` code. Do not change a setting to get around a refusal.
 
 `agentflow_ai_status` (`session`, `since`) lists the sessions, or one session's
 transcript from a sequence number. Use `since` with the returned `next_seq` to
@@ -64,7 +64,10 @@ tell the user to answer in the console's AI panel, or to run
 command yourself: agentflow refuses it from an agent and the pre-bash hook
 blocks it.
 
-`agentflow_ai_cancel` (`session`) stops a session; it asks for confirmation.
+`agentflow_ai_cancel` (`session`) stops a session. It follows the user's
+autonomy policy, so it may return `needs_confirmation` first: show the summary
+and apply the token only after the user says yes. The user can also stop a
+session at once with **Cancel session** in the console's AI panel.
 
 The CLI forms are:
 

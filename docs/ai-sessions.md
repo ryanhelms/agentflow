@@ -98,19 +98,49 @@ allows the request, it is denied.
 - Anything outside the worktree, in `.git` or in a nested repository is denied.
 - A command that names the agentflow home, the console registry or the session
   store is denied, whatever your rules say.
+- The session `PATH`, for the harness and its commands, keeps only entries
+  outside every worktree of the session's repository and of every repository the
+  console serves, so a repository cannot put a program in front of `go` or `npm`.
+  When agentflow cannot read which repositories the console serves, it does not
+  start the session (`unsafe_environment`).
 
 A request waits up to 5 minutes (`ai.sessions.ask_timeout`) and is then denied.
 `ai status` lists the waiting requests, each with its `ai respond` command.
+
+### What a write request shows
+
+A write request shows the change: the path, the file's current text and the new
+text. **Allow once** is offered only when you can see the whole change:
+
+- The request holds at most 256 KiB of each side. A larger or binary change
+  shows only **Reject** (`preview_too_large`).
+- The console's AI panel offers **Allow once** only up to 70,000 characters or
+  4,000 lines a side. Allow a longer change from your terminal with
+  `ai respond --allow`, which prints it in full.
+- If the file changes after you saw the request, the write is denied
+  (`changed`).
+
+The change is kept only in the request's own file (readable only by you). It is
+not redacted, so you judge the real content, and it is deleted when the request
+is answered, expires or the session ends. It never reaches the transcript, an
+event, a log or the audit.
+
+Every allow names the request as you saw it (its fingerprint). An allow for a
+request that changed since is refused.
 
 ### Who may answer
 
 | Who | Allow once | Reject | Cancel |
 | --- | --- | --- | --- |
-| You, in the console's AI panel | yes | yes | yes |
+| You, in the console's AI panel | yes | yes | yes, at once |
 | You, at the terminal running `ai run` | yes | yes | yes (Ctrl-C) |
 | You, `ai respond --allow` in your own terminal | yes | yes | `ai cancel` |
 | An AI agent: `agentflow_ai_respond`, or `ai respond` inside an agent | **no** | yes | yes |
 | The session itself | no | no | no |
+
+**Cancel session** in the console stops the session at once: your click is the
+confirmation. `ai cancel` and `agentflow_ai_cancel` follow your autonomy policy,
+so they may ask first.
 
 `ai respond --allow` shows the whole request and asks y/N. It refuses inside an
 AI agent and without a terminal, and it ignores `--yes`. The pre-bash hook blocks
@@ -143,6 +173,9 @@ write, start a session or answer a request.
 | Idle time | 10 minutes (1 minute to 1 hour) | `ai.sessions.idle_timeout` |
 | Time to answer a request | 5 minutes (30 seconds to 30 minutes) | `ai.sessions.ask_timeout` |
 | Requests waiting | 4 per session | |
+| Requests | 30 a minute per session | |
+| Terminals | 4 at once, 64 per session | |
+| What the harness sends as messages and updates | 64 MiB; past it the session ends `limit_output` | |
 
 The harness may report a cost. Agentflow shows it as reported by the harness and
 does not enforce it; the time limits bound what a session can spend.
