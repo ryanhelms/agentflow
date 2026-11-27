@@ -77,6 +77,32 @@ func TestStepperMinimumsAreAcceptedByTheCode(t *testing.T) {
 		},
 	}
 
+	// Steppers whose maximum the loader checks too (config.ValidateAI).
+	sessionKey := func(key string) func(*testing.T, int) error {
+		return func(t *testing.T, n int) error {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(os.Getenv("AGENTFLOW_HOME"), "config.yml"), []byte("ai:\n  sessions:\n    "+key+": "+strconv.Itoa(n)+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := config.LoadUser()
+			return err
+		}
+	}
+	ranged := map[string]func(*testing.T, int) error{
+		"personal:ai.sessions.max_running": sessionKey("max_running"),
+		"personal:ai.sessions.keep_days":   sessionKey("keep_days"),
+	}
+	for key, load := range ranged {
+		checks[key] = func(t *testing.T, min int) {
+			if err := load(t, min); err != nil {
+				t.Errorf("the loader rejects min %d: %v", min, err)
+			}
+			if err := load(t, min-1); err == nil {
+				t.Errorf("min %d is not the smallest value that works: the loader accepts %d", min, min-1)
+			}
+		}
+	}
+
 	seen := map[string]bool{}
 	for _, f := range config.Catalog() {
 		if f.Meta.Widget != config.WidgetStepper {
@@ -100,7 +126,12 @@ func TestStepperMinimumsAreAcceptedByTheCode(t *testing.T) {
 			t.Errorf("%s: step is %d; use 1 unless the code needs more", key, f.Meta.Step)
 		}
 		if f.Meta.Max != nil {
-			t.Errorf("%s: max %d is not checked by the code; a limit the code lacks can reject a value it accepts", key, *f.Meta.Max)
+			load, ok := ranged[key]
+			if !ok {
+				t.Errorf("%s: max %d is not checked by the code; a limit the code lacks can reject a value it accepts", key, *f.Meta.Max)
+			} else if max := *f.Meta.Max; load(t, max) != nil || load(t, max+1) == nil {
+				t.Errorf("%s: max %d is not the largest value the loader accepts", key, max)
+			}
 		}
 		t.Run(key, func(t *testing.T) { check(t, *f.Meta.Min) })
 	}
@@ -139,10 +170,23 @@ func TestDurationLimitsAreTheOnesTheCodeChecks(t *testing.T) {
 			return err
 		}
 	}
+	sessionDuration := func(key string) func(*testing.T, string) error {
+		return func(t *testing.T, value string) error {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("ai:\n  sessions:\n    "+key+": "+value+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := config.LoadUser()
+			return err
+		}
+	}
 	load := map[string]func(*testing.T, string) error{
 		"personal:approval_window": user, "repo:policy.max_approval_window": repo,
 		"personal:ai.harnesses.poll_interval": userKey("poll_interval"),
 		"personal:ai.harnesses.probe_timeout": userKey("probe_timeout"),
+		"personal:ai.sessions.max_duration":   sessionDuration("max_duration"),
+		"personal:ai.sessions.idle_timeout":   sessionDuration("idle_timeout"),
+		"personal:ai.sessions.ask_timeout":    sessionDuration("ask_timeout"),
 	}
 
 	seen := map[string]bool{}

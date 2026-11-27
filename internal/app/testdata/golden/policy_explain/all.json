@@ -22,6 +22,190 @@
     "mandatory": false
   },
   {
+    "action": "ai.cancel",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.cancel",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Cancels an ACP session.",
+    "mandatory": false
+  },
+  {
+    "action": "ai.fetch",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "ai.fetch",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "A session's web fetch always asks a person unless a personal rule allows it.",
+    "mandatory": true
+  },
+  {
+    "action": "ai.fs.read",
+    "rules": [
+      {
+        "class": "read",
+        "action": "ai.fs.read",
+        "level": "auto",
+        "source": "read",
+        "user_class": "",
+        "user_class_default": false,
+        "repo_class": "",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "read"
+    ],
+    "confirmation": "A session reads a file in its worktree.",
+    "mandatory": false
+  },
+  {
+    "action": "ai.fs.write",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.fs.write",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "A session writes a file in its worktree.",
+    "mandatory": false
+  },
+  {
+    "action": "ai.permission",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.permission",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "A session's tool of an unknown kind always asks a person.",
+    "mandatory": true
+  },
+  {
+    "action": "ai.respond",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.respond",
+        "level": "auto",
+        "source": "autonomy.local",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Only a person may allow a session's request.",
+    "mandatory": false
+  },
+  {
+    "action": "ai.run",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.run",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "Starting an ACP session always requires confirmation.",
+    "mandatory": true
+  },
+  {
+    "action": "ai.terminal",
+    "rules": [
+      {
+        "class": "local",
+        "action": "ai.terminal",
+        "level": "confirm",
+        "source": "mandatory confirmation",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "auto",
+        "repo_class_default": true,
+        "force_confirm": true,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "local"
+    ],
+    "confirmation": "A session's command always asks a person unless a personal rule allows the program.",
+    "mandatory": true
+  },
+  {
     "action": "comment",
     "rules": [
       {
