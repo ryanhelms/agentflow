@@ -1,5 +1,7 @@
 # Plan: event-driven, pluggable agentflow with ACP-driven AI, in 12 phases
 
+> **Changed on 2026-11-27:** CI promotes each `develop-pN` tag, so phase 11 no longer stops for `agentflow promote`. The run now ends by making the repository public. The current goal is [goal.md](goal.md); it replaces the goal statement and stop line below.
+
 ## Context
 
 agentflow pulls state on demand today:

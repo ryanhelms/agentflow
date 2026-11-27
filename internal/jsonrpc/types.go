@@ -37,6 +37,12 @@ type Limits struct {
 	MaxInFlight  int
 	CallTimeout  time.Duration
 	WriteTimeout time.Duration
+	// OrderedResponses, when set, makes the reader hand a response to its
+	// Call only after every notification read before it has been handled
+	// (phase 7, lane 7.1: acp.SessionLimits sets it, so a returned
+	// session/prompt means the turn's session/update notifications are all
+	// handled). False keeps the old behaviour.
+	OrderedResponses bool
 }
 
 // ID is a request ID: a JSON number or string, kept as its raw JSON so it
@@ -191,7 +197,12 @@ type LaunchSpec struct {
 	// The harness sign-in status profile sets it, since its HOME is the
 	// person's real home.
 	DataDir string
-	Args    []string
+	// AllowDir, when set, is an absolute existing directory that Dir may
+	// also be inside (links resolved). Empty means the old rule. Only the
+	// ACP session profile sets it (phase 7: the worktree root; lane 7.2
+	// implements the check in launch.go).
+	AllowDir string
+	Args     []string
 	// Env is the complete environment of the child, normally from
 	// ScrubbedEnv. Launch refuses a name that is not allowed by
 	// EnvAllowed or AllowEnv.
