@@ -5,6 +5,19 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.60.0](https://github.com/ryanhelms/agentflow/compare/v0.59.0...v0.60.0) - 2026-11-27
+
+### Features
+
+- add the harness contract, test guard and jsonrpc.Run (#108) ([5c59dbc](https://github.com/ryanhelms/agentflow/commit/5c59dbc41524bfbaa49c2e721e1a511107ae1940))
+- integrate phase 6 harness detection (#118) ([fdf0eca](https://github.com/ryanhelms/agentflow/commit/fdf0eca7c179012ee74979fc86dfbc05967edf98))
+
+### Fixes
+
+- wait for approved plugin writes when the host stops (#99) ([f037424](https://github.com/ryanhelms/agentflow/commit/f037424ee57f22ac83c31b7b4b6f6abad6aa2689))
+- ignore an agentflow home inside a repository (#106) ([ab89596](https://github.com/ryanhelms/agentflow/commit/ab8959652545c491d3e6bb4f652f070d03045fab))
+- refuse versioned launchers and show plugin probe commands (#126) ([b4389ac](https://github.com/ryanhelms/agentflow/commit/b4389accd8d85dae92a06079a265d223c20ee3b5))
+
 ## [0.59.0](https://github.com/ryanhelms/agentflow/compare/v0.58.0...v0.59.0) - 2026-11-27
 
 ### Features
