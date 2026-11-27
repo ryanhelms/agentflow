@@ -331,6 +331,10 @@ arrives. A held write does not run either when, before it would, the plugin was
 turned off, replaced by another version, or lost the command from
 `permissions.invoke`.
 
+An approved write that has started is not cut off when the console stops, or when
+the plugin crashes or is turned off. A stopping console waits up to 10 seconds for
+it, then cancels it.
+
 Every command a plugin runs appears on the timeline like your own, with the client
 `plugin:<id>`.
 
@@ -482,6 +486,7 @@ complete small program.
 | One event delivery | 10 seconds, one at a time |
 | Ping | every 30 seconds; 2 missed marks the plugin `degraded`, 4 restart it |
 | Shutdown | 2 seconds, then the program is killed |
+| A write still running when the console stops | 10 seconds, then cancelled |
 | Restarts | the 5th within 10 minutes marks the plugin `failed` |
 | Installed plugins | 32 |
 | Log file | `data/plugin.log`, 1 MiB, one older file kept |

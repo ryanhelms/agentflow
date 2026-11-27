@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 )
@@ -17,6 +18,9 @@ func OpenDeadLetterForTest(path string) bus.DeadLetter { return openDeadLetter(p
 // ApprovalEventForTest hands e to the host's approval watcher, as its
 // subscription would.
 func (h *Host) ApprovalEventForTest(ctx context.Context, e bus.Event) { h.approvalEvent(ctx, e) }
+
+// SetDrainTimeoutForTest shortens how long Stop waits for calls in flight.
+func (h *Host) SetDrainTimeoutForTest(d time.Duration) { h.o.DrainTimeout = d }
 
 // InodeForTest is the inode of st, to count rewrites.
 func InodeForTest(st os.FileInfo) uint64 { return st.Sys().(*syscall.Stat_t).Ino }

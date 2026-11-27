@@ -37,6 +37,8 @@ type fixture struct {
 	home    string
 	gateDir string
 	ran     chan fakeIn
+	// hold, when set, is where notify's Run waits after it reports on ran.
+	hold func(context.Context) error
 
 	mu        sync.Mutex
 	commands  map[string]command.Command // more commands than notify
@@ -54,7 +56,7 @@ type fakeIn struct {
 }
 
 // fakeNotify gates like a write through the Invoker.
-func fakeNotify(ran chan fakeIn) command.Spec[fakeIn, map[string]string] {
+func fakeNotify(ran chan fakeIn, hold func(context.Context) error) command.Spec[fakeIn, map[string]string] {
 	return command.Spec[fakeIn, map[string]string]{
 		Name: "notify", Policy: command.Policy{Class: policy.Remote, Action: "notify", Gate: command.GateByInvoker, AuditByInvoker: true},
 		Token:    func(in *fakeIn) *string { return &in.ConfirmToken },
@@ -62,8 +64,11 @@ func fakeNotify(ran chan fakeIn) command.Spec[fakeIn, map[string]string] {
 		Plan: func(_ context.Context, _ *app.App, in fakeIn) (command.Plan, error) {
 			return command.Plan{Summary: map[string]string{"signal": in.Signal}}, nil
 		},
-		Run: func(_ context.Context, _ *app.App, in fakeIn) (any, error) {
+		Run: func(ctx context.Context, _ *app.App, in fakeIn) (any, error) {
 			ran <- in
+			if err := hold(ctx); err != nil {
+				return nil, err
+			}
 			return map[string]string{"sent": in.Signal}, nil
 		},
 	}
@@ -104,7 +109,12 @@ func newFixture(t *testing.T, child func() *plugintest.Child) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	notify := fakeNotify(f.ran)
+	notify := fakeNotify(f.ran, func(ctx context.Context) error {
+		if f.hold == nil {
+			return nil
+		}
+		return f.hold(ctx)
+	})
 	f.h = plugin.NewHost(plugin.Options{
 		Source: f.src, Layers: f.layers, Bus: f.bus, Home: f.home,
 		Served: func() []plugin.Worktree {

@@ -1724,6 +1724,7 @@ A plugin can never confirm its own operation: it never holds a token, it cannot 
 - **No bearer.** `ApprovePluginRequest` is the one path that answers a record without its bearer token. The person at the terminal holds the per-user secret the token derives from, so the token would add nothing; the person-only checks are what keep it a person's act.
 - **The resume.** The host keeps each held call in memory (plugin, command, exact input, cause, target; at most 256). It subscribes itself to `approval.resolved` and `approval.expired` for every repository; plugins still never receive `approval.*`. On each event naming a held call it reads the record through the plugin's own gate: `approved` claims the call and resumes it once with the approval ID, `pending` keeps it, anything else (cancelled, expired, consumed) drops it. A call is claimed before it runs, so a repeated event cannot run it twice, and the gate consumes the approval in any case. Before it runs a call the host checks the plugin again: still running as the installed version and hash that asked, the command still in `manifest.InvocableCommands` and in its `permissions.invoke`, and the repository not disabling it; otherwise it drops the call. If the plugin resumes the call itself, the first of the two to claim it runs it: a plugin that loses gets `failed` with code `resumed_by_host`, and nothing runs or is published for it (no `op.failed` for a used approval). When the host's approval subscription overflows (256 events), it settles every held call instead of losing the dropped answers.
 - **Limits.** Held calls do not survive a daemon restart: an approval granted after one runs nothing, and the plugin asks again on its next event. The approval window (5 minutes by default) bounds how long a write waits.
+- **Stopping.** `Stop` returns after the host's resumes and the process plugins' `command.invoke` requests have ended. It waits at most 10 s, then cancels the approved writes still running and waits 2 s more. Nothing else cancels an approved write that has started: not the daemon's context ending, nor the plugin's connection closing. So it also runs on, within its 60 s, when only that plugin crashes or is disabled. Once `Stop` has started, no resume starts and a `command.invoke` request is refused with `not_ready`.
 - **The UI.** `ApprovalItem` carries `requested_by` (always present; empty for records written before it existed). The Approvals panel and the Plugins page show `agentflow plugin approve <operation ID>` for items whose value starts with `plugin:`, and no Approve button for them.
 
 ### Phase 5 permission rules
@@ -1776,6 +1777,7 @@ Each installed plugin adds fields to the Settings catalog (phase 4 decision 4: "
 | `event.deliver` | 10 s, one in flight per plugin |
 | Ping | every 30 s, 5 s timeout; 2 missed: `degraded`; 4 missed: restart |
 | `shutdown` | 2 s, then kill (process group on Unix) |
+| Writes in flight when the daemon stops | 10 s, then cancel, then 2 s to record the outcome |
 | Plugin requests in flight | 4 |
 | `command.invoke` | 10 a minute, burst 5; 60 s each |
 | `event.publish` | 60 a minute, burst 20 |

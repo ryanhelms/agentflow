@@ -707,9 +707,10 @@ it goes, for `comment` the ticket and the whole body), then asks. It refuses a
 request that does not store that summary. After you answer `y`, the console runs the
 write once, by itself, and its result appears on the timeline. `--decline` cancels
 it instead. Run it in the repository the plugin acted on, before the request
-expires, while the console that held it is still running. No AI tool adds, removes
-or turns on a plugin. **A program plugin runs as you and is not sandboxed: add
-only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
+expires, while the console that held it is still running. A console you stop waits
+up to 10 seconds for a write that is already running. No AI tool adds, removes or
+turns on a plugin. **A program plugin runs as you and is not sandboxed: add only
+plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
 permissions and how to write your own, and `examples/plugins/` has two samples.
 
 ## Commit convention
