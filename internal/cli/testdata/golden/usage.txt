@@ -78,6 +78,9 @@ Work
   plugin approve OP_ID [--decline] [--json]
                                  approve a write a plugin asked for; the console then runs it once
                                  run it yourself at a terminal: it always asks; --yes is ignored
+  ai harnesses [--probe] [--all] [--id ID]... [--json]
+                                 the ACP harnesses on your PATH, each with its state and fix
+  ai doctor [--probe] [--json]   check harness detection; exits 1 when a check fails
   push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
   pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
   commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow

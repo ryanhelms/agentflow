@@ -6,8 +6,8 @@
 # adapters/claude-code and checks: the MCP server connects with all tools, the skills
 # load, the SessionStart hook injects ticket context, /agentflow:commit makes a
 # convention commit through the confirmation flow, the PreToolUse hook blocks the
-# never-list commands, a new nscaledev repo is set up automatically, and
-# /agentflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
+# never-list commands, the harness tools report without starting any harness, a new
+# nscaledev repo is set up automatically, and /agentflow:remove undoes it. Needs: go, git, jq, a logged-in `claude` CLI and `gh auth`
 # (for the remote flow map). Nothing touches your real repos, caches or Claude config,
 # apart from the Claude account usage of the runs.
 #
@@ -52,6 +52,10 @@ printf '[init]\n\tdefaultBranch = main\n' >"$tmp/gitconfig"
 export GIT_CONFIG_GLOBAL="$tmp/gitconfig" GIT_CONFIG_NOSYSTEM=1
 unset AGENTFLOW_SESSION_REPO AGENTFLOW_ALLOW_PRIMARY
 mkdir -p "$XDG_CACHE_HOME/agentflow/dev" "$AGENTFLOW_HOME"
+# Harness probes and sign-in checks are on by default, and `claude` itself is on
+# PATH as a harness's base CLI: turn both off before anything starts, so no run
+# starts a harness or a sign-in command.
+printf 'ai:\n  harnesses:\n    auto_probe: false\n    sign_in_check: false\n' >"$AGENTFLOW_HOME/config.yml"
 (cd "$root" && go build -o "$XDG_CACHE_HOME/agentflow/dev/agentflow" ./cmd/agentflow)
 ln -sfn dev "$XDG_CACHE_HOME/agentflow/current"
 # Keep incidental CLI calls in the test on the fixture binary even if the
@@ -107,6 +111,7 @@ run_claude "$tmp/1.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_ag
 init=$(jq -c 'select(.type=="system" and .subtype=="init")' "$tmp/1.jsonl")
 check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:agentflow:agentflow" and .status=="connected")' <<<"$init"
 check "25 agentflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_agentflow_agentflow__"))] | length >= 25' <<<"$init"
+check "harness tools listed" jq -e '[.tools[] | select(test("__agentflow_ai_(harnesses|doctor)$"))] | length == 2' <<<"$init"
 check "21 skills" jq -e '[.slash_commands[] | select(startswith("agentflow:"))] | length >= 21' <<<"$init"
 check "manager skill available" jq -e '.slash_commands | index("agentflow:manager") != null' <<<"$init"
 check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("agentflow · PLAT-123") and contains("Fixture GPU quota task"))' "$tmp/1.jsonl"
@@ -129,7 +134,14 @@ check "force-push blocked" grep -q "force-push is never allowed" <<<"$results"
 check "gh pr merge blocked" grep -q "merging PRs is a human decision" <<<"$results"
 check "nothing new committed" test "$(git log -1 --format=%s)" = "$subject"
 
-echo "4. automatic init and /agentflow:remove"
+echo "4. harness detection, without a probe"
+run_claude "$tmp/harnesses.jsonl" "Call the agentflow_ai_harnesses tool and then the agentflow_ai_doctor tool, each with no arguments at all. Never set probe. Then reply with the word done." "mcp__plugin_agentflow_agentflow"
+calls=$(jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name | test("__agentflow_ai_(harnesses|doctor)$")))' "$tmp/harnesses.jsonl")
+check "both harness tools called" jq -e -s '[.[].name] | unique | length == 2' <<<"$calls"
+check "no probe asked for" jq -e -s 'all(.[]; .input.probe != true)' <<<"$calls"
+check "both returned a report" jq -e -s '[.[] | select(.type=="user") | .message.content[]? | select(.type=="tool_result") | .content | tostring | select(contains("checked_at"))] | length >= 2' "$tmp/harnesses.jsonl"
+
+echo "5. automatic init and /agentflow:remove"
 fresh="$tmp/fresh"
 mkdir -p "$fresh"
 cd "$fresh"
@@ -153,6 +165,22 @@ check "agentflow removed" test ! -e .agentflow
 check "auto init off for this clone" test "$(git config agentflow.autoinit)" = false
 run_claude "$tmp/6.jsonl" "Reply with the word ready." "mcp__plugin_agentflow_agentflow"
 check "not set up again" test ! -e .agentflow
+
+# With both toggles off and no probe asked for, nothing may have run a harness:
+# no probe log, and no probe or sign-in record in the cache.
+no_harness_ran() {
+  local dir="$AGENTFLOW_HOME/harnesses"
+  [ -d "$dir" ] || return 0
+  [ -z "$(find "$dir" -name 'probe.log*')" ] || return 1
+  if [ -f "$dir/cache.json" ]; then
+    # Records have these keys; the daemon's published states do not.
+    if grep -Eq '"(identity|probed_at|checked_at)"' "$dir/cache.json"; then
+      return 1
+    fi
+  fi
+  return 0
+}
+check "no harness or sign-in command ran" no_harness_ran
 
 echo
 echo "$pass passed, $fail failed"
