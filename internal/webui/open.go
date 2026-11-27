@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"testing"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/provider/nativeoauth"
@@ -82,7 +83,10 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 	if err != nil {
 		return startup{}, fmt.Errorf("locate agentflow executable: %w", err)
 	}
-	cmd := exec.Command(exe, "ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port))
+	cmd, err := consoleChild(exe, []string{"ui", "--serve-child", dest.Screen, dest.Role, mode, strconv.Itoa(port)})
+	if err != nil {
+		return startup{}, err
+	}
 	cmd.Dir = dir
 	// Resolve custom relative socket paths in the caller's directory before
 	// the daemon starts in the repository selected by the CLI.
@@ -103,6 +107,17 @@ func prepareConsole(ctx context.Context, dir string, dest Destination, mode stri
 		return startup{}, errors.New("the console reported ready but is not registered")
 	}
 	return startup{Ready: true, URL: address, Reused: ready.Reused}, nil
+}
+
+// consoleChild builds the `agentflow ui --serve-child` command that starts
+// a console daemon. A test binary is not agentflow, so it never runs one:
+// tests replace consoleChild with a child mode of their own that serves
+// from a temporary registry.
+var consoleChild = func(exe string, args []string) (*exec.Cmd, error) {
+	if testing.Testing() {
+		return nil, errors.New("webui: test guard: a test never re-executes its binary as the console; replace consoleChild")
+	}
+	return exec.Command(exe, args...), nil
 }
 
 // ServeChild is the readiness handshake between two copies of agentflow:

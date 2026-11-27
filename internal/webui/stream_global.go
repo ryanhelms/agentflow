@@ -9,9 +9,11 @@ import (
 	"github.com/ryanhelms/agentflow/internal/bus/store"
 )
 
-// globalRegistryDir locates the console registry that holds the global
-// store. It is registryDir, from os/user and never AGENTFLOW_HOME or $HOME;
-// tests point it at a private temporary directory.
+// globalRegistryDir locates the console registry: the daemon's instance,
+// identity and lock files, and the global store. Every caller goes through
+// it. It is registryDir, from os/user and never AGENTFLOW_HOME or $HOME;
+// tests point it at a private temporary directory, so no test reaches the
+// account's real console.
 var globalRegistryDir = registryDir
 
 // globalStoreSuffix follows the daemon prefix in the global store's
