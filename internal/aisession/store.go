@@ -34,6 +34,7 @@ const (
 	harnessPIDFile = "harness.pid"
 	terminalsFile  = "terminals.json"
 	claimFile      = "host.claim"
+	claimTokenFile = "host.token" // SHA-256 of the claim token, hex
 )
 
 // ErrNoSession: no session has this ID.

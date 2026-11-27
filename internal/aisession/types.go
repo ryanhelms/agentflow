@@ -706,6 +706,11 @@ type HostOptions struct {
 	// OnAsk is called when an ask is held, for the foreground terminal to
 	// prompt; the answer goes through Manager.Answer.
 	OnAsk func(AskRecord)
+	// ClaimToken is the secret Start made for this session: only a host
+	// that presents it may claim the record. Start passes it to a detached
+	// host on its standard input; a host in the starting process finds it
+	// without this field. Empty in any other process, which is refused.
+	ClaimToken string
 }
 
 // Manager is the Process Manager every surface uses (lane 7.3's app

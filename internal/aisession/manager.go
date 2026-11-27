@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -342,13 +343,22 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 	if err != nil {
 		return Session{}, err
 	}
+	// The claim token: only the host this starter launches may claim the
+	// record, never another process that runs ai host --session first.
+	token := randomHex(32)
+	sum := sha256.Sum256([]byte(token))
+	if err := writePrivate(st.path(id, claimTokenFile), []byte(hex.EncodeToString(sum[:]))); err != nil {
+		_, _ = st.Update(id, func(s *Session) error { s.State, s.Code = StateEnded, CodeLaunch; return nil })
+		return Session{}, err
+	}
+	claimTokens.Store(id, token)
 	ev := newEvents(m.o, created)
 	ev.started(ctx, created)
 	ev.changed(ctx, created, "")
 	if p.plan.Detached {
 		detach := m.o.Detach
 		if detach == nil {
-			detach = execDetach(st)
+			detach = execDetach(st, token)
 		}
 		if err := detach(ctx, id); err != nil {
 			ended, _ := st.Update(id, func(s *Session) error {
@@ -365,7 +375,7 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 
 // execDetach starts `agentflow ai host --session ID` from this binary, in
 // a new session, with its output on host.log.
-func execDetach(st *fileStore) func(ctx context.Context, id ID) error {
+func execDetach(st *fileStore, token string) func(ctx context.Context, id ID) error {
 	return func(_ context.Context, id ID) error {
 		if testing.Testing() {
 			return errors.New("aisession: test guard: a test never re-executes its binary; set Options.Detach")
@@ -382,18 +392,63 @@ func execDetach(st *fileStore) func(ctx context.Context, id ID) error {
 			return err
 		}
 		defer log.Close()
-		devnull, err := os.Open(os.DevNull)
+		// The claim token goes to the host on its standard input, never in
+		// its arguments or environment.
+		in, out, err := os.Pipe()
 		if err != nil {
 			return err
 		}
-		defer devnull.Close()
-		cmd := &exec.Cmd{Path: exe, Args: []string{exe, "ai", "host", "--session", string(id)}, Env: os.Environ(), Stdin: devnull, Stdout: log, Stderr: log}
+		defer out.Close()
+		cmd := &exec.Cmd{Path: exe, Args: []string{exe, "ai", "host", "--session", string(id)}, Env: os.Environ(), Stdin: in, Stdout: log, Stderr: log}
 		detachAttr(cmd)
-		if err := cmd.Start(); err != nil {
+		err = cmd.Start()
+		_ = in.Close()
+		if err != nil {
+			return err
+		}
+		if _, err := out.Write([]byte(token + "\n")); err != nil {
+			_ = cmd.Process.Kill()
 			return err
 		}
 		return cmd.Process.Release()
 	}
+}
+
+// claimTokens holds the claim token of every session this process
+// started, for a host in the same process (the foreground ai run, the
+// tests' in-process detach).
+var claimTokens sync.Map // ID -> string
+
+// ReadClaimToken reads a detached host's claim token from r (its standard
+// input): one line of at most 128 bytes, within a few seconds.
+func ReadClaimToken(r io.Reader) string {
+	got := make(chan string, 1)
+	go func() {
+		b := make([]byte, 129)
+		n, _ := io.ReadAtLeast(r, b, 65)
+		got <- strings.TrimSpace(string(b[:n]))
+	}()
+	select {
+	case t := <-got:
+		return t
+	case <-time.After(5 * time.Second):
+		return ""
+	}
+}
+
+// validClaim reports whether token is session id's claim token.
+func (s *fileStore) validClaim(id ID, token string) bool {
+	if token == "" {
+		if t, ok := claimTokens.Load(id); ok {
+			token, _ = t.(string)
+		}
+	}
+	want, err := os.ReadFile(s.path(id, claimTokenFile))
+	if err != nil || token == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(token))
+	return hmac.Equal([]byte(hex.EncodeToString(sum[:])), want)
 }
 
 // repoIDOf reads the repository's bus repository ID from its event store

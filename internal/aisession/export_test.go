@@ -39,3 +39,15 @@ func SetToolCapsForTest(tb testing.TB, calls int, diffBytes int64) {
 	maxToolCalls, maxDiffBytes = calls, diffBytes
 	tb.Cleanup(func() { maxToolCalls, maxDiffBytes = oc, od })
 }
+
+// HideClaimForTest makes this process forget session id's claim token, as
+// another process would not know it, and returns the function that puts
+// it back.
+func HideClaimForTest(id ID) func() {
+	t, ok := claimTokens.LoadAndDelete(id)
+	return func() {
+		if ok {
+			claimTokens.Store(id, t)
+		}
+	}
+}

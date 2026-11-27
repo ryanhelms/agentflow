@@ -101,6 +101,11 @@ func newHost(m *manager, st *fileStore, id ID, o HostOptions) (*host, error) {
 	if sess.State != StateStarting {
 		return nil, refuse(RefuseNested, "The session is not waiting for a host.", "")
 	}
+	// Only the host its starter launched may claim it.
+	if !st.validClaim(id, o.ClaimToken) {
+		return nil, refuse(RefuseNested, "Only the host agentflow started for this session may run it.", "")
+	}
+	claimTokens.Delete(id)
 	// Claim it: the first host wins.
 	f, err := os.OpenFile(st.path(id, claimFile), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {

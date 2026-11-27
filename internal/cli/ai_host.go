@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"regexp"
 
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -18,7 +19,8 @@ import (
 // host"): the detached host that `ai run --detach` and agent starts launch.
 // It is not a registered operation and not in the usage text. It claims the
 // session's record and runs it until it ends; the Manager refuses unless the
-// record is starting and unclaimed.
+// record is starting and unclaimed and the host presents the session's
+// claim token, which only the starter has.
 
 var hostSessionRe = regexp.MustCompile(`^ais_[0-9a-f]{32}$`)
 
@@ -31,11 +33,14 @@ func runAIHost(ctx context.Context, args []string) error {
 	if fs.NArg() != 0 || !hostSessionRe.MatchString(*id) {
 		return errors.New("usage: agentflow ai host --session ID (started by agentflow ai run; not for direct use)")
 	}
+	// The starter writes the session's claim token to standard input; a
+	// host without it is refused, so no other process can claim the record.
+	token := aisession.ReadClaimToken(os.Stdin)
 	a, err := openHostApp(ctx, aisession.ID(*id))
 	if err != nil {
 		return err
 	}
-	_, err = a.AIHost(ctx, ops.AISessionOptions(a), aisession.ID(*id), aisession.HostOptions{Mode: aisession.HostDetached})
+	_, err = a.AIHost(ctx, ops.AISessionOptions(a), aisession.ID(*id), aisession.HostOptions{Mode: aisession.HostDetached, ClaimToken: token})
 	return err
 }
 

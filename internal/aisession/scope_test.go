@@ -52,3 +52,38 @@ func TestSessionsAreScopedToTheCallersRepository(t *testing.T) {
 		t.Errorf("session ended %s", got.Code)
 	}
 }
+
+// Only the host agentflow started may claim a starting session: another
+// process that runs ai host --session first (an agent; here a second
+// Manager that does not know the claim token) is refused, and the real
+// host still runs it.
+func TestOnlyTheStartersHostClaimsTheSession(t *testing.T) {
+	var intruded []error
+	r := newRigWith(t, aisessiontest.Script{}, aisessiontest.Settings{}, func(o *aisession.Options) {
+		real := o.Detach
+		home := o.Home
+		o.Detach = func(ctx context.Context, id aisession.ID) error {
+			restore := aisession.HideClaimForTest(id)
+			intruder := aisession.NewManager(aisession.Options{Home: home, Version: "test"})
+			for _, token := range []string{"", "0000000000000000000000000000000000000000000000000000000000000000"} {
+				_, err := intruder.Host(ctx, id, aisession.HostOptions{Mode: aisession.HostDetached, ClaimToken: token})
+				intruded = append(intruded, err)
+			}
+			restore()
+			return real(ctx, id)
+		}
+	})
+	ctx := person(context.Background())
+	s := r.start(t, ctx, "x")
+	if got := r.d.Wait(t, s.ID, 60*time.Second); got.Code != aisession.CodeEndTurn {
+		t.Errorf("session ended %s", got.Code)
+	}
+	if len(intruded) != 2 {
+		t.Fatalf("intruder ran %d times", len(intruded))
+	}
+	for _, err := range intruded {
+		if refusal(t, err) != aisession.RefuseNested {
+			t.Errorf("an intruding host was not refused: %v", err)
+		}
+	}
+}
