@@ -268,8 +268,8 @@ func (v *validator) status(d Definition) {
 		}
 	}
 	switch {
-	case v.layer == LayerPersonal && d.StatusSource != "":
-		v.fail("status_source", CodeRule, "is only for agentflow's overlay")
+	case d.StatusSource != "" && !oneLine(d.StatusSource, MaxStatusSourceLen):
+		v.fail("status_source", CodeStatus, "must be one line of at most 512 bytes")
 	case v.layer == LayerAgentflow && d.StatusFrom != "" && strings.TrimSpace(d.StatusSource) == "":
 		v.fail("status_source", CodeStatus, "an overlay sign-in check must cite its source")
 	}
@@ -291,6 +291,38 @@ func (v *validator) envNames(field string, names []string) {
 			return
 		}
 	}
+}
+
+// CleanText makes untrusted display text safe to show: line breaks and tabs
+// become spaces, other control and bidirectional formatting characters and
+// invalid UTF-8 are removed, runs of spaces are joined, the ends are trimmed,
+// and the result is cut to at most max bytes at a character boundary.
+func CleanText(s string, max int) string {
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToValidUTF8(s, "") {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || r == '\u2028' || r == '\u2029' || unicode.IsSpace(r):
+			space = b.Len() > 0
+			continue
+		case unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) || unicode.Is(unicode.Cf, r):
+			continue
+		}
+		if space {
+			b.WriteByte(' ')
+			space = false
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if len(out) > max {
+		cut := max
+		for cut > 0 && !utf8.RuneStart(out[cut]) {
+			cut--
+		}
+		out = strings.TrimSpace(out[:cut])
+	}
+	return out
 }
 
 // oneLine reports whether s is valid UTF-8 of at most max bytes with no

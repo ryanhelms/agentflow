@@ -97,12 +97,13 @@ const (
 
 // Limits of the definition rules.
 const (
-	MaxIDLen          = 64
-	MaxNameLen        = 64
-	MaxCommandLen     = 64
-	MaxArgs           = 16
-	MaxArgLen         = 128
-	MaxSignedOutLine  = 128
-	MaxEnvNameLen     = 64
-	MaxStatusExitCode = 255
+	MaxIDLen           = 64
+	MaxNameLen         = 64
+	MaxCommandLen      = 64
+	MaxArgs            = 16
+	MaxArgLen          = 128
+	MaxSignedOutLine   = 128
+	MaxEnvNameLen      = 64
+	MaxStatusExitCode  = 255
+	MaxStatusSourceLen = 512
 )

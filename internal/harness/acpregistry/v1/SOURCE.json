@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/agentclientprotocol/registry",
+  "commit": "4273056f03b93f8ce41e9276256ea47b057b794c",
+  "committed_at": "2026-11-26T23:54:34Z",
+  "agents": 46,
+  "spec": {
+    "repository": "https://github.com/agentclientprotocol/agent-client-protocol",
+    "tag": "schema-v1.35.0",
+    "commit": "065b57951b6b2a91ac5eddd249e145d1f6d54545"
+  }
+}

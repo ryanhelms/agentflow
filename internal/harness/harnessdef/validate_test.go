@@ -106,7 +106,7 @@ func TestValidateRefuses(t *testing.T) {
 		{"config credential suffix", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_API_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config named credential", "x", harnessdef.Definition{CredentialEnv: []string{"CODEX_SECRET"}, ConfigEnv: []string{"CODEX_SECRET"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config agentflow", "x", harnessdef.Definition{ConfigEnv: []string{"AGENTFLOW_HOME"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
-		{"personal source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "me"}, harnessdef.LayerPersonal, harnessdef.CodeRule},
+		{"two-line source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "a\nb"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"overlay without source", "x", harnessdef.Definition{StatusFrom: "self"}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
 	}
 	for _, c := range cases {
@@ -167,4 +167,26 @@ func make17() []string {
 		out[i] = "a"
 	}
 	return out
+}
+
+func TestCleanText(t *testing.T) {
+	cases := map[string]string{
+		"plain":                   "plain",
+		"  two\nlines\r\n here ":  "two lines here",
+		"bidi\u202e text\u200b":   "bidi text",
+		"bell\x07 and \x00nul":    "bell and nul",
+		"tab\tand\u2028sep":       "tab and sep",
+		string([]byte{0xff, 'a'}): "a",
+	}
+	for in, want := range cases {
+		if got := harnessdef.CleanText(in, 64); got != want {
+			t.Errorf("CleanText(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := harnessdef.CleanText("aé", 2); got != "a" {
+		t.Errorf("cut inside a rune: %q", got)
+	}
+	if got := harnessdef.CleanText(strings.Repeat("x", 300), 256); len(got) != 256 {
+		t.Errorf("len = %d", len(got))
+	}
 }
