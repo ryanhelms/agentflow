@@ -5,6 +5,21 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.59.0](https://github.com/ryanhelms/agentflow/compare/v0.58.0...v0.59.0) - 2026-11-27
+
+### Features
+
+- add shared stdio JSON-RPC and a scrubbed launcher (#83) ([e690f16](https://github.com/ryanhelms/agentflow/commit/e690f16f15bc3b7dbfa199bc9638e7d5defa62c9))
+- add the plugin manifest package and plugin settings (#85) ([4baff6d](https://github.com/ryanhelms/agentflow/commit/4baff6d06de3ba16ebfebfe8fc8d15ee49d71dab))
+- add plugin commands, samples and docs (#86) ([5be29a2](https://github.com/ryanhelms/agentflow/commit/5be29a297b31b4e0fe9266eb36e698106e87c57c))
+- run plugins in the daemon with deny-only permission rules (#90) ([74baa10](https://github.com/ryanhelms/agentflow/commit/74baa10a136d9fe5105cd00291d79bd10425ffaf))
+- show installed plugins and their health live (#84) ([89591f6](https://github.com/ryanhelms/agentflow/commit/89591f6160f6d25ee3234ac283829b5658829eb8))
+- approve a plugin's write and run it once afterwards (#92) ([cdcfa14](https://github.com/ryanhelms/agentflow/commit/cdcfa14cfc760884193ad49956c38da7155ded6b))
+
+### Fixes
+
+- repeat the plugin and command right before approve asks (#96) ([013e2f4](https://github.com/ryanhelms/agentflow/commit/013e2f4cfc7aa3d98bfe95fb3305344ce82cfda7))
+
 ## [0.58.0](https://github.com/ryanhelms/agentflow/compare/v0.57.0...v0.58.0) - 2026-11-26
 
 ### Features
