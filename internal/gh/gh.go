@@ -352,7 +352,7 @@ func (c *Client) Deployments(ctx context.Context, repo string) ([]Deployment, er
 	return deps, nil
 }
 
-// SearchPRs searches pull requests (e.g. "org:nscaledev is:open PLAT-123").
+// SearchPRs searches pull requests (e.g. "org:acme is:open PLAT-123").
 func (c *Client) SearchPRs(ctx context.Context, q string) ([]PR, error) {
 	var out struct {
 		Items []struct {

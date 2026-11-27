@@ -191,20 +191,24 @@ func existingClientEntries(root *os.Root, name string) ([]string, error) {
 		return nil, err
 	}
 	var keys []string
-	for key, value := range adapter {
-		original, exists := doc[key]
-		if !exists {
-			continue
-		}
-		keys = append(keys, key)
-		entries, _ := original.(map[string]any)
-		wanted, _ := value.(map[string]any)
-		for entry := range wanted {
-			if _, exists := entries[entry]; exists {
-				keys = append(keys, key+"/"+entry)
+	// Names an earlier template used are recorded too: here before this
+	// installation means they are not remove's to delete.
+	for _, overlay := range []map[string]any{adapter, legacyOverlay(name)} {
+		for key, value := range overlay {
+			original, exists := doc[key]
+			if !exists {
+				continue
+			}
+			keys = append(keys, key)
+			entries, _ := original.(map[string]any)
+			wanted, _ := value.(map[string]any)
+			for entry := range wanted {
+				if _, exists := entries[entry]; exists {
+					keys = append(keys, key+"/"+entry)
+				}
 			}
 		}
 	}
 	slices.Sort(keys)
-	return keys, nil
+	return slices.Compact(keys), nil
 }

@@ -1,5 +1,5 @@
-/* Local console surfaces use the semantic colors from nscale-tokens.css. */
-.nscale-ui {
+/* Local console surfaces use the semantic colors from agentflow-tokens.css. */
+.agentflow-ui {
   /* Shared aliases for independently loaded console editors. */
   --midnight: var(--brand-midnight);
   --nav-panel: color-mix(in srgb, var(--brand-midnight) 82%, var(--brand-blue));
@@ -238,7 +238,7 @@ dialog::backdrop { background: var(--scrim); }
 }
 
 /* Live updates: stream state, change highlight and stream notes (docs/design/ui/live-stream.md). */
-.nscale-ui { --live-flash: var(--info-bg); --live-mark: var(--accent); }
+.agentflow-ui { --live-flash: var(--info-bg); --live-mark: var(--accent); }
 .checkout { --live-flash: color-mix(in srgb, var(--brand-spearmint) 34%, transparent); --live-mark: var(--brand-spearmint); }
 .stream { display: inline-flex; align-items: center; gap: var(--s-2); }
 .stream-state { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-muted); font: 550 var(--fs-xs)/1.45 var(--font); white-space: nowrap; }

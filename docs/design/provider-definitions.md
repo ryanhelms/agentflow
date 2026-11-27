@@ -18,7 +18,7 @@ higher layer locks the property.
 | Topic | Decision |
 | --- | --- |
 | Driver model | One operation model. Each role operation binds to a driver: `compiled`, `mcp`, `cli`, `http` or `plugin`. An opt-in `agent` fallback is allowed for MCP only. |
-| Sources | The release layer (compiled providers plus nscale YAML definitions, both embedded in the binary), project `.agentflow/providers/`, and user `~/.agentflow/providers/`. |
+| Sources | The release layer (compiled providers plus agentflow's YAML definitions, both embedded in the binary), project `.agentflow/providers/`, and user `~/.agentflow/providers/`. |
 | Precedence | release → project → user. A later layer wins unless the release layer constrains the property, section or operation. |
 | Lock kinds | `lock: true`, `allow: [...]`, `lock: append` and `pattern: ...`. |
 | Contracts | Each definition declares a contract version per role. agentflow supports the current and previous major version of each contract. |
@@ -41,7 +41,7 @@ user     ~/.agentflow/providers/*.yml    binds credentials and local transports
 ```
 
 The release layer combines what were separate built-in and org catalogs. It holds
-the compiled providers, nscale's YAML definitions and every constraint.
+the compiled providers, agentflow's YAML definitions and every constraint.
 Changing it takes a agentflow release.
 
 Merging works one property at a time. Maps merge, and scalars and lists replace.
@@ -53,7 +53,7 @@ constraint:
 | `lock: true` | No later layer may change it. | `site` |
 | `allow: [...]` | Later values must come from this set (each list item, for a list). | Jira `projects` |
 | `lock: append` | Later layers may add list entries but not remove release entries. | required labels, reviewers |
-| `pattern: <regex>` | Later string values must match. | `base_url` restricted to `*.nscale.com` |
+| `pattern: <regex>` | Later string values must match. | `base_url` restricted to `*.example.com` |
 
 Constraints live in a `constraints` block next to `settings`, keyed by the
 settings path (`search.limit`). A separate block keeps a constraint from being

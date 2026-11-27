@@ -1,4 +1,4 @@
-// Package commit implements the Nscale commit convention:
+// Package commit implements the agentflow commit convention:
 //
 //	type(KEY-1[,KEY-2])[!]: imperative summary [#verb ...]
 //

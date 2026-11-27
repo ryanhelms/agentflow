@@ -278,7 +278,7 @@ func providerSchemas() map[string]roleSchema {
 	}
 	tasks["asana"] = func() any { return &AsanaSettings{} }
 	tasks["jira"] = func() any {
-		return &JiraSettings{Site: DefaultSite, Projects: []string{}}
+		return &JiraSettings{Projects: []string{}}
 	}
 	tasks["github-issues"] = func() any {
 		return &GitHubIssuesSettings{
@@ -302,7 +302,7 @@ func providerSchemas() map[string]roleSchema {
 			}
 		},
 	}
-	knowledge["confluence"] = func() any { return &ConfluenceSettings{Site: DefaultSite} }
+	knowledge["confluence"] = func() any { return &ConfluenceSettings{} }
 	knowledge["github-wiki"] = func() any { return &GitHubWikiSettings{} }
 	github := roleSchema{"github", map[string]settingsFactory{"github": githubSettings}}
 	devOpsFixture := roleSchema{"github", map[string]settingsFactory{

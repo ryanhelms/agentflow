@@ -76,7 +76,7 @@ Rules:
   the indicator through `aria-describedby`.
 - With `prefers-reduced-motion: reduce` the marks do not animate and a changed value gets a
   static 1 px outline (`--live-mark`) for the same 2 s. Forced colours use `Highlight`.
-- Light and dark use the same tokens from `nscale-tokens.css`; add no raw colours.
+- Light and dark use the same tokens from `agentflow-tokens.css`; add no raw colours.
 
 ## Empty and error states
 

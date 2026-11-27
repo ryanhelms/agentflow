@@ -298,6 +298,9 @@ func mergeJSON(res *Result, root *os.Root, rel string, src []byte) error {
 				changed = true
 			}
 		}
+		if note := legacyNote(rel, doc); note != "" {
+			res.Notes = append(res.Notes, note)
+		}
 		if !changed {
 			res.Skipped = append(res.Skipped, rel)
 			return nil

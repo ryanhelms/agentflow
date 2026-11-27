@@ -32,7 +32,7 @@ func newRepo(t *testing.T) string {
 		_ = os.WriteFile(filepath.Join(dir, p), []byte(s), 0o644)
 	}
 	run("init", "-q", "-b", "main")
-	run("config", "user.email", "dev@nscale.com")
+	run("config", "user.email", "dev@example.com")
 	run("config", "user.name", "Dev")
 	run("commit", "-q", "--allow-empty", "-m", "chore(PLAT-1): init")
 	run("switch", "-q", "-c", "PLAT-1-quota")

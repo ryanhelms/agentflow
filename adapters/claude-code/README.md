@@ -1,6 +1,6 @@
 # agentflow for Claude Code
 
-A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
+A Claude Code plugin in the `agentflow` marketplace (this repository). It provides:
 
 - MCP server `agentflow` (all `agentflow_*` tools)
 - Skill `agentflow` with the commit, PR, confirmation and untrusted-content rules
@@ -25,9 +25,9 @@ Repos turn it on for everyone in `.claude/settings.json` (written by `agentflow 
 ```json
 {
   "extraKnownMarketplaces": {
-    "nscale": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
+    "agentflow": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
   },
-  "enabledPlugins": { "agentflow@nscale": true },
+  "enabledPlugins": { "agentflow@agentflow": true },
   "includeCoAuthoredBy": false
 }
 ```

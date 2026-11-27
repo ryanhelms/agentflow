@@ -50,7 +50,7 @@ roles, including the legacy Jira and Confluence jobs.
 | Provider | Settings and defaults |
 | --- | --- |
 | Code hosting | `hosts` defaults to an empty hostname-to-forge map. `source_remote` and `target_remote` default to unset, so detection can select Git remotes. |
-| Jira | `site` and `projects` inherit the legacy Jira settings and defaults. |
+| Jira | `site` and `projects` inherit the legacy Jira settings. No site is built in: set one before using Jira. |
 | Asana | `project` is the default project GID. `transitions` maps each project GID to its events and destination section GIDs. Both start unset. |
 | Confluence | `site` inherits the legacy Confluence site, which defaults to the Jira site. Optional `publish_spaces` lists the exact space keys permitted for document publication. |
 | GitHub | An unset `repository` defers to Git remote detection. |
@@ -146,8 +146,8 @@ release catalog is empty. Each layer accepts `.yml` and `.yaml` files, with one 
 document per file and one definition per provider and role in that layer.
 Legacy Jira projects and site seed Jira preferences before the release layer.
 Confluence inherits the legacy Jira site unless its own legacy site is set.
-Inline role settings take precedence over project definition files. The legacy
-login and doctor commands still consult the top-level Jira configuration.
+Inline role settings take precedence over project definition files. `login`,
+`logout` and `doctor` use the resolved Jira site. No site is built in.
 
 ```yaml
 # .agentflow/providers/issues.yml
@@ -174,7 +174,7 @@ version: 1
 providers:
   jira:
     task_management:
-      settings: {site: https://nscale.atlassian.net, projects: [PLAT]}
+      settings: {site: https://acme.atlassian.net, projects: [PLAT]}
       constraints:
         site: {lock: true}                  # no later change
         projects: {allow: [PLAT, INFRA]}    # values from this set only
@@ -183,7 +183,7 @@ providers:
       settings: {labels: [triage]}
       constraints:
         labels: {lock: append}              # may add, never remove
-        repository: {pattern: '^nscaledev/'}
+        repository: {pattern: '^acme/'}
 ```
 
 Constraints apply to merged settings after each layer. Quote literal dots in

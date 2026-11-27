@@ -1,10 +1,8 @@
 /*
- * Nscale Identity System tokens (library v1.1, realigned to brand.nscale.com on 24 Sep 2026).
- * Names mirror the Figma variable collection `nscale`: brand/*, palette/*, semantic/* (Light/Dark),
- * on-dark/*, status/*, space/s-*, radius/*. Values marked PROPOSAL are not in the published
- * library and need the library owner's sign-off (see docs/design-system.md).
+ * agentflow design tokens.
+ * Groups: brand/*, palette/*, semantic/* (Light/Dark), on-dark/*, status/*, space/s-*, radius/*.
  */
-:where(.nscale-ui) {
+:where(.agentflow-ui) {
   /* brand/* — constant across modes */
   --brand-midnight: #040e27;
   --brand-blue: #0f41f3;
@@ -32,7 +30,7 @@
   --mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
   /*
-   * type size — PROPOSAL (the library sets sizes per text style, not as a scale). In rem, so every size follows
+   * type size. In rem, so every size follows
    * the root font size: the reader's browser setting, or a text-size preference. px at the default 16px root.
    * Nothing below 11px; body is 14px.
    */
@@ -48,7 +46,7 @@
   --fs-5xl: 1.75rem;   /* 28 h1 */
   --fs-6xl: 2rem;      /* 32 mono-xl */
 
-  /* motion — PROPOSAL (the library has no motion tokens) */
+  /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --t-fast: 120ms;
@@ -63,12 +61,12 @@
   --row-h: 1.875rem;          /* 30 */
 }
 @media (min-resolution: 2dppx) {
-  :where(.nscale-ui) { --keyline: 0.5px; }
+  :where(.agentflow-ui) { --keyline: 0.5px; }
 }
 
 /* semantic/* — Dark mode (Midnight ground). Default for the console. */
-:where(.nscale-ui),
-.nscale-ui[data-theme='dark'] {
+:where(.agentflow-ui),
+.agentflow-ui[data-theme='dark'] {
   color-scheme: dark;
   --bg: #040e27;
   --surface: #0a1734;
@@ -77,20 +75,20 @@
   --text-muted: #b4bbc7;
   --text-subtle: #878c95;
   --border: #1c2c57;
-  --border-strong: #2a3f7a; /* PROPOSAL: palette/blue-800 for emphasised keylines */
+  --border-strong: #2a3f7a; /* emphasised keylines */
   --accent: #87a0f9;
   --blue-wash: #0c34c2;
   --on-blue: #fdfff8;
   --focus: #00df99;
   --primary-hover: #00df99;
 
-  /* status/* — PROPOSAL hexes (library exposes the variables, not the values, to this build) */
+  /* status/* */
   --ok: #00df99;      --ok-bg: rgba(0, 223, 153, 0.12);
   --warn: #ffb547;    --warn-bg: rgba(255, 181, 71, 0.12);
   --bad: #ff5d6c;     --bad-bg: rgba(255, 93, 108, 0.13);
   --info: #87a0f9;    --info-bg: rgba(135, 160, 249, 0.13);
 
-  /* chart series — PROPOSAL: eight separable marks, periwinkle first. Five hues, then three brand
+  /* chart series: eight separable marks, periwinkle first. Five hues, then three brand
      neutrals split by lightness. None reuses a status colour (--ok / --warn / --bad), so a series
      can sit beside Conflict or Error in one stack and still read as its own thing. */
   --series-1: #87a0f9; --series-2: #f58fd6; --series-3: #2cc8ee; --series-4: #d6e04e;
@@ -102,7 +100,7 @@
 }
 
 /* semantic/* — Light mode (Chalk ground) */
-:where(.nscale-ui[data-theme='light'], [data-theme='light'] .nscale-ui:not([data-theme])) {
+:where(.agentflow-ui[data-theme='light'], [data-theme='light'] .agentflow-ui:not([data-theme])) {
   color-scheme: light;
   --bg: #fdfff8;
   --surface: #ffffff;

@@ -73,8 +73,8 @@ it with your change.
 ### Website
 
 From the repository root, start the launch and documentation website with
-Docker Compose v2.22 or later. The container includes Node, Vite, and the Nscale
-site fonts.
+Docker Compose v2.22 or later. The container includes Node, Vite, and the site
+fonts.
 
 ```sh
 docker compose up --build --wait website
@@ -85,12 +85,12 @@ Open [the local website](http://127.0.0.1:5173). Edit React components and CSS i
 the page for HTML edits. Installer commands live in `website/src/install.js`.
 The release index and searchable summaries live in `website/src/docs-data.js`.
 
-The site uses the Nscale design system's Dashboard and Workbench page
-templates, shared React components, and theme tokens. The published archives
-in `website/vendor/` are pinned in the npm lockfile so local Docker builds
-can install them without GitHub Packages credentials. When updating the
-design system, obtain the published archives, update the file dependencies,
-then regenerate and commit the lockfile. [Nscale design system](https://github.com/nscaledev/design-system)
+The site uses the agentflow design system's Dashboard and Workbench page
+templates, shared React components, and theme tokens. The prebuilt archives in
+`website/vendor/` are pinned in the npm lockfile, so local Docker builds install
+them from this repository. When updating the design system, replace the
+archives, update the file dependencies, then regenerate and commit the
+lockfile.
 
 | Task | Command |
 | --- | --- |

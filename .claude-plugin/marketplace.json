@@ -1,16 +1,16 @@
 {
-  "name": "nscale",
+  "name": "agentflow",
   "owner": {
-    "name": "Nscale Engineering Enablement"
+    "name": "Ryan Helms"
   },
   "metadata": {
-    "description": "Nscale engineering plugins"
+    "description": "Agentflow plugins"
   },
   "plugins": [
     {
       "name": "agentflow",
       "source": "./adapters/claude-code",
-      "description": "Jira-aware commits, ticket context, PRs and Confluence for the Nscale delivery loop",
+      "description": "Jira-aware commits, ticket context, PRs and Confluence for the agentflow delivery loop",
       "category": "development"
     }
   ]

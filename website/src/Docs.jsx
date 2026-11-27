@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Icon, Input, Link, Row, Select, Stack, Text } from "@nscaledev/design-components/atoms";
-import { EmptyState, FormField, ListRow, Panel } from "@nscaledev/design-components/molecules";
-import { PageHeader } from "@nscaledev/design-components/organisms";
-import { WorkbenchTemplate } from "@nscaledev/design-patterns";
+import { Icon, Input, Link, Row, Select, Stack, Text } from "@agentflow/design-components/atoms";
+import { EmptyState, FormField, ListRow, Panel } from "@agentflow/design-components/molecules";
+import { PageHeader } from "@agentflow/design-components/organisms";
+import { WorkbenchTemplate } from "@agentflow/design-patterns";
 import {
   CURRENT_RELEASE,
   RELEASES,

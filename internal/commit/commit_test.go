@@ -85,9 +85,9 @@ func TestBreaking(t *testing.T) {
 }
 
 func TestStripAITrailers(t *testing.T) {
-	in := "feat(PLAT-1): add x\n\nbody\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Jane <jane@nscale.com>\n"
+	in := "feat(PLAT-1): add x\n\nbody\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nCo-authored-by: Jane <jane@example.com>\n"
 	out := StripAITrailers(in)
-	if strings.Contains(out, "anthropic") || !strings.Contains(out, "jane@nscale.com") {
+	if strings.Contains(out, "anthropic") || !strings.Contains(out, "jane@example.com") {
 		t.Errorf("out = %q", out)
 	}
 }

@@ -1,7 +1,7 @@
 {
-  "name": "nscale",
+  "name": "agentflow",
   "interface": {
-    "displayName": "Nscale Engineering"
+    "displayName": "Agentflow"
   },
   "plugins": [
     {

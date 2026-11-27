@@ -1,6 +1,6 @@
 {
   "extraKnownMarketplaces": {
-    "nscale": {
+    "agentflow": {
       "source": {
         "source": "github",
         "repo": "ryanhelms/agentflow"
@@ -8,7 +8,7 @@
     }
   },
   "enabledPlugins": {
-    "agentflow@nscale": true
+    "agentflow@agentflow": true
   },
   "includeCoAuthoredBy": false
 }
