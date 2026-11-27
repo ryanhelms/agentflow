@@ -17,6 +17,22 @@ The Agentflow server reads its repository from its working directory. Open a tru
 
 These manifests provide local stdio services. Claude chat does not run a plugin’s local stdio server. Grok and other configured MCP-only clients can use their existing project adapters as described in the [README](../README.md). The binary release supports macOS and Linux on amd64/arm64, and Windows amd64. Host policies, runtimes and permissions also apply on remote development machines.
 
+### Install the design system plugin
+
+The same marketplace lists a second plugin, `design-system`. It holds one skill, `agentflow-design`, that tells an agent how to build a React interface with the Agentflow design tokens, components and page templates. It carries the three design packages as npm tarballs and has no MCP server, hooks or commands, so it needs no binary and no Node.js on the host. Install it in addition to Agentflow or on its own.
+
+| Client | Install | Verify |
+| --- | --- | --- |
+| Claude Code | After `claude plugin marketplace add ryanhelms/agentflow`, run `claude plugin install design-system@agentflow`. | Open a new session and find the `design-system:agentflow-design` skill. |
+| Claude Desktop, local Code or Cowork | Add the marketplace as above, then add **design-system**. | Check the available skills. |
+| Codex CLI or desktop | After `codex plugin marketplace add ryanhelms/agentflow`, run `codex plugin add design-system@agentflow`. Restart the session. | `codex plugin list --marketplace agentflow` shows both plugins. |
+| Cursor Teams or Enterprise | Import the repository as a team marketplace as above, then install **design-system** in **Customize**. For a local import, choose `plugins/design-system` in a checkout. | Inspect its skill under **Customize**. |
+| VS Code with the Copilot harness | Install from the Agentflow Git repository as above and choose `plugins/design-system` for the plugin. | Inspect **Skills**. |
+
+Gemini CLI installs the repository root as one extension, so it does not offer this plugin separately.
+
+After changing a tarball in `website/vendor/`, run `scripts/build-design-system-plugin.sh`. It copies the tarballs and the skill's reference files into `plugins/design-system` and sets the plugin version to the design components version. `go test ./internal/setup/` fails while the copies are stale.
+
 ### Locate the installed CLI before project setup
 
 The manager is available before the project has a `.agentflow` directory. In a Codex, Cursor, Gemini, or VS Code local session, the skill details identify the installed `skills/manager/SKILL.md` file. The directory containing `skills/` is the plugin root. Set the working directory to the target Git checkout. With that actual root substituted, check the binary on macOS or Linux with `sh "<plugin-root>/templates/repo/.agentflow/bin/agentflow" version`, or on Windows amd64 with PowerShell `& "<plugin-root>\templates\repo\.agentflow\bin\agentflow.ps1" version`. Append the manager’s requested CLI arguments to this same launcher. The Claude Code plugin exposes its own `bin/agentflow` on the session shell’s PATH; its POSIX launcher also works at `<claude-plugin-root>/bin/agentflow`. When the host cannot run local commands, use the [release installers](https://github.com/ryanhelms/agentflow/releases/latest) from a terminal with access to the project.

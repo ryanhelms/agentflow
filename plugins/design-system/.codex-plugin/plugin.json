@@ -1,0 +1,16 @@
+{
+  "name": "design-system",
+  "version": "0.1.1",
+  "description": "Agentflow design system: tokens, React components and page templates, with a skill for building interfaces that use them.",
+  "author": {
+    "name": "Ryan Helms"
+  },
+  "homepage": "https://github.com/ryanhelms/agentflow",
+  "repository": "https://github.com/ryanhelms/agentflow",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agentflow Design System",
+    "shortDescription": "Build interfaces with the Agentflow design system"
+  }
+}
