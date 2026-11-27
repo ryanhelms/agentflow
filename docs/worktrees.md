@@ -82,16 +82,28 @@ directory, or from the branch name. It refuses when:
 - the worktree has uncommitted changes
 - the branch has commits that are on no `origin` branch and not part of the merged PR head
 - the branch is protected or is the default branch
-- the PR is not merged
+- the PR is not merged, or GitHub reports a merged PR without its head commit
+- the local or remote branch has commits that are not in the merged work, such as follow-up
+  work pushed after the merge, or pushed from another machine
 
 The PR counts as merged when `gh pr view <branch> --json state,mergedAt,baseRefName,headRefOid`
-says so. Without a PR, the branch must have advanced past its starting commit and be an
-ancestor of `origin/<default>` after a fetch.
+says so. Both the local branch and `origin/<branch>` must then be the PR's head commit or
+behind it. Without a PR, or when `gh` fails, the local branch must have advanced past its
+starting commit and be an ancestor of `origin/<default>` after a fetch, and so must
+`origin/<branch>`.
 
 Then it runs `git worktree remove`, deletes the local branch, runs `git worktree prune`,
 deletes the remote branch if it still exists, and prints the primary checkout path. Running
 it again reports `already_finished`. The confirmation flow is the same as other agentflow
 writes (`finish` action, remote class).
+
+Finish deletes each branch only while it is still at the commit it checked. When the local
+branch has moved, it stops before removing the worktree. It deletes the local branch with
+`git branch -D`, which refuses a branch that another worktree uses, also while that worktree
+rebases or bisects. It deletes the remote branch with
+`git push --force-with-lease=refs/heads/<branch>:<checked commit> origin :refs/heads/<branch>`,
+so a push made after the check, or since the last fetch when `origin` could not be read, makes
+the delete fail and the branch stays. Run `finish` again to check the new commits.
 
 ## sweep
 
@@ -111,6 +123,9 @@ its own repository ([repo-boundary.md](repo-boundary.md)). Merged worktrees else
 | `orphaned` | the directory is gone | reports; `git worktree prune` clears the entry |
 | `other_repo` | merged, in another repository (`--all-repos`) | reports; finish it from a session there |
 | `detached`, `protected`, `active` | nothing to do | reports |
+
+Sweep uses finish's checks. A merged worktree whose branch holds later commits stays
+`active`, and its detail names the branch that holds them.
 
 It then runs `git worktree prune` and `git remote set-head origin -a`. Sweep never deletes a
 worktree that is not merged.
@@ -142,9 +157,37 @@ local hooks next to `commit-msg` and sets `core.hooksPath=.githooks`:
   `agentflow start <issue> --worktree`. `AGENTFLOW_ALLOW_PRIMARY=1` bypasses it, for example to
   commit the files `agentflow init` wrote. A repository with no commits is allowed.
 
-The Claude Code PreToolUse hook keeps the never-list. With `policy.coordinator_merge: true` it
-allows `gh pr merge` when the PR's base, read with `gh pr view`, is not `main` or `master`. The
-command must be a single `gh pr merge` with no shell chaining. The never-list also holds
+The Claude Code PreToolUse hook keeps the never-list. It treats every spelling of a merge as a
+merge: `gh pr merge` with quoted words, `gh -R OWNER/NAME pr merge`, `gh pr -R OWNER/NAME merge`,
+zsh's `=gh`, a program named through a variable or substitution (`$GH`, `$(which gh)`), a
+merge inside `bash -c`, `$(...)`, `<(...)` or `>(...)`, a write to the `gh api`
+`pulls/N/merge` endpoint, and a `mergePullRequest`, `enablePullRequestAutoMerge` or
+`enqueuePullRequest` mutation. A GET of `pulls/N/merge`, which only asks whether the PR is merged, stays allowed.
+
+With `policy.coordinator_merge: true` it allows a merge when the PR's base, read with
+`gh pr view`, is not `main` or `master`. It looks the PR up in the repository the command
+names with a PR URL, `-R`/`--repo` or `GH_REPO`, and in the folder the command runs in. It
+allows only one plain command, for example:
+
+```bash
+gh pr merge 12 --squash --repo OWNER/NAME
+```
+
+It refuses the merge as a human decision when the command:
+
+- holds `;`, `&`, `|`, `$`, a backquote, a second line outside quotes, a carriage return,
+  a redirection, or a `<(...)` or `>(...)` substitution. A line break inside a quoted
+  `--body` is allowed.
+- is not `gh pr merge` itself, such as `gh -R OWNER/NAME pr merge`, `gh api` or a wrapper
+  like `env` or `sudo`; only `GH_REPO=OWNER/NAME` may come before `gh`
+- uses a flag `gh pr merge` does not have, or groups short flags (`-sR OWNER/NAME`)
+- names more than one PR, or two different repositories, including a PR URL of another
+  repository than `-R` or `GH_REPO`
+
+It does not see a merge through a `gh` alias, a script, a GraphQL query read from a file
+(`-F query=@file`), or another HTTP client such as `curl`.
+
+The never-list also holds
 `agentflow plugin add`, `remove` and `approve` with a plugin source or ID. It does not find
 every form of such a command: see [What the hook catches](plugins.md#what-the-hook-catches).
 `--convention-only` skips the rest of the never-list and checks messages and titles. The

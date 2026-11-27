@@ -56,6 +56,20 @@ func TestRefusesOtherRepository(t *testing.T) {
 		"gh api repos/ryanhelms/agentflow/issues/1/comments -f body=hi",
 		"gh repo create ryanhelms/new-thing --private",
 		"gh repo delete ryanhelms/agentflow --yes",
+		// process substitution runs the command inside
+		"cat <(gh pr close 3 -R ryanhelms/agentflow)",
+		"tee >(gh pr close 3 -R ryanhelms/agentflow) </dev/null",
+		// gh takes the repository from the URL, not from -R or GH_REPO
+		"gh pr merge https://github.com/ryanhelms/agentflow/pull/5 -R ryanhelms/agent-commander",
+		"GH_REPO=ryanhelms/agent-commander gh pr close https://github.com/ryanhelms/agentflow/pull/5",
+		// zsh runs =gh as the gh on PATH
+		"=gh pr close 3 -R ryanhelms/agentflow",
+		// boolean short flags before the URL
+		"gh pr merge -s https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr merge -m https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr merge -r https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr review -a https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr review -c -b ok https://github.com/ryanhelms/agentflow/pull/5",
 		// git into another checkout or worktree
 		"git -C /h/agentflow commit -m 'feat: x'",
 		"git -C ../agentflow push origin feature",
@@ -103,7 +117,13 @@ func TestAllowsHomeAndReads(t *testing.T) {
 		// the home repository and its worktrees
 		"gh pr merge 5",
 		"gh pr merge 5 -R ryanhelms/agent-commander",
+		"gh pr merge -s https://github.com/ryanhelms/agent-commander/pull/5",
+		"gh pr merge -s 5 -R ryanhelms/agent-commander",
+		"gh pr review -r -b 'needs work' https://github.com/ryanhelms/agent-commander/pull/5",
+		"gh issue list -s open -R ryanhelms/agentflow",
+		"gh pr create -a someone -m v1 --title x --body y",
 		"gh pr merge https://github.com/ryanhelms/agent-commander/pull/5",
+		"gh pr merge https://github.com/ryanhelms/agent-commander/pull/5 -R ryanhelms/agent-commander",
 		"gh -R RyanHelms/Agent-Commander issue create --title x",
 		"gh -R agent-commander pr close 2",
 		"git commit -m 'feat: x'",

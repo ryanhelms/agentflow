@@ -8,6 +8,12 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// OpenBrowserEnv is OpenBrowser: ShellExecute starts no program from the
+// environment's search path, so env is not used.
+func OpenBrowserEnv(ctx context.Context, address string, _ []string) error {
+	return OpenBrowser(ctx, address)
+}
+
 func OpenBrowser(ctx context.Context, address string) error {
 	if err := ctx.Err(); err != nil {
 		return err

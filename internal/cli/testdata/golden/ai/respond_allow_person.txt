@@ -1,0 +1,19 @@
+$ agentflow ai respond <session-1> <ask-2> --allow --json
+--- stdin
+y
+--- stdout
+Allow once? [y/N]: {
+  "session": "<session-1>",
+  "ask": "<ask-2>",
+  "decision": "allow",
+  "state": "waiting"
+}
+--- stderr
+Request <ask-2>: fs_write, because: gate
+  path:    src/hello.txt
+  size:    21 bytes
+  change to src/hello.txt (the harness's content, shown as text):
+  ----- old (each line starts with "old| ") -----
+  ----- new (each line starts with "new| ") -----
+  new| hello from the agent
+  ----- end -----

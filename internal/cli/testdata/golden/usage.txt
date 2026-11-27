@@ -82,6 +82,14 @@ Work
   ai harnesses [--probe] [--all] [--id ID]... [--json]
                                  the ACP harnesses on your PATH, each with its state and fix
   ai doctor [--probe] [--json]   check harness detection; exits 1 when a check fails
+  ai run --harness ID [--detach] [--yes] [--json] PROMPT
+                                 run one prompt through a harness in this worktree; always asks first
+  ai status [SESSION] [--follow] [--since SEQ] [--json]
+                                 AI sessions and their waiting requests, or one session's transcript
+  ai respond SESSION ASK (--allow | --reject) [--json]
+                                 answer a request a session waits on; --allow only in your own terminal, it always asks
+  ai cancel SESSION [--yes] [--json]
+                                 stop an AI session; its waiting requests are answered cancelled
   push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
   pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
   commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow

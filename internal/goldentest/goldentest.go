@@ -228,6 +228,11 @@ var (
 	shortRE     = regexp.MustCompile(`("sha": ")[0-9a-f]{7,12}(")`)
 	digestRE    = regexp.MustCompile(`\b[0-9a-f]{64}\b`)
 	objectRE    = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+	// AI sessions (ADR, "Phase 7"): session IDs, ask IDs, and the local
+	// clock time an ask is denied at.
+	sessionRE  = regexp.MustCompile(`\bais_[0-9a-f]{32}\b`)
+	askRE      = regexp.MustCompile(`\bask_[0-9a-f]{16}\b`)
+	deniedAtRE = regexp.MustCompile(`denied at \d\d:\d\d:\d\d`)
 )
 
 // Text normalises s. Path rules run first, longest path first, so a nested
@@ -247,6 +252,9 @@ func (n *Normalizer) Text(s string) string {
 	s = timeRE.ReplaceAllString(s, "<time>")
 	s = clockRE.ReplaceAllString(s, "expires <time>")
 	s = tokenRE.ReplaceAllString(s, "<confirm-token>")
+	s = sessionRE.ReplaceAllStringFunc(s, n.number("session"))
+	s = askRE.ReplaceAllStringFunc(s, n.number("ask"))
+	s = deniedAtRE.ReplaceAllString(s, "denied at <time>")
 	s = operationRE.ReplaceAllString(s, "<operation-id>")
 	s = ownerRE.ReplaceAllString(s, "$1/<owner>")
 	s = shortRE.ReplaceAllString(s, "${1}<short-object>${2}")

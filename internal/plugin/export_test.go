@@ -2,8 +2,6 @@ package plugin
 
 import (
 	"context"
-	"os"
-	"syscall"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -21,6 +19,3 @@ func (h *Host) ApprovalEventForTest(ctx context.Context, e bus.Event) { h.approv
 
 // SetDrainTimeoutForTest shortens how long Stop waits for calls in flight.
 func (h *Host) SetDrainTimeoutForTest(d time.Duration) { h.o.DrainTimeout = d }
-
-// InodeForTest is the inode of st, to count rewrites.
-func InodeForTest(st os.FileInfo) uint64 { return st.Sys().(*syscall.Stat_t).Ino }

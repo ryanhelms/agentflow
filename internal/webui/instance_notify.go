@@ -131,7 +131,7 @@ func (a daemonAcceptor) Accept(ctx context.Context, e bus.Event) (bus.Event, err
 // one predates the socket. It does not check that the daemon is alive: the
 // socket handshake does, and fails against a stale listener.
 func NotifyEndpoint(ctx context.Context) (notifysock.Endpoint, error) {
-	registry, err := registryDir()
+	registry, err := globalRegistryDir()
 	if err != nil {
 		return notifysock.Endpoint{}, fmt.Errorf("%w: %w", notifysock.ErrNoDaemon, err)
 	}

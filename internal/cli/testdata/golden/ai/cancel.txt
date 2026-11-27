@@ -1,0 +1,17 @@
+$ agentflow ai cancel <session-1> --json
+--- stdin
+y
+--- stdout
+{
+  "harness": "demo",
+  "session": "<session-1>",
+  "state": "waiting",
+  "worktree": "<repo>"
+}
+Proceed? [y/N]: {
+  "session": "<session-1>",
+  "state": "waiting"
+}
+--- stderr
+Agentflow ai.cancel: confirm (autonomy.local); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.local sets ai.cancel (local) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it

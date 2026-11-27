@@ -11,7 +11,7 @@ Codex, Grok, Cursor, Copilot or Gemini.
 
 | | |
 | --- | --- |
-| **Status** | Private repository owned by Ryan Helms. It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. The ACP platform program is running: its PRs merge into the `develop` integration branch ([docs/plans/acp-platform/](docs/plans/acp-platform/)). |
+| **Status** | Public repository owned by Ryan Helms (public since 2026-11-27). It moved from `nscaledev/agentflow` to `ryanhelms/agentflow` on 2026-11-25, and issue and PR numbers restarted at #1. Before the move, the Nscale provider pilot and the isolated `nscaledev/mcp-gateway` canary and rollback passed, and Kyle Redelinghuys and Vishal Srini approved the architecture and rollout plan. Agentflow uses a Git-backed OKF knowledge bundle. Repositories that still pin `nscaledev/agentflow` move to this repository with `agentflow pin`. The ACP platform program is running: its PRs merge into the `develop` integration branch ([docs/plans/acp-platform/](docs/plans/acp-platform/)). |
 | **Current release** | <!-- agentflow:version -->`v0.56.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 | **Owner** | Engineering Enablement · maintainer Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): approved architecture and rollout plan |
@@ -462,6 +462,10 @@ Deployments and release lookup also support local JSON fixtures.
 | Approve or decline a write a plugin asked for (you, at a terminal) | `agentflow plugin approve OP_ID [--decline]` | – |
 | List the AI harnesses on this machine, with each one's state and fix | `agentflow ai harnesses [--probe] [--all] [--id ID]` | `agentflow_ai_harnesses` or `/agentflow:ai` |
 | Check why a harness is missing or not ready | `agentflow ai doctor [--probe]` | `agentflow_ai_doctor` or `/agentflow:ai` |
+| Run one prompt through a harness in this worktree (always confirmed first) | `agentflow ai run --harness ID [--detach] PROMPT` | `agentflow_ai_run` or `/agentflow:ai` |
+| Follow AI sessions, or one session's transcript | `agentflow ai status [SESSION] [--follow] [--since SEQ]` | `agentflow_ai_status` or `/agentflow:ai` |
+| Answer a request a session waits on (agents can only reject) | `agentflow ai respond SESSION ASK (--allow \| --reject)` | `agentflow_ai_respond` (reject only) |
+| Stop an AI session | `agentflow ai cancel SESSION` | `agentflow_ai_cancel` or `/agentflow:ai` |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -478,6 +482,15 @@ where you asked. From a terminal, use
 `agentflow ui --screen providers --role task_management`. The command returns
 once the local console has opened. Use `agentflow ui --status` to check the
 daemon or `agentflow ui --stop` to shut it down for all clones.
+Only a person at a terminal sees the console's one-time sign-in link: standard
+input is a terminal and no AI agent or AI session is in the environment. For
+anyone else, `agentflow ui` opens the browser itself and never prints the link,
+and `agentflow ui --no-open` refuses. `agentflow_ui_open` never returns it, and
+the console's startup step `ui --serve-child` never prints it. The browser opener
+gets a fixed environment, so a caller's `BROWSER` or `PATH` cannot receive the
+link. This stops ordinary agent behaviour, not a program running as you that
+deliberately fakes a terminal and removes the agent variables: that program gets
+the link as you would. [Repository console](docs/repository-console.md)
 An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 
@@ -573,6 +586,28 @@ changes no setting: automatic probes, the sign-in check and harness overrides
 are on the Settings page, in the AI harnesses group. `agentflow ui --screen
 harnesses` opens the page.
 [Harnesses page design](docs/design/ui/harnesses.md)
+
+The **AI sessions** page shows this repository's ACP sessions as they run: the
+harness, the state and why a session ended, who started it, its worktree and
+branch. For the session you pick it shows the prompt, the agent's plan, what the
+agent wrote and did (messages, thoughts, tool calls with their files, diffs and
+command output), the commands Agentflow ran for it, usage with the cost the
+harness reported, and the changed files once it ends. When an agent asks for
+permission, a card shows what Agentflow checked, in full: the file and the
+change a write would make, or the command line, the program it starts, the
+folder, every variable the harness sets with its whole value, and why it asks. A
+path that is a link shows where it leads, and a hidden character in a name or a
+command shows as a mark such as `<U+202E>`. The agent's own wording is kept apart and marked as the
+agent's, and a request about one of the harness's own tools says that Agentflow
+cannot check it. You answer with **Reject** or **Allow once**; **Allow once** is
+absent when the request cannot be allowed or the page cannot show all of it. A
+card shows the time left, and a button answers only after it has stood still
+for a moment. **Cancel session** asks once more before it stops a session.
+Everything an agent wrote is shown as plain text: never as HTML or rendered
+Markdown, and no address in it is a link. The page starts no session: it shows
+`agentflow ai run` to copy into a terminal. Every update arrives over the event
+stream.
+[AI sessions page design](docs/design/ui/ai-panel.md)
 
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
@@ -744,7 +779,7 @@ permissions and how to write your own, and `examples/plugins/` has two samples.
 
 A harness is an AI coding agent that speaks the Agent Client Protocol (ACP), or an
 ACP adapter for one. Agentflow finds the ones on your PATH and says what to do
-about each. It never installs one and never starts a session.
+about each. Detection never installs one and never starts a session; `ai run` below starts one only after you confirm.
 
 ```text
 agentflow ai harnesses            # state and fix of each harness found
@@ -766,6 +801,40 @@ show the version command and the command that probe runs. Package runners,
 interpreters and shells are never run, also with a version in the name (`python3.12`).
 [AI harnesses](docs/harnesses.md) explains the states, the checks and the
 overrides.
+
+### Run an AI session
+
+`ai run` runs one prompt through a ready harness, in the task worktree you run it
+from. No flag or tool input chooses another directory or repository, and it
+refuses in the primary checkout: start a task worktree first
+(`agentflow start <task> --worktree`).
+
+```text
+agentflow ai run --harness gemini "Add a greeting"   # asks you to confirm, then streams
+agentflow ai status                                  # sessions and waiting requests
+agentflow ai status SESSION --follow                 # a detached session's transcript
+agentflow ai respond SESSION ASK --allow             # only you, in your own terminal
+agentflow ai cancel SESSION
+```
+
+`ai run` always shows a summary first: the harness, the worktree, the names of the
+environment variables passed, agentflow's read-only MCP tools, the limits, the
+control files that changed, and the prompt. Every file and command request the
+harness sends agentflow is checked: the never-list, the worktree boundary, your
+`ai.permissions.rules`, then your autonomy policy, and denied when nothing allows
+it. Control-file writes and secret-file reads always ask you, also through a link
+or, on macOS and Windows, a non-ASCII spelling; a command that sets its own
+environment variables always asks and shows each value. `ai status`, `ai respond`
+and `ai cancel` see only the sessions of the repository you run them in. When
+`AGENTFLOW_HOME` points somewhere else, your own `~/.agentflow` settings still hold
+and can only make a session stricter. An agent can start a
+session (turn off `ai.sessions.agent_start` to stop that), but its session asks you
+for every write and command, and an agent can only reject a request, never allow
+one. **Cancel session** in the console's AI panel stops a session at once;
+`ai cancel` and `agentflow_ai_cancel` follow your autonomy policy. A session can
+never start a session. The harness's own tools stay outside
+these checks. [AI sessions](docs/ai-sessions.md) explains the checks, the limits and
+what agentflow cannot control.
 
 ## Commit convention
 
@@ -861,7 +930,10 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   hook also blocks agents from running `agentflow plugin add`, `remove` or `approve`, in
   `--convention-only` mode too. With
   `policy.coordinator_merge: true`, an agent may run `gh pr merge` for a PR whose base is not
-  `main` or `master`. `agentflow init` also installs a `pre-push` hook that blocks pushes to
+  `main` or `master`, as one plain command; other spellings of a merge, such as
+  `gh -R OWNER/NAME pr merge`, a second command on another line or `gh api`, are refused.
+  `agentflow finish` and `sweep` keep a branch that holds commits the merged PR did not
+  include. `agentflow init` also installs a `pre-push` hook that blocks pushes to
   `policy.protected_branches` and a `pre-commit` hook that refuses commits in the primary
   checkout. [Task worktrees](docs/worktrees.md)
 - **Repository boundary.** A session changes only the repository it runs in. The pre-bash
@@ -894,6 +966,25 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   every harness, only when you probe it by name (`--id`, or its card's **Probe now**),
   and its arguments must be plain words or flags, never a path, host or URL.
   [AI harnesses](docs/harnesses.md)
+- **AI sessions.** A session runs only in the worktree of the process that starts it,
+  never in the primary checkout. It gets a listed environment without tokens, keys,
+  `SSH_AUTH_SOCK`, proxy or `AGENTFLOW_*` variables; only the harness's own verified
+  sign-in variables pass. Its `PATH` drops every entry inside a worktree of its own
+  repository or of any repository the console serves. Every file and command request it sends agentflow goes
+  through the never-list, the worktree boundary, your rules and your policy, and is
+  denied when nothing allows it; paths are checked as named and as they resolve.
+  Only a person allows a request, and an allow is bound
+  to the request as the person saw it (its fingerprint): `agentflow_ai_respond`
+  can only reject, `ai respond --allow` refuses agents and non-terminals, and the
+  pre-bash hook blocks agents from running it in every mode. These stop ordinary
+  agent behaviour: a program running as you that deliberately fakes a terminal and
+  removes the agent variables can allow its own requests and start sessions as you,
+  and the record will say a person did it. Your account's own settings hold
+  whatever `AGENTFLOW_HOME` a caller sets, and the session limits count both homes. The MCP server agentflow
+  passes to a harness (`agentflow mcp --session ID`) has only read-only tools, and its
+  client can never write. A session cannot start a session. The harness's own tools
+  are not checked: agentflow reports what it ran without asking and lists the changed
+  files. [AI sessions](docs/ai-sessions.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
   provider definitions, approvals and plugins. A repository's environment (direnv, an
@@ -1055,6 +1146,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/plugins.md](docs/plugins.md) | Add, turn on and remove plugins, what a plugin may do, and how to write one |
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/harnesses.md](docs/harnesses.md) | AI harness detection: states, `ai harnesses`, `ai doctor`, what a probe runs and who may ask |
+| [docs/ai-sessions.md](docs/ai-sessions.md) | AI sessions: `ai run`, `status`, `respond` and `cancel`, the request checks, who may answer, limits and what agentflow cannot control |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |

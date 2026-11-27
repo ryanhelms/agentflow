@@ -91,6 +91,8 @@ type Repo struct {
 	Worktree Worktree `yaml:"worktree,omitempty"`
 	// Plugins lets a repository turn installed plugins off for itself.
 	Plugins RepoPlugins `yaml:"plugins,omitempty"`
+	// AI holds the repository's tightening session keys (phase 7).
+	AI RepoAI `yaml:"ai,omitempty"`
 
 	legacyJiraSite, legacyConfluenceSite bool
 }
