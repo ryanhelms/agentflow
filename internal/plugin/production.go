@@ -2,7 +2,9 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
@@ -41,7 +43,16 @@ func builtinInstalled() []manifest.Installed {
 // configuration files on every call.
 type configLayers struct{}
 
+// It never creates the agentflow home: with no home or no config.yml,
+// nothing is enabled.
 func (configLayers) Personal(context.Context) (map[string]PersonalPlugin, error) {
+	home, err := config.HomeDir()
+	if err != nil {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(home, "config.yml")); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	u, err := config.LoadUser()
 	if err != nil {
 		return nil, err
