@@ -59,8 +59,23 @@ func ValidGlob(pattern string) bool {
 	return pattern != ""
 }
 
-// foldCase: macOS and Windows compare paths without case.
-func foldCase() bool { return runtime.GOOS == "darwin" || runtime.GOOS == "windows" }
+// foldCase: macOS and Windows compare paths without case. A variable so a
+// test on Linux can run the folding platforms' rules.
+var foldCase = func() bool { return runtime.GOOS == "darwin" || runtime.GOOS == "windows" }
+
+// nonASCII reports whether a slash path has a component with a rune past
+// ASCII. On macOS and Windows the file system folds characters that
+// strings.ToLower does not (APFS opens id_r\u017fa as id_rsa, .agentflow
+// with the fl ligature as .agentflow), so no glob or list here can tell what
+// such a name opens: only a person may allow it (ReasonUnicodeName).
+func nonASCII(rel string) bool {
+	for i := 0; i < len(rel); i++ {
+		if rel[i] >= 0x80 {
+			return true
+		}
+	}
+	return false
+}
 
 // ControlFiles are the worktree-relative globs whose writes always ask a
 // person (PersonOnly, reason control_file): files that control execution
@@ -139,8 +154,12 @@ func relOf(base, p string) (string, bool) {
 }
 
 // resolve applies checks 1 to 5 of "Phase 7 file access" to an asked path
-// and returns the Path, or a verdict code. Check 6 (os.Root at the moment
-// of use) and 7 (the operation's own checks) are fs.go's.
+// and returns the Path, or a verdict code. Checks 3 to 5 run on the
+// lexical path and again on the resolved one (links followed; for a path
+// that does not exist yet, its nearest existing parent and the rest), so a
+// link inside the worktree that points into a .git folder or a nested
+// repository is refused too. Check 6 (os.Root at the moment of use) and 7
+// (the operation's own checks) are fs.go's.
 func (w worktree) resolve(asked string) (Path, string) {
 	p := Path{Abs: asked}
 	if asked == "" || !filepath.IsAbs(asked) || strings.ContainsRune(asked, 0) {
@@ -148,10 +167,7 @@ func (w worktree) resolve(asked string) (Path, string) {
 	}
 	clean := filepath.Clean(asked)
 	p.Abs = clean
-	rel, ok := relOf(w.real, clean)
-	if !ok {
-		rel, ok = relOf(w.root, clean)
-	}
+	rel, ok := w.lexical(clean)
 	if !ok {
 		return p, VerdictOutsideWorktree
 	}
@@ -160,13 +176,41 @@ func (w worktree) resolve(asked string) (Path, string) {
 		// The root itself is a directory: no fs request names it.
 		return p, VerdictNotRegular
 	}
+	if code := w.checkRel(rel); code != "" {
+		return p, code
+	}
+	if real, err := filepath.EvalSymlinks(filepath.Join(w.real, filepath.FromSlash(rel))); err == nil {
+		p.Real, p.Exists = real, true
+	}
+	resolved, inside := w.resolvedRel(rel)
+	if !inside {
+		return p, VerdictOutsideWorktree
+	}
+	if resolved != rel && resolved != "" {
+		if code := w.checkRel(resolved); code != "" {
+			return p, code
+		}
+	}
+	return p, ""
+}
+
+// lexical is p's worktree-relative slash path as spelled.
+func (w worktree) lexical(p string) (string, bool) {
+	if rel, ok := relOf(w.real, p); ok {
+		return rel, true
+	}
+	return relOf(w.root, p)
+}
+
+// checkRel runs checks 3 to 5 on a worktree-relative slash path.
+func (w worktree) checkRel(rel string) string {
 	segs := strings.Split(rel, "/")
 	for _, s := range segs {
 		if strings.EqualFold(s, ".git") {
-			return p, VerdictGitDir
+			return VerdictGitDir
 		}
 		if runtime.GOOS == "windows" && badWindowsName(s) {
-			return p, VerdictName
+			return VerdictName
 		}
 	}
 	// No directory on the way below the root holds a .git entry.
@@ -174,16 +218,56 @@ func (w worktree) resolve(asked string) (Path, string) {
 	for _, s := range segs[:len(segs)-1] {
 		dir = filepath.Join(dir, s)
 		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
-			return p, VerdictNestedRepository
+			return VerdictNestedRepository
 		}
 	}
-	if real, err := filepath.EvalSymlinks(filepath.Join(w.real, filepath.FromSlash(rel))); err == nil {
-		p.Real, p.Exists = real, true
-		if _, inside := relOf(w.real, real); !inside {
-			return p, VerdictOutsideWorktree
+	return ""
+}
+
+// resolvedRel is where rel leads with every link followed: the resolved
+// path when it exists, else its nearest existing parent resolved plus the
+// rest. inside is false when that leaves the worktree.
+func (w worktree) resolvedRel(rel string) (string, bool) {
+	full := filepath.Join(w.real, filepath.FromSlash(rel))
+	tail := ""
+	for cur := full; ; {
+		if real, err := filepath.EvalSymlinks(cur); err == nil {
+			r, ok := relOf(w.real, filepath.Join(real, tail))
+			return r, ok
 		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", false
+		}
+		tail = filepath.Join(filepath.Base(cur), tail)
+		cur = parent
 	}
-	return p, ""
+}
+
+// forms are the worktree-relative slash paths p may name: as spelled and
+// as resolved now. Every classification (secret, control, rule) uses all
+// of them and the strictest answer wins. outside is true when the
+// resolved form leaves the worktree.
+func (w worktree) forms(p Path) (forms []string, outside bool) {
+	if !filepath.IsAbs(p.Abs) {
+		return nil, true
+	}
+	lex, ok := w.lexical(filepath.Clean(p.Abs))
+	if !ok {
+		return nil, true
+	}
+	forms = []string{lex}
+	if lex == "" {
+		return forms, false
+	}
+	res, inside := w.resolvedRel(lex)
+	if !inside {
+		return forms, true
+	}
+	if res != lex && res != "" {
+		forms = append(forms, res)
+	}
+	return forms, false
 }
 
 var windowsDevices = map[string]bool{"con": true, "prn": true, "aux": true, "nul": true}

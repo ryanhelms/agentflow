@@ -85,7 +85,7 @@ func DefaultChain(c ChainConfig) []PermissionHandler {
 	return []PermissionHandler{
 		&neverLink{c: c, w: w},
 		&boundaryLink{c: c, w: w},
-		&ruleLink{c: c},
+		&ruleLink{c: c, w: w},
 		&gateLink{c: c},
 		defaultLink{},
 	}
@@ -151,17 +151,9 @@ type neverLink struct {
 func (l *neverLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 	switch r.Kind {
 	case KindRead:
-		for _, p := range r.Paths {
-			if IsSecretFile(l.rel(p)) {
-				r.PersonOnly, r.Reason = true, ReasonSecretFile
-			}
-		}
+		l.mark(r, IsSecretFile, ReasonSecretFile)
 	case KindWrite:
-		for _, p := range r.Paths {
-			if IsControlFile(l.rel(p)) {
-				r.PersonOnly, r.Reason = true, ReasonControlFile
-			}
-		}
+		l.mark(r, IsControlFile, ReasonControlFile)
 	case KindTerminal:
 		if v, ok := l.terminal(ctx, r); ok {
 			return v
@@ -169,17 +161,9 @@ func (l *neverLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 	case KindPermission:
 		switch r.ToolKind {
 		case acp.ToolEdit, acp.ToolDelete, acp.ToolMove:
-			for _, p := range r.Paths {
-				if IsControlFile(l.rel(p)) {
-					r.PersonOnly, r.Reason = true, ReasonControlFile
-				}
-			}
+			l.mark(r, IsControlFile, ReasonControlFile)
 		case acp.ToolRead, acp.ToolSearch:
-			for _, p := range r.Paths {
-				if IsSecretFile(l.rel(p)) {
-					r.PersonOnly, r.Reason = true, ReasonSecretFile
-				}
-			}
+			l.mark(r, IsSecretFile, ReasonSecretFile)
 		case acp.ToolExecute:
 			r.PersonOnly, r.Reason = true, ReasonTerminal
 		case acp.ToolThink, acp.ToolFetch:
@@ -192,16 +176,31 @@ func (l *neverLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 	return next(ctx, r)
 }
 
-// rel is p's worktree-relative path, worked out again here: the chain
-// never trusts a field it did not set.
-func (l *neverLink) rel(p Path) string {
-	if rel, ok := relOf(l.w.real, p.Abs); ok {
-		return rel
+// mark makes r person-only when any form of any of its paths (as spelled
+// or as resolved; "Phase 7 file access") is on the list, or, on macOS and
+// Windows, has a non-ASCII component. The chain never trusts a field it
+// did not set, so the forms are worked out again here.
+func (l *neverLink) mark(r *Request, list func(string) bool, reason string) {
+	for _, p := range r.Paths {
+		forms, _ := l.w.forms(p)
+		for _, f := range forms {
+			if list(f) {
+				r.PersonOnly, r.Reason = true, reason
+				return
+			}
+		}
 	}
-	if rel, ok := relOf(l.w.root, p.Abs); ok {
-		return rel
+	if foldCase() {
+		for _, p := range r.Paths {
+			forms, _ := l.w.forms(p)
+			for _, f := range forms {
+				if nonASCII(f) {
+					r.PersonOnly, r.Reason = true, ReasonUnicodeName
+					return
+				}
+			}
+		}
 	}
-	return ""
 }
 
 // ---- 2. repository boundary ----
@@ -257,12 +256,19 @@ func (l *boundaryLink) Decide(ctx context.Context, r *Request, next Next) Verdic
 
 // ---- 3. policy rule ----
 
-type ruleLink struct{ c ChainConfig }
+type ruleLink struct {
+	c ChainConfig
+	w worktree
+}
 
 func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 	st := stateOf(ctx)
-	rels := relPaths(r)
-	// The repository's lists: ask or deny only.
+	paths := pathForms(l.w, r)
+	var rels []string
+	for _, fs := range paths {
+		rels = append(rels, fs...)
+	}
+	// The repository's lists: ask or deny only. Any form of any path.
 	if l.c.Repo != nil {
 		for _, g := range l.c.Repo.AI.Permissions.Deny {
 			if anyMatch(g, rels) {
@@ -283,7 +289,7 @@ func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 		rules := l.c.User.AI.Permissions.Rules
 		for _, name := range slices.Sorted(maps.Keys(rules)) {
 			rule := rules[name]
-			if config.ValidateAIRule(name, rule) != nil || !ruleMatches(rule, r, rels) {
+			if config.ValidateAIRule(name, rule) != nil || !ruleMatches(rule, r, paths) {
 				continue
 			}
 			switch rule.Decision {
@@ -310,15 +316,20 @@ func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 	return next(ctx, r)
 }
 
-func relPaths(r *Request) []string {
-	var out []string
-	for _, p := range r.Paths {
-		if p.Rel != "" {
-			out = append(out, p.Rel)
+// pathForms is, for each path of r (and a terminal's cwd), its forms: as
+// spelled and as resolved. A path outside the worktree has none.
+func pathForms(w worktree, r *Request) [][]string {
+	var out [][]string
+	add := func(p Path) {
+		if forms, outside := w.forms(p); !outside && len(forms) > 0 && forms[0] != "" {
+			out = append(out, forms)
 		}
 	}
-	if r.Command != nil && r.Command.Cwd.Rel != "" {
-		out = append(out, r.Command.Cwd.Rel)
+	for _, p := range r.Paths {
+		add(p)
+	}
+	if r.Command != nil && r.Command.Cwd.Abs != "" {
+		add(r.Command.Cwd)
 	}
 	return out
 }
@@ -332,17 +343,30 @@ func anyMatch(glob string, rels []string) bool {
 	return false
 }
 
-// ruleMatches: fs rules match every path of a read or write (a permission
+// ruleMatches: fs rules match the paths of a read or write (a permission
 // request of the same tool kind included), a terminal rule the resolved
-// program's base name, a tool rule the tool kind.
-func ruleMatches(rule config.AIRule, r *Request, rels []string) bool {
-	all := func() bool {
-		if len(r.Paths) == 0 || len(rels) != len(r.Paths) {
+// program's base name, a tool rule the tool kind. Strictest wins: a deny
+// or ask rule matches when any form of any path matches; an allow rule
+// only when every form of every path does, so a link cannot carry an
+// allow for docs/** onto .github/workflows.
+func ruleMatches(rule config.AIRule, r *Request, paths [][]string) bool {
+	match := func() bool {
+		if len(r.Paths) == 0 || len(paths) != len(r.Paths) {
 			return false
 		}
-		for _, rel := range rels {
-			if !MatchGlob(rule.Match, rel, foldCase()) {
-				return false
+		if rule.Decision != config.AIDecisionAllow {
+			for _, forms := range paths {
+				if anyMatch(rule.Match, forms) {
+					return true
+				}
+			}
+			return false
+		}
+		for _, forms := range paths {
+			for _, f := range forms {
+				if !MatchGlob(rule.Match, f, foldCase()) {
+					return false
+				}
 			}
 		}
 		return true
@@ -350,9 +374,9 @@ func ruleMatches(rule config.AIRule, r *Request, rels []string) bool {
 	_, action := actionOf(r)
 	switch rule.Kind {
 	case config.AIRuleKindFSRead:
-		return action == ActionFSRead && all()
+		return action == ActionFSRead && match()
 	case config.AIRuleKindFSWrite:
-		return action == ActionFSWrite && all()
+		return action == ActionFSWrite && match()
 	case config.AIRuleKindTerminal:
 		if r.Kind != KindTerminal || r.Command == nil {
 			return false

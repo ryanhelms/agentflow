@@ -307,6 +307,13 @@ const (
 	// ReasonPreviewTooLarge: an fs_write whose preview is cut or not text;
 	// no one can allow it.
 	ReasonPreviewTooLarge = "preview_too_large"
+	// ReasonUnicodeName: on macOS and Windows a path below the worktree
+	// has a component with a non-ASCII rune, which the file system may
+	// fold onto another name; only a person may allow it.
+	ReasonUnicodeName = "unicode_name"
+	// ReasonEnv: a terminal request carries the agent's own environment
+	// entries; no rule allows it, a person sees every name and value.
+	ReasonEnv = "env"
 )
 
 // Gate actions and their classes ("Per request kind").
@@ -340,11 +347,15 @@ type AskRecord struct {
 	Title      string                 `json:"title,omitempty"` // the agent's words, sanitized
 	Options    []acp.PermissionOption `json:"options,omitempty"`
 	// Paths are worktree-relative, or "~/..." outside the worktree.
-	Paths    []string `json:"paths,omitempty"`
-	Line     string   `json:"line,omitempty"` // POSIX-quoted command line
-	Cwd      string   `json:"cwd,omitempty"`  // worktree-relative
-	EnvNames []string `json:"env_names,omitempty"`
-	Size     int64    `json:"size,omitempty"`
+	Paths []string `json:"paths,omitempty"`
+	// ResolvedPaths, set when a link moves any of Paths elsewhere in the
+	// worktree, is where each path leads (worktree-relative), in the same
+	// order: the place the operation would reach.
+	ResolvedPaths []string `json:"resolved_paths,omitempty"`
+	Line          string   `json:"line,omitempty"` // POSIX-quoted command line
+	Cwd           string   `json:"cwd,omitempty"`  // worktree-relative
+	EnvNames      []string `json:"env_names,omitempty"`
+	Size          int64    `json:"size,omitempty"`
 	// Diff, for an fs_write ask, is what the write would change: the
 	// current content and the exact bytes that will be written, each at
 	// most MaxPreview. It is not redacted (the person judges the real

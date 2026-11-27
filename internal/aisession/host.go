@@ -674,8 +674,17 @@ func (h *host) ask(ctx context.Context, r *Request) Verdict {
 		Options: r.Options, Size: r.Size, Reason: r.Reason, CanAllow: canAllow(r),
 		CreatedAt: now.UTC(), ExpiresAt: now.Add(h.limits.AskTimeout).UTC(),
 	}
+	moved := false
 	for _, p := range r.Paths {
 		rec.Paths = append(rec.Paths, display(p))
+		res := display(p)
+		if forms, _ := h.w.forms(p); len(forms) > 1 {
+			res, moved = forms[1], true
+		}
+		rec.ResolvedPaths = append(rec.ResolvedPaths, res)
+	}
+	if !moved {
+		rec.ResolvedPaths = nil
 	}
 	if c := r.Command; c != nil {
 		rec.Line, rec.Cwd, rec.EnvNames = c.Line, c.Cwd.Rel, c.EnvNames

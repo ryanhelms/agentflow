@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/ryanhelms/agentflow/internal/acp"
@@ -290,8 +291,14 @@ func (h *host) checkUnasked(ctx context.Context, ts *toolState) {
 		case VerdictOutsideWorktree, VerdictGitDir, VerdictNestedRepository, VerdictRelative, VerdictName:
 			outside = true
 		}
-		if IsControlFile(p.Rel) {
+		forms, out := h.w.forms(p)
+		if out {
 			outside = true
+		}
+		for _, f := range forms {
+			if IsControlFile(f) {
+				outside = true
+			}
 		}
 	}
 	h.record(ctx, Item{Kind: ItemUnasked, ToolCall: ts.ID, Data: dataOf(map[string]any{"kind": kind, "outside": outside})})
@@ -406,6 +413,7 @@ func (h *host) ReadTextFile(ctx context.Context, p acp.ReadTextFileRequest) (acp
 		return acp.ReadTextFileResponse{}, cancelledErr()
 	}
 	pth, _ := h.w.resolve(p.Path)
+	checked, _ := h.w.forms(pth)
 	r := &Request{Session: h.id, Kind: KindRead, Paths: []Path{pth}}
 	v := h.decide(ctx, r)
 	if v.Handler == HandlerCancel || ctx.Err() != nil {
@@ -415,7 +423,15 @@ func (h *host) ReadTextFile(ctx context.Context, p acp.ReadTextFileRequest) (acp
 		h.record(ctx, Item{Kind: ItemFile, Data: dataOf(map[string]any{"op": "read", "path": display(pth), "decision": "deny", "code": v.Code})})
 		return acp.ReadTextFileResponse{}, denied(v.Code)
 	}
-	content, size, err := h.files.read(pth.Rel, p.Line, p.Limit)
+	// Right before the read: the path must still lead where the chain
+	// looked, and the file opened must be the file it classified.
+	if !h.unchanged(p.Path, pth, checked) {
+		v = deny(HandlerBoundary, VerdictChanged)
+		h.audit(r, v, "")
+		h.record(ctx, Item{Kind: ItemFile, Data: dataOf(map[string]any{"op": "read", "path": display(pth), "decision": "deny", "code": v.Code})})
+		return acp.ReadTextFileResponse{}, denied(v.Code)
+	}
+	content, size, err := h.files.readChecked(pth.Rel, pth.Real, p.Line, p.Limit)
 	if err != nil {
 		code := fsCode(err)
 		if code == VerdictNotFound {
@@ -442,6 +458,7 @@ func (h *host) WriteTextFile(ctx context.Context, p acp.WriteTextFileRequest) (a
 		return acp.WriteTextFileResponse{}, denied(VerdictTooLarge)
 	}
 	pth, code := h.w.resolve(p.Path)
+	checked, _ := h.w.forms(pth)
 	r := &Request{Session: h.id, Kind: KindWrite, Paths: []Path{pth}, Size: int64(len(p.Content))}
 	// The preview a person sees, taken before the chain: the current
 	// content and the exact bytes that will be written.
@@ -466,8 +483,18 @@ func (h *host) WriteTextFile(ctx context.Context, p acp.WriteTextFileRequest) (a
 		h.record(ctx, Item{Kind: ItemFile, Data: dataOf(map[string]any{"op": "write", "path": display(pth), "decision": "deny", "code": v.Code})})
 		return acp.WriteTextFileResponse{}, denied(v.Code)
 	}
-	sum, err := h.files.write(pth.Rel, p.Content)
+	// Checked again right before the rename: the path must still lead
+	// where the chain looked.
+	sum, err := h.files.writeChecked(pth.Rel, p.Content, func() error {
+		if !h.unchanged(p.Path, pth, checked) {
+			return &fsError{VerdictChanged}
+		}
+		return nil
+	})
 	if err != nil {
+		if fsCode(err) == VerdictChanged {
+			h.audit(r, deny(HandlerBoundary, VerdictChanged), "")
+		}
 		return acp.WriteTextFileResponse{}, denied(fsCode(err))
 	}
 	h.mu.Lock()
@@ -475,6 +502,18 @@ func (h *host) WriteTextFile(ctx context.Context, p acp.WriteTextFileRequest) (a
 	h.mu.Unlock()
 	h.record(ctx, Item{Kind: ItemFile, Data: dataOf(map[string]any{"op": "write", "path": pth.Rel, "size": len(p.Content), "sha256": sum, "decision": "allow", "code": v.Code})})
 	return acp.WriteTextFileResponse{}, nil
+}
+
+// unchanged reports whether asked still resolves as it did when the chain
+// decided: the boundary passes, the resolved file is the same, and its
+// forms (as spelled and as resolved) are the ones classified.
+func (h *host) unchanged(asked string, before Path, checked []string) bool {
+	now, code := h.w.resolve(asked)
+	if code != "" || now.Real != before.Real {
+		return false
+	}
+	forms, outside := h.w.forms(now)
+	return !outside && slices.Equal(forms, checked)
 }
 
 // ---- terminal/* ----

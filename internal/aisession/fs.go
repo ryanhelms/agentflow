@@ -56,9 +56,12 @@ func rootErr(err error) error {
 	return &fsError{VerdictIO}
 }
 
-// read returns the content of rel: a regular file of at most MaxFileBytes
-// of valid UTF-8, optionally from line (1-based) for limit lines.
-func (f *files) read(rel string, line, limit *uint32) (string, int64, error) {
+// readChecked returns the content of rel: a regular file of at most
+// MaxFileBytes of valid UTF-8, optionally from line (1-based) for limit
+// lines. checked is the resolved path the chain classified ("" when it did
+// not exist): the file opened must be that same file (os.SameFile), so a
+// link swapped between the check and the read is refused (changed).
+func (f *files) readChecked(rel, checked string, line, limit *uint32) (string, int64, error) {
 	name := path.Clean(rel)
 	file, err := f.root.Open(name)
 	if err != nil {
@@ -68,6 +71,12 @@ func (f *files) read(rel string, line, limit *uint32) (string, int64, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return "", 0, rootErr(err)
+	}
+	if checked == "" {
+		return "", 0, &fsError{VerdictChanged}
+	}
+	if want, err := os.Stat(checked); err != nil || !os.SameFile(info, want) {
+		return "", 0, &fsError{VerdictChanged}
 	}
 	if !info.Mode().IsRegular() {
 		return "", 0, &fsError{VerdictNotRegular}
@@ -115,6 +124,13 @@ func lines(s string, line, limit *uint32) string {
 // gets 0644; the content goes to a temporary file in the same directory,
 // then is renamed through the root. It returns the content's SHA-256.
 func (f *files) write(rel, content string) (string, error) {
+	return f.writeChecked(rel, content, nil)
+}
+
+// writeChecked is write with recheck, run right before the rename: a
+// non-nil error from it (the path's classification changed since the chain
+// ran) refuses the write.
+func (f *files) writeChecked(rel, content string, recheck func() error) (string, error) {
 	if len(content) > MaxFileBytes {
 		return "", &fsError{VerdictTooLarge}
 	}
@@ -160,6 +176,9 @@ func (f *files) write(rel, content string) (string, error) {
 		if info, err := f.root.Lstat(name); err == nil && (info.Mode()&os.ModeSymlink != 0 || links(info) > 1) {
 			werr = &fsError{VerdictLink}
 		}
+	}
+	if werr == nil && recheck != nil {
+		werr = recheck()
 	}
 	if werr == nil {
 		werr = f.root.Rename(tmp, name)
