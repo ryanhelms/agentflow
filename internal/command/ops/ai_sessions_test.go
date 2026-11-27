@@ -437,8 +437,12 @@ func TestAISessionOptionsMCPServer(t *testing.T) {
 			t.Fatalf("a binary inside the worktree was passed: %+v", s)
 		}
 	}
-	if o.Home != f.app.Home || o.Version == "" || o.WorktreeID == nil || o.PluginDeny == nil || o.MergeBase == nil || o.Emit == nil {
+	if o.Home != f.app.Home || o.Version == "" || o.WorktreeID == nil || o.PluginDeny == nil || o.MergeBase == nil || o.Emit == nil || o.WorkDirs == nil {
 		t.Fatalf("options %+v", o)
+	}
+	// A test binary reads no console registry (the account's own).
+	if dirs, err := o.WorkDirs(t.Context()); err != nil || len(dirs) != 0 {
+		t.Fatalf("work dirs in a test binary: %v, %v", dirs, err)
 	}
 }
 

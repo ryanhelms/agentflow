@@ -217,6 +217,12 @@ func TestHarnessProbe(t *testing.T) {
 	det.set(testHarness("gemini", harness.StateNative, "/x/gemini"), testHarness("goose", harness.StateNative, "/x/goose"),
 		harness.Harness{ID: "kimi", State: harness.StateNotInstalled}, acme)
 	src := runSource(t, det)
+	// This test binary also registers the real commands (ai_console_test.go
+	// imports internal/command/ops), so "without" is an empty registry.
+	empty := command.NewRegistry()
+	oldCommands := harnessCommands
+	harnessCommands = func() *command.Registry { return empty }
+	t.Cleanup(func() { harnessCommands = oldCommands })
 	if w := harnessRequest(t, s, "/api/harnesses/probe", "{}", nil); w.Code != 503 {
 		t.Errorf("without the ai.harnesses command: %d %s", w.Code, w.Body)
 	}
