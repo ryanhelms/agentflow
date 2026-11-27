@@ -311,11 +311,6 @@ func ValidateAIRule(name string, r AIRule) error {
 	return nil
 }
 
-// AccountHome is the OS account's home from the password database (os/user),
-// never $HOME; OverrideAccountHome replaces it in tests. ACP sessions give
-// the harness this HOME ("Phase 7 session environment").
-func AccountHome() (string, error) { return accountHome() }
-
 // AccountAgentflowHome is the agentflow home of the OS account's own home
 // folder (~/.agentflow, or a legacy ~/.devflow when only that exists),
 // whatever AGENTFLOW_HOME, DEVFLOW_HOME or HOME say.

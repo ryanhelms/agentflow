@@ -51,7 +51,7 @@ var laneWrites = []string{
 var unregisteredWrites = map[string]string{
 	"init":         "writes the repository's files before there is an App to open; not an operation of this lane",
 	"remove":       "undoes init, with no App for the same reason",
-	"pin":          "edits a workflow file through the plain file system; not an operation of this lane",
+	"pin":          "edits the caller workflow, launchers and git hooks through the plain file system; not an operation of this lane",
 	"install":      "configures AI clients outside any repository (ScopeNone)",
 	"login":        "stores a credential outside any repository (ScopeNone)",
 	"logout":       "removes a credential outside any repository (ScopeNone)",

@@ -14,7 +14,8 @@ Setup
   remove [--dry-run] [--force] [--keep-releases]
                                  undo init: delete agentflow's files, strip its entries from
                                  AGENTS.md and client configs, stop automatic init here
-  pin [--check]                  pin .github/workflows/agentflow.yml to this agentflow release
+  pin [--check]                  pin .github/workflows/agentflow.yml to this agentflow release and
+                                 replace unchanged launchers and hooks from older releases
                                  (review the change in a PR, like any dependency bump)
   install [--client all|NAME]    configure AI clients (claude, codex, grok, cursor, vscode, gemini)
   setup [plan|verify] [--companion ID] [--client NAME] [--json]   inspect provider and client readiness
