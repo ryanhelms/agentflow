@@ -92,3 +92,4 @@ Outside the backlog:
 - Phase 6 security re-review findings (versioned interpreters in plugin harnesses; the version command next to Probe), issue #120, are fixed by #126, merged before `develop-p6`.
 - The owner answered the phase 7 open questions on #127; the ADR's "Phase 7 owner decisions" records them (6, 8, 11 and 12 taken as recommended, not owner-confirmed).
 - The test cleanup race in `internal/plugin` that failed the first v0.59.0 release run is fixed by #99.
+- Issue #129 (consumers keep the old launchers): `agentflow pin` also replaces the four launcher and hook files, but only when a file matches the SHA-256 of a stock file shipped from v0.53.0 on or the current template. Changed files, links and linked folders warn; devflow-era hooks are left out so an unmigrated repository is not switched to agentflow. The Claude Code plugin launcher no longer runs a repository's committed `.agentflow/bin/agentflow`.
