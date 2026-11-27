@@ -371,6 +371,9 @@ func (s *Service) apply(ctx context.Context, p *plan, id, undoOf string) (any, e
 // lock takes the personal settings lock, the one agentflow_config_apply
 // holds for personal approval saves. The journal is written under it too.
 func (s *Service) lock() (func(), error) {
+	if err := s.homeErr(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(s.Home, 0o700); err != nil {
 		return nil, errors.New("cannot open the agentflow settings directory")
 	}

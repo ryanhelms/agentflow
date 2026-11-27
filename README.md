@@ -591,7 +591,10 @@ conventional title with `agentflow pr --title "feat: add quota"` or the
 ### Control agent approvals
 
 To allow local commits while keeping other writes under review, add this to your
-personal `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`).
+personal `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`). Keep
+`AGENTFLOW_HOME` outside every repository: agentflow ignores a home inside one (see
+[Security and governance](#security-and-governance)). `config.yml` itself may link into
+a dotfiles checkout.
 
 ```yaml
 autonomy:
@@ -842,6 +845,20 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   turn it off but never install or enable it. A plugin never holds a confirmation
   token: its writes wait for you. A program plugin gets a clean environment, which is
   not a sandbox: it runs as you. [Plugins](docs/plugins.md)
+- **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
+  `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
+  provider definitions, approvals and plugins. A repository's environment (direnv, an
+  editor or AI-client setting) can set those variables, so agentflow ignores a home that
+  sits inside a git repository: any checkout, linked worktree or git directory, after
+  following links and `..`, and a home whose location cannot be checked. It then uses
+  `~/.agentflow` of your OS account (looked up from the account, not `$HOME`) and prints
+  a warning on stderr, also shown by the session-start hook, that names the variable
+  and how to fix it. Your account's own `~/.agentflow` is always used, also when it is a
+  link into a dotfiles checkout, and so is a home inside a repository whose root is
+  your account's home directory. To keep settings in a separate dotfiles checkout, link
+  `~/.agentflow` (or just its `config.yml`) there instead of setting `AGENTFLOW_HOME`.
+  The pre-bash, commit-msg and pre-push hooks never read the home, so they enforce the
+  same rules either way.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
