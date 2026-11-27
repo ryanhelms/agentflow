@@ -427,6 +427,9 @@ func printPluginSummary(w io.Writer, p *app.Pending) {
 		if !s.Decline {
 			fmt.Fprintln(w, "! The console runs it once, as the plugin, right after you approve.")
 		}
+		// A long request scrolls the lines above off screen, so the question
+		// follows the plugin, the command and the request once more.
+		fmt.Fprintf(w, "%s: plugin %q, command %q, request %s\n", verb, s.Plugin, s.Command, s.OperationID)
 	default:
 		printSummary(w, p)
 	}
