@@ -180,7 +180,7 @@ func OpenBrowser(ctx context.Context, address string) error {
 		return err
 	}
 	done := make(chan error, 1)
-	go func() { done <- nativeoauth.OpenBrowser(context.WithoutCancel(ctx), address) }()
+	go func() { done <- nativeoauth.OpenBrowserEnv(context.WithoutCancel(ctx), address, openerEnv()) }()
 	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
 	select {
