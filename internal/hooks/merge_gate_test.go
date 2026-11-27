@@ -65,6 +65,8 @@ func TestPreBashMergeGateRefusesASecondCommand(t *testing.T) {
 	}
 	// The coordinator's own forms stay allowed.
 	for _, cmd := range []string{
+		"gh pr merge 12 --squash --body 'first line\n\nsecond line'",
+		"gh pr merge 12 --squash --body \"first line\nsecond line\"",
 		"gh pr merge 12 --squash --repo ryanhelms/agent-commander",
 		"gh pr merge 12 --squash -R ryanhelms/agent-commander --delete-branch",
 		"gh pr merge 12 --squash --subject 'feat(PLAT-1): add x'",

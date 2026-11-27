@@ -189,7 +189,7 @@ func lex(s string) lexed {
 }
 
 // balanced returns the body of the parenthesised group at the start of s and the
-// number of bytes it spans, including both parentheses.
+// index of its closing parenthesis (len(s)-1 when the group is not closed).
 func balanced(s string) (string, int) {
 	depth := 0
 	quote := byte(0)

@@ -594,6 +594,20 @@ var ghValued = map[string]bool{
 	"--cache": true, "-p": true, "--project": true, "--author": true, "--search": true,
 }
 
+// ghBooleans are short flags that ghValued lists as taking a value but that are
+// booleans in the subcommand named first, so the word after them is a positional,
+// such as the PR URL in `gh pr merge -s URL`.
+var ghBooleans = map[string]map[string]bool{
+	"pr merge":  {"-s": true, "-m": true, "-r": true},
+	"pr review": {"-a": true, "-r": true, "-c": true},
+}
+
+// ghBoolean reports whether flag takes no value in the subcommand that
+// positional names so far.
+func ghBoolean(positional []string, flag string) bool {
+	return len(positional) >= 2 && ghBooleans[positional[0]+" "+positional[1]][flag]
+}
+
 var apiRepoRe = regexp.MustCompile(`^/?repos/([^/?#]+)/([^/?#]+)`)
 
 func (st *state) gh(args []string, lookup func(string) string, cmd string) *Refusal {
@@ -633,7 +647,7 @@ func (st *state) gh(args []string, lookup func(string) string, cmd string) *Refu
 			fields = true
 		}
 		if strings.HasPrefix(a, "-") {
-			if ghValued[a] && i+1 < len(args) {
+			if ghValued[a] && !ghBoolean(positional, a) && i+1 < len(args) {
 				i++
 			}
 			continue

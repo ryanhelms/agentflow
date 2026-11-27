@@ -173,8 +173,9 @@ gh pr merge 12 --squash --repo OWNER/NAME
 
 It refuses the merge as a human decision when the command:
 
-- holds `;`, `&`, `|`, `$`, a backquote, a second line, a carriage return, a redirection,
-  or a `<(...)` or `>(...)` substitution
+- holds `;`, `&`, `|`, `$`, a backquote, a second line outside quotes, a carriage return,
+  a redirection, or a `<(...)` or `>(...)` substitution. A line break inside a quoted
+  `--body` is allowed.
 - is not `gh pr merge` itself, such as `gh -R OWNER/NAME pr merge`, `gh api` or a wrapper
   like `env` or `sudo`; only `GH_REPO=OWNER/NAME` may come before `gh`
 - uses a flag `gh pr merge` does not have, or groups short flags (`-sR OWNER/NAME`)

@@ -311,8 +311,9 @@ func coordinatorMerge(cmd string, opt NeverOptions) string {
 	if !opt.CoordinatorMerge || opt.MergeBase == nil {
 		return human
 	}
-	// A newline runs a second command just like ";" does, and <(...) runs one inside.
-	if _, single := boundary.Words(cmd); !single || strings.ContainsAny(cmd, ";&|`$\n\r") {
+	// An unquoted newline runs a second command just like ";" does (boundary.Words
+	// refuses it), and <(...) runs one inside. A quoted one is part of a word.
+	if _, single := boundary.Words(cmd); !single || strings.ContainsAny(cmd, ";&|`$\r") {
 		return human + " (policy.coordinator_merge allows only a single gh pr merge command)"
 	}
 	base, err := opt.MergeBase(cmd)

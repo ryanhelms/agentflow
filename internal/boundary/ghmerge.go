@@ -8,8 +8,8 @@ import (
 var (
 	// restMergeRe matches the REST merge endpoint in an argument of gh api.
 	restMergeRe = regexp.MustCompile(`(?i)pulls/[^/\s]+/merge\b`)
-	// graphQLMergeRe matches the GraphQL merge mutations.
-	graphQLMergeRe = regexp.MustCompile(`(?i)mergepullrequest|enablepullrequestautomerge`)
+	// graphQLMergeRe matches the GraphQL mutations that merge or queue a merge.
+	graphQLMergeRe = regexp.MustCompile(`(?i)mergepullrequest|enablepullrequestautomerge|enqueuepullrequest`)
 )
 
 // RunsGHMerge reports whether cmd merges a pull request through gh, in any

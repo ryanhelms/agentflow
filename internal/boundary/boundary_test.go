@@ -64,6 +64,12 @@ func TestRefusesOtherRepository(t *testing.T) {
 		"GH_REPO=ryanhelms/agent-commander gh pr close https://github.com/ryanhelms/agentflow/pull/5",
 		// zsh runs =gh as the gh on PATH
 		"=gh pr close 3 -R ryanhelms/agentflow",
+		// boolean short flags before the URL
+		"gh pr merge -s https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr merge -m https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr merge -r https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr review -a https://github.com/ryanhelms/agentflow/pull/5",
+		"gh pr review -c -b ok https://github.com/ryanhelms/agentflow/pull/5",
 		// git into another checkout or worktree
 		"git -C /h/agentflow commit -m 'feat: x'",
 		"git -C ../agentflow push origin feature",
@@ -111,6 +117,11 @@ func TestAllowsHomeAndReads(t *testing.T) {
 		// the home repository and its worktrees
 		"gh pr merge 5",
 		"gh pr merge 5 -R ryanhelms/agent-commander",
+		"gh pr merge -s https://github.com/ryanhelms/agent-commander/pull/5",
+		"gh pr merge -s 5 -R ryanhelms/agent-commander",
+		"gh pr review -r -b 'needs work' https://github.com/ryanhelms/agent-commander/pull/5",
+		"gh issue list -s open -R ryanhelms/agentflow",
+		"gh pr create -a someone -m v1 --title x --body y",
 		"gh pr merge https://github.com/ryanhelms/agent-commander/pull/5",
 		"gh pr merge https://github.com/ryanhelms/agent-commander/pull/5 -R ryanhelms/agent-commander",
 		"gh -R RyanHelms/Agent-Commander issue create --title x",

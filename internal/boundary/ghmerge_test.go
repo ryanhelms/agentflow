@@ -21,15 +21,16 @@ func TestRunsGHMerge(t *testing.T) {
 		"=gh pr merge 5":                    true,
 		"$GH pr merge 5":                    true,
 		"\"$(which gh)\" -R o/r pr merge 5": true,
-		"gh api repos/o/r/pulls/5/merge -f merge_method=squash": true,
-		"gh api -XPUT repos/o/r/pulls/5/merge":                  true,
-		"gh api repos/o/r/pulls/5/merge":                        false, // GET: is it merged?
-		"gh api -X GET repos/o/r/pulls/5/merge":                 false,
-		"gh pr view 5":                                          false,
-		"gh pr merges":                                          false,
-		"gh api repos/o/r/pulls/5":                              false,
-		"git merge main":                                        false,
-		"git commit -m 'docs: explain gh pr merge'":             false,
+		"gh api repos/o/r/pulls/5/merge -f merge_method=squash":                                                 true,
+		"gh api graphql -f query='mutation{enqueuePullRequest(input:{pullRequestId:\"x\"}){clientMutationId}}'": true,
+		"gh api -XPUT repos/o/r/pulls/5/merge":                                                                  true,
+		"gh api repos/o/r/pulls/5/merge":                                                                        false, // GET: is it merged?
+		"gh api -X GET repos/o/r/pulls/5/merge":                                                                 false,
+		"gh pr view 5":                                                                                          false,
+		"gh pr merges":                                                                                          false,
+		"gh api repos/o/r/pulls/5":                                                                              false,
+		"git merge main":                                                                                        false,
+		"git commit -m 'docs: explain gh pr merge'":                                                             false,
 	} {
 		if got := RunsGHMerge(cmd); got != want {
 			t.Errorf("RunsGHMerge(%q) = %v want %v", cmd, got, want)
