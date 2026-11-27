@@ -23,10 +23,10 @@ func newHomeFixture(t *testing.T) *homeFixture {
 	oldAccount, oldWarnings := accountHome, HomeWarnings
 	accountHome = func() (string, error) { return f.account, nil }
 	HomeWarnings = f.warnings
-	homeWarned.Clear()
+	resetHomeWarnings()
 	t.Cleanup(func() {
 		accountHome, HomeWarnings = oldAccount, oldWarnings
-		homeWarned.Clear()
+		resetHomeWarnings()
 	})
 	t.Setenv("AGENTFLOW_HOME", "")
 	t.Setenv("DEVFLOW_HOME", "")
@@ -34,6 +34,13 @@ func newHomeFixture(t *testing.T) *homeFixture {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	return f
+}
+
+func resetHomeWarnings() {
+	homeWarned.Clear()
+	homeNotes.Lock()
+	homeNotes.list = nil
+	homeNotes.Unlock()
 }
 
 func realDir(t *testing.T, dir string) string {
@@ -294,5 +301,52 @@ func TestPersonalConfigLinkedIntoDotfilesCheckout(t *testing.T) {
 	}
 	if u.Autonomy.Local != Auto {
 		t.Errorf("linked config.yml not read: %+v", u.Autonomy)
+	}
+}
+
+// A folder whose location cannot be checked is not used.
+func TestHomeThatCannotBeResolvedIsIgnored(t *testing.T) {
+	f := newHomeFixture(t)
+	dir := realDir(t, t.TempDir())
+	loop := filepath.Join(dir, "loop")
+	if err := os.Symlink(loop, loop); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(loop, "home"))
+	got, err := HomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(f.account, ".agentflow"); got != want {
+		t.Fatalf("HomeDir() = %s, want %s", got, want)
+	}
+	if !strings.Contains(f.warnings.String(), "cannot be checked") {
+		t.Errorf("warning = %q", f.warnings)
+	}
+}
+
+func TestHomeNoticesKeepTheWarning(t *testing.T) {
+	newHomeFixture(t)
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(newRepo(t), "home"))
+	if _, err := HomeDir(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := HomeDir(); err != nil {
+		t.Fatal(err)
+	}
+	notes := HomeNotices()
+	if len(notes) != 1 || !strings.Contains(notes[0], "AGENTFLOW_HOME") {
+		t.Fatalf("HomeNotices() = %q", notes)
+	}
+}
+
+func TestAccountHomeIsNotTakenFromHOME(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	got, err := lookupAccountHome()
+	if err != nil {
+		t.Skipf("this account has no passwd entry: %v", err)
+	}
+	if got == os.Getenv("HOME") {
+		t.Fatalf("lookupAccountHome() = %s, the value of $HOME", got)
 	}
 }

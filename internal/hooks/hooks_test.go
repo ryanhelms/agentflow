@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ryanhelms/agentflow/internal/config"
 )
 
 func TestCommitMsg(t *testing.T) {
@@ -340,5 +342,37 @@ func TestCoreHooksIgnoreHomeInsideRepository(t *testing.T) {
 		if err := CommitMsgHook(t.Context(), "MSG", &buf); (err == nil) != valid {
 			t.Errorf("commit %q: %v", msg, err)
 		}
+	}
+}
+
+// session-start repeats an ignored-home warning on stdout, which the agent
+// reads; stderr is not shown to it.
+func TestSessionStartReportsIgnoredHome(t *testing.T) {
+	account := t.TempDir()
+	t.Cleanup(config.OverrideAccountHome(account))
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if out, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	if err := os.Mkdir(".agentflow", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".agentflow/config.yml", []byte("providers: {task_management: {provider: none}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(dir, "personal")
+	t.Setenv("AGENTFLOW_HOME", home)
+	var out bytes.Buffer
+	if err := SessionStart(t.Context(), "claude", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "ignoring the agentflow home "+home) || !strings.Contains(out.String(), "AGENTFLOW_HOME") {
+		t.Fatalf("session-start did not report the ignored home:\n%s", out.String())
+	}
+	if _, err := os.Stat(home); err == nil {
+		t.Error("session-start created the ignored home")
 	}
 }
