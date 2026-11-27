@@ -1,0 +1,6 @@
+$ agentflow pin --check
+--- stdout
+.agentflow/bin/agentflow is a stock file from an older release. Run agentflow pin.
+--- stderr
+agentflow: .githooks/commit-msg: left it unchanged: it differs from every file agentflow shipped; to replace it, review it and copy https://github.com/ryanhelms/agentflow/blob/v0.61.0/templates/repo/.githooks/commit-msg by hand
+--- error
