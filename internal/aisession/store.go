@@ -208,11 +208,17 @@ func (s *fileStore) listLocked() ([]Session, error) {
 	return out, nil
 }
 
+// List returns the store's sessions, newest first. Stubs (Elsewhere) are
+// left out: they only count toward the caps.
 func (s *fileStore) List() ([]Session, error) {
 	var out []Session
 	err := s.locked(func() error {
-		var err error
-		out, err = s.listLocked()
+		all, err := s.listLocked()
+		for _, sess := range all {
+			if !sess.Elsewhere {
+				out = append(out, sess)
+			}
+		}
 		return err
 	})
 	return out, err
@@ -224,6 +230,9 @@ func (s *fileStore) Get(id ID) (Session, error) {
 		sess, err := s.read(id)
 		if err != nil {
 			return err
+		}
+		if sess.Elsewhere {
+			return ErrNoSession
 		}
 		if now := s.now(); s.stale(sess, now) {
 			s.endLost(&sess, now)
@@ -627,8 +636,10 @@ func (s *fileStore) AnswerKey(id ID) ([]byte, error) {
 }
 
 func (s *fileStore) RequestCancel(id ID, by Requester) error {
-	if _, err := s.read(id); err != nil {
+	if sess, err := s.read(id); err != nil {
 		return err
+	} else if sess.Elsewhere {
+		return ErrNoSession
 	}
 	b, _ := json.Marshal(struct {
 		By Requester `json:"by"`
@@ -684,7 +695,13 @@ func (s *fileStore) Prune(keepDays int, keepTranscripts bool) error {
 		now := s.now()
 		var ended []Session
 		for _, sess := range all {
-			if sess.State == StateEnded {
+			switch {
+			case sess.Elsewhere:
+				// A stub is needed only for the hourly start count.
+				if sess.State == StateEnded && now.Sub(sess.CreatedAt) > time.Hour {
+					_ = os.RemoveAll(s.Dir(sess.ID))
+				}
+			case sess.State == StateEnded:
 				ended = append(ended, sess)
 			}
 		}
@@ -725,4 +742,43 @@ func dirSize(dir string) int64 {
 		return nil
 	})
 	return n
+}
+
+// ---- stubs (Session.Elsewhere) ----
+
+// putStub writes the stub of sess, a session stored in another agentflow
+// home, under the lock the caller holds: only what the caps count.
+func (s *fileStore) putStub(sess Session) error {
+	if !ValidID(string(sess.ID)) {
+		return errors.New("aisession: invalid session ID")
+	}
+	if err := mkdirPrivate(s.Dir(sess.ID)); err != nil {
+		return err
+	}
+	return s.write(Session{ID: sess.ID, Worktree: sess.Worktree, State: StateStarting, Home: sess.Home,
+		EnvNames: []string{}, CreatedAt: sess.CreatedAt, Host: HostInfo{Mode: sess.Host.Mode, Heartbeat: sess.CreatedAt}, Elsewhere: true})
+}
+
+// beatStub keeps a stub alive while its session's host runs.
+func (s *fileStore) beatStub(id ID) {
+	if !ValidID(string(id)) {
+		return
+	}
+	if _, err := os.Stat(s.path(id, sessionFile)); err == nil {
+		_ = s.beat(id)
+	}
+}
+
+// endStub marks a stub ended. It is kept for the hourly start count and
+// pruned after that.
+func (s *fileStore) endStub(id ID) {
+	_ = s.locked(func() error {
+		sess, err := s.read(id)
+		if err != nil || !sess.Elsewhere || sess.State == StateEnded {
+			return nil
+		}
+		t := s.now().UTC()
+		sess.State, sess.EndedAt = StateEnded, &t
+		return s.write(sess)
+	})
 }

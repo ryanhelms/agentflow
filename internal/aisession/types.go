@@ -3,6 +3,7 @@ package aisession
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"time"
 
 	"github.com/ryanhelms/agentflow/internal/acp"
@@ -204,6 +205,12 @@ type Path struct {
 	Rel    string // slash path relative to the worktree root; "" when outside
 	Real   string // resolved, when it exists
 	Exists bool
+
+	// What resolve found, kept so the read and the write compare the file
+	// they open with the one the chain classified (os.SameFile), not with
+	// whatever the path names at that moment: info is the file (nil when it
+	// did not exist), dir the folder it is in (nil when that did not exist).
+	info, dir fs.FileInfo
 }
 
 type Command struct {
@@ -486,6 +493,11 @@ type Session struct {
 	Usage        *Usage     `json:"usage,omitempty"`
 	Counters     Counters   `json:"counters"`
 	ChangedFiles []string   `json:"changed_files,omitempty"`
+	// Elsewhere marks a stub: the account store's record of a session
+	// stored in another agentflow home. It holds only the ID, worktree,
+	// state, times and heartbeat, never content. It counts toward the caps
+	// and is hidden from every reader (List, Get).
+	Elsewhere bool `json:"elsewhere,omitempty"`
 }
 
 type HostInfo struct {

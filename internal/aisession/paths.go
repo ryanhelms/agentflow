@@ -179,8 +179,15 @@ func (w worktree) resolve(asked string) (Path, string) {
 	if code := w.checkRel(rel); code != "" {
 		return p, code
 	}
-	if real, err := filepath.EvalSymlinks(filepath.Join(w.real, filepath.FromSlash(rel))); err == nil {
+	full := filepath.Join(w.real, filepath.FromSlash(rel))
+	if real, err := filepath.EvalSymlinks(full); err == nil {
 		p.Real, p.Exists = real, true
+		if info, err := os.Stat(real); err == nil {
+			p.info = info
+		}
+	}
+	if info, err := os.Stat(filepath.Dir(full)); err == nil && info.IsDir() {
+		p.dir = info
 	}
 	resolved, inside := w.resolvedRel(rel)
 	if !inside {

@@ -45,7 +45,8 @@ func (o Options) accountLayer() (*config.User, string) {
 // loadUser is the person's configuration for a session: the session
 // home's, made stricter by the account layer. accountRules are the
 // account layer's deny and ask rules, which the chain checks before any
-// rule of the session home.
+// rule of the session home. With an account layer the session home keeps
+// only its deny and ask rules too.
 func (o Options) loadUser() (user *config.User, accountRules map[string]config.AIRule, err error) {
 	user, err = config.LoadUserAt(o.Home)
 	if err != nil {
@@ -55,7 +56,12 @@ func (o Options) loadUser() (user *config.User, accountRules map[string]config.A
 	if acct == nil {
 		return user, nil, nil
 	}
-	return strictest(user, acct), restrictingRules(acct.AI.Permissions.Rules), nil
+	out := strictest(user, acct)
+	// A caller chose the session home, so its allow rules would loosen the
+	// account's settings (a read confirm, say): with an account layer no
+	// allow rule applies, from either layer. Deny and ask rules still do.
+	out.AI.Permissions.Rules = restrictingRules(user.AI.Permissions.Rules)
+	return out, restrictingRules(acct.AI.Permissions.Rules), nil
 }
 
 // restrictingRules keeps the deny and ask rules: the account layer's allow
@@ -165,23 +171,48 @@ func strictest(u, acct *config.User) *config.User {
 	return &out
 }
 
-// accountCounts are the sessions of the account store that a start must
-// count with its own: running ones, ones in the same worktree, and starts
-// in the last hour. fn runs under the account store's lock (taken before
-// the session store's).
-func (m *manager) withAccountCounts(worktree string, fn func(running, here, recent int) error) error {
-	_, acct := m.o.accountLayer()
-	if acct == "" {
-		return fn(0, 0, 0)
+// accountStoreHome is the account's agentflow home when it is set and is
+// not the session home: the store whose caps every session counts. Unlike
+// accountLayer it does not need the folder to exist yet (the store creates
+// it), so a fresh account still counts the sessions of every other home.
+func (o Options) accountStoreHome() string {
+	acct := o.AccountHome
+	if acct == "" || !filepath.IsAbs(acct) || sameDir(acct, o.Home) {
+		return ""
 	}
-	st, err := openStore(acct, m.o.Now)
+	return acct
+}
+
+// accountStore opens the account store, or nil when there is none.
+func (m *manager) accountStore() (*fileStore, error) {
+	acct := m.o.accountStoreHome()
+	if acct == "" {
+		return nil, nil
+	}
+	return openStore(acct, m.o.Now)
+}
+
+// withAccountCounts runs create with the sessions of the account store
+// that a start must count with its own: running ones, ones in the same
+// worktree, and starts in the last hour (stubs included). It runs under the
+// account store's lock, taken before the session store's, and writes the
+// stub of the session create made into the account store before the lock
+// is released, so a start from any other home counts it.
+func (m *manager) withAccountCounts(worktree string, create func(running, here, recent int) (Session, error)) error {
+	st, err := m.accountStore()
 	if err != nil {
-		return fn(0, 0, 0)
+		// An account store that cannot be opened must not lift the caps.
+		return refuse(RefuseLimitRunning, "The account's session store cannot be opened, so the session caps cannot be checked.", "Check the permissions of the account's agentflow home.")
+	}
+	if st == nil {
+		_, err := create(0, 0, 0)
+		return err
 	}
 	return st.locked(func() error {
 		all, err := st.listLocked()
 		if err != nil {
-			return fn(0, 0, 0)
+			// An account store that cannot be read must not lift the caps.
+			return refuse(RefuseLimitRunning, "The account's session store cannot be read, so the session caps cannot be checked.", "Check the permissions of the agentflow home's ai folder.")
 		}
 		now := st.now()
 		running, here, recent := 0, 0, 0
@@ -197,6 +228,17 @@ func (m *manager) withAccountCounts(worktree string, fn func(running, here, rece
 				here++
 			}
 		}
-		return fn(running, here, recent)
+		sess, err := create(running, here, recent)
+		if err != nil {
+			return err
+		}
+		return st.putStub(sess)
 	})
+}
+
+// endStub marks the account store's stub of session id ended.
+func (m *manager) endStub(id ID) {
+	if st, err := m.accountStore(); err == nil && st != nil {
+		st.endStub(id)
+	}
 }

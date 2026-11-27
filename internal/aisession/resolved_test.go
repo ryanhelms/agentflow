@@ -110,15 +110,22 @@ func TestReadRefusesAFileOtherThanTheCheckedOne(t *testing.T) {
 	}
 	defer f.Close()
 	link(t, "README.md", filepath.Join(w.real, "swap"))
-	checked := filepath.Join(w.real, "sub", "x.txt")
+	checked, err := os.Stat(filepath.Join(w.real, "sub", "x.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	// The chain checked swap -> sub/x.txt; the link now names README.md.
 	if _, _, err := f.readChecked("swap", checked, nil, nil); fsCode(err) != VerdictChanged {
 		t.Errorf("read of a swapped link = %v, want changed", err)
 	}
-	if s, _, err := f.readChecked("swap", filepath.Join(w.real, "README.md"), nil, nil); err != nil || s != "hello\n" {
+	readme, err := os.Stat(filepath.Join(w.real, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, _, err := f.readChecked("swap", readme, nil, nil); err != nil || s != "hello\n" {
 		t.Errorf("read of the checked file = %q, %v", s, err)
 	}
-	if _, _, err := f.readChecked("swap", "", nil, nil); !errors.As(err, new(*fsError)) || fsCode(err) != VerdictChanged {
+	if _, _, err := f.readChecked("swap", nil, nil, nil); !errors.As(err, new(*fsError)) || fsCode(err) != VerdictChanged {
 		t.Errorf("read of a file that did not exist when checked = %v, want changed", err)
 	}
 }

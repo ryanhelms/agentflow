@@ -66,6 +66,7 @@ type host struct {
 	cancelling  bool
 	cancelCode  string
 	cancelCh    chan struct{}
+	acct        *fileStore // the account store, for the stub; nil when the same home
 }
 
 // toolState is what the host follows of one tool call.
@@ -207,7 +208,8 @@ func (h *host) Run(ctx context.Context) (Session, error) {
 	h.transition(ctx, "", "", func(s *Session) {
 		s.Host = HostInfo{PID: os.Getpid(), Mode: h.o.Mode, StartedAt: start.UTC(), Heartbeat: start.UTC()}
 	})
-	_ = h.st.beat(h.id)
+	h.acct, _ = h.m.accountStore()
+	h.beat()
 	go h.heartbeat(ctx)
 
 	code, err := h.setup(ctx)
@@ -225,8 +227,17 @@ func (h *host) heartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			_ = h.st.beat(h.id)
+			h.beat()
 		}
+	}
+}
+
+// beat writes the heartbeat, and the account store stub's when the session
+// home is not the account's.
+func (h *host) beat() {
+	_ = h.st.beat(h.id)
+	if h.acct != nil {
+		h.acct.beatStub(h.id)
 	}
 }
 
@@ -309,6 +320,12 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	}
 	expand["AGENTFLOW_HOME"] = append(expand["AGENTFLOW_HOME"], home)
 	protect := []string{home, filepath.Join(home, storeDir)}
+	// The account's own agentflow home, when the session's is another one:
+	// its settings, its audit and the stubs that count this session.
+	if acct := h.m.o.accountStoreHome(); acct != "" {
+		expand["AGENTFLOW_HOME"] = append(expand["AGENTFLOW_HOME"], acct)
+		protect = append(protect, acct, filepath.Join(acct, storeDir))
+	}
 	for _, hd := range expand["HOME"] {
 		protect = append(protect, filepath.Join(hd, ".agentflow-ui"))
 	}
@@ -551,6 +568,7 @@ func (h *host) end(ctx context.Context, code string) Session {
 		s.EndedAt = &t
 	})
 	h.ev.ended(ctx, s)
+	h.m.endStub(h.id)
 	keep := h.user == nil || h.user.AI.Sessions.KeepTranscriptsOn()
 	if !keep {
 		h.st.dropTranscript(h.id)

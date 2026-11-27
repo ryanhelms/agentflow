@@ -1,6 +1,7 @@
 package aisession
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -23,9 +24,9 @@ func SetFoldForTest(tb testing.TB, on bool) {
 // read is readChecked against the file rel resolves to now (the tests of
 // the os.Root rules, which run before the SameFile check).
 func (f *files) read(rel string, line, limit *uint32) (string, int64, error) {
-	checked, err := filepath.EvalSymlinks(filepath.Join(f.root.Name(), filepath.FromSlash(rel)))
+	checked, err := os.Stat(filepath.Join(f.root.Name(), filepath.FromSlash(rel)))
 	if err != nil {
-		checked = ""
+		checked = nil
 	}
 	return f.readChecked(rel, checked, line, limit)
 }
@@ -50,4 +51,11 @@ func HideClaimForTest(id ID) func() {
 			claimTokens.Store(id, t)
 		}
 	}
+}
+
+// ClaimTokenHeldForTest reports whether this process still holds session
+// id's claim token.
+func ClaimTokenHeldForTest(id ID) bool {
+	_, ok := claimTokens.Load(id)
+	return ok
 }

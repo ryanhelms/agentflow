@@ -462,7 +462,7 @@ func (h *host) ReadTextFile(ctx context.Context, p acp.ReadTextFileRequest) (acp
 		h.record(ctx, Item{Kind: ItemFile, Data: dataOf(map[string]any{"op": "read", "path": display(pth), "decision": "deny", "code": v.Code})})
 		return acp.ReadTextFileResponse{}, denied(v.Code)
 	}
-	content, size, err := h.files.readChecked(pth.Rel, pth.Real, p.Line, p.Limit)
+	content, size, err := h.files.readChecked(pth.Rel, pth.info, p.Line, p.Limit)
 	if err != nil {
 		code := fsCode(err)
 		if code == VerdictNotFound {
@@ -516,7 +516,7 @@ func (h *host) WriteTextFile(ctx context.Context, p acp.WriteTextFileRequest) (a
 	}
 	// Checked again right before the rename: the path must still lead
 	// where the chain looked.
-	sum, err := h.files.writeChecked(pth.Rel, p.Content, func() error {
+	sum, err := h.files.writeChecked(pth.Rel, p.Content, pth.dir, func() error {
 		if !h.unchanged(p.Path, pth, checked) {
 			return &fsError{VerdictChanged}
 		}

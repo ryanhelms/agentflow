@@ -58,10 +58,11 @@ func rootErr(err error) error {
 
 // readChecked returns the content of rel: a regular file of at most
 // MaxFileBytes of valid UTF-8, optionally from line (1-based) for limit
-// lines. checked is the resolved path the chain classified ("" when it did
-// not exist): the file opened must be that same file (os.SameFile), so a
-// link swapped between the check and the read is refused (changed).
-func (f *files) readChecked(rel, checked string, line, limit *uint32) (string, int64, error) {
+// lines. checked is the file the chain classified, as resolve found it (nil
+// when it did not exist): the file opened must be that same file
+// (os.SameFile), so a file or link swapped in at any time after the check
+// is refused (changed).
+func (f *files) readChecked(rel string, checked fs.FileInfo, line, limit *uint32) (string, int64, error) {
 	name := path.Clean(rel)
 	file, err := f.root.Open(name)
 	if err != nil {
@@ -72,10 +73,7 @@ func (f *files) readChecked(rel, checked string, line, limit *uint32) (string, i
 	if err != nil {
 		return "", 0, rootErr(err)
 	}
-	if checked == "" {
-		return "", 0, &fsError{VerdictChanged}
-	}
-	if want, err := os.Stat(checked); err != nil || !os.SameFile(info, want) {
+	if checked == nil || !os.SameFile(info, checked) {
 		return "", 0, &fsError{VerdictChanged}
 	}
 	if !info.Mode().IsRegular() {
@@ -124,19 +122,44 @@ func lines(s string, line, limit *uint32) string {
 // gets 0644; the content goes to a temporary file in the same directory,
 // then is renamed through the root. It returns the content's SHA-256.
 func (f *files) write(rel, content string) (string, error) {
-	return f.writeChecked(rel, content, nil)
+	return f.writeChecked(rel, content, nil, nil)
 }
 
-// writeChecked is write with recheck, run right before the rename: a
-// non-nil error from it (the path's classification changed since the chain
-// ran) refuses the write.
-func (f *files) writeChecked(rel, content string, recheck func() error) (string, error) {
+// writeChecked is write with two checks. The folder rel is in is opened
+// once (an os.Root of its own) and the temporary file and the rename go
+// through that open folder, so swapping a parent for a link afterwards
+// changes nothing. dir is the folder the chain classified, as resolve
+// found it: the opened folder must be that same folder (nil: it did not
+// exist then, so the folder made now is used). recheck runs right before
+// the rename: a non-nil error from it (the path's classification changed
+// since the chain ran) refuses the write.
+func (f *files) writeChecked(rel, content string, dir fs.FileInfo, recheck func() error) (string, error) {
 	if len(content) > MaxFileBytes {
 		return "", &fsError{VerdictTooLarge}
 	}
 	name := path.Clean(rel)
+	parent, base := path.Dir(name), path.Base(name)
+	if parent != "." {
+		if err := f.root.MkdirAll(parent, 0o755); err != nil {
+			return "", rootErr(err)
+		}
+	}
+	d := f.root
+	if parent != "." {
+		sub, err := f.root.OpenRoot(parent)
+		if err != nil {
+			return "", rootErr(err)
+		}
+		defer sub.Close()
+		d = sub
+	}
+	if dir != nil {
+		if info, err := d.Stat("."); err != nil || !os.SameFile(info, dir) {
+			return "", &fsError{VerdictChanged}
+		}
+	}
 	mode := os.FileMode(0o644)
-	switch info, err := f.root.Lstat(name); {
+	switch info, err := d.Lstat(base); {
 	case err == nil:
 		if info.Mode()&os.ModeSymlink != 0 {
 			return "", &fsError{VerdictLink}
@@ -152,13 +175,8 @@ func (f *files) writeChecked(rel, content string, recheck func() error) (string,
 	default:
 		return "", rootErr(err)
 	}
-	if dir := path.Dir(name); dir != "." {
-		if err := f.root.MkdirAll(dir, 0o755); err != nil {
-			return "", rootErr(err)
-		}
-	}
-	tmp := path.Join(path.Dir(name), ".agentflow-write-"+randomHex(8))
-	file, err := f.root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	tmp := ".agentflow-write-" + randomHex(8)
+	file, err := d.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return "", rootErr(err)
 	}
@@ -168,12 +186,12 @@ func (f *files) writeChecked(rel, content string, recheck func() error) (string,
 		werr = cerr
 	}
 	if werr == nil {
-		werr = f.root.Chmod(tmp, mode)
+		werr = d.Chmod(tmp, mode)
 	}
 	if werr == nil {
 		// Checked again right before the rename: a link or hard link made
 		// meanwhile is refused.
-		if info, err := f.root.Lstat(name); err == nil && (info.Mode()&os.ModeSymlink != 0 || links(info) > 1) {
+		if info, err := d.Lstat(base); err == nil && (info.Mode()&os.ModeSymlink != 0 || links(info) > 1) {
 			werr = &fsError{VerdictLink}
 		}
 	}
@@ -181,10 +199,10 @@ func (f *files) writeChecked(rel, content string, recheck func() error) (string,
 		werr = recheck()
 	}
 	if werr == nil {
-		werr = f.root.Rename(tmp, name)
+		werr = d.Rename(tmp, base)
 	}
 	if werr != nil {
-		_ = f.root.Remove(tmp)
+		_ = d.Remove(tmp)
 		var fe *fsError
 		if errors.As(werr, &fe) {
 			return "", werr

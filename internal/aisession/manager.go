@@ -351,13 +351,17 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 		MCP: p.plan.MCP, Host: HostInfo{Mode: mode}, CreatedAt: m.o.Now().UTC(),
 	}
 	var created Session
-	err = m.withAccountCounts(p.root, func(running, here, recent int) error {
+	err = m.withAccountCounts(p.root, func(running, here, recent int) (Session, error) {
 		var err error
 		created, err = st.Create(sess, r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour,
 			Running: running, Here: here, Recent: recent})
-		return err
+		return created, err
 	})
 	if err != nil {
+		if created.ID != "" {
+			// Created here, but its stub could not be written: end it.
+			_, _ = st.Update(id, func(s *Session) error { s.State, s.Code = StateEnded, CodeLaunch; return nil })
+		}
 		return Session{}, err
 	}
 	// The claim token: only the host this starter launches may claim the
@@ -366,9 +370,17 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 	sum := sha256.Sum256([]byte(token))
 	if err := writePrivate(st.path(id, claimTokenFile), []byte(hex.EncodeToString(sum[:]))); err != nil {
 		_, _ = st.Update(id, func(s *Session) error { s.State, s.Code = StateEnded, CodeLaunch; return nil })
+		m.endStub(id)
 		return Session{}, err
 	}
-	claimTokens.Store(id, token)
+	// A host in this process (the foreground ai run, an Options.Detach)
+	// finds the token here and removes it when it claims the record. A
+	// detached ai host process gets it on its standard input instead, so
+	// it is never kept for one.
+	inProcess := !p.plan.Detached || m.o.Detach != nil
+	if inProcess {
+		claimTokens.Store(id, token)
+	}
 	ev := newEvents(m.o, created)
 	ev.started(ctx, created)
 	ev.changed(ctx, created, "")
@@ -378,10 +390,12 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 			detach = execDetach(st, token)
 		}
 		if err := detach(ctx, id); err != nil {
+			claimTokens.Delete(id)
 			ended, _ := st.Update(id, func(s *Session) error {
 				s.State, s.Code = StateEnded, CodeLaunch
 				return nil
 			})
+			m.endStub(id)
 			ev.changed(ctx, ended, StateStarting)
 			ev.ended(ctx, ended)
 			return ended, fmt.Errorf("aisession: start the detached host: %w", err)
