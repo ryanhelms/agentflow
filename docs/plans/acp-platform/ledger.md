@@ -13,7 +13,7 @@ Phase gates:
 | 3 | #59 (contract, issue #52) | `develop-p3` at `c555ac4` | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | done; promoted to `main` by auto-promote, released as v0.57.0 on 2026-11-26 |
 | 4 | #72 (contract, issue #68) | `develop-p4` at `33f5ffd` | `config set --dry-run` flags a loosening edit; `console.autonomy: suggest` blocks an autonomy raise; the Settings page review with loosening ticks | done; promoted to `main`, released as v0.58.0 on 2026-11-26 |
 | 5 | #82 (contract, issue #77) | `develop-p5` at `013e2f4` | on an isolated build both sample plugins installed; a failed commit produced a `timeline-hints` annotation; `ci-notify` approve-then-run-once is covered by `TestApprovedPluginWriteRunsOnceThroughTheDaemon` | done; promoted to `main` by auto-promote (`f0928d4`), released as v0.59.0 (`e282e6d`) on 2026-11-26 |
-| 6 | #104 (contract, issue #97) | | `ai harnesses --probe` and `ai doctor` show every state with its fix against the fake ACP agent; an agent's probe is refused while `auto_probe` is off; the Harnesses page follows a harness being removed and added again | contract in review |
+| 6 | #104 (contract, issue #97) | | `ai harnesses --probe` and `ai doctor` show every state with its fix against the fake ACP agent and fake CLI, including a sign-in check (`signed_out`, and `unknown` with a credential variable set); an agent's probe is refused while `auto_probe` is off; the Harnesses page follows a harness being removed and added again | contract in review |
 
 Lanes:
 
@@ -48,7 +48,7 @@ Lanes:
 | 5.3 | Plugin commands, the two sample plugins, docs (`docs/plugins.md`) | S | #80 | #85, #86 | done |
 | 5.4 | Plugins page: installed plugins, status, what each adds, live health | F | #81 | #84 | done |
 | 5.5 | `plugin approve` and the host's resume of an approved plugin write; `requested_by` on approvals | O | #91 | #92, #94, #96 | done |
-| 6.0 | Phase 6 contract ADR: `Harness`, definitions and layers, pinned registry copy, `initialize` slice, launch profile, states and fixes, config keys, events, harnesses projection, commands, security, ownership | O | #97 | #104 | in review |
+| 6.0 | Phase 6 contract ADR: `Harness`, definitions and layers, pinned registry copy, `initialize` slice, launch profile, sign-in check, states and fixes, config keys, events, harnesses projection, commands, security, ownership | O | #97 | #104 | in review |
 | 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | #100 | | pending |
 | 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | #101 | | pending |
 | 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | #102 | | pending |
@@ -84,6 +84,7 @@ Phase 11 hardening backlog (found in phase 5, left for 11.1):
 - A panic mid-operation leaves `op.requested` without an outcome event.
 - A plugin write held for approval lives in the daemon's memory: an approval granted after a daemon restart runs nothing.
 - The commit-message check may reject a valid heredoc `-m` message (unverified).
-- `AGENTFLOW_HOME` set by a repository's environment (for example direnv) makes the personal layer, and so the installed plugins and their enabled flags, repository-controlled. Phase 6 checks the home before it reads harness definitions; plugins do not yet (found in phase 6).
+Outside the backlog:
 
-Outside the backlog: the test cleanup race in `internal/plugin` that failed the first v0.59.0 release run is being fixed separately.
+- A personal home that a repository's environment points inside the repository (`AGENTFLOW_HOME` set by direnv) is being fixed in its own issue, #105.
+- The test cleanup race in `internal/plugin` that failed the first v0.59.0 release run is fixed by #99.
