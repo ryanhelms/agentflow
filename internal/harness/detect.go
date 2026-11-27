@@ -157,6 +157,7 @@ func (d *detector) Detect(ctx context.Context, o DetectOptions) (Report, error) 
 	if err != nil {
 		return Report{}, fmt.Errorf("harness: detection: %w", err)
 	}
+	defs = dropSameProgram(defs, res)
 
 	person := o.Requester == RequesterPerson
 	probeAllowed := o.Probe && (person || st.autoProbe)
@@ -589,4 +590,78 @@ func (m *MemoryStore) SetPublished(p map[string]PublishedState) error {
 		m.published[k] = v
 	}
 	return nil
+}
+
+// dropSameProgram keeps one entry per installed program. Two catalog
+// definitions can name the same command (the legacy "kimi" and "kimi-code"
+// both install "kimi"); listing the one file twice would show a person one
+// program as two harnesses. Found definitions whose file resolves to the
+// same target form a group, and only its highest-ranked
+// member stays: the one with the highest layer (personal, then a plugin,
+// then the agentflow overlay, then the registry alone), then the lowest ID.
+// A definition the person or a plugin shaped is never dropped: the person
+// named it, or reviewed the plugin that did.
+func dropSameProgram(defs []Layered, res finderResult) []Layered {
+	type member struct {
+		id   string
+		rank int
+	}
+	groups := map[string][]member{}
+	for _, d := range defs {
+		f, ok := res.found[d.ID]
+		if !ok || f.Path == "" || f.Target == "" {
+			continue
+		}
+		groups[f.Target] = append(groups[f.Target], member{id: d.ID, rank: layerRank(d.Sources)})
+	}
+	drop := map[string]bool{}
+	for _, ms := range groups {
+		if len(ms) < 2 {
+			continue
+		}
+		best := ms[0]
+		for _, m := range ms[1:] {
+			if m.rank > best.rank || (m.rank == best.rank && m.id < best.id) {
+				best = m
+			}
+		}
+		for _, m := range ms {
+			if m.id != best.id && m.rank < layerRankPlugin {
+				drop[m.id] = true
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return defs
+	}
+	keep := make([]Layered, 0, len(defs))
+	for _, d := range defs {
+		if !drop[d.ID] {
+			keep = append(keep, d)
+		}
+	}
+	return keep
+}
+
+const (
+	layerRankRegistry = iota
+	layerRankAgentflow
+	layerRankPlugin
+	layerRankPersonal
+)
+
+// layerRank is the highest layer in sources.
+func layerRank(sources []string) int {
+	r := layerRankRegistry
+	for _, s := range sources {
+		switch {
+		case s == SourcePersonal:
+			r = max(r, layerRankPersonal)
+		case strings.HasPrefix(s, SourcePluginPrefix):
+			r = max(r, layerRankPlugin)
+		case s == SourceAgentflow:
+			r = max(r, layerRankAgentflow)
+		}
+	}
+	return r
 }

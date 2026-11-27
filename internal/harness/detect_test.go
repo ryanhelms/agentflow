@@ -467,3 +467,29 @@ func TestDetectSignInOffWithoutAProbe(t *testing.T) {
 		}
 	}
 }
+
+// TestDetectListsOneProgramOnce: the legacy "kimi" entry and "kimi-code"
+// both find the one installed "kimi"; a person sees it once, as the entry
+// the agentflow overlay names. Personal overrides that start the same file
+// stay, because the person named each one.
+func TestDetectListsOneProgramOnce(t *testing.T) {
+	e := newEnv(t, harnesstest.Settings{Overrides: demo(map[string]harnessdef.Definition{
+		"demo-a": {Name: "Demo A", Command: "demo-acp", Args: []string{"--mode=ok"}},
+		"demo-b": {Name: "Demo B", Command: "demo-acp", Args: []string{"--mode=ok"}},
+	})})
+	harnesstest.StatusCLI(t, e.bin, "kimi", 0, "kimi 2.8.1")
+	harnesstest.StatusCLI(t, e.bin, "demo-acp", 0, "demo-acp 1.0.0")
+	for _, all := range []bool{false, true} {
+		r := e.detect(t, DetectOptions{Requester: RequesterAgent, All: all})
+		if h := byID(t, r, "kimi-code"); h.State == StateNotInstalled {
+			t.Fatalf("kimi-code = %+v", h)
+		}
+		for _, h := range r.Harnesses {
+			if h.ID == "kimi" {
+				t.Fatalf("all=%v: the legacy kimi entry is listed too: %+v", all, h)
+			}
+		}
+		byID(t, r, "demo-a")
+		byID(t, r, "demo-b")
+	}
+}
