@@ -902,6 +902,25 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   `~/.agentflow` (or just its `config.yml`) there instead of setting `AGENTFLOW_HOME`.
   The pre-bash, commit-msg and pre-push hooks never read the home, so they enforce the
   same rules either way.
+- **The binary never comes from a repository.** The launchers, the git hooks, the
+  Claude Code plugin hooks, the installers and self-update find the binary in
+  `${XDG_CACHE_HOME:-~/.cache}/agentflow` (Windows: `%LOCALAPPDATA%\agentflow`). A
+  repository's environment can set `HOME`, `XDG_CACHE_HOME` or `LOCALAPPDATA`, so a cache
+  inside a git working tree or git directory is never used to find or install the
+  binary, after following links, and neither is one that is relative, has a `.` or `..`
+  folder or cannot be checked (on Windows also one that goes through a link or
+  junction). Agentflow then uses your OS account's own cache (`~/.cache/agentflow` from
+  the account, not `$HOME`; on Windows the account's local application data folder) and
+  prints a warning on stderr. A `current` link that points into a repository is not
+  run either. The check reads only the file system, never `git`, so `GIT_DIR` and the
+  other git variables do not change it. A cache inside a repository whose root is your
+  account's home directory (a dotfiles checkout) is still used. Every other cache
+  location keeps the same layout. A repository that can set `PATH`, or that commits its
+  own `.agentflow/bin/agentflow` or `.githooks`, still runs its own code: those are
+  repository files, and the Claude Code plugin runs a repository's launcher on purpose.
+  Repositories set up before this change keep their old launcher and hooks until you
+  run `agentflow init --force` there (it rewrites every template file) or copy the new
+  `.agentflow/bin/` and `.githooks/` files; `agentflow pin` does not update them.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release

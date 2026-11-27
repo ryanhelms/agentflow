@@ -196,7 +196,11 @@ These are used by other repos and clients. Changing them is a breaking change:
 - MCP tool names and input fields (`agentflow_*`, `confirm_token`).
 - The install layout `${XDG_CACHE_HOME:-~/.cache}/agentflow/<version>/agentflow` with a
   `current` symlink (Windows: `%LOCALAPPDATA%\agentflow\current.txt`), which the launchers
-  in `templates/repo/.agentflow/bin/` depend on.
+  in `templates/repo/.agentflow/bin/` depend on. A cache root inside a git working tree
+  or git directory is never used (issue #129): every script that finds or installs the
+  binary carries the same fenced `agentflow cache root` block, `update.CacheRoot` applies
+  the same rule through `config.UserDir`, and tests in `internal/setup` and
+  `internal/update` keep the copies identical and the answers equal. Change them together.
 - `bin/next-version.sh` must give the same result as `internal/release` (`agentflow release
   version`). Change both together and test both.
 - Config schemas: `.agentflow/config.yml`, `.agentflow/releases.yml`, `flow-map.yml`,
