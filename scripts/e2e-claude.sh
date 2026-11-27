@@ -56,6 +56,13 @@ mkdir -p "$XDG_CACHE_HOME/agentflow/dev" "$AGENTFLOW_HOME"
 # PATH as a harness's base CLI: turn both off before anything starts, so no run
 # starts a harness or a sign-in command.
 printf 'ai:\n  harnesses:\n    auto_probe: false\n    sign_in_check: false\n' >"$AGENTFLOW_HOME/config.yml"
+# The console daemon's registry is the OS account's own (~/.agentflow-ui), not
+# AGENTFLOW_HOME, so a console opened here would start or reuse the person's
+# daemon, which probes with the person's real settings and PATH. claude -p run
+# from inside a desktop app can look like an interactive host, so turn the
+# automatic console off explicitly (CONTINUOUS_INTEGRATION suppresses only
+# that), and check at the end that no fixture repository was registered.
+export CONTINUOUS_INTEGRATION=1
 (cd "$root" && go build -o "$XDG_CACHE_HOME/agentflow/dev/agentflow" ./cmd/agentflow)
 ln -sfn dev "$XDG_CACHE_HOME/agentflow/current"
 # Keep incidental CLI calls in the test on the fixture binary even if the
@@ -181,6 +188,17 @@ no_harness_ran() {
   return 0
 }
 check "no harness or sign-in command ran" no_harness_ran
+
+# No console daemon served a fixture repository: the registry lists every
+# worktree it serves (read only; nothing there is changed).
+no_console_for_fixtures() {
+  local registry real
+  registry="$(cd ~ && pwd -P)/.agentflow-ui"
+  real="$(cd "$tmp" && pwd -P)"
+  [ -d "$registry" ] || return 0
+  ! grep -qsF -e "$tmp" -e "$real" "$registry"/*.json
+}
+check "no console daemon served the fixtures" no_console_for_fixtures
 
 echo
 echo "$pass passed, $fail failed"
