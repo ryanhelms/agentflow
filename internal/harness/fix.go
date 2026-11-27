@@ -211,3 +211,23 @@ func quoteArg(s string, windows bool) string {
 }
 
 func isWindows() bool { return runtime.GOOS == "windows" }
+
+// ProbeLaunch is what a probe of h runs, in order, as one line: the
+// version command, then the command and its args ("acme --version, then
+// acme acp"), or the command and args with ", with no version command". A
+// harness without NoVersion runs a version command, so empty VersionArgs
+// show the default --version. "" when h has no Command.
+func ProbeLaunch(h Harness) string {
+	if h.Command == "" {
+		return ""
+	}
+	run := strings.Join(append([]string{h.Command}, h.Args...), " ")
+	if h.NoVersion {
+		return run + ", with no version command"
+	}
+	version := h.VersionArgs
+	if len(version) == 0 {
+		version = []string{"--version"}
+	}
+	return strings.Join(append([]string{h.Command}, version...), " ") + ", then " + run
+}

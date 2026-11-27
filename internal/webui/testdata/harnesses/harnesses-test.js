@@ -310,7 +310,9 @@
     // No version command, and hostile text in the command, args and version args.
     const unversioned = harness("quiet-agent",{name:"Quiet",sources:["plugin:acme"],code:"not_probed",command:"<b>quiet</b>",args:["<i>acp</i>"],version_args:["<u>v</u>"],no_version:true,probe:{status:"refused",code:"plugin_launch"},acp:undefined,notes:["plugin_launch"],
       fix:pluginFix("quiet-agent")});
-    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,waiting,plugged,unversioned,opencode,goose,pi],{auto_probe:false}))]));
+    // Probed by name once: ready, with no fix box, and its own Probe now still says what it runs (--version when no version_args are sent).
+    const trusted = harness("trusted-agent",{name:"Trusted",sources:["plugin:acme"],command:"trusted",args:["acp"],probe:{status:"cached",code:"ok",probed_at:at(-60000),duration_ms:90},notes:["plugin_launch"]});
+    await post("emit",delta(8,"config.layer.changed",[entry(state([gemini,claude,signedIn,mine,probed,waiting,plugged,unversioned,trusted,opencode,goose,pi],{auto_probe:false}))]));
     await until(() => byID("harnesses-auto").textContent === "Off","automatic probes are not shown as off");
     const turnOn = part("waiting","fix").querySelector("a");
     check(shows("waiting","status") === "Not probed" && part("waiting","fix").querySelector(".hn-fix-text").textContent === "Automatic probes are off. Probe it yourself, or turn them on." && turnOn.textContent === "turn them on" && turnOn.getAttribute("href") === "#settings?group=ai"
@@ -321,8 +323,10 @@
     check(part("acme-agent","launch").textContent === "Probe now runs acme version --short for its version, then acme acp --mode=stdio."
       && [...part("acme-agent","launch").querySelectorAll("code")].map(code => code.textContent).join("|") === "acme version --short|acme acp --mode=stdio"
       && part("acme-agent","fix").contains(part("acme-agent","launch")) && part("acme-agent","launch").compareDocumentPosition(part("acme-agent","probe")) & Node.DOCUMENT_POSITION_FOLLOWING,"the plugin harness card does not show what its probe runs");
-    check(part("quiet-agent","launch").textContent === "Probe now runs <b>quiet</b> <i>acp</i> (no version command)." && !card("quiet-agent").querySelector("b, i, u") && commands(part("quiet-agent","fix")).length === 0
+    check(part("quiet-agent","launch").textContent === "Probe now runs <b>quiet</b> <i>acp</i>, with no version command." && !card("quiet-agent").querySelector("b, i, u") && commands(part("quiet-agent","fix")).length === 0
       && !part("waiting","fix").querySelector('[data-part="launch"]'),"the no-version plugin harness card is wrong");
+    check(shows("trusted-agent","status") === "Ready" && part("trusted-agent","fix").hidden && part("trusted-agent","launch").textContent === "Probe now runs trusted --version for its version, then trusted acp."
+      && part("trusted-agent","launch").compareDocumentPosition(part("trusted-agent","probe")) & Node.DOCUMENT_POSITION_FOLLOWING && !card("gemini").querySelector('[data-part="launch"]'),"a ready plugin harness offers Probe now without what it runs");
     check(byID("harnesses-auto").dataset.state === "off" && byID("harnesses-auto-detail").textContent.includes("only looks at files") && byID("harnesses-auto").classList.contains("live-changed"),"the automatic probes change is not shown");
 
     // Everything ready: the other group says that nothing needs attention.

@@ -206,19 +206,12 @@ func printHarnesses(w io.Writer, r harness.Report) {
 }
 
 // printPluginLaunch shows, for a harness a plugin chose how to start,
-// everything its probe by name runs, in order: the version command (or
-// that there is none), then the command and its args.
+// everything its probe by name runs, in order (harness.ProbeLaunch).
 func printPluginLaunch(w io.Writer, indent string, h harness.Harness) {
 	if h.Command == "" || !slices.Contains(h.Notes, harness.NotePluginLaunch) {
 		return
 	}
-	run := strings.Join(append([]string{h.Command}, h.Args...), " ")
-	if h.NoVersion || len(h.VersionArgs) == 0 {
-		fmt.Fprintf(w, "%sA probe by name runs: %s (no version command)\n", indent, printable(run))
-		return
-	}
-	version := strings.Join(append([]string{h.Command}, h.VersionArgs...), " ")
-	fmt.Fprintf(w, "%sA probe by name runs: %s, then %s\n", indent, printable(version), printable(run))
+	fmt.Fprintf(w, "%sA probe by name runs: %s\n", indent, printable(harness.ProbeLaunch(h)))
 }
 
 func orDash(s string) string {

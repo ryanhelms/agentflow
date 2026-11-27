@@ -147,6 +147,21 @@ func TestRegistryCommandsAreNotLaunchers(t *testing.T) {
 	}
 }
 
+// ProbeLaunch shows the default version command when none is set, and
+// says when there is none.
+func TestProbeLaunch(t *testing.T) {
+	for want, h := range map[string]Harness{
+		"acme --version, then acme acp":     {Command: "acme", Args: []string{"acp"}},
+		"acme version --short, then acme":   {Command: "acme", VersionArgs: []string{"version", "--short"}},
+		"acme acp, with no version command": {Command: "acme", Args: []string{"acp"}, NoVersion: true, VersionArgs: []string{"x"}},
+		"":                                  {Args: []string{"acp"}},
+	} {
+		if got := ProbeLaunch(h); got != want {
+			t.Errorf("ProbeLaunch(%+v) = %q, want %q", h, got, want)
+		}
+	}
+}
+
 func TestComposeLayers(t *testing.T) {
 	cat, err := acpregistry.Load()
 	if err != nil {
