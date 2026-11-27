@@ -361,3 +361,32 @@ func withoutName(env []string, name string) []string {
 	}
 	return out
 }
+
+// TestLaunchWithHarnessEnvPassesNoCredential is the same check for a probe,
+// which uses Launch.
+func TestLaunchWithHarnessEnvPassesNoCredential(t *testing.T) {
+	adr := []string{"GH_TOKEN", "GITHUB_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY", "CLAUDE_CODE_SESSION_ID", "AGENTFLOW_HOME"}
+	for _, name := range append(adr, secrets...) {
+		t.Setenv(name, "secret-"+name)
+	}
+	s := jsonrpctest.ChildSpec(t, "serve")
+	env, err := jsonrpc.HarnessEnv(os.Environ(), t.TempDir(), []string{s.Root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Env = env
+	p := launch(t, s)
+	var got []string
+	if err := p.Conn().Call(context.Background(), "env", nil, &got); err != nil {
+		t.Fatal(err)
+	}
+	m := envMap(t, got)
+	for _, name := range append(adr, secrets...) {
+		if _, ok := m[name]; ok {
+			t.Errorf("%s reached the child", name)
+		}
+	}
+	if !strings.HasPrefix(m["PATH"], s.Root+string(filepath.ListSeparator)) {
+		t.Fatalf("PATH = %q, want %s first", m["PATH"], s.Root)
+	}
+}

@@ -39,7 +39,9 @@ var ShellVariables = []string{"OLDPWD", "PWD", "SHLVL", "_"}
 // directory holding a link to git (so tests can still make repositories).
 // It sets HOME (and USERPROFILE), the XDG base directories and
 // AGENTFLOW_HOME to fresh temporary directories, and returns the agentflow
-// home. It uses tb.Setenv, so the test cannot be parallel.
+// home. It uses tb.Setenv, so the test cannot be parallel. The new HOME has
+// no git configuration: a test that commits sets its own identity (git -c
+// user.name=... -c user.email=..., or GIT_AUTHOR_* and GIT_COMMITTER_*).
 //
 // Not yet: writing auto_probe: false and sign_in_check: false into the
 // home's config.yml. That needs the ai configuration keys and lands with

@@ -176,9 +176,15 @@ func Run(ctx context.Context, s LaunchSpec, maxStdout int) (RunResult, error) {
 	select {
 	case <-drained:
 	case <-timer.C:
-		// Something outside the group still holds a pipe open.
+		// Something outside the group still holds a pipe open. Closing the
+		// read ends unblocks the copies on Unix; where it may not (Windows),
+		// wait one more drain delay at most and leave them behind.
 		closeAll(stdoutR, stderrR)
-		<-drained
+		timer.Reset(drainDelay)
+		select {
+		case <-drained:
+		case <-timer.C:
+		}
 	}
 	timer.Stop()
 	closeAll(stdoutR, stderrR)
