@@ -35,7 +35,6 @@ var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"ai.fs.read":            {"read", "A session reads a file in its worktree."},
 	"ai.fs.write":           {"local", "A session writes a file in its worktree."},
 	"ai.permission":         {"local", "A session's tool of an unknown kind always asks a person."},
-	"ai.respond":            {"local", "Only a person may allow a session's request."},
 	"ai.run":                {"local", "Starting an ACP session always requires confirmation."},
 	"ai.terminal":           {"local", "A session's command always asks a person unless a personal rule allows the program."},
 	"comment":               {"remote", "Some provider routes require confirmation."},

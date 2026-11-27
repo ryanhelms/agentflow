@@ -319,7 +319,7 @@ const (
 // Gate actions and their classes ("Per request kind").
 const (
 	ActionRun        = "ai.run"
-	ActionRespond    = "ai.respond"
+	ActionRespond    = "ai.respond" // the audit name of ai respond; not an autonomy action: only the answer rules decide
 	ActionCancel     = "ai.cancel"
 	ActionFSRead     = "ai.fs.read"
 	ActionFSWrite    = "ai.fs.write"

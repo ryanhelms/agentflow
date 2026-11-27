@@ -142,10 +142,15 @@ func manyRules(n int) map[string]AIRule {
 
 func TestAISessionAutonomyActions(t *testing.T) {
 	classes := map[string]string{
-		"ai.run": "local", "ai.respond": "local", "ai.cancel": "local", "ai.fs.read": "read",
+		"ai.run": "local", "ai.cancel": "local", "ai.fs.read": "read",
 		"ai.fs.write": "local", "ai.terminal": "local", "ai.fetch": "remote", "ai.permission": "local",
 	}
 	mandatory := map[string]bool{"ai.run": true, "ai.terminal": true, "ai.fetch": true, "ai.permission": true}
+	// Who may answer is decided by the answer rules alone, so there is no
+	// autonomy action for ai respond.
+	if _, ok := DescribeAutonomyAction("ai.respond"); ok || ValidAutonomyAction("ai.respond") {
+		t.Error("ai.respond is an autonomy action, but nothing gates it")
+	}
 	for action, class := range classes {
 		a, ok := DescribeAutonomyAction(action)
 		if !ok || len(a.Classes) != 1 || a.Classes[0] != class {

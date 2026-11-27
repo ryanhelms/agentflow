@@ -647,7 +647,7 @@ var aiRespondSpec = command.Spec[aiRespondIn, aisession.AnswerResult]{
 	MCP: &command.MCP{Tool: "agentflow_ai_respond", Annotations: command.LocalWrite, InputSchema: aiRespondSchema,
 		Description: "Reject a request an AI session waits on. decision must be reject: an agent can never allow a request. " +
 			"To allow one, the user answers in the console's AI panel, or runs agentflow ai respond SESSION ASK --allow in their own terminal; do not run that yourself."},
-	Policy: command.Policy{Class: policy.Local, Action: aisession.ActionRespond, AuditByInvoker: true},
+	Policy: command.Policy{Class: policy.Local, Action: aisession.ActionRespond, Gate: command.GateNone, AuditByInvoker: true},
 	Events: command.ScopeWorktree,
 	Validate: func(in aiRespondIn) error {
 		if err := validSession(in.Session); err != nil {
