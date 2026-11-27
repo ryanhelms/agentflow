@@ -292,8 +292,10 @@
         </section>
         <section id="page-ai" aria-labelledby="ai-title" hidden>
           <div class="page-heading"><h1 id="ai-title" tabindex="-1">AI sessions</h1><p>A session runs a coding agent for one prompt in a task worktree of this repository. This page shows each session as it runs. Here you answer what an agent asks and cancel a session. You start a session in a terminal, not on this page.</p></div>
-          <p id="ai-note" class="live-note" hidden></p>
-          <p id="ai-wait" class="muted">Waiting for live updates…</p>
+          <div class="ai-note-slot">
+            <p id="ai-note" class="live-note" hidden></p>
+            <p id="ai-wait" class="muted">Waiting for live updates…</p>
+          </div>
           <div id="ai-body" hidden>
             <p id="ai-summary" class="muted ai-summary" hidden></p>
             <div id="ai-layout" class="ai-layout" hidden>
@@ -309,7 +311,7 @@
                 <p id="ai-session-detail" class="ai-session-detail"></p>
                 <section id="ai-asks" class="ai-asks" aria-labelledby="ai-asks-title" hidden>
                   <h3 id="ai-asks-title"></h3>
-                  <p class="ai-asks-lead">Read what Agentflow checked before you answer. Only you can allow a request, and “Allow once” allows this one request only.</p>
+                  <p class="ai-asks-lead">Read each request before you answer. Only you can allow a request, and “Allow once” allows this one request only.</p>
                   <ul id="ai-ask-list" class="ai-ask-list" aria-labelledby="ai-asks-title"></ul>
                 </section>
                 <dl id="ai-session-facts" class="ai-facts"></dl>
@@ -335,7 +337,7 @@
                 </section>
                 <section class="ai-part" aria-labelledby="ai-stream-title">
                   <h3 id="ai-stream-title">What the agent did</h3>
-                  <p class="muted ai-hint">Everything here is the agent's own text, shown as plain text. Agentflow did not check it, and no address in it is a link.</p>
+                  <p class="muted ai-hint">Messages, thoughts and descriptions here are the agent's own text, shown as plain text. Agentflow did not check them, and no address in them is a link. The other lines are Agentflow's notes.</p>
                   <div id="ai-truncated" class="ai-truncated" hidden></div>
                   <div id="ai-stream" class="ai-stream" tabindex="0" role="region" aria-labelledby="ai-stream-title">
                     <p id="ai-items-none" class="muted" hidden></p>

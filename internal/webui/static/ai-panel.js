@@ -28,13 +28,18 @@
   const plural = (n, one, many = one + "s") => n + " " + (n === 1 ? one : many);
   const number = value => value.toLocaleString("en-US");
 
-  // Control characters, line separators and the characters that reorder
-  // text (bidirectional controls). The session store removes them; the
-  // page does not rely on that.
-  const unsafe = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
-  const unsafeAll = new RegExp(unsafe.source + "+", "g");
+  // Characters that can hide, reorder or disguise text: control and
+  // format characters (the bidirectional controls, zero-width characters
+  // and tags among them), line separators, private-use and unpaired
+  // characters, variation selectors, the fillers that draw nothing, and
+  // every space that is not the plain space. The session store removes
+  // most of them; the page does not rely on that.
+  const hazards = "\\p{Cc}\\p{Cf}\\p{Cs}\\p{Co}\\p{Zl}\\p{Zp}\\u00a0\\u1680\\u2000-\\u200a\\u202f\\u205f\\u3000\\u034f\\u115f\\u1160\\u17b4\\u17b5\\u180b-\\u180f\\u3164\\ufe00-\\ufe0f\\uffa0\\u{e0100}-\\u{e01ef}";
+  const unsafe = new RegExp("[" + hazards + "]", "u");
+  const unsafeAll = new RegExp("[" + hazards + "]+", "gu");
   // The same set without the line break and the tab, for text of several lines.
-  const unsafeInBlock = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+  const unsafeInBlock = new RegExp("(?![\\n\\t])[" + hazards + "]", "gu");
+  const unsafeBlock = new RegExp("(?![\\n\\t])[" + hazards + "]", "u");
   // One line of display text, bounded.
   const shown = (value, max) => {
     const line = text(value).replace(unsafeAll, " ").replace(/\s+/g, " ").trim();
@@ -51,16 +56,26 @@
   // the part that matters: whole() says whether the page can show a value
   // as it is, and a request with a value it cannot is not offered to allow.
   const whole = (value, max) => typeof value === "string" && value.length <= max && !unsafe.test(value);
+  const wholeBlock = (value, max) => typeof value === "string" && value.length <= max && !unsafeBlock.test(value.replace(/\r\n?/g, "\n"));
   const exact = (value, max) => {
     const line = text(value).replace(unsafeAll, "\ufffd");
     return line.length > max ? line.slice(0, max) + "…" : line;
   };
+  // Letters outside plain ASCII in a path or a command can look like
+  // other letters. They are allowed, and the card points each one out.
+  const foreign = value => [...new Set([...value].filter(char => char.codePointAt(0) > 0x7e && char !== "\ufffd" && char !== "…"))].slice(0, 12)
+    .map(char => char + " (U+" + char.codePointAt(0).toString(16).toUpperCase().padStart(4, "0") + ")");
+  // The agent's words on a permission card: one line, with every emoji
+  // written out as "[emoji]", so none can pass for a mark of the console.
+  const quoted = (value, max) => shown(shown(value, max).replace(/\p{Extended_Pictographic}/gu, " [emoji] "), max + 200);
+  // The program of a POSIX-quoted command line: its first word.
+  const program = line => /^(?:'[^']*'|[^\s'])+/.exec(line)?.[0] || "";
 
   // The session ID (ADR, "Phase 7 session store"). Only IDs of these forms
   // are sent in a request.
   const sessionForm = /^ais_[0-9a-f]{32}$/;
-  const askForm = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
-  const fingerprintForm = /^[A-Za-z0-9+/=_:-]{16,128}$/;
+  const askForm = /^ask_[0-9a-f]{16}$/;
+  const fingerprintForm = /^[0-9a-f]{64}$/;
   const plainCode = /^[a-z0-9][a-z0-9_.:-]{0,63}$/;
   const currencyForm = /^[A-Z]{3}$/;
 
@@ -72,7 +87,8 @@
   const planStates = ["pending", "in_progress", "completed"];
   const optionKinds = ["allow_once", "allow_always", "reject_once", "reject_always"];
 
-  const armAfter = 1200;      // how long a new or moved card's buttons wait
+  const armAfter = 1200;      // how long a button waits after it appeared or moved
+  const maxDiffRows = 4000;   // the longest change a card shows in full
   const confirmWithin = 10000; // how long "Answer sent" waits for the stream to show it
 
   // Bounds on what the page draws. The projection has its own (ADR,
@@ -90,16 +106,16 @@
     };
   }
 
-  // aisession.Counters has no JSON names, so its fields arrive as Go
-  // names; the snake_case form is read too.
+  // aisession.Counters, by its JSON names.
   function countersState(raw) {
     raw = record(raw) || {};
-    const read = (name, snake) => count(raw[name]) || count(raw[snake]);
     return {
-      tools: read("ToolCalls", "tool_calls"), asks: read("Asks", "asks"), allowed: read("Allowed", "allowed"),
-      denied: read("Denied", "denied"), unasked: read("Unasked", "unasked"), terminals: read("Terminals", "terminals")
+      tools: count(raw.tool_calls), asks: count(raw.asks), allowed: count(raw.allowed),
+      denied: count(raw.denied), unasked: count(raw.unasked), terminals: count(raw.terminals)
     };
   }
+
+  const maxPreview = 70000; // a little over the 64 KiB the projection sends for each side
 
   function askState(raw) {
     raw = record(raw);
@@ -109,27 +125,41 @@
     const options = [];
     for (const option of list(raw.options).map(record)) {
       if (!option || options.length >= 8) continue;
-      options.push({name: shown(option.name, 200), kind: pick(option.kind, optionKinds, "unknown")});
+      options.push({name: quoted(option.name, 200), kind: pick(option.kind, optionKinds, "unknown")});
     }
     const kind = pick(raw.kind, askKinds, "unknown");
+    const change = record(raw.diff);
     const ask = {
       id, kind, toolKind: pick(raw.tool_kind, toolKinds, raw.tool_kind ? "unknown" : ""),
-      title: shown(raw.title, 600),
+      title: quoted(raw.title, 600),
       paths: paths.slice(0, maxPaths).map(path => exact(path, 4096)).filter(Boolean), line: exact(raw.line, 16384), cwd: exact(raw.cwd, 4096),
       envNames: names.slice(0, 64).map(name => exact(name, 256)).filter(Boolean),
       options,
+      // The change an fs_write would make: the file as it is and as it would be.
+      diff: change ? {path: exact(change.path, 4096), before: text(change.old_text), after: text(change.new_text), cut: change.cut === true} : null,
       reason: plainCode.test(text(raw.reason)) ? raw.reason : "",
       expires: time(raw.expires_at),
       fingerprint: fingerprintForm.test(text(raw.fingerprint)) ? raw.fingerprint : ""
     };
     // What the reader decides on must be on the card in full and as it is.
-    // A request the page cannot show that way, or cannot name, can only be
-    // rejected here.
-    ask.complete = kind !== "unknown" && paths.length <= maxPaths && paths.every(path => path !== "" && whole(path, 4096))
+    // blocked says why a request cannot be allowed here: "" when it can.
+    const values = kind !== "unknown" && paths.length <= maxPaths && paths.every(path => path !== "" && whole(path, 4096))
       && (raw.line === undefined || whole(raw.line, 16384)) && (raw.cwd === undefined || whole(raw.cwd, 4096))
       && names.length <= 64 && names.every(name => name !== "" && whole(name, 256))
       && (kind !== "terminal" || ask.line !== "");
-    ask.canAllow = raw.can_allow === true && ask.complete && Boolean(ask.fingerprint);
+    ask.blocked = kind === "unknown" ? "kind" : !values ? "values" : !ask.fingerprint ? "fingerprint" : "";
+    if (!ask.blocked && kind === "fs_write") {
+      // A write is allowed only with the whole change in view.
+      if (ask.reason === "preview_too_large" || change?.cut === true) ask.blocked = "large";
+      else if (!change) ask.blocked = "nodiff";
+      else if (paths.length !== 1 || change.path !== paths[0]) ask.blocked = "values";
+      else if ((change.old_text !== undefined && typeof change.old_text !== "string") || typeof change.new_text !== "string") ask.blocked = "nodiff";
+      else if (ask.diff.before.length > maxPreview || ask.diff.after.length > maxPreview) ask.blocked = "large";
+      else if (!wholeBlock(ask.diff.before, maxPreview) || !wholeBlock(ask.diff.after, maxPreview)) ask.blocked = "text";
+      else if (lineDiff(ask.diff.before, ask.diff.after, 3, maxDiffRows).cut) ask.blocked = "large";
+    }
+    if (!ask.blocked && raw.can_allow !== true) ask.blocked = "option";
+    ask.canAllow = ask.blocked === "";
     return ask;
   }
 
@@ -250,18 +280,21 @@
   // Cancel is offered while the turn can still be cancelled.
   const cancellable = session => ["starting", "initializing", "creating", "running", "waiting"].includes(session.state);
 
-  // What the agent asks, in Agentflow's words, from what Agentflow resolved.
-  const toolAsks = {
-    read: "Permission to read files", search: "Permission to search files", think: "Permission to think",
-    edit: "Permission to change files", delete: "Permission to delete files", move: "Permission to move files",
-    execute: "Permission to run a command with its own tools", fetch: "Permission to fetch from the network",
-    switch_mode: "Permission to change its mode", other: "Permission for an action of its own", unknown: "Permission for an action this console does not know"
+  // What is asked, in Agentflow's words. For fs_read, fs_write and
+  // terminal Agentflow resolved the request itself. A "permission" is the
+  // harness asking about one of its own tools: Agentflow knows only what
+  // the agent says about it, so the card never words it as a finding.
+  const ownTool = "The agent asks to use one of its own tools";
+  const toolSays = {
+    read: "read files", search: "search files", think: "think", edit: "change files", delete: "delete files", move: "move files",
+    execute: "run a command", fetch: "fetch from the network", switch_mode: "change its mode", other: "something it did not name",
+    unknown: "an action this console does not know"
   };
   function askHeading(ask) {
     if (ask.kind === "fs_write") return "Write a file";
     if (ask.kind === "fs_read") return "Read a file";
     if (ask.kind === "terminal") return "Run a command";
-    if (ask.kind === "permission") return toolAsks[ask.toolKind] || toolAsks.other;
+    if (ask.kind === "permission") return ownTool;
     return "A request this console does not know";
   }
   // Who does it once it is allowed (ADR, "what agentflow controls").
@@ -269,22 +302,34 @@
     if (ask.kind === "fs_write") return "If you allow it, Agentflow writes this file itself, in the session's worktree.";
     if (ask.kind === "fs_read") return "If you allow it, Agentflow reads this file itself and gives its content to the agent.";
     if (ask.kind === "terminal") return "If you allow it, Agentflow starts this command itself, in the session's worktree. What the command then does is not limited.";
-    if (ask.kind === "permission") return "If you allow it, the harness does this with its own tools. Agentflow passes your answer on and cannot check what the harness then does.";
+    if (ask.kind === "permission") return "The harness does this itself, with its own tools. Agentflow passes your answer on and cannot check what happens then.";
     return "This console cannot show this request, so it can only be rejected. Update Agentflow.";
   }
   const reasons = {
     control_file: "It changes a file that controls an agent or this repository's automation. That always asks you.",
     secret_file: "The file may hold secrets, and what the agent reads goes to the harness's model provider. That always asks you.",
-    terminal: "A command asks you unless one of your rules allows its program.",
-    repository_program: "The program is a shell, a wrapper or a file inside the worktree, so no rule can allow it.",
+    terminal: "Commands always ask you, unless one of your rules allows the program.",
+    repository_program: "The program is a file inside the worktree, so no rule can allow it.",
+    shell: "The program is a shell or a wrapper that runs other commands, so no rule can allow it.",
     no_locations: "The agent did not say which files this touches.",
     kind: "This kind of request always asks you.",
     rule: "A permission rule says to ask you.",
     gate: "Your autonomy settings say to confirm this.",
-    ceiling: "An agent started this session, so it cannot do this without you."
+    ceiling: "An agent started this session, so it cannot do this without you.",
+    preview_too_large: "The change is too large to show here."
   };
   const reasonText = reason => reasons[reason] || (reason ? "Reason code " + reason + "." : "Agentflow did not say why.");
   const optionNames = {allow_once: "allow once", allow_always: "allow always", reject_once: "reject once", reject_always: "reject always", unknown: "a kind this console does not know"};
+  // Why a request has no Allow once (ask.blocked).
+  const blockedText = {
+    kind: "This console does not know this kind of request, so it cannot be allowed here. You can reject it.",
+    values: "This console cannot show the whole request as it is, so it cannot be allowed here. You can reject it.",
+    fingerprint: "The request arrived without its check value, so it cannot be allowed here. You can reject it.",
+    nodiff: "Agentflow did not send the change this would write, so it cannot be allowed here. You can reject it.",
+    large: "The change is too large to show in full, so it cannot be allowed here. You can reject it.",
+    text: "The change has characters this page cannot show as they are (marked \ufffd), so it cannot be allowed here. You can reject it.",
+    option: "This request cannot be allowed: the agent offered no “allow once” choice. You can reject it, or it is rejected when the time runs out."
+  };
 
   const toolNames = {read: "Read", edit: "Edit", delete: "Delete", move: "Move", search: "Search", execute: "Run", think: "Think", fetch: "Fetch", switch_mode: "Switch mode", other: "Tool"};
   const toolStatus = {pending: ["Waiting", "neutral"], in_progress: ["Running", "info"], completed: ["Done", "ok"], failed: ["Failed", "bad"]};
@@ -345,7 +390,9 @@
     for (const line of a.slice(a.length - tail, a.length - tail + context)) rows.push({op: " ", text: line});
     skip(tail - context);
     if (rows.length <= limit) return rows;
-    return [...rows.slice(0, limit), {op: "…", text: plural(rows.length - limit, "more line") + " not shown"}];
+    const cut = [...rows.slice(0, limit), {op: "…", text: plural(rows.length - limit, "more line") + " not shown"}];
+    cut.cut = true;
+    return cut;
   }
 
   function element(tag, content = "", klass = "") {
@@ -384,7 +431,7 @@
     const cards = new Map();  // ask key -> its card, in the order the asks arrived
     const blocks = new Map(); // stream block key -> its node
     const known = new Set();  // asks already announced
-    let current = null, live = {state: "connecting"}, selected = "", shownSession = "", ticker = 0, armTimer = 0;
+    let current = null, live = {state: "connecting"}, selected = "", shownSession = "", ticker = 0, armTimer = 0, watching = 0;
     let follow = true, unread = 0, confirming = false, cancel = {session: "", state: "", message: ""};
 
     function mark(node) {
@@ -539,99 +586,179 @@
     // ---- Permission cards ----
 
     const askKey = (item, ask) => item.id + "/" + ask.id + "/" + ask.fingerprint;
-    function subject(ask) {
-      if (ask.line) return ask.line;
-      return ask.paths.length === 1 ? ask.paths[0] : ask.paths.length ? plural(ask.paths.length, "path") : "";
+    const frame = callback => (options.view || scope).requestAnimationFrame(callback);
+
+    // A button answers only when it has stood still for a moment. Whatever
+    // moves it (a card above that goes away, a new session in the list, a
+    // note that appears) could put Allow once under a click aimed at
+    // something else. place() reads where a card's buttons are on the page.
+    function place(card) {
+      const rect = card.querySelector(".ai-ask-actions").getBoundingClientRect();
+      const view = options.view || scope;
+      return Math.round(rect.left + view.scrollX) + ":" + Math.round(rect.top + view.scrollY) + ":" + Math.round(rect.width);
     }
-    // A card's buttons wait a moment after the card appears or moves, so a
-    // click aimed at something else cannot land on them.
-    function arm() {
-      const until = now() + armFor;
-      for (const card of cards.values()) card.armed = until;
-      clearTimeout(armTimer);
-      armTimer = setTimeout(renderCards, armFor + 20);
-      renderCards();
+    // Note the cards whose buttons moved since the last look. Reading a
+    // position needs the page on screen.
+    function settle() {
+      if (!open()) return false;
+      const at = now();
+      let moved = false;
+      for (const card of cards.values()) {
+        const where = place(card);
+        if (card.place === where) continue;
+        card.place = where;
+        card.armed = at + armFor;
+        moved = true;
+      }
+      if (moved) {
+        clearTimeout(armTimer);
+        armTimer = setTimeout(renderCards, armFor + 20);
+        renderCards();
+      }
+      return moved;
     }
+    // Look once a frame while a card is on screen, and not otherwise.
+    function watch() {
+      watching = 0;
+      if (!counting()) return;
+      settle();
+      watching = frame(watch);
+    }
+
+    // The agent's words: one paragraph, muted, two lines until the reader
+    // asks for all of it. The label above it is the stronger text.
+    function quote(value) {
+      const out = [element("blockquote", value, "ai-quote")];
+      if (value.length > 140) {
+        const more = element("button", "Show all", "ai-quote-more");
+        more.type = "button";
+        more.setAttribute("aria-expanded", "false");
+        out[0].dataset.clamped = "true";
+        more.addEventListener("click", () => {
+          const all = more.getAttribute("aria-expanded") !== "true";
+          more.setAttribute("aria-expanded", String(all));
+          more.textContent = all ? "Show less" : "Show all";
+          out[0].dataset.clamped = String(!all);
+        });
+        out.push(more);
+      }
+      return out;
+    }
+    function codes(values) {
+      const items = element("ul", "", "ai-paths");
+      for (const value of values) items.appendChild(element("li")).append(element("code", value, "ai-exact"));
+      return items;
+    }
+    function choices(ask) {
+      const out = [element("p", "The agent's names for its choices. Agentflow answers only with “allow once” or “reject”, whatever a name says.", "ai-said-note")];
+      const rows = element("ul", "", "ai-choices");
+      for (const option of ask.options) {
+        const row = element("li");
+        row.append(element("q", option.name || "no name"), " (" + optionNames[option.kind] + ")");
+        rows.append(row);
+      }
+      out.push(rows);
+      return out;
+    }
+    // The change a write would make, in a box that scrolls.
+    function change(ask) {
+      const diff = ask.diff;
+      const rows = lineDiff(block(diff.before, maxPreview), block(diff.after, maxPreview), 3, maxDiffRows);
+      const added = rows.filter(row => row.op === "+").length, removed = rows.filter(row => row.op === "-").length;
+      const pre = scroller("", "The change to " + diff.path, "ai-diff ai-ask-diff");
+      for (const row of rows) {
+        const line = element("span", "", "ai-diff-row");
+        line.dataset.op = row.op === "+" ? "add" : row.op === "-" ? "remove" : row.op === "…" ? "skip" : "same";
+        line.append(element("span", row.op === " " ? "\u00a0" : row.op, "ai-diff-op"), element("span", row.text === "" ? "\u00a0" : row.text));
+        pre.append(line);
+      }
+      const count = element("p", !added && !removed ? "No line changes." : plural(added, "line") + " put in, " + plural(removed, "line") + " taken out.", "ai-ask-count");
+      return [count, pre];
+    }
+
     function buildCard(item, ask) {
       const card = element("li", "", "ai-ask");
+      card.dataset.kind = ask.kind;
+      const own = ask.kind === "permission";
       const heading = element("h4", askHeading(ask), "ai-ask-title");
-      heading.id = "ai-ask-" + ask.id.replace(/[^A-Za-z0-9_-]/g, "-") + "-title";
+      heading.id = "ai-ask-" + ask.id + "-title";
       heading.tabIndex = -1;
       card.setAttribute("aria-labelledby", heading.id);
       card.append(heading);
 
-      // What Agentflow resolved: the request itself, in full.
-      const facts = element("dl", "", "ai-ask-facts");
-      if (ask.line) facts.append(term("Command", element("code", ask.line, "ai-exact")));
-      if (ask.paths.length) {
-        const paths = element("ul", "", "ai-paths");
-        for (const path of ask.paths) paths.appendChild(element("li")).append(element("code", path, "ai-exact"));
-        facts.append(term(ask.paths.length === 1 ? "File" : "Files", paths));
-      }
-      if (ask.kind === "terminal" || ask.cwd) facts.append(term("Runs in", ask.cwd ? element("code", ask.cwd, "ai-exact") : "the worktree's top folder"));
-      if (ask.envNames.length) {
-        const names = element("ul", "", "ai-paths");
-        for (const name of ask.envNames) names.appendChild(element("li")).append(element("code", name, "ai-exact"));
-        facts.append(term("Sets variables", names, element("p", "The agent set values for these. Agentflow does not show or keep the values.", "muted")));
-      }
-      facts.append(term("Worktree", element("code", item.worktree || "not reported", "ai-exact")));
-      facts.append(term("Why it asks", reasonText(ask.reason)));
-      const resolved = element("div", "", "ai-ask-resolved");
-      resolved.append(element("p", "What Agentflow checked", "ai-ask-label"), facts, element("p", askEffect(ask), "ai-ask-effect"));
-      card.append(resolved);
-
-      // The agent's wording, apart from the facts and marked as the agent's.
-      if (ask.title || ask.options.length) {
+      if (own) {
+        // The harness asks about a tool of its own. Everything known about
+        // it is what the agent says, so all of it goes in the agent's box.
+        card.append(element("p", askEffect(ask), "ai-ask-warn"));
         const said = element("div", "", "ai-said");
-        said.append(element("p", "Written by the agent. Agentflow did not check this text.", "ai-said-label"));
-        if (ask.title) said.append(element("blockquote", ask.title));
-        if (ask.options.length) {
-          said.append(element("p", "The agent's names for its choices. Agentflow answers only with “allow once” or “reject”, whatever a name says.", "muted"));
-          const choices = element("ul", "", "ai-choices");
-          for (const option of ask.options) {
-            const row = element("li");
-            row.append(element("q", option.name || "no name"), " (" + optionNames[option.kind] + ")");
-            choices.append(row);
-          }
-          said.append(choices);
+        said.append(element("p", "What the agent says it will do. Agentflow cannot check it.", "ai-said-label"));
+        const claims = element("dl", "", "ai-ask-facts ai-claims");
+        claims.append(term("It says it will", toolSays[ask.toolKind] || toolSays.other));
+        if (ask.paths.length) claims.append(term(ask.paths.length === 1 ? "On this file" : "On these files", codes(ask.paths)));
+        said.append(claims);
+        if (ask.title) said.append(...quote(ask.title));
+        if (ask.options.length) said.append(...choices(ask));
+        const about = element("dl", "", "ai-ask-facts ai-ask-about");
+        about.append(term("Session worktree", element("code", item.worktree || "not reported", "ai-exact")), term("Why it asks", reasonText(ask.reason)));
+        card.append(said, about);
+      } else {
+        // The agent's wording first, marked as the agent's; then what
+        // Agentflow resolved, next to the buttons.
+        if (ask.title) {
+          const said = element("div", "", "ai-said");
+          said.append(element("p", "Written by the agent. Agentflow did not check this text.", "ai-said-label"), ...quote(ask.title));
+          card.append(said);
         }
-        card.append(said);
+        const facts = element("dl", "", "ai-ask-facts");
+        if (ask.line) {
+          // A long command hides its program in the crowd: name it first.
+          const long = ask.line.length > 80;
+          if (long && program(ask.line)) facts.append(term("Program", element("code", program(ask.line), "ai-exact")));
+          facts.append(term(long ? "Command, " + number(ask.line.length) + " characters" : "Command", element("code", ask.line, "ai-exact")));
+        }
+        if (ask.paths.length) facts.append(term(ask.paths.length === 1 ? "File" : "Files", codes(ask.paths)));
+        if (ask.kind === "fs_write" && ask.diff) facts.append(term("Change", ...change(ask)));
+        if (ask.kind === "terminal" || ask.cwd) facts.append(term("Runs in", ask.cwd ? element("code", ask.cwd, "ai-exact") : "the worktree's top folder"));
+        if (ask.envNames.length) facts.append(term("Sets variables", codes(ask.envNames), element("p", "The agent set values for these. Agentflow does not show or keep the values.", "muted")));
+        facts.append(term("Worktree", element("code", item.worktree || "not reported", "ai-exact")));
+        facts.append(term("Why it asks", reasonText(ask.reason)));
+        const resolved = element("div", "", "ai-ask-resolved");
+        resolved.append(element("p", "What Agentflow checked", "ai-ask-label"), facts);
+        const odd = foreign([...ask.paths, ask.cwd, ask.line].join(""));
+        if (odd.length) resolved.append(element("p", "Look closely: the " + (ask.line ? "command" : "path") + " has characters that are not plain English letters, digits or signs, and some look like other letters: " + odd.join(", ") + ".", "ai-ask-odd"));
+        resolved.append(element("p", askEffect(ask), "ai-ask-effect"));
+        card.append(resolved);
       }
+      if (ask.blocked) card.append(element("p", blockedText[ask.blocked], "ai-ask-fixed"));
 
       const left = element("p", "", "ai-ask-time");
       left.dataset.part = "time";
+      const offline = element("p", "Live updates are offline, so this request may already be answered or out of time.", "ai-ask-offline");
+      offline.dataset.part = "offline";
+      offline.hidden = true;
       const status = element("p", "", "ai-ask-status");
       status.dataset.part = "status";
-      status.id = heading.id.replace(/-title$/, "-status");
+      status.id = "ai-ask-" + ask.id + "-status";
       const actions = element("div", "", "ai-ask-actions");
-      const what = subject(ask);
-      const reject = element("button", "Reject", "button secondary");
-      reject.type = "button";
-      reject.dataset.decision = "reject";
-      reject.setAttribute("aria-label", "Reject: " + askHeading(ask) + (what ? ", " + what : ""));
-      reject.setAttribute("aria-describedby", status.id);
-      reject.addEventListener("click", () => answer(card, "reject"));
-      actions.append(reject);
-      if (ask.canAllow) {
-        const allow = element("button", "Allow once", "button primary");
-        allow.type = "button";
-        allow.dataset.decision = "allow";
-        allow.setAttribute("aria-label", "Allow once: " + askHeading(ask) + (what ? ", " + what : ""));
-        allow.setAttribute("aria-describedby", status.id);
-        allow.addEventListener("click", () => answer(card, "allow"));
-        actions.append(allow);
-      } else {
-        const why = !ask.complete ? "This console cannot show the whole request, so it cannot be allowed here. You can reject it."
-          : !ask.fingerprint ? "The request arrived without its check value, so it cannot be allowed here. You can reject it."
-          : "This request cannot be allowed: the agent offered no “allow once” choice. You can reject it, or it is rejected when the time runs out.";
-        card.append(element("p", why, "ai-ask-fixed"));
+      // Two buttons of equal weight at opposite ends. Their names are
+      // short; the card's heading and status line describe them.
+      for (const [decision, name] of ask.canAllow ? [["reject", "Reject"], ["allow", "Allow once"]] : [["reject", "Reject"]]) {
+        const button = element("button", name, "button secondary");
+        button.type = "button";
+        button.dataset.decision = decision;
+        button.setAttribute("aria-describedby", heading.id + " " + status.id);
+        button.addEventListener("click", () => answer(card, decision));
+        actions.append(button);
       }
-      card.append(left, actions, status);
+      card.append(left, offline, actions, status);
       card.ask = ask;
       card.session = item.id;
       card.pending = "";
       card.failure = "";
       card.sent = 0;
+      card.armed = now() + armFor;
+      card.place = "";
+      card.said = "";
       return card;
     }
 
@@ -640,7 +767,9 @@
       if (!options.request || !cards.has(card.key)) return;
       if (card.pending) { options.announce("Your answer is on its way."); return; }
       if (ask.expires && now() >= ask.expires) { options.announce("The time to answer ran out."); return; }
-      if (now() < card.armed) { options.announce("Read the request first. The buttons work in a moment."); return; }
+      // Look again now: the button may have moved since the last frame.
+      settle();
+      if (now() < card.armed) { options.announce("The buttons just appeared or moved. Read the request, then answer."); return; }
       if (decision === "allow" && !ask.canAllow) return;
       card.pending = decision;
       card.failure = "";
@@ -666,20 +795,29 @@
         const left = ask.expires ? ask.expires - at : Infinity;
         const expired = left <= 0;
         // An answer the stream has not confirmed in time can be given again.
-        if (card.pending && at - card.sent > confirmWithin) { card.pending = ""; card.failure = "The session has not confirmed your answer yet. You can answer again."; }
+        if (card.pending && at - card.sent > confirmWithin) { card.pending = ""; card.failure = "The session has not confirmed your answer yet. Your first answer may still count. You can answer again."; }
         const time = card.querySelector('[data-part="time"]');
         put(time, expired ? "The time to answer ran out. Agentflow rejects the request."
           : ask.expires ? "Answer within " + remaining(left) + ". After that, Agentflow rejects it." : "");
         time.hidden = !time.textContent;
         time.dataset.state = expired ? "over" : left <= 60000 ? "soon" : "";
+        // The clock is said twice only: at the last minute and at the end.
+        const moment = expired ? "over" : left <= 60000 ? "soon" : "";
+        if (card.seen && moment && card.said !== moment) {
+          options.announce(moment === "over" ? "The time to answer ran out: " + askHeading(ask).toLowerCase() + "." : "One minute left to answer: " + askHeading(ask).toLowerCase() + ".");
+        }
+        card.said = moment;
+        card.seen = true;
         const waiting = !expired && !card.pending && at < card.armed;
         const said = card.pending === "allow" ? "Allow once sent. Waiting for the session to confirm."
           : card.pending === "reject" ? "Reject sent. Waiting for the session to confirm."
-          : card.failure || (live.state === "offline" ? "Live updates are offline, so this request may already be answered." : "");
+          : card.failure;
         const status = card.querySelector('[data-part="status"]');
+        // The line keeps its room when empty, so an answer on one card
+        // does not move the cards below it.
         put(status, said);
-        status.hidden = !said;
         status.dataset.state = card.failure && !card.pending ? "bad" : "";
+        card.querySelector('[data-part="offline"]').hidden = live.state !== "offline";
         const off = expired || Boolean(card.pending) || waiting;
         for (const button of card.querySelectorAll(".ai-ask-actions button")) {
           // A button that waits stays in the tab order; pressing it says why.
@@ -692,14 +830,12 @@
     function reconcileCards(item, flash) {
       const target = find("ai-ask-list");
       const wanted = new Map(item ? item.asks.map(ask => [askKey(item, ask), ask]) : []);
-      let moved = false;
       for (const [key, card] of cards) {
         if (wanted.has(key)) continue;
         // A card that goes away must not take keyboard focus with it.
         if (card.contains(document.activeElement)) find("ai-session-title").focus({preventScroll: true});
         card.remove();
         cards.delete(key);
-        moved = true;
       }
       for (const [key, ask] of wanted) {
         if (cards.has(key)) { cards.get(key).ask.expires = ask.expires; continue; }
@@ -709,13 +845,14 @@
         // New cards go below the ones already there, so those do not move.
         target.append(card);
         if (flash) mark(card);
-        moved = true;
       }
       const any = cards.size > 0;
       find("ai-asks").hidden = !any;
       put(find("ai-asks-title"), any ? plural(cards.size, "request waits", "requests wait") + " for your answer" : "");
-      if (moved && any) arm();
-      else renderCards();
+      // Cards that moved up or down wait again before they answer.
+      if (!settle()) renderCards();
+      clearTimeout(armTimer);
+      if (any) armTimer = setTimeout(renderCards, armFor + 20);
     }
 
     // ---- The stream of items ----
@@ -1008,7 +1145,7 @@
       const parts = [plural(state.sessions.length, "session")];
       if (running) parts.push(running + " running");
       if (asks) parts.push(plural(asks, "request waits", "requests wait") + " for your answer");
-      const cap = state.maxRunning ? " Your user runs " + state.running + " of at most " + state.maxRunning + " sessions on this computer." : "";
+      const cap = state.maxRunning ? " You are running " + state.running + " of at most " + state.maxRunning + " sessions on this computer." : "";
       put(find("ai-summary"), any ? parts.join(" · ") + "." + cap : "");
       find("ai-summary").hidden = !any;
       find("ai-layout").hidden = !any;
@@ -1035,6 +1172,7 @@
         clearInterval(ticker);
         ticker = 0;
       }
+      if (counting() && !watching) watching = frame(watch);
       if (!current) return;
       renderCards();
       // Output that arrived while the page was closed: show its end.
