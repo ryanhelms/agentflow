@@ -288,6 +288,30 @@ func TestFinishRefusals(t *testing.T) {
 	}
 }
 
+func TestFinishRefusesCommitsAfterMergedPR(t *testing.T) {
+	_, primary := fixture(t)
+	s := Resolve(&config.Repo{}, &config.User{})
+	dir := addWorktree(t, s, primary, "issue-3")
+	commitFile(t, dir, "a.go")
+	git(t, dir, "push", "-q", "-u", "origin", "issue-3")
+	head := git(t, dir, "rev-parse", "HEAD")
+	squashMerge(t, primary, "issue-3")
+	commitFile(t, dir, "b.go") // follow-up work, pushed but in no merged PR
+	git(t, dir, "push", "-q", "origin", "issue-3")
+	opt := Options{Protected: config.DefaultProtected, GH: fakeGH(map[string]string{
+		"issue-3": `{"state":"MERGED","mergedAt":"x","baseRefName":"develop","headRefOid":"` + head + `"}`,
+	})}
+	_, err := PlanFinish(t.Context(), dir, "", opt)
+	var refused *RefusedError
+	if !errors.As(err, &refused) || refused.Outcome.State != StateUnmerged || !strings.Contains(refused.Outcome.Detail, "after the merged PR") {
+		t.Fatalf("finish with commits after the merged PR: %v", err)
+	}
+	res, err := PlanSweep(t.Context(), []string{primary}, opt)
+	if err != nil || len(res.Plans()) != 0 {
+		t.Fatalf("sweep planned %d finishes: %v", len(res.Plans()), err)
+	}
+}
+
 func TestOfflineMergeDetectionIgnoresNewBranches(t *testing.T) {
 	_, primary := fixture(t)
 	s := Resolve(&config.Repo{}, &config.User{})
