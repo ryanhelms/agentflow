@@ -25,6 +25,7 @@ Approve what plugin "ci-notify" asked to run:
     }
   }
 ! The console runs it once, as the plugin, right after you approve.
+Approve: plugin "ci-notify", command "notify", request <operation-id>
 Proceed? [y/N]: 
 --- error
 cancelled

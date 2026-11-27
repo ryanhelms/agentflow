@@ -26,4 +26,5 @@ Decline what plugin "ci-notify" asked to run:
       "title": "CI failed on feat"
     }
   }
+Decline: plugin "ci-notify", command "notify", request <operation-id>
 Proceed? [y/N]: 
