@@ -74,9 +74,7 @@ const (
 // in types_phase2.go, the phase 3 family (op) in types_phase3.go, the
 // phase 5 family (plugin) in types_phase5.go and the phase 6 family
 // (harness) in types_phase6.go.
-var ReservedFamilies = []string{
-	"ai", // phase 7: ai.session.*
-}
+var ReservedFamilies = []string{}
 
 var registry = map[Type]TypeInfo{
 	TypeGitHeadChanged:      {Type: TypeGitHeadChanged, Scope: ScopeWorktree, Phase: 1},
