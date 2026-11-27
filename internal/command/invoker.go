@@ -31,9 +31,12 @@ func (inv *invoker) Invoke(ctx context.Context, c *Call) (any, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	stages := make([]Stage, 0, len(inv.o.Stages)+len(RegisteredStages()))
+	stages = append(stages, inv.o.Stages...)
+	stages = append(stages, RegisteredStages()...)
 	next := Handler(inv.operate)
-	for i := len(inv.o.Stages) - 1; i >= 0; i-- {
-		stage, rest := inv.o.Stages[i], next
+	for i := len(stages) - 1; i >= 0; i-- {
+		stage, rest := stages[i], next
 		next = func(ctx context.Context, c *Call) (any, error) { return stage.Handle(ctx, c, rest) }
 	}
 	return next(ctx, c)

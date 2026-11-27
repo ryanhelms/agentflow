@@ -166,6 +166,13 @@ func run(ctx context.Context, cmd string, args []string) error {
 	if dispatch, rest, ok := command.Default.Dispatch(append([]string{cmd}, args...)); ok {
 		return dispatch(ctx, cliEnv{}, invoker, rest)
 	}
+	// A registered operation whose command line still runs a handler
+	// below: run the registered stages (plugin permission rules) first.
+	if m, ok := command.Default.Legacy(append([]string{cmd}, args...)); ok {
+		if err := command.CheckStages(ctx, m, command.Origin{Source: "cli", Client: "cli"}, command.Detail{}); err != nil {
+			return err
+		}
+	}
 	switch cmd {
 	case "policy":
 		return runPolicy(ctx, args)
@@ -367,7 +374,7 @@ func runHook(ctx context.Context, args []string) error {
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	client := fs.String("client", "", "calling client")
-	conventionOnly := fs.Bool("convention-only", false, "pre-bash: check messages and titles only, not the never-list")
+	conventionOnly := fs.Bool("convention-only", false, "pre-bash: check messages, titles, the repository boundary and the plugin add, remove and approve rule; skip the rest of the never-list")
 	rest := args[1:]
 	var positional []string
 	for len(rest) > 0 {

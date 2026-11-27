@@ -10,6 +10,7 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/bus/store"
+	"github.com/ryanhelms/agentflow/internal/plugin"
 )
 
 // The timeline projection (lane 3.5). The contract is in the ADR, section
@@ -64,6 +65,7 @@ func (p *timelineProjection) Topics() []bus.Topic {
 	return []bus.Topic{
 		{Repo: p.repo.id, Worktree: bus.Any, Types: "op.**"},
 		{Repo: p.repo.id, Worktree: bus.Any, Types: "approval.**"},
+		{Repo: p.repo.id, Worktree: bus.Any, Types: bus.Pattern(bus.TypePluginAnnotationAdded)},
 	}
 }
 
@@ -87,12 +89,14 @@ func (p *timelineProjection) State(ctx context.Context, key ProjectionKey) (json
 		return nil, err
 	}
 	st := timelineOf(events, p.now())
+	attachAnnotations(&st, events)
 	st.Truncated = st.Truncated || cut
 	return json.Marshal(st)
 }
 
 // events reads the repository's newest timelineWindow stored events and
-// keeps the op.* and approval.* ones, oldest first. cut is true when older
+// keeps the op.*, approval.* and plugin.annotation.added ones, oldest
+// first. cut is true when older
 // events exist that were not read.
 func (p *timelineProjection) events(ctx context.Context) (events []bus.Event, cut bool, err error) {
 	s := p.repo.store
@@ -424,4 +428,41 @@ func httpsURL(raw string) string {
 		return ""
 	}
 	return raw
+}
+
+// attachAnnotations adds each plugin.annotation.added event in events
+// (oldest first) to the operation its operation_id names, keeping the
+// newest MaxTimelineAnnotations, oldest first. An annotation for an
+// operation outside st is not shown. Text and URL are plugin text: clamped,
+// control and bidi characters stripped (plugin.SafeText),
+// the URL kept only when it is https.
+func attachAnnotations(st *TimelineState, events []bus.Event) {
+	index := map[string]int{}
+	for i, op := range st.Operations {
+		index[op.ID] = i
+	}
+	for _, e := range events {
+		if e.Type != bus.TypePluginAnnotationAdded {
+			continue
+		}
+		var p bus.PluginAnnotationAdded
+		if json.Unmarshal(e.Payload, &p) != nil {
+			continue
+		}
+		p = p.Clamp()
+		p.Text, p.Plugin = plugin.SafeText(p.Text, len(p.Text)), plugin.SafeText(p.Plugin, len(p.Plugin))
+		i, ok := index[p.OperationID]
+		if !ok || p.Plugin == "" || p.Text == "" {
+			continue
+		}
+		if p.Level != bus.AnnotationWarning {
+			p.Level = bus.AnnotationInfo
+		}
+		op := &st.Operations[i]
+		op.Annotations = append(op.Annotations, TimelineAnnotation{EventID: e.ID, Plugin: p.Plugin, Text: p.Text,
+			URL: httpsURL(p.URL), Level: p.Level, Time: e.Time.UTC()})
+		if n := len(op.Annotations) - MaxTimelineAnnotations; n > 0 {
+			op.Annotations = append([]TimelineAnnotation(nil), op.Annotations[n:]...)
+		}
+	}
 }

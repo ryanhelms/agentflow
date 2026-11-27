@@ -69,6 +69,15 @@ var directCalls = map[string]string{
 	"transition --shipped":      "CI-only: the release workflow marks shipped tasks, with no tool, no confirmation and no Spec",
 }
 
+// scopeNoneWrites lists the registered writes that publish no op.* events
+// because they change the user's home and no repository (Events: ScopeNone,
+// phase 3 "ScopeNone"). Each still runs the policy gate and the Invoker writes
+// its audit line. The test fails when an entry is no longer a ScopeNone write.
+var scopeNoneWrites = map[string]string{
+	"plugin.add":    "installs into the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
+	"plugin.remove": "deletes from the user's agentflow home, outside any repository; the Plugins page learns of it from plugin.lifecycle.changed",
+}
+
 // auditExempt lists registered writes that neither set AuditByInvoker nor write
 // an audit line on every path, each with the reason.
 var auditExempt = map[string]string{}
@@ -101,6 +110,10 @@ func TestEveryWriteOperationEmitsEvents(t *testing.T) {
 	for _, c := range writes {
 		m := c.Meta()
 		t.Run(m.Name, func(t *testing.T) {
+			if reason, ok := scopeNoneWrites[m.Name]; ok {
+				checkScopeNoneWrite(t, f.app, m, reason)
+				return
+			}
 			checkWriteRules(t, m)
 			if m.Gate != command.GateByInvoker {
 				checkOutcomes(t, f.app, m)
@@ -111,6 +124,57 @@ func TestEveryWriteOperationEmitsEvents(t *testing.T) {
 		})
 	}
 	t.Run("legacy-only writes", func(t *testing.T) { checkLegacyOnly(t, f.dir) })
+	t.Run("scope none entries are current", func(t *testing.T) {
+		for name := range scopeNoneWrites {
+			c, ok := command.Default.Lookup(name)
+			if !ok || !isWrite(c.Meta()) || c.Meta().Events != command.ScopeNone {
+				t.Errorf("%s is listed as a ScopeNone write, but is not one", name)
+			}
+		}
+	})
+}
+
+// checkScopeNoneWrite checks a write that publishes no events: it has no
+// tool, it runs a gate under a real autonomy action, the Invoker audits it,
+// and no outcome publishes an event, through both Invokers.
+func checkScopeNoneWrite(t *testing.T, a *app.App, m command.Meta, reason string) {
+	t.Helper()
+	if reason == "" {
+		t.Error("a ScopeNone write needs its reason")
+	}
+	if m.Events != command.ScopeNone || m.Tool != "" {
+		t.Errorf("%s: events %v, tool %q: want ScopeNone and no tool", m.Name, m.Events, m.Tool)
+	}
+	if m.Gate == command.GateNone || !config.ValidAutonomyAction(m.Action) || !m.AuditByInvoker {
+		t.Errorf("%s: gate %v, action %q, AuditByInvoker %v: want a gate, an autonomy action and the Invoker's audit line", m.Name, m.Gate, m.Action, m.AuditByInvoker)
+	}
+	const id = "op_00112233445566778899aabbccddeeff"
+	for _, sc := range []struct {
+		name string
+		run  func(context.Context) (any, error)
+	}{
+		{"applied", func(context.Context) (any, error) { return metaOut{}, nil }},
+		{"needs confirmation", func(context.Context) (any, error) { return pending("needs_confirmation", id), nil }},
+		{"suggest", func(context.Context) (any, error) { return pending("suggest", id), nil }},
+		{"error", func(context.Context) (any, error) { return nil, errors.New("failed") }},
+	} {
+		for name, newInvoker := range map[string]func(command.Options) command.Invoker{
+			"reference":  func(o command.Options) command.Invoker { return commandtest.Invoker{Options: o} },
+			"production": command.NewInvoker,
+		} {
+			t.Run(sc.name+"/"+name, func(t *testing.T) {
+				em, au := &commandtest.Emitter{}, &commandtest.Auditor{}
+				inv := newInvoker(command.Options{Emitters: em.Source(), Auditor: au})
+				_, _ = inv.Invoke(t.Context(), metaCall(a, m, sc.run))
+				if len(em.Events()) != 0 {
+					t.Errorf("published %v, want no events", em.Types())
+				}
+				if len(au.Lines()) != 1 {
+					t.Errorf("%d audit lines from the %s Invoker, want 1", len(au.Lines()), name)
+				}
+			})
+		}
+	}
 }
 
 // selfAuditing lists the operations whose app method writes an audit line

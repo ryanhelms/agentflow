@@ -127,8 +127,11 @@ type Request struct {
 // Notification reports whether r expects no answer.
 func (r *Request) Notification() bool { return len(r.ID) == 0 }
 
-// Handler answers the peer's requests and notifications. It runs on its own
-// goroutine per request, at most Limits.MaxInFlight at once; ctx ends when
+// Handler answers the peer's requests and notifications. A request runs on
+// its own goroutine, at most Limits.MaxInFlight at once. Notifications are
+// not counted in MaxInFlight: they run in arrival order on one goroutine,
+// and when enough wait the Conn stops reading until the Handler catches up,
+// so a notification Handler must not Call on the same Conn. ctx ends when
 // the connection closes. For a notification the result is ignored. An error
 // of type *Error is sent as is; any other error becomes CodeInternalError
 // with the message "internal error" (its text is never sent).
@@ -186,8 +189,10 @@ type LaunchSpec struct {
 	// ScrubbedEnv. Launch refuses a name that is not allowed by
 	// EnvAllowed.
 	Env []string
-	// Stderr receives the child's stderr, at most StderrLimit bytes kept
-	// (the newest). Nil discards it.
+	// Stderr receives the child's stderr line by line as it arrives, each
+	// line cut at 4 KiB, at most StderrLimit bytes in all; then one
+	// "[stderr truncated]" line and nothing more. The newest StderrLimit
+	// bytes stay available through StderrTail. Nil discards it.
 	Stderr io.Writer
 	// StderrLimit, Limits and ShutdownGrace take the defaults when zero.
 	StderrLimit   int

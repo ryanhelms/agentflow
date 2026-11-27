@@ -18,6 +18,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Repo and Worktree are what Emitter fills in.
@@ -151,7 +152,9 @@ func (inv Invoker) Invoke(ctx context.Context, c *command.Call) (any, error) {
 		next = func(ctx context.Context, c *command.Call) (any, error) { return stage.Handle(ctx, c, rest) }
 	}
 	v, err := next(ctx, c)
-	if c.DryRun || c.Meta.Events == command.ScopeNone {
+	// As in command.NewInvoker: a read is not audited, and a write with
+	// ScopeNone is, though it publishes nothing (em is nil for it).
+	if c.DryRun || c.Meta.Class == policy.Read || c.Meta.Class == "" {
 		return v, err
 	}
 	out := c.Classify(v, err)

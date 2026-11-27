@@ -1,0 +1,24 @@
+$ agentflow plugin add <plugin-src>
+--- stdin
+y
+--- stdout
+Upgraded ci-notify from 0.1.0 to 0.2.0 (sha256:<digest-5>).
+It is turned on. To turn it off, run: agentflow config set plugins.ci-notify.enabled=false
+--- stderr
+Agentflow plugin.install: confirm (default)
+Upgrade plugin ci-notify 0.2.0: "CI failure notifications"
+  from      "<plugin-src>"
+  hash      sha256:<digest-5>
+  tier      declarative
+  replaces  0.1.0 (sha256:<digest-1>)
+  receives  gh.ci.updated
+  publishes nothing
+  runs      notify
+  settings  signal
+  adds
+    handler ci-failed: on gh.ci.updated (2 conditions) then invoke notify
+! This plugin runs no code of its own: agentflow reads its rules and does only what its permissions allow.
+! Writes the plugin starts (notify) wait for your approval before they run.
+! plugins.ci-notify.enabled is already true in your settings, so this version runs as soon as the console sees it.
+It is turned on. To turn it off, run: agentflow config set plugins.ci-notify.enabled=false
+Proceed? [y/N]: 
