@@ -115,3 +115,27 @@ func TestForbiddenAlwaysBlocksSessionAllow(t *testing.T) {
 		t.Fatalf("plugin entry: %q", reason)
 	}
 }
+
+// Agents never run the sign-in commands or a session host directly. A
+// cheap layer: indirection (a script written first, a built command) gets
+// around it.
+func TestForbiddenAlwaysBlocksSignInAndHost(t *testing.T) {
+	for _, cmd := range []string{
+		"agentflow ui --no-open",
+		"agentflow ui --no-open=true .",
+		"agentflow ui --foreground --no-open",
+		"agentflow ui --serve-child overview '' link 0",
+		`sh -c "agentflow ui --no-open"`,
+		"env -u CLAUDECODE agentflow ui --no-open",
+		"agentflow ai host --session ais_0123456789abcdef0123456789abcdef",
+	} {
+		if reason := ForbiddenAlways(cmd); reason == "" {
+			t.Errorf("%q is allowed, want it blocked", cmd)
+		}
+	}
+	for _, cmd := range []string{"agentflow ui", "agentflow ui --status", "agentflow ui --stop", "agentflow ui --no-open=false", "agentflow ai status", `echo "agentflow ui --no-open"`} {
+		if reason := ForbiddenAlways(cmd); reason != "" {
+			t.Errorf("%q: blocked (%s), want it allowed", cmd, reason)
+		}
+	}
+}

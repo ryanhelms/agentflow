@@ -259,7 +259,48 @@ func ForbiddenAlways(cmd string) string {
 	if allowsSessionAsk(cmd) {
 		return "allowing what an AI session asks for is a human decision; ask the user to answer in the console's AI panel, or to run agentflow ai respond --allow in their own terminal"
 	}
+	if signInCommand(cmd) {
+		return "the console's sign-in link is for the user only; use agentflow_ui_open to open the console in their browser, or ask them to run agentflow ui in their own terminal"
+	}
+	if hostsSession(cmd) {
+		return "agentflow ai host is started by agentflow itself for a detached session; follow a session with agentflow ai status instead"
+	}
 	return ""
+}
+
+// signInCommand reports whether cmd runs agentflow ui --no-open (which
+// prints the one-time sign-in link) or the console's startup plumbing
+// ui --serve-child. Found the way changesPlugins finds plugin decisions,
+// with the same limits: a cheap layer that indirection gets around.
+func signInCommand(cmd string) bool {
+	for _, args := range agentflowInvocations(cmd) {
+		if len(args) < 1 || args[0] != "ui" {
+			continue
+		}
+		for _, a := range args[1:] {
+			if a == "--" {
+				break
+			}
+			name, value, hasValue := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-"), "=")
+			if !strings.HasPrefix(a, "-") {
+				continue
+			}
+			if on, err := strconv.ParseBool(value); (name == "no-open" || name == "serve-child") && (!hasValue || err != nil || on) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hostsSession reports whether cmd runs agentflow ai host.
+func hostsSession(cmd string) bool {
+	for _, args := range agentflowInvocations(cmd) {
+		if len(args) > 1 && args[0] == "ai" && args[1] == "host" {
+			return true
+		}
+	}
+	return false
 }
 
 // namesSomething reports whether args hold more than options: a plugin source

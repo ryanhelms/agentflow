@@ -134,6 +134,17 @@ func ServeForeground(ctx context.Context, dir string, port int, dest Destination
 }
 
 func serveAt(ctx context.Context, dir string, port int, dest Destination, ready func(string, bool), mode string) error {
+	return serveAtAs(ctx, dir, port, dest, ready, mode, false)
+}
+
+// serveChildAt is serveAt for `ui --serve-child`: it never asks a running
+// daemon for a link (its starter does that over the control request) and
+// its ready callback gets no address.
+func serveChildAt(ctx context.Context, dir string, port int, dest Destination, ready func(string, bool), mode string) error {
+	return serveAtAs(ctx, dir, port, dest, func(_ string, reused bool) { ready("", reused) }, mode, true)
+}
+
+func serveAtAs(ctx context.Context, dir string, port int, dest Destination, ready func(string, bool), mode string, child bool) error {
 	registry, err := registryDir()
 	if err != nil {
 		return err
@@ -143,10 +154,14 @@ func serveAt(ctx context.Context, dir string, port int, dest Destination, ready 
 		return err
 	}
 	clearCommanderEnv()
-	return serveRegistered(ctx, registry, port, op, ready)
+	return serveRegisteredAs(ctx, registry, port, op, ready, child)
 }
 
 func serveRegistered(ctx context.Context, registry string, port int, op daemonRequest, ready func(string, bool)) error {
+	return serveRegisteredAs(ctx, registry, port, op, ready, false)
+}
+
+func serveRegisteredAs(ctx context.Context, registry string, port int, op daemonRequest, ready func(string, bool), child bool) error {
 	prefix, err := daemonPrefix(registry)
 	if err != nil {
 		return err
@@ -158,6 +173,11 @@ func serveRegistered(ctx context.Context, registry string, port int, op daemonRe
 	if existing != nil {
 		if port > 0 && existing.Port != port {
 			return fmt.Errorf("console daemon is already running on port %d", existing.Port)
+		}
+		if child {
+			// The starter asks the daemon itself.
+			ready("", true)
+			return nil
 		}
 		reply, err := existing.control(ctx, op)
 		if err == nil {
@@ -213,6 +233,10 @@ func serveRegistered(ctx context.Context, registry string, port int, op daemonRe
 	defer stop()
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(l) }()
+	if child {
+		// The starter asks for its link over the control request.
+		launch = ""
+	}
 	ready(launch, false)
 	err = <-done
 	if errors.Is(err, http.ErrServerClosed) {

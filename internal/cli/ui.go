@@ -64,11 +64,9 @@ func runUI(ctx context.Context, args []string) error {
 	clearWorktreeGitEnv()
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
-	// Only the parent process reads this private readiness pipe.
+	// The console's startup plumbing: it reports readiness only, never a
+	// link (the starter asks the daemon over the control request).
 	if len(args) == 5 && args[0] == "--serve-child" {
-		if !uiParentIsAgentflow() {
-			return errServeChildParent
-		}
 		port, err := strconv.Atoi(args[4])
 		if err != nil || port < 0 || port > 65535 {
 			return errors.New("invalid console port")
