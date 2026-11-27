@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -242,7 +241,7 @@ func TestProbeKillsTheProcessGroup(t *testing.T) {
 			t.Fatal("the fake did not spawn")
 		}
 		deadline := time.Now().Add(5 * time.Second)
-		for syscall.Kill(pid, 0) == nil {
+		for processAlive(pid) {
 			if time.Now().After(deadline) {
 				t.Fatalf("grandchild %d still runs", pid)
 			}
