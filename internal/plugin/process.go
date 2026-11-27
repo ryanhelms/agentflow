@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -218,8 +219,22 @@ func (pr *process) Err() error {
 }
 
 // handle answers the child's requests through Env. Nothing is answered
-// before initialize succeeded.
-func (pr *process) handle(ctx context.Context, r *jsonrpc.Request) (any, error) {
+// before initialize succeeded. A panic in a request (a command the plugin
+// invoked, say) is this plugin's crash: the child is killed, restarted
+// with backoff, and the daemon carries on.
+func (pr *process) handle(ctx context.Context, r *jsonrpc.Request) (result any, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if pr.env != nil {
+				pr.env.Log("error", fmt.Sprintf("request %s panicked in the host", r.Method))
+			}
+			if pr.proc != nil {
+				_ = pr.proc.Kill()
+			}
+			pr.end(coded(fmt.Errorf("request %s panicked", r.Method), bus.PluginCodeCrashed, false))
+			result, err = nil, errors.New("internal error") // sent as internal error
+		}
+	}()
 	if !pr.ready.Load() {
 		return nil, rpcRefusal(refuse(RefuseNotReady))
 	}

@@ -106,6 +106,9 @@ func (d *declarative) Deliver(ctx context.Context, e bus.Event) error {
 	for _, actions := range plans {
 		for _, a := range actions {
 			if err := d.run(ctx, a); err != nil {
+				if Code(err) == bus.PluginCodeCrashed {
+					return err
+				}
 				return coded(err, ReasonAction, false)
 			}
 		}
@@ -165,7 +168,14 @@ func (d *declarative) crashed() error {
 	return err
 }
 
-func (d *declarative) run(ctx context.Context, a plannedAction) error {
+// run runs one action. A panic in it, or in the command it invokes, is
+// this plugin's crash, never the daemon's.
+func (d *declarative) run(ctx context.Context, a plannedAction) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = d.crashed()
+		}
+	}()
 	if a.invoke != nil {
 		res, err := d.env.Invoke(ctx, *a.invoke)
 		if err != nil {
@@ -176,7 +186,7 @@ func (d *declarative) run(ctx context.Context, a plannedAction) error {
 		}
 		return nil
 	}
-	_, err := d.env.Publish(ctx, *a.annotate)
+	_, err = d.env.Publish(ctx, *a.annotate)
 	return err
 }
 

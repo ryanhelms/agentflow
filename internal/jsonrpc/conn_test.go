@@ -510,3 +510,32 @@ func TestParamsMustBeStructured(t *testing.T) {
 		t.Fatal("scalar params were sent")
 	}
 }
+
+func TestHandlerPanicBecomesInternalError(t *testing.T) {
+	h := jsonrpc.HandlerFunc(func(_ context.Context, r *jsonrpc.Request) (any, error) {
+		if r.Method == "ok" {
+			return "fine", nil
+		}
+		panic("handler panics")
+	})
+	c, peer := jsonrpctest.Wire(t, h, jsonrpc.Limits{})
+	// A panicking notification is dropped; a panicking request is answered.
+	if err := peer.WriteLine(`{"jsonrpc":"2.0","method":"boom"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := peer.WriteLine(`{"jsonrpc":"2.0","id":1,"method":"boom"}`); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := errCode(t, response(t, peer)); code != jsonrpc.CodeInternalError {
+		t.Fatalf("code = %d", code)
+	}
+	if err := peer.WriteLine(`{"jsonrpc":"2.0","id":2,"method":"ok"}`); err != nil {
+		t.Fatal(err)
+	}
+	if m := response(t, peer); m.Error != nil || string(m.Result) != `"fine"` {
+		t.Fatalf("after a panic: %+v", m)
+	}
+	if c.Err() != nil {
+		t.Fatalf("closed: %v", c.Err())
+	}
+}

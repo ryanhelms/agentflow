@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -258,7 +259,7 @@ func (r *runner) deliver(inst Instance, env *env, sub bus.Subscription, e bus.Ev
 		dropped := sub.Dropped()
 		r.h.update(r.p.ID, func(st *Status) { st.Dropped = dropped })
 		ctx, cancel := context.WithTimeout(r.ctx, r.h.o.DeliverTimeout)
-		_ = inst.Deliver(ctx, e) // an overflow marker is never a dead letter
+		_ = safeDeliver(ctx, inst, e) // an overflow marker is never a dead letter
 		cancel()
 		return
 	}
@@ -267,7 +268,7 @@ func (r *runner) deliver(inst Instance, env *env, sub bus.Subscription, e bus.Ev
 	}
 	env.remember(e)
 	ctx, cancel := context.WithTimeout(r.ctx, r.h.o.DeliverTimeout)
-	err := inst.Deliver(ctx, e)
+	err := safeDeliver(ctx, inst, e)
 	cancel()
 	if err == nil {
 		r.h.update(r.p.ID, func(st *Status) { st.Delivered++ })
@@ -334,3 +335,14 @@ type idleSubscription struct{}
 func (idleSubscription) Events() <-chan bus.Event { return nil }
 func (idleSubscription) Dropped() uint64          { return 0 }
 func (idleSubscription) Close() error             { return nil }
+
+// safeDeliver is inst.Deliver with a panic turned into this plugin's
+// crash, so a plugin (or a command it triggers) cannot kill the daemon.
+func safeDeliver(ctx context.Context, inst Instance, e bus.Event) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = coded(fmt.Errorf("plugin panicked: %v", r), bus.PluginCodeCrashed, false)
+		}
+	}()
+	return inst.Deliver(ctx, e)
+}

@@ -76,8 +76,9 @@ func (s *PermissionStage) Handle(ctx context.Context, c *command.Call, next comm
 		// which file to fix.
 		return nil, &DeniedError{Plugin: "*", Rule: "*", Message: s.unreadable(err)}
 	}
+	b := branchOf(ctx, c)
 	for _, r := range rules {
-		if matchRule(r.rule.Match, c) {
+		if matchRule(r.rule.Match, c, b) {
 			return nil, &DeniedError{Plugin: r.plugin, Rule: r.rule.Name, Message: oneLine(r.rule.Deny, MaxDenyMessage)}
 		}
 	}
@@ -86,10 +87,14 @@ func (s *PermissionStage) Handle(ctx context.Context, c *command.Call, next comm
 
 // load returns the enabled rules, read again only when the registry's
 // revision or the personal layer's plugins section changed.
+//
+// With no plugin enabled there are no rules and the registry is not read,
+// so a broken installed.json cannot block anything. With a plugin
+// enabled, a registry that cannot be found or read fails closed.
 func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
-	src, layers := s.Source(), s.Layers()
-	if src == nil || layers == nil {
-		return nil, nil
+	layers := s.Layers()
+	if layers == nil {
+		return nil, nil // no personal layer: nothing is enabled
 	}
 	personal, err := layers.Personal(ctx)
 	if err != nil {
@@ -101,10 +106,18 @@ func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
 			enabled[id] = true
 		}
 	}
-	fp, _ := json.Marshal(enabled)
-	key := src.Revision() + "\x00" + string(fp)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(enabled) == 0 {
+		s.key, s.rules = "", nil
+		return nil, nil
+	}
+	src := s.Source()
+	if src == nil {
+		return nil, &rulesError{err: errNoRegistry}
+	}
+	fp, _ := json.Marshal(enabled)
+	key := src.Revision() + "\x00" + string(fp)
 	if key == s.key {
 		return s.rules, nil
 	}
@@ -125,13 +138,57 @@ func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
 	return rules, nil
 }
 
-// matchRule reports whether every non-empty list of m matches c.
-func matchRule(m manifest.RuleMatch, c *command.Call) bool {
+// errNoRegistry: the agentflow home, and so installed.json, cannot be
+// found while a plugin is enabled.
+var errNoRegistry = errors.New("the agentflow home cannot be found")
+
+// branchWriters are the actions that write a branch. Each writes the
+// current branch: commit commits on it, push publishes it, and a PR's
+// head is it.
+var branchWriters = map[string]bool{"commit": true, "push": true, "pr_open": true, "pr_ready_for_review": true}
+
+// callBranch is the branch a call writes, for a rule's branch condition.
+type callBranch struct {
+	name    string
+	unknown bool // the call writes a branch that cannot be determined
+}
+
+// branchOf returns the branch c writes: Detail.Branch when the operation
+// names one, else the current branch for a branch-writing action.
+func branchOf(ctx context.Context, c *command.Call) callBranch {
+	if c.Detail.Branch != "" {
+		return callBranch{name: c.Detail.Branch}
+	}
+	if !branchWriters[c.Meta.Action] {
+		return callBranch{}
+	}
+	if c.App != nil && c.App.Repo != nil {
+		if b := c.App.Repo.Branch(ctx); b != "" {
+			return callBranch{name: b}
+		}
+	}
+	return callBranch{unknown: true}
+}
+
+// matchRule reports whether every non-empty list of m matches c, whose
+// written branch is b. A branch condition matches a branch-writing call
+// whose branch cannot be determined (so it denies), and never matches a
+// call that writes no branch.
+func matchRule(m manifest.RuleMatch, c *command.Call, b callBranch) bool {
 	if len(m.Operation)+len(m.Class)+len(m.Action)+len(m.Origin)+len(m.Branch) == 0 {
 		return false // Validate refuses an empty match; never deny everything
 	}
-	return globs(m.Operation, c.Meta.Name) && globs(m.Class, string(c.Meta.Class)) && globs(m.Action, c.Meta.Action) &&
-		globs(m.Origin, c.Origin.Source) && globs(m.Branch, c.Detail.Branch)
+	if !globs(m.Operation, c.Meta.Name) || !globs(m.Class, string(c.Meta.Class)) || !globs(m.Action, c.Meta.Action) ||
+		!globs(m.Origin, c.Origin.Source) {
+		return false
+	}
+	switch {
+	case len(m.Branch) == 0, b.unknown:
+		return true
+	case b.name == "":
+		return false
+	}
+	return globs(m.Branch, b.name)
 }
 
 // globs reports whether value matches any of patterns; an empty list
@@ -160,6 +217,9 @@ func (e *rulesError) Unwrap() error { return e.err }
 // unreadable is the refusal's message: the file and how to fix it.
 func (s *PermissionStage) unreadable(err error) string {
 	var re *rulesError
+	if errors.Is(err, errNoRegistry) {
+		return "plugin permission rules could not be read because the agentflow home cannot be found. Set HOME, or turn plugins off in config.yml."
+	}
 	if errors.As(err, &re) && re.config {
 		return fmt.Sprintf("plugin permission rules could not be read because %s is not valid. Fix that file, then check it with agentflow config.", pathOr(s.ConfigPath, defaultConfigPath))
 	}
