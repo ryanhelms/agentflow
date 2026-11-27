@@ -174,6 +174,10 @@ func run(ctx context.Context, cmd string, args []string) error {
 		}
 	}
 	switch cmd {
+	case "ai":
+		if len(args) > 0 && args[0] == "host" {
+			return runAIHost(ctx, args[1:])
+		}
 	case "policy":
 		return runPolicy(ctx, args)
 	case "push":
