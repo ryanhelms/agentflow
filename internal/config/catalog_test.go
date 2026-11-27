@@ -176,7 +176,7 @@ func TestGroupsAreOrderedAndIncludeEachRole(t *testing.T) {
 	for _, role := range ProviderRoles {
 		want = append(want, "providers."+role)
 	}
-	want = append(want, "autonomy", "policy", "commit", "worktrees", "integrations", "updates", "init")
+	want = append(want, "autonomy", "policy", "commit", "worktrees", "integrations", "updates", "init", "plugins")
 	if !slices.Equal(ids, want) {
 		t.Errorf("groups = %v\nwant     %v", ids, want)
 	}

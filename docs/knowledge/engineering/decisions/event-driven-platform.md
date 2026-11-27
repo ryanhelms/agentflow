@@ -19,12 +19,15 @@ x-agentflow-links:
     - title: "Phase 4 contract: settings change sets, preview, save and undo"
       url: https://github.com/ryanhelms/agentflow/issues/68
       ref: null
+    - title: "Phase 5 contract: plugin manifest, JSON-RPC and plugin host"
+      url: https://github.com/ryanhelms/agentflow/issues/77
+      ref: null
 ---
 # Event bus, message store and event stream
 
 ## Status
 
-Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3") and phase 4 (section "Phase 4", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
+Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3"), phase 4 (section "Phase 4") and phase 5 (section "Phase 5", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
 
 ## Context
 
@@ -93,7 +96,7 @@ Phase 1 types:
 | `config.layer.changed` | any | `ConfigLayerChanged{layer, paths}`; phase 1 uses layer `repo` | `.agentflow/*.yml`, `.agentflow/*.yaml` or `.agentflow/providers/*.y{a,}ml` changes |
 | `stream.overflow` | any, transient | `StreamOverflow{subscription, dropped}` | a subscription dropped events (see Overflow) |
 
-Reserved families, each added by its phase's amendment: `approval.*` and `hook.*`, `commit.created`, `gh.*` (phase 2, now registered: see "Phase 2, Event types"); `op.*` (phase 3, now registered: see "Phase 3 event types"); `plugin.*` (phase 5); `harness.*` (phase 6); `ai.session.*` (phase 7).
+Reserved families, each added by its phase's amendment: `approval.*` and `hook.*`, `commit.created`, `gh.*` (phase 2, now registered: see "Phase 2, Event types"); `op.*` (phase 3, now registered: see "Phase 3 event types"); `plugin.*` (phase 5, now registered: see "Phase 5 events"); `harness.*` (phase 6); `ai.session.*` (phase 7).
 
 ### Bus
 
@@ -1426,3 +1429,512 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - The console, the CLI (`agentflow config set A=1 B=2`) and agents (`agentflow_config_set`) save through the same Spec, so every save is on the timeline.
 - `agentflow_config` and `agentflow_config_apply` keep their inputs and outputs; they move onto the registry once `command.MCP.InputSchema` exists.
 - Outside edits reach the page within the phase 1 latency, and no client polls.
+
+## Phase 5
+
+*Amendment for phase 5 (issue #77), lanes 5.1 to 5.4 (issues #78 to #81).* Phase 5 adds a plugin host. `agentflow plugin list/add/remove` manage plugins installed from a local path, a Plugins page shows them live, and each plugin's own settings appear on the Settings page. Two sample plugins show the two code-free and code tiers: a YAML plugin that turns `gh.ci.updated` failures into a notification, and a small out-of-process plugin that adds timeline annotations.
+
+**Plugins are untrusted code.** Every rule in this section follows from that: a plugin gets only what its granted permissions allow, never a secret, a confirm token or the parent's environment, and it can make policy stricter but never looser.
+
+Everything in the phase 1 to 4 sections still holds unless a paragraph here says it changes. The code form of this section:
+
+| Contract | Go |
+| --- | --- |
+| Event types and payloads | `internal/bus/types_phase5.go` (`TypePlugin*`, `PluginState`, `PluginCode*`, `PluginLifecycleChanged`, `PluginDeliveryFailed`, `PluginAnnotationAdded`) |
+| JSON-RPC wire types, codes, limits, `Conn`, `Handler`, `LaunchSpec`, `Process`, environment allowlist | `internal/jsonrpc/types.go` |
+| Manifest, tiers, extension points, permissions and allow-lists, settings, registry entry, install layout, `Source`, validation codes | `internal/plugin/manifest/types.go` |
+| `Instance`, `Env`, `Factory`, `Builtin`, invoke and publish requests and results, limits, lifecycle `Transitions`, `Status`, `Layers` | `internal/plugin/types.go` |
+| JSON-RPC methods and their params | `internal/plugin/rpc.go` |
+| Plugins projection state | `internal/webui/projection_plugins_state.go` (`PluginsState`) |
+| Timeline annotations | `TimelineOperation.Annotations`, `TimelineAnnotation` in `internal/webui/projection_timeline_state.go` |
+| JSON invocation of a command (added by lane 5.2) | `command.JSONCommand` in `internal/command/invoke_json.go` |
+| Registered Invoker stages (added by lane 5.2) | `command.RegisterStage`, `command.RegisteredStages` in `internal/command/stages.go` |
+| Autonomy ceiling (added by lane 5.2) | `(*policy.Gate).WithCeiling`, `(*app.App).WithAutonomyCeiling` |
+
+### Phase 5 patterns
+
+| Piece | GoF / EIP pattern | Go |
+| --- | --- | --- |
+| One Factory per tier, chosen by the registry | Abstract Factory | `plugin.Factory`, the tier registry |
+| A process plugin inside the host | Proxy (GoF); Channel Adapter (EIP) | the process tier's `Instance` over `jsonrpc.Conn` |
+| What a plugin may touch | Facade | `plugin.Env` |
+| Lifecycle | State | `bus.PluginState`, `plugin.Transitions` |
+| Which events reach a plugin | Message Filter; Selective Consumer | the plugin's subscription, checked against its grant |
+| Declarative `when` | Message Filter | `manifest.Condition` |
+| Declarative actions | Interpreter (small), Message Translator (templates) | the declarative tier |
+| Failed delivery | Dead Letter Channel (persistent) | `<home>/plugins/deadletter.jsonl` |
+| Malformed frames | Invalid Message Channel | protocol error: the connection closes, the plugin restarts |
+| Plugin acts | Command Message to the Invoker | `command.invoke`, `command.JSONCommand` |
+| Permission rules | Chain of Responsibility (an Invoker stage) | the permission_rule Stage |
+| Plugin settings in Settings | a new catalog source | `manifest.CatalogFields` |
+| Back-pressure per plugin | Event-Driven Consumer with acknowledgement | `event.deliver` is a request |
+
+### Phase 5 tiers
+
+| Tier | Runs | Code from the plugin | Implemented by |
+| --- | --- | --- | --- |
+| `declarative` | YAML rules interpreted in the host | none | lane 5.2 |
+| `process` | an executable from the plugin directory, JSON-RPC on stdio | yes, in its own process | lane 5.2, over lane 5.1 |
+| `builtin` | Go compiled into agentflow, `plugin.RegisterBuiltin` from `init` | agentflow's own | lane 5.2 (registry only; phase 5 ships none) |
+
+There is no Go `plugin` package tier. The host never switches on the tier outside the Factory registry. Every tier is driven through the same `plugin.Instance` and gets the same `plugin.Env`, with the same permission checks. Builtins start disabled like any plugin.
+
+Plugins run **only in the console daemon**. With no daemon running, no handler runs. Permission rules are the exception: they run in every process that invokes a command (see "Phase 5 permission rules").
+
+### Phase 5 extension points
+
+| Point | Phase 5 | Meaning |
+| --- | --- | --- |
+| `handler` | **implemented**, both tiers | React to events. Declarative: rules with `on`, `when`, `actions`. Process: `on` only declares what the process may subscribe to. |
+| `permission_rule` | **implemented**, declarative only | Deny operations it matches. Never allow. |
+| `harness` | reserved, phase 6 | An ACP harness definition. Phase 6 amends this ADR. |
+| `provider` | reserved | A task, knowledge or notification provider. |
+| `source` | reserved | Publish new event types. Needs per-plugin type registration. |
+| `sink` | reserved | Durable delivery to an outside target (Durable Subscriber with its own cursor). A handler that neither invokes nor publishes covers the simple case today. |
+| `widget` | reserved | A declarative console panel. Never plugin HTML or JavaScript in the console. |
+
+`manifest.Validate` refuses a manifest that uses a reserved point (code `reserved`). A phase that implements one amends this ADR and `manifest.PointPhase`.
+
+### Phase 5 manifest
+
+A plugin is a directory with `agentflow-plugin.yml`, or (declarative only) a single YAML file. Decoding is strict: an unknown key is a `syntax` problem. The Go form is `manifest.Manifest`. The CI sample:
+
+```yaml
+schema: 1
+id: ci-notify
+name: CI failure notifications
+version: 0.1.0
+description: Sends a notification when the checks of a branch you work on start failing.
+tier: declarative
+permissions:
+  subscribe: [gh.ci.updated]
+  invoke: [notify]
+extensions:
+  handler:
+    - name: ci-failed
+      on: [gh.ci.updated]
+      when:
+        - {field: payload.state, equals: failure}
+        - {field: payload.previous, not_equals: failure}
+      actions:
+        - invoke:
+            command: notify
+            input:
+              signal: "{{settings.signal}}"
+              operation_id: "ci-notify-{{event.payload.head_sha}}"
+              title: "CI failed on {{event.payload.head_ref}}"
+              body: "Failed checks: {{event.payload.failed}}"
+settings:
+  - key: signal
+    type: string
+    default: ci.failed
+    label: Notification signal
+    description: The notification signal to send. Route it in the notifications provider settings.
+```
+
+A process plugin sets `tier: process` and `exec: {command: timeline-hints, args: []}`. `exec.command` is relative to the plugin directory, without `..`; it is never looked up on PATH. On Windows a missing extensionless command also tries `.exe`.
+
+Rules (`manifest.Validate`, lane 5.3; codes in `manifest.Code*`):
+
+- `id`: 2 to 40 characters, `[a-z][a-z0-9-]*[a-z0-9]`. Reserved: `agentflow`, `builtin`, `daemon`, `cli`, `mcp`, and IDs starting with `agentflow-`.
+- `version`: semantic version without `v`. `tier`: `declarative` or `process`; `builtin` is refused in a file.
+- Every `handler.on` pattern, `invoke.command` and annotate action is covered by `permissions` (`ungranted`). Every permission is inside the allow-lists of "Phase 5 subscriptions and publishing" and "Phase 5 command invocation" (`permission`).
+- A process plugin's handlers have no `when` or `actions`, and it has no permission rules (`rule`).
+- Conditions have exactly one operator; actions exactly one kind; `annotate` only in handlers whose `on` patterns are all `op.*`.
+- Templates use only `{{event.<field>}}` and `{{settings.<key>}}`.
+- Limits (`manifest.Max*`): manifest 256 KiB, 256 files, 16 MiB per installed tree, 32 plugins installed, 32 handlers, 32 rules, 16 conditions, 4 actions, 32 settings, 16 patterns per list.
+
+### Phase 5 install
+
+**No downloads.** `plugin add` takes a local directory or a local YAML file. It refuses a URL (`http:`, `https:`, `git@`, `ssh:`, `file:` and anything with `://`), never runs `npx`, `uvx`, `pip`, `go install`, `git` or a package manager, and never fetches anything. A process plugin's executable is built by the person before they add it.
+
+**Layout** under the agentflow home (`config.HomeDir()`):
+
+```text
+<home>/plugins/                    0700
+  installed.json                   0600  the registry (manifest.Registry), replaced atomically under installed.json.lock
+  deadletter.jsonl                 0600  the persistent Dead Letter Channel
+  <id>/
+    <first 16 hex of the hash>/    the installed copy: directories 0500, files 0400, executables 0500
+    data/                          0700  the plugin's HOME, TMPDIR and only writable place; plugin.log
+```
+
+**What `plugin add PATH` does** (lane 5.3, `internal/plugin/install`):
+
+1. Read the tree: regular files only. A symbolic link, a device, a socket, a path outside PATH, more than 256 files or 16 MiB is refused. A single YAML file is read as the manifest.
+2. Parse and validate the manifest.
+3. Hash it (`HashDir`): for each file sorted by its slash path, the line `<path>\x00<x or ->\x00<sha256 hex of the content>\n` (`x` for an executable bit); the hash is `sha256:` and the hex SHA-256 of all lines. The manifest file is part of the tree.
+4. Gate it (below). The confirmation summary lists the ID, name, version, tier, hash, every extension, every permission, `exec.command`, and an upgrade's previous version and hash. A token is bound to that summary, so a file that changes between preview and apply fails with `operation_changed`.
+5. Copy the tree into `<id>/<hash prefix>/` with read-only modes, re-hash the copy, and write the registry entry with the source path, the time and the parsed manifest. Remove the previous version's copy after the registry write.
+6. The plugin is installed **disabled**. Enabling is a settings change, `personal:plugins.<id>.enabled`, from the Settings page or `agentflow config set plugins.<id>.enabled=true`: a loosening edit, ticked in the Save review.
+
+Adding an installed ID with a different hash is an upgrade: same flow, the old version keeps running until the registry changes. Re-adding the same hash is a no-op.
+
+**Verification at start.** Before every start the host calls `Source.Verify`: hash the installed copy again and parse its manifest. A difference moves the plugin to `failed` with `hash_mismatch` or `manifest_invalid`. Only `plugin add` again recovers it.
+
+**Remove.** `plugin remove ID` deletes the registry entry, the installed copy, the data directory and the personal `plugins.<id>` block, under one confirmation. The daemon stops the plugin when it sees the registry change.
+
+**How the daemon notices.** Lane 5.3 adds `<home>/plugins/installed.json` to the user watch (`internal/watch/user.go`): a change publishes `config.layer.changed{layer: personal, paths: ["plugins/installed.json"]}` in `global`. The host reloads on that event and on every personal-layer change (enabling, settings).
+
+**A repository never installs or enables a plugin.** Only the personal layer and the person's own `plugin add` do. A cloned repository runs no plugin code. A repository may only turn plugins off for itself (`repo:plugins.disabled`).
+
+### Phase 5 JSON-RPC framing and launcher (lane 5.1)
+
+`internal/jsonrpc` is new shared code. `internal/provider/codexhost/stdio.go` stays as it is: it is a client of a different host with its own deny-replies, and moving it is not worth the risk. The plugin host (phase 5), the harness probe (phase 6) and the ACP client (phase 7) use `internal/jsonrpc`.
+
+**Framing.** JSON-RPC 2.0. One JSON object per line, `\n`-terminated, written atomically, at most 1 MiB (`DefaultMaxFrame`; ACP may raise it through `Limits`). `jsonrpc: "2.0"` is required. Request IDs are a number or a string, echoed exactly. A frame that is not JSON is `-32700`; one that is not a valid request, notification or response is `-32600`. An oversized or malformed frame, or a response to an ID never sent, closes the connection (`ErrFrameTooLarge`, `ErrProtocol`): the Invalid Message Channel is the connection itself.
+
+**Conn.** `NewConn(r, w, h, limits) Conn`: both sides send requests and notifications. `Call` waits for the answer until its context or `CallTimeout` (10 s) ends, then discards a late answer. The peer may have 4 requests in flight (`MaxInFlight`); one more gets `CodeBusy`. A Handler error of type `*jsonrpc.Error` is sent as is; any other becomes `-32603` "internal error" and its text is never sent. Error `data` is `{"code": "<fixed code>"}`.
+
+**Error codes.** Standard `-32700`, `-32600`, `-32601`, `-32602`, `-32603`; agentflow `-32001` forbidden, `-32002` rate limited, `-32003` busy, `-32004` timeout, `-32005` shutting down.
+
+**Launcher.** `Launch(ctx, LaunchSpec) (Process, error)`:
+
+- `Path` is absolute and must resolve, symbolic links included, to a regular executable file inside `Root` (the installed copy). It never searches PATH.
+- The environment is exactly `LaunchSpec.Env`, normally from `ScrubbedEnv`; a name `EnvAllowed` refuses fails the launch.
+- Stdin and stdout carry the connection. Stderr goes to `LaunchSpec.Stderr`, at most 64 KiB kept (the plugin host writes it to `data/plugin.log`). It never reaches an event, the stream or a terminal.
+- On Unix the child gets its own process group (`Setpgid`) and `Stop` and `Kill` signal the group. On Windows only the child is killed: job objects are new platform code, left out of phase 5 (decision 9).
+- `Stop` closes stdin, waits `ShutdownGrace` (2 s), then kills.
+
+**Scrubbed environment** (`ScrubbedEnv(parent, data, extra)`):
+
+| Variable | Value |
+| --- | --- |
+| `LANG`, `LC_ALL`, `LC_CTYPE`, `LC_MESSAGES`, `TZ` | inherited when set |
+| `SystemRoot`, `SystemDrive`, `COMSPEC`, `PATHEXT`, `WINDIR`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE` (Windows) | inherited when set |
+| `PATH` | fixed: `/usr/bin:/bin:/usr/sbin:/sbin` on Unix, `%SystemRoot%\System32;%SystemRoot%` on Windows |
+| `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`; `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `TEMP`, `TMP` | under the plugin's data directory |
+| `AGENTFLOW_PLUGIN_ID`, `AGENTFLOW_PLUGIN_DIR`, `AGENTFLOW_PLUGIN_DATA`, `AGENTFLOW_PLUGIN_PROTOCOL` | set by the host |
+
+Nothing else passes: no `GH_TOKEN`, `GITHUB_TOKEN`, Jira or Confluence token, cloud keys, proxy credentials, `SSH_AUTH_SOCK`, client session IDs (`CLAUDE_CODE_SESSION_ID`, `CODEX_THREAD_ID`) or `AGENTFLOW_*` variable of the daemon. HOME points at the data directory so a library that reads `~/.netrc`, `~/.config/gh` or a cloud CLI's files finds nothing. This is not a sandbox: the process still runs as the user and can read what the user can (decision 8).
+
+### Phase 5 JSON-RPC methods
+
+Protocol version 1 (`manifest.ProtocolVersion`). Go shapes in `internal/plugin/rpc.go` and `types.go`.
+
+| Direction | Method | Kind | Params → result |
+| --- | --- | --- | --- |
+| host → plugin | `initialize` | request | `{protocol_version, agentflow, plugin: {id, version}, settings, permissions, limits}` → `{protocol_version}` |
+| host → plugin | `event.deliver` | request | `{event: <envelope>}` → `{}` |
+| host → plugin | `settings.changed` | notification | `{settings}` |
+| host → plugin | `ping` | request | `{}` → `{}` |
+| host → plugin | `shutdown` | request | `{}` → `{}` |
+| plugin → host | `subscribe` | request | `{types: [pattern]}` → `{types: [accepted]}` |
+| plugin → host | `command.invoke` | request | `InvokeRequest` → `InvokeResult` |
+| plugin → host | `event.publish` | request | `PublishRequest` → `{id}` |
+| plugin → host | `log` | notification | `{level, message}` |
+
+- `initialize` is the first message. A different `protocol_version` in the answer fails the start with `protocol`. A plugin request before `initialize` has been answered gets `-32001` with code `not_ready`.
+- `event.deliver` carries one event, the full envelope as stored. The host sends the next only after the answer, so a slow plugin holds only its own queue (back-pressure). An error answer or a timeout sends the event to the Dead Letter Channel.
+- `subscribe` replaces the plugin's subscription set. A pattern must equal a granted pattern or be a type a granted pattern matches; others are refused (`not_granted`).
+- `log` writes one line (at most 4 KiB) to `data/plugin.log`, rotated at 1 MiB with one old file kept. Never to an event.
+- Refusals are `-32001` (forbidden) with a `plugin.Refuse*` code, `-32002` for a rate limit.
+
+### Phase 5 lifecycle
+
+`bus.PluginState` and `plugin.Transitions` (GoF State). A declarative or builtin plugin has no process, so it never enters `degraded` or `backoff`.
+
+```text
+         plugin add                 enabled
+ (none) ───────────► installed ─────────────► starting ──initialize ok──► running ◄──pong──┐
+                         ▲                      │   ▲                      │   │            │
+               disabled  │        fails         │   │ retry_at             │   └─missed 2──► degraded
+                         │   ┌──────────────────┘   │                      │                 │
+ stopped ◄── stopping ◄──┼───┤                  backoff ◄── exit, crash, protocol, timeout ──┘
+                         │   └─5 restarts in 10 min, hash_mismatch, manifest_invalid─► failed
+                         └── plugin remove (from any state, through stopping) ─► removed
+```
+
+| From | Event | To | Code |
+| --- | --- | --- | --- |
+| none | registry lists it, not enabled | `installed` | |
+| none, `installed`, `stopped`, `failed` | enabled, verify passes | `starting` | `enabled` |
+| any | verify fails | `failed` | `hash_mismatch`, `manifest_invalid` |
+| `starting` | `initialize` answered with the right version | `running` | |
+| `starting` | launch fails, `initialize` times out (5 s) or answers a wrong version | `backoff` (or `failed` for a wrong version) | `launch`, `timeout`, `protocol` |
+| `running` | 2 missed pings (every 30 s, 5 s timeout) or a delivery timeout | `degraded` | `ping`, `timeout` |
+| `degraded` | a ping answered | `running` | |
+| `running`, `degraded` | 4 missed pings, exit, signal, protocol error | `backoff` | `ping`, `exited`, `crashed`, `protocol` |
+| `backoff` | `retry_at` reached | `starting` | |
+| `backoff` | the 5th restart within 10 minutes | `failed` | `crash_loop` |
+| any running state | disabled, or the daemon stops | `stopping` → `stopped` | `disabled` |
+| any | removed from the registry | `stopping` → `removed` | |
+
+- **Backoff:** 1 s, doubling, at most 5 minutes. The restart counter resets after 10 minutes in `running`.
+- **`failed` is sticky:** the plugin starts again only after its settings, its enabled flag or its installed hash change.
+- **Stopping:** `shutdown`, then close stdin, then kill the process group after 2 s.
+- Every transition publishes `plugin.lifecycle.changed`.
+
+**Crash isolation.**
+
+- Each plugin has its own bus subscription (256-event buffer, the phase 1 overflow rule) and its own goroutine running `bus.Handle`, so a slow or dead plugin never holds up Publish, another plugin or a projection.
+- A process plugin is a separate OS process; its crash is an exit the host observes.
+- The declarative interpreter runs each event under `recover` and a 100 ms budget (actions excluded); a panic is a `crashed` dead letter, and 5 in 10 minutes fail the plugin.
+- An overflow (`stream.overflow` on the plugin's subscription) is delivered to the plugin as the marker event itself, counted in `dropped`, and is not a dead letter.
+
+### Phase 5 events
+
+| Type | Scope | Global | Transient | Payload | Produced when |
+| --- | --- | --- | --- | --- | --- |
+| `plugin.lifecycle.changed` | repository-wide | only | no | `PluginLifecycleChanged{plugin, version, tier, state, previous, code, restarts, retry_at}` | a plugin changes state (table above) |
+| `plugin.delivery.failed` | repository-wide | only | yes | `PluginDeliveryFailed{plugin, event_id, event_type, event_repo, code}` | an event went to the Dead Letter Channel |
+| `plugin.annotation.added` | any | never | no | `PluginAnnotationAdded{plugin, operation_id, text, url, level}` | a plugin publishes a note on an operation |
+
+- Only the daemon's plugin host produces them, on its own bus. None is a socket type (`notifysock.Allowed` is unchanged), so no other process can forge one.
+- Source: `plugin.host` for lifecycle and delivery events; `plugin:<id>` for an annotation.
+- Payloads follow the phase 2 rules: codes, not text; no path, token or plugin error message. Annotation text is plugin text: clamped to one line of 256 bytes, an `https` URL only, shown as plain text.
+- Lifecycle events go to the `global` store: plugins are installed per user. Streams do **not** gain a `global/*/plugin.**` topic (the phase 2 rule 2 is unchanged): the `plugins` projection subscribes to them and sends its state in the repository's own frames, as the overview does for personal-layer changes.
+- No phase 5 type is audited by the Wire Tap.
+
+### Phase 5 subscriptions and publishing
+
+**What a plugin may receive** (`manifest.SubscribableFamilies`, `SubscribableTypes`): `git.**`, `config.**`, `gh.**`, `op.**`, `commit.**`, `hook.**`, and `plugin.annotation.added`. Never:
+
+- `approval.*`: a plugin must not see a pending approval or race a person's answer;
+- `client.*`, `ui.*`, `plugin.lifecycle.*`, `plugin.delivery.*`;
+- any `global` event (the personal layer's changes reach a plugin only as `settings.changed`).
+
+The host subscribes per plugin to `<repo>/*/<pattern>` for every served repository that does not list the plugin in `repo:plugins.disabled`, and adds or drops repositories as the daemon attaches them or the repository layer changes.
+
+**What a plugin may publish** (`manifest.PublishableTypes`): `plugin.annotation.added` only. Never `op.*` (only the Invoker states what an operation did), `approval.*`, `plugin.lifecycle.*` or a type a daemon source owns. The host sets the source (`plugin:<id>`), the payload's `plugin`, the repository and worktree (from `cause`, or `repo` and `worktree`, which must be served and not disable the plugin), the `CausationID` (`cause`), and validates the payload (`operation_id` of the `op_` form, `level` `info` or `warning`, `url` `https` or empty).
+
+**Rate limits** per plugin: 60 publishes a minute (burst 20).
+
+### Phase 5 command invocation
+
+A plugin changes things only by sending a Command to the Invoker, never through the bus. `command.invoke` (process) and the declarative `invoke` action take the same path:
+
+1. **Allowed?** The command is in `manifest.InvocableCommands` and in the plugin's `permissions.invoke`, else `not_allowed` or `not_granted`. Phase 5 allows the writes `notify` and `comment`, and the reads `ship.status`, `context`, `ac.checklist` and `review.threads` (decision 4). Never `approval.*`, `policy.*`, `config.*`, `plugin.*`, `setup.*`, `promote`, `delegate`, `push`, `commit` or `pr.*`.
+2. **Rate:** 10 invocations a minute (burst 5), each bounded by 60 s.
+3. **Where:** the worktree named by `repo` and `worktree`, else the `cause` event's worktree, else the repository's `main` worktree. It must be served by the daemon and its repository must not disable the plugin (`unknown_worktree`, `repo_disabled`).
+4. **Input:** decoded strictly into the Spec's In (`command.JSONCommand`, lane 5.2: unknown fields refused). An input with `confirm_token` is refused (`confirm_token`).
+5. **App and gate:** `app.Open(dir, "plugin:<id>")`, then `WithAutonomyCeiling(confirm)`: every rule the gate resolves is capped at `confirm`, so `auto` never applies a plugin's write without a person (decision 5). `suggest` stays `suggest`.
+6. **Invoke** with `Origin{Source: "plugin:<id>", Client: "plugin:<id>", Cause: <cause>}` through a daemon Invoker whose Emitter publishes on the daemon's bus, with `command.AuditLog{}`. The call appears on the timeline like any other operation, with client `plugin:<id>`.
+7. **Result to the plugin** (`InvokeResult`): `applied` with the result (at most 256 KiB, else `truncated`), `failed` with a code, `suggested` with a code, or `awaiting_approval` with the approval ID and expiry. A `needs_confirmation` Pending is reported as `awaiting_approval` and **its token is dropped**: the record stays pending in the journal and the console's approvals panel shows it. Nobody holds its bearer token, so neither the panel nor `agentflow policy approve` can answer it; a person answers it with `agentflow plugin approve` (see "Phase 5 approving a plugin's write"). No error text reaches the plugin.
+8. **Resume:** the host resumes an approved write itself (below), so a plugin need not. A process plugin may still call `command.invoke` with `resume: <approval_id>`, which passes the ID as the confirm token. The gate proceeds only when a person approved that record and the plugin's own client requested it; while it is pending the host answers `awaiting_approval` without running the call, and otherwise the plugin gets `failed` with `approval_expired`, `approval_consumed` or `operation_changed`.
+
+A plugin can never confirm its own operation: it never holds a token, it cannot invoke `approval.*`, and it cannot see `approval.*` events.
+
+### Phase 5 approving a plugin's write
+
+*Amendment (issue #91). The owner chose this path.*
+
+- **The record.** The gate stores the requesting client in every approval record (`requested_by`, for example `plugin:ci-notify`). A `plugin:` client can redeem, and read with `Status`, only the records it requested (`ErrNotRequester`). The `plugin:` prefix is reserved for the plugin host: `policy.NewGate` and `app.Open` refuse it (`ErrReservedClient`), so `agentflow mcp --client plugin:x`, the hooks and any other named client cannot ask or redeem as a plugin; only `policy.NewPluginGate` and `app.OpenPlugin`, which the host calls, make a plugin's gate. When a plugin's fresh call is held, the host writes a `PluginRequest` into the record once (`plugin.DescribeHeld`, `Gate.DescribePluginRequest`): the plugin, the command, the Spec's `Detail` (subject, task, branch) and `Summary`, the confirmation summary the command's gate returned (`app.Pending.Summary`, the same one a person sees running the command: for `notify` the notification and its destinations, for `comment` the ticket and the body). Every string is cleaned of control and bidi characters (one line for the `Detail` fields; newlines and tabs kept in the summary), and any value under a key that names a secret (`token`, `secret`, `password`, `credential`, `authorization`, `api_key`, `private_key`, `webhook`, `cookie` and similar) is replaced by `(redacted)`. A summary over 256 KiB is not stored, and `Omitted` says why. The record file is mode 0600, and a journal record may be up to 576 KiB. The command's raw input is never stored.
+- **The command.** `agentflow plugin approve OP_ID [--decline] [--json]` (Spec `plugin.approve`, `local`, autonomy action `plugin.approve`, mandatory confirmation; gate in Run through `GateOperation` with `RequireConfirmation`, its expiry capped at the request's; `AuditByInvoker`, `Events: ScopeNone`). CLI only, no MCP tool (decision 3 applies). It refuses agent sessions (`app.AgentEnvironment`) and a non-terminal standard input, ignores `--yes`, and the pre-bash never-list blocks agents from running it in every mode, `--convention-only` included. It shows the plugin, the command, the `Detail`, the expiry and the whole stored summary (indented JSON, never cut, however long), asks y/N, then calls `Gate.ApprovePluginRequest` (or `DeclinePluginRequest`): only a pending record whose `requested_by` starts with `plugin:`; any other is refused (`ErrNotPluginRequest`), and so is a call from a `plugin:` client. Approval (not decline) also needs a host-written request (`ErrNoHostRequest`) for a write in `manifest.InvocableWrites` (`notify`, `comment`) whose gate action is that command (`ErrNotPluginWrite`), with its summary (`ErrNoRequestSummary`): a person never approves what they were not shown. It finds records by the scope of the repository it runs in.
+- **No bearer.** `ApprovePluginRequest` is the one path that answers a record without its bearer token. The person at the terminal holds the per-user secret the token derives from, so the token would add nothing; the person-only checks are what keep it a person's act.
+- **The resume.** The host keeps each held call in memory (plugin, command, exact input, cause, target; at most 256). It subscribes itself to `approval.resolved` and `approval.expired` for every repository; plugins still never receive `approval.*`. On each event naming a held call it reads the record through the plugin's own gate: `approved` claims the call and resumes it once with the approval ID, `pending` keeps it, anything else (cancelled, expired, consumed) drops it. A call is claimed before it runs, so a repeated event cannot run it twice, and the gate consumes the approval in any case. Before it runs a call the host checks the plugin again: still running as the installed version and hash that asked, the command still in `manifest.InvocableCommands` and in its `permissions.invoke`, and the repository not disabling it; otherwise it drops the call. If the plugin resumes the call itself, the first of the two to claim it runs it: a plugin that loses gets `failed` with code `resumed_by_host`, and nothing runs or is published for it (no `op.failed` for a used approval). When the host's approval subscription overflows (256 events), it settles every held call instead of losing the dropped answers.
+- **Limits.** Held calls do not survive a daemon restart: an approval granted after one runs nothing, and the plugin asks again on its next event. The approval window (5 minutes by default) bounds how long a write waits.
+- **The UI.** `ApprovalItem` carries `requested_by` (always present; empty for records written before it existed). The Approvals panel and the Plugins page show `agentflow plugin approve <operation ID>` for items whose value starts with `plugin:`, and no Approve button for them.
+
+### Phase 5 permission rules
+
+A `permission_rule` (declarative plugins only) denies matching operations. It **can only make policy stricter**:
+
+- The host turns each enabled plugin's rules into one Invoker Stage (lane 5.2), registered with `command.RegisterStage` from `internal/plugin`'s `init`. `NewInvoker` runs `command.RegisteredStages()` after `Options.Stages` on every call, so CLI, MCP and daemon Invokers all apply them without editing `cli.go` or `mcpserver/server.go`.
+- The Stage either calls `next` with the Call unchanged, or stops the chain with an error (`plugin.DeniedError{Plugin, Rule, Message}`, error code `plugin_denied`). It never returns a result of its own, never changes the Call, and never skips the gate: the gate runs after the stages (`GateByInvoker`) or inside Run (`GateInRun`).
+- A rule matches by `operation`, `class`, `action`, `origin` and `branch` globs (`manifest.RuleMatch`). Every non-empty list must match.
+- `branch` is the branch the call writes. An operation that names a branch (`Detail.Branch`) uses it. The actions `commit`, `push`, `pr_open`, `pr_ready_for_review` and `finish` use the current branch when they name none: commit commits on it, push publishes it, a PR's head is it, and finish deletes it. When one of them cannot determine its branch (detached HEAD, no repository), a `branch` condition matches, so the rule denies. Any other operation writes no branch, and a `branch` condition never matches it, not even `*`.
+- With no plugin enabled in the personal layer there are no rules and the Stage does not read the registry, so a broken `installed.json` blocks nothing. With a plugin enabled, a registry that cannot be found or read, or an unreadable personal layer, denies every non-exempt operation and names the file to fix (fail closed).
+- Rules never apply to `config.*`, `plugin.*`, `approval.*` and `policy.*` operations, so a person can always disable a plugin or answer an approval, whatever a rule says.
+- The Stage reads the registry and the personal layer once per call through a fingerprint cache (the phase 2 MCP reload fingerprint rule), so a new rule applies to the next call without a restart.
+- A repository's `plugins.disabled` turns off handlers only. A repository cannot drop a person's permission rules: that would loosen.
+- A deny stops the call before `op.requested`, like a validation error (the phase 3 skeleton, step 2), so it publishes no event. The caller sees the rule's message, which is plugin text for display.
+- Out-of-process permission rules are reserved: a rule that can crash or time out would have to fail open (loosen) or fail closed (block everything) (decision 6). Phase 7's `PermissionHandler` chain will consult the same rules.
+
+### Phase 5 declarative handlers
+
+For each event matching a handler's `on`:
+
+1. Evaluate `when` (all conditions). Field paths: `type`, `repo`, `worktree`, `source`, `correlation_id`, `payload.<key>[.<key>]`. A missing field is null. Operators: `equals`, `not_equals`, `in`, `exists`.
+2. Run `actions` in order. `invoke` takes the path of "Phase 5 command invocation" with the event as `cause`. `annotate` publishes `plugin.annotation.added` with the event's `CorrelationID` as `operation_id`.
+3. Templates: `{{event.<path>}}` and `{{settings.<key>}}`. A string that is one placeholder keeps the value's JSON type; otherwise values are inserted as text (a list as comma-separated text). At most 64 KiB per string. There are no functions, conditionals or loops.
+4. An action that fails ends the handler for that event, and the event goes to the Dead Letter Channel with code `action`. An `awaiting_approval` result is not a failure.
+
+### Phase 5 settings
+
+Each installed plugin adds fields to the Settings catalog (phase 4 decision 4: "a new source"), built by `manifest.CatalogFields` (lane 5.3) and joined in `consolecfg.RepoCatalog`:
+
+| ID | Widget | Meta |
+| --- | --- | --- |
+| `personal:plugins.<id>.enabled` | `toggle`, default false | label "Enabled", group `plugins.<id>`, `applies: live`, **`loosens: enable`** |
+| `personal:plugins.<id>.settings.<key>` | from the setting's `widget`, else by type: `toggle`, `select` (with `enum`), `text`, `stepper`, `chips` | label, description, `min`, `max`, `min_duration`, `max_duration`, `advanced` from the manifest; `applies` from the manifest (`live` default, or `restart`) |
+| `repo:plugins.disabled` (compiled) | `chips` | group `plugins`, label "Plugins turned off here", **`loosens: shrink`** |
+
+- Groups: a compiled group `plugins` ("Plugins", after `init`), and one group `plugins.<id>` per installed plugin, labelled with its name. `settings.View.Groups` comes from the catalog, so the Settings page draws them with no browser change.
+- The compiled walk leaves out `personal:plugins` (the plugins add those fields), with a reason in the exclusion table. `TestEveryConfigFieldHasControl` covers `repo:plugins.disabled`.
+- A plugin's setting widget must suit its type as compiled fields do (phase 4 table). `credential-ref`, `file-picker`, `branch-picker`, `provider-picker`, `kv-table`, `list` and `sensitive` are refused in phase 5: no secret or path reaches a plugin (decision 7).
+- Lane 5.3 adds `config.User.Plugins map[string]UserPlugin` (`enabled`, `settings`) and `config.Repo.Plugins` (`disabled`). Both are optional keys: adding them is backwards compatible.
+- The host gives a plugin its effective settings (manifest defaults, then the personal values that pass validation) in `initialize` and in `settings.changed` after a personal-layer change. A `restart` setting restarts the plugin instead.
+- Enabling a plugin is a loosening edit: the Save review lists it and needs its tick; `console.autonomy` is related, as for every loosening save.
+
+### Phase 5 limits
+
+| Limit | Value |
+| --- | --- |
+| Frame | 1 MiB |
+| `initialize` | 5 s |
+| `event.deliver` | 10 s, one in flight per plugin |
+| Ping | every 30 s, 5 s timeout; 2 missed: `degraded`; 4 missed: restart |
+| `shutdown` | 2 s, then kill (process group on Unix) |
+| Plugin requests in flight | 4 |
+| `command.invoke` | 10 a minute, burst 5; 60 s each |
+| `event.publish` | 60 a minute, burst 20 |
+| Subscription buffer | 256 events, phase 1 overflow rule |
+| Invoke result | 256 KiB |
+| Declarative work per event | 100 ms, actions excluded |
+| Restart backoff | 1 s doubling to 5 min; 5 restarts in 10 min: `failed` |
+| Log file | 1 MiB, one old file kept |
+| Dead letters kept | 1000 |
+| Installed plugins | 32 |
+
+Memory and CPU are not limited in phase 5: the standard library cannot set a child's resource limits portably, and per-OS limits are new platform code (decision 9).
+
+### Phase 5 Dead Letter Channel
+
+The host's persistent Dead Letter Channel (`bus.DeadLetter`, as phase 1 promised) is `<home>/plugins/deadletter.jsonl`, mode 0600, the last 1000 letters, rewritten atomically when it passes 1 MiB. A rewrite keeps only the newest letters that fit in 256 KiB, so rewrites stay rare. A stored letter's payload over 4 KiB becomes `{"dropped_bytes": N}` (its event ID and type still name it), and its reason is cut to 1 KiB.
+
+- A letter is `bus.Letter{event, consumer: "plugin:<id>", reason: <code>, time}`. The reason is a code (`timeout`, `crashed`, `exited`, `protocol`, `action`, `rpc_error`), never the plugin's own error text.
+- An event goes there when its delivery returns an error, times out, or is in flight when the plugin dies.
+- Each letter also publishes the transient `plugin.delivery.failed` in `global`.
+- Phase 5 never redelivers. `plugin list --json` and the Plugins page show the letters.
+- The file holds envelopes that already sit in the repositories' stores, in the user's private home.
+
+### Phase 5 plugins projection
+
+| Projection | Key | Topics | Reads | State |
+| --- | --- | --- | --- | --- |
+| `plugins` | repository | `global/*/plugin.lifecycle.changed`, `global/*/plugin.delivery.failed`, `global/*/config.layer.changed`, the repository's `config.layer.changed` | host `Status()` and letters, the registry, the personal layer, the repository's `plugins.disabled` | `PluginsState` |
+
+`internal/webui/projection_plugins_state.go` holds the shapes: `host`, `plugins` (each with ID, name, description, version, tier, hash, install time, `enabled`, `disabled_here`, state, code, since, restarts, `retry_at`, counters, extensions, permissions, `settings_group`) and `dead_letters` (newest first, at most 20, without payloads).
+
+- It registers through `projectionExtensions` from `projection_plugins.go` (phase 3 decision 12). The host starts from a `runtimeExtension` in `stream_runtime_plugins.go` and is reached by the projection through that file, so neither edits `stream_runtime.go`.
+- Counters are as of the last plugin event; the host publishes a lifecycle event on every state and health change.
+- Every change the page shows arrives over the stream. The page sends no request.
+
+### Phase 5 timeline annotations
+
+- The `timeline` projection also subscribes to `plugin.annotation.added` and attaches each annotation to the operation whose ID is its `operation_id`, at most 5 per operation (`MaxTimelineAnnotations`), oldest first. An annotation for an operation outside the state is not shown.
+- `TimelineAnnotation{event_id, plugin, text, url, level, time}`.
+- The browser shows the text as plain text and the URL as a plain link, labelled with the plugin ID. Never HTML.
+
+### Phase 5 commands
+
+Lane 5.3 adds these Specs in `internal/command/ops/plugin.go`. No lane edits `cli.go`, `mcpserver/server.go` or `parity_test.go`.
+
+| Spec | CLI | MCP tool | Class, action | Gate | Events | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| `plugin.list` | `plugin list [--json]` | `agentflow_plugin_list` (read-only) | `read` | none | none | `{plugins: [...]}` |
+| `plugin.add` | `plugin add PATH [--yes] [--json]` | none (decision 3) | `local`, `plugin.install` | in Run, always confirmed | none | the registry entry |
+| `plugin.remove` | `plugin remove ID [--yes] [--json]` | none (decision 3) | `local`, `plugin.install` | in Run, always confirmed | none | `{id, removed}` |
+| `plugin.approve` | `plugin approve OP_ID [--decline] [--yes] [--json]` | none (decision 3) | `local`, `plugin.approve` | in Run, always confirmed | none | `{operation_id, plugin, command, state, expires_at, next}` |
+
+- `plugin.list` result entries: `id`, `name`, `version`, `tier`, `hash`, `hash_ok` (re-hashed now), `enabled`, `state` and `code` (the newest `plugin.lifecycle.changed` in the `global` store, read as `store.RoleReader`; empty when there is none), `extensions`, `permissions`, `installed_at`. Text output is one line per plugin. It never prints the source path in `--json` output that an MCP client gets.
+- `plugin.add` and `plugin.remove` gate through `a.GateOperation` with `RequireConfirmation` (phase 4): `auto` cannot skip the confirmation. `plugin.install` is a new autonomy action (`local`, "Installing or removing plugins requires confirmation."), added to the autonomy catalog by lane 5.3. Adding a key is backwards compatible.
+- They set `Policy.AuditByInvoker`, and `Events: ScopeNone`: they change the user's home, not a repository (phase 3, "ScopeNone"). `TestEveryWriteOperationEmitsEvents` lists them with that reason. The Plugins page learns of them from `plugin.lifecycle.changed`.
+- The plugin skill is `adapters/claude-code/skills/plugin/SKILL.md`.
+
+### Phase 5 sample plugins
+
+| Sample | Path | Tier | Does |
+| --- | --- | --- | --- |
+| `ci-notify` | `examples/plugins/ci-notify/agentflow-plugin.yml` | declarative | On `gh.ci.updated` with `state: failure` and a different `previous`, invokes `notify` with the configured signal, `operation_id` `ci-notify-<head sha>` (so retries deduplicate) and the failed checks. With no route for the signal, `notify` reports "disabled" and nothing is sent; with one, the plugin's write waits for a person (the confirm ceiling). |
+| `timeline-hints` | `examples/plugins/timeline-hints/` (`main.go`, `agentflow-plugin.yml`, `.gitignore` for the built binary) | process | Subscribes to `op.failed` and publishes a `plugin.annotation.added` with a fixed hint per code (`operation_changed`: "The candidate changed after review. Prepare it again."; `approval_expired`, `invalid_token`, `blocked`, ...). Standard library only, about 150 lines, speaking the raw protocol so authors see it. Built with `go build -o timeline-hints .` before `plugin add`. |
+
+**Phase demo.**
+
+1. `agentflow plugin add examples/plugins/ci-notify`, confirm; enable it on the Settings page (tick the loosening).
+2. A failing CI run on a served branch shows `op.requested` and its outcome from client `plugin:ci-notify` on the timeline.
+3. Build and add `timeline-hints`, enable it; a failed operation (for example `commit --yes` with a stale token) shows its hint on the timeline.
+4. The Plugins page shows both as `running`. Killing the `timeline-hints` process shows `backoff`, then `running` again.
+
+### Phase 5 Plugins page (lane 5.4)
+
+- One page, `#plugins`: one card per plugin, from `PluginsState` only.
+- Each card: name, version, tier, state with its code and the retry time, enabled and "turned off in this repository", what it adds (handlers with their events and the commands they invoke or annotations they add; permission rules with their deny message), what it may do (permissions), counters, and its dead letters.
+- **Enable** opens the Settings group `plugins.<id>`. The page has no enable, install or remove endpoint of its own: install and remove show the CLI command to copy (decision 3).
+- Plugin text (names, descriptions, deny messages) is shown as text, never HTML.
+- The timeline shows annotations under their operation (lane 5.4 owns that rendering in `static/timeline.*`).
+
+### Phase 5 amendments to earlier contracts
+
+All additive.
+
+| Contract | Change | Lane |
+| --- | --- | --- |
+| `bus` registry | `plugin.*` types registered; `plugin` leaves `ReservedFamilies` | this PR |
+| `command` | `JSONCommand` (Spec decodes a JSON input strictly and invokes); `RegisterStage`, `RegisteredStages`, run by `NewInvoker` after `Options.Stages` on every call | 5.2 |
+| `policy.Gate` | `WithCeiling(level)`: `Explain` caps every resolved level at the ceiling | 5.2 |
+| `app.App` | `WithAutonomyCeiling(level)`: a copy whose gate has the ceiling | 5.2 |
+| `config.User`, `config.Repo` | optional `plugins` sections | 5.3 |
+| autonomy catalog | new action `plugin.install` (`local`) | 5.3 |
+| settings catalog | plugin fields and groups; `View.Groups` from the catalog | 5.3 |
+| user watch | `plugins/installed.json` as a personal `config.layer.changed` | 5.3 |
+| timeline state | `Annotations` | this PR (type), 5.2 (projection) |
+| `TestEveryWriteOperationEmitsEvents` allow-list | `plugin.add`, `plugin.remove` (user home, no repository) | 5.3 |
+
+### File ownership for phase 5 lanes
+
+A lane changes only the files it owns. A lane that needs another lane's file, or a contract change, stops and reports.
+
+| Lane | Issue | Owns | Must not touch |
+| --- | --- | --- | --- |
+| 5.1 JSON-RPC and launcher | #78 | `internal/jsonrpc/**` except `types.go` and `doc.go`; `internal/jsonrpc/jsonrpctest/**` | `internal/provider/codexhost/**`, `internal/plugin/**`, every other package, `go.mod` |
+| 5.2 Plugin host | #79 | `internal/plugin/*.go` except `types.go`, `rpc.go`, `doc.go`; `internal/plugin/plugintest/**`; `internal/command/invoke_json.go`, `internal/command/stages.go` and the registered-stages call in `internal/command/invoker.go`; `internal/policy/ceiling.go` and the clamp in `Gate.Explain` (`policy.go`); `internal/app/plugin_gate.go`; `internal/webui/stream_runtime_plugins.go`, `internal/webui/projection_plugins.go`, the annotation part of `internal/webui/projection_timeline.go`, and their tests | `internal/plugin/manifest/**`, `internal/plugin/install/**`, `internal/jsonrpc/**`, `internal/webui/static/**`, `internal/config/**`, `internal/consolecfg/**`, `internal/settings/**`, `cli.go`, `server.go`, `parity_test.go` |
+| 5.3 Commands, samples, docs | #80 | `internal/plugin/manifest/**` except `types.go` and `doc.go`; `internal/plugin/install/**`; `internal/app/plugins.go`; `internal/command/ops/plugin.go`; `internal/config/plugins.go`, the `Plugins` fields in `config.go`, `plugin.install` in `autonomy.go`, the `repo:plugins.disabled` entry in `field_meta_table.go`, the `plugins` group and `personal:plugins` exclusion in `catalog.go`; `internal/consolecfg/catalog.go`; `internal/settings/view.go`; `internal/watch/user.go` (`installed.json`); the plugin rows in `internal/command/ops/emit_test.go`; `examples/plugins/**`; `docs/plugins.md`; `adapters/claude-code/skills/plugin/SKILL.md`; README sections on plugins; the blueprint capability table; golden files through `-update` only | `internal/plugin/*.go`, `internal/jsonrpc/**`, `internal/webui/**`, `cli.go`, `server.go`, `parity_test.go` |
+| 5.4 Plugins page | #81 | `internal/webui/static/plugins.*`; the Plugins nav entry, page section and script tag in `static/index.html`; plugins rules in `static/style.css`; annotation rendering in `static/timeline.*`; `internal/webui/plugins_browser_test.go`; `internal/webui/testdata/plugins/**`; `docs/design/ui/plugins.md`; the README section on the Plugins page | every other Go file and static file |
+
+- All four lanes can start at once.
+- Lane 5.2 codes against `jsonrpc.Conn` (with `jsonrpctest.Pipe` once 5.1 merges, a fake before), a fake `manifest.Source` and a fake `plugin.Layers`. It wires `jsonrpc.Launch`, `manifest.NewFileSource` and the production `Layers` in its last commit, after lanes 5.1 and 5.3 merge.
+- Lane 5.3 should merge its manifest package early; it may be its own PR.
+- Lane 5.4 builds against `PluginsState` and `TimelineAnnotation` with a scripted stream fixture until 5.2 merges.
+- `README.md` is shared by section: 5.3 writes the commands, plugins and security sections, 5.4 the Plugins page section.
+- Exported contract types change only through an amendment: everything in the code-form table at the top of this section.
+
+### Phase 5 security
+
+**Threat model.** A plugin's author may be hostile, and a plugin's input (event payloads: PR titles, check names) may be hostile. The person who runs `plugin add` is trusted, and reviews what the confirmation shows.
+
+**Security review (lanes 5.1, 5.2 and 5.3, before merge).**
+
+- [ ] `plugin add` reads only a local path; no code path downloads, clones, or runs a package manager. Symbolic links and files outside the tree are refused.
+- [ ] The installed copy is hashed at install and verified before every start; a changed copy never runs.
+- [ ] `plugin add` and `plugin remove` always ask, under every autonomy level, with every permission in the summary. No MCP tool installs or removes a plugin.
+- [ ] A repository can never install, enable or loosen anything for a plugin; it can only turn handlers off for itself.
+- [ ] A child's environment is the scrubbed list only; a test proves tokens, keys and session IDs of the daemon do not reach it. HOME and TMPDIR point into the plugin's data directory.
+- [ ] Launch never searches PATH and refuses an executable outside the installed copy.
+- [ ] A plugin never receives `approval.*`, `client.*`, `ui.*` or `global` events, and never publishes anything but `plugin.annotation.added`.
+- [ ] A plugin never sees or sends a confirm token; its writes run under a `confirm` ceiling and wait for a person; it cannot invoke `approval.*`, `policy.*`, `config.*` or `plugin.*`.
+- [ ] A permission rule can only deny; it never applies to `config.*`, `plugin.*`, `approval.*` or `policy.*`.
+- [ ] No event, projection, letter or log line outside `data/plugin.log` carries a plugin's own text other than display fields that are clamped (annotation text, names, deny messages), and the console shows those as text.
+- [ ] A crashing, hanging, flooding or malformed plugin cannot block the bus, the daemon or another plugin (tests for each).
+- [ ] Settings reaching a plugin hold no secret or path (`credential-ref`, pickers and `sensitive` refused).
+
+### Phase 5 decisions
+
+*Decided by the architect in the contract PR. The coordinator confirms or changes them before the lanes start.*
+
+1. **Plugins are per user and run in the daemon.** Installed in the agentflow home and enabled in the personal layer. A repository can only turn handlers off. No repository-provided plugin in phase 5: a clone must never run code.
+2. **Installed disabled; enabling is a Settings change.** `plugin add` installs, and `personal:plugins.<id>.enabled` (a loosening toggle) starts it. This reuses the phase 4 Save review instead of a second enable command.
+3. **`plugin add`, `plugin remove` and `plugin approve` are person-only CLI commands.** They refuse agent sessions and non-terminals, ignore `--yes`, and the pre-bash never-list blocks agents from running them in every mode. (Originally: **`plugin add` and `plugin remove` are CLI only.**) Changes the approved plan's "commands and MCP tools" reading.** `agentflow_plugin_list` is the only plugin MCP tool. Installing code is the terminal user's act: an agent that wrote a plugin should not also be the one asking to install it. Parity holds: every tool has a CLI command; CLI-only commands already exist (`install`, `login`).
+4. **A short invocable allow-list.** Writes `notify` and `comment`; reads `ship.status`, `context`, `ac.checklist`, `review.threads`. Widening it is an amendment.
+5. **A `confirm` ceiling on every plugin write.** Under `auto` a plugin's write still waits for a person. The CI sample therefore asks once per failing head commit when a route exists. A per-plugin autonomy setting (a loosening field) is a possible later amendment.
+6. **Permission rules are declarative only.** An out-of-process rule must fail open (loosening) or closed (a crashed plugin blocks every command); neither is acceptable.
+7. **No secrets reach plugins in phase 5.** No `credential-ref` settings, no inherited environment. A plugin that needs a secret is out of scope until an amendment defines secret delivery.
+8. **The scrubbed environment is not a sandbox.** A process plugin runs as the user and can read the user's files and use the network. The confirmation, the hash and the docs say so plainly. OS sandboxing would need platform code or a dependency.
+9. **No memory or CPU limits, and no Windows job objects.** Resource limits need cgroups or job objects. `golang.org/x/sys` is already a dependency, so this needs no new module, but it is new platform code per OS. Timeouts, rate limits, bounded queues and process-group kill (Unix) are the phase 5 limits. Flagged in case the owner wants job objects on Windows.
+10. **Lifecycle events live in `global`, and streams gain no `global` plugin topic.** The `plugins` projection carries the state in each repository's frames, as the overview does for personal-layer changes.
+11. **The sample "notification" is the `notify` command.** It sends through the configured notification routes and is gated like any write. A console-only toast is not a phase 5 event type.
+
+**Open questions for the coordinator.**
+
+- Decision 3 drops MCP tools for add and remove. Confirm, or ask for `agentflow_plugin_add` and `agentflow_plugin_remove` (confirmed by the prompt owner like every write).
+- Decision 5 makes the CI sample ask a person per failure when a route exists. Confirm, or add `personal:plugins.<id>.autonomy` (loosening) now.
+- Decision 9: accept no Windows job objects in phase 5.
+
+### Phase 5 consequences
+
+- Plugins extend agentflow without changing its code, in three tiers behind one interface, and a broken plugin only breaks itself.
+- No plugin can loosen policy, confirm its own write, see an approval or read the daemon's secrets from its environment.
+- Every plugin action is an ordinary operation on the timeline, with client `plugin:<id>`, and every plugin change is an ordinary Settings save.
+- Phases 6 and 7 reuse `internal/jsonrpc` and the extension-point list (`harness`, the permission rules in the ACP chain).
+- Consuming repositories see no change unless a person installs and enables a plugin.

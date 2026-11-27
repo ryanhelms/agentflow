@@ -1,0 +1,4 @@
+$ agentflow plugin approve <operation-id>
+--- stdout
+--- error
+no approval with this ID in this repository: run plugin approve in the repository the plugin acted on

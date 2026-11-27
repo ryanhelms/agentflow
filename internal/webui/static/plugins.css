@@ -1,0 +1,118 @@
+/* The Plugins page (docs/design/ui/plugins.md). Tokens only: light and dark share these rules. */
+
+/* The standing warning: what a plugin is, before any card. Amber, because it is a caution and not a fault. */
+.pg-trust { display: grid; gap: var(--s-1); max-width: 78ch; border-inline-start-color: var(--warn); background: var(--warn-bg); }
+.pg-trust strong { font-weight: 670; }
+#plugins-note { margin: 0 0 var(--s-4); }
+.pg-summary { margin-bottom: var(--s-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+
+/* One card per plugin. The keyline on the left repeats the state tag's tone. */
+.pg-list { display: grid; gap: var(--s-4); margin: 0 0 var(--s-4); padding: 0; list-style: none; }
+.pg-card { border-inline-start: 3px solid var(--border-strong); }
+.pg-card[data-state=running] { border-inline-start-color: var(--ok); }
+.pg-card[data-state=degraded], .pg-card[data-state=backoff] { border-inline-start-color: var(--warn); }
+.pg-card[data-state=failed] { border-inline-start-color: var(--bad); }
+.pg-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-1) var(--s-3); }
+.pg-head > .tag { flex: none; white-space: nowrap; }
+.pg-name { min-width: 0; overflow-wrap: anywhere; }
+.pg-name .fact { gap: .55rem; }
+.pg-name .state-mark { width: .6rem; height: .6rem; }
+.pg-facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); margin-top: var(--s-1); color: var(--text-muted); font-size: var(--fs-sm); }
+.pg-facts code { color: var(--text); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pg-facts [data-fact=tier] { text-decoration: underline dotted; text-underline-offset: .2em; cursor: help; }
+.pg-description { max-width: 78ch; margin-top: var(--s-2); overflow-wrap: anywhere; }
+.pg-detail { max-width: 78ch; margin-top: var(--s-2); padding: var(--s-1) var(--s-3); border-inline-start: 3px solid var(--border-strong); background: var(--surface-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pg-detail[data-tone=warn] { border-inline-start-color: var(--warn); background: var(--warn-bg); }
+.pg-detail[data-tone=bad] { border-inline-start-color: var(--bad); background: var(--bad-bg); }
+
+/* Enabled or not, and the one way to change it: its Settings group. */
+.pg-enable { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin-top: var(--s-3); }
+.pg-flags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); font-size: var(--fs-sm); font-weight: 600; }
+.pg-hint { margin-top: var(--s-2); font-size: var(--fs-xs); }
+.pg-enable .pg-hint { margin: 0; }
+
+/* A write of the plugin that waits for the person, with the command that approves it. */
+.pg-approvals { max-width: 78ch; margin-top: var(--s-4); padding: var(--s-3) var(--s-4); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); }
+.pg-approval-list { display: grid; gap: var(--s-3); margin: var(--s-3) 0 0; padding: 0; list-style: none; }
+.pg-approval-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); }
+.pg-approval-head time { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.pg-approvals .pg-command pre { background: var(--surface); }
+/* The same command on the plugin's request in the Approvals panel. */
+.approval-plugin { margin-top: var(--s-2); font-size: var(--fs-sm); }
+/* The panel is narrow: the command wraps there, so the whole operation ID shows. */
+.approval-plugin .pg-command pre code { padding: 0; background: none; font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* What it adds beside what it may do. */
+.pg-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--s-4) var(--s-6); margin-top: var(--s-4); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }
+.pg-card h3 { margin-bottom: var(--s-2); color: var(--text-muted); font: 600 var(--fs-sm)/1.4 var(--font); letter-spacing: 0; }
+.pg-extensions, .pg-extension-lines, .pg-letter-list, .pg-add-notes { margin: 0; padding: 0; list-style: none; }
+.pg-extensions { display: grid; gap: var(--s-3); }
+.pg-extension-head { overflow-wrap: anywhere; }
+.pg-kind { padding: .05rem .4rem; border: var(--keyline) solid var(--border-strong); color: var(--text-muted); background: var(--surface-2); font: 550 var(--fs-xs)/1.45 var(--font); }
+.pg-extension-lines { margin-top: var(--s-1); padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); color: var(--text-muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pg-extension-lines q { color: var(--text); }
+.pg-card code { padding: .05rem .3rem; background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.pg-permissions, .pg-about-facts { display: grid; gap: var(--s-2); }
+.pg-permissions > div, .pg-about-facts > div { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; font-size: var(--fs-sm); }
+.pg-permissions dt, .pg-about-facts dt, .pg-counters dt { color: var(--text-muted); font-size: var(--fs-xs); }
+.pg-permissions dd, .pg-about-facts dd, .pg-counters dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Counters as of the last plugin event. */
+.pg-activity { margin-top: var(--s-4); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }
+.pg-counters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-3) var(--s-4); }
+.pg-counters dd { width: fit-content; margin-top: .1rem; font: var(--fs-4xl)/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.pg-counters dd[data-state=bad] { color: var(--bad); }
+.pg-counters dd[data-state=warn] { color: var(--warn); }
+
+/* Failed deliveries, newest first. */
+.pg-letters, .pg-about { margin-top: var(--s-3); }
+.pg-letters summary, .pg-about summary { font-size: var(--fs-sm); }
+.pg-letter-list { margin-top: var(--s-2); }
+.pg-letter-list > li { padding: var(--s-2) 0; border-top: var(--keyline) solid var(--border); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pg-letter-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); }
+.pg-letter-head time { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pg-letter-code { color: var(--bad); font-weight: 550; }
+.pg-letter-id { color: var(--text-muted); font-size: var(--fs-xs); }
+.pg-about-facts { margin-top: var(--s-3); }
+.pg-hash { font: var(--fs-xs)/1.5 var(--mono); }
+.pg-remove { margin-top: var(--s-3); font-size: var(--fs-sm); }
+
+/* A terminal command to copy. It scrolls sideways before it wraps, so what is copied is what is shown. */
+.pg-command, #plugins-add-command { display: flex; align-items: stretch; gap: var(--s-2); max-width: 44rem; margin: var(--s-2) 0 0; }
+.pg-command pre, pre#plugins-add-command { flex: 1; min-width: 0; margin: 0; padding: .5rem var(--s-3); border: var(--keyline) solid var(--border-strong); background: var(--surface-2); overflow-x: auto; }
+.pg-command pre code, pre#plugins-add-command code { padding: 0; background: none; font-size: var(--fs-sm); white-space: pre; }
+.pg-command pre::before, pre#plugins-add-command::before { content: "$ "; color: var(--text-muted); font-family: var(--mono); font-size: var(--fs-sm); user-select: none; }
+.pg-command .button { flex: none; align-self: stretch; min-width: 4.25rem; }
+
+/* The empty state and the way to add a plugin share one panel. */
+.pg-add p { max-width: 78ch; }
+.pg-add p + p { margin-top: var(--s-2); }
+.pg-add code { padding: .05rem .3rem; background: var(--surface-2); font-size: var(--fs-xs); }
+.pg-add-notes { display: grid; gap: var(--s-1); max-width: 78ch; margin-top: var(--s-3); color: var(--text-muted); font-size: var(--fs-sm); }
+.pg-add-notes li { padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); }
+.pg-orphans { margin-bottom: var(--s-4); }
+
+/* The mark's shape carries the state, as in the live panels: filled is running, hollow waits, a square has stopped. */
+.pg-card [data-state=running] > .state-mark, .pg-card [data-state=on] > .state-mark { color: var(--ok); background: currentColor; }
+.pg-card [data-state=starting] > .state-mark, .pg-card [data-state=stopping] > .state-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.pg-card [data-state=degraded] > .state-mark { color: var(--warn); background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+.pg-card [data-state=backoff] > .state-mark { color: var(--warn); animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.pg-card [data-state=failed] > .state-mark { color: var(--bad); background: currentColor; border-radius: 0; }
+.pg-card [data-state=installed] > .state-mark, .pg-card [data-state=stopped] > .state-mark, .pg-card [data-state=removed] > .state-mark,
+.pg-card [data-state=none] > .state-mark, .pg-card [data-state=unknown] > .state-mark, .pg-card [data-state=off] > .state-mark { border-radius: 0; }
+
+@media (max-width: 65rem) {
+  .pg-columns { grid-template-columns: minmax(0, 1fr); }
+  .pg-counters { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+}
+@media (max-width: 38rem) {
+  .pg-head { flex-wrap: wrap; }
+  .pg-permissions > div, .pg-about-facts > div { grid-template-columns: minmax(0, 1fr); }
+  .pg-command, #plugins-add-command { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pg-card .state-mark { animation: none !important; }
+}
+@media (forced-colors: active) {
+  .pg-card, .pg-detail, .pg-trust { border-inline-start-color: CanvasText; }
+}

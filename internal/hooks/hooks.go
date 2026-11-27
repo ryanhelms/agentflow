@@ -270,8 +270,8 @@ func RepoBoundary(ctx context.Context, cmd, cwd string) *boundary.Refusal {
 
 // PreBash blocks commands that change another repository, never-list commands and invalid commit messages, PR titles and squash
 // subjects. Claude Code treats exit code 2 as "block" and shows stderr to the model.
-// The repository boundary applies in every mode. conventionOnly skips the never-list: agentflow's own repo uses it, because maintainers
-// there ask agents to merge PRs explicitly.
+// The repository boundary and the plugin rule (policy.ForbiddenAlways) apply in every mode. conventionOnly skips the rest of the
+// never-list: agentflow's own repo uses it, because maintainers there ask agents to merge PRs explicitly.
 // It runs before every shell command, so it publishes hook.ran only when it
 // blocks a command or fails.
 func PreBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionOnly bool) (err error) {
@@ -307,9 +307,13 @@ func preBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 		branch = repo.Branch(ctx)
 		keyHint = gitx.KeyFromBranch(branch)
 	}
+	reason := policy.ForbiddenAlways(cmd)
 	if conventionOnly {
 		never.CoordinatorMerge = false
-	} else if reason := policy.ForbiddenWith(cmd, protected, branch, never); reason != "" {
+	} else if reason == "" {
+		reason = policy.ForbiddenWith(cmd, protected, branch, never)
+	}
+	if reason != "" {
 		fmt.Fprintln(stderr, "agentflow blocked this command: "+reason)
 		return &ExitError{Code: 2, Msg: reason, Reason: ReasonNeverList}
 	}

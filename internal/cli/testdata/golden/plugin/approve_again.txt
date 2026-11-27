@@ -1,0 +1,6 @@
+$ agentflow plugin approve <operation-id>
+--- stdin
+y
+--- stdout
+--- error
+this approval is not waiting for a person: it is approved

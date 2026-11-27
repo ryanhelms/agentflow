@@ -1,0 +1,8 @@
+$ agentflow plugin remove ci-notify --yes
+--- stdin
+y
+--- stdout
+--- stderr
+--yes is ignored: plugin remove always asks you.
+--- error
+plugin remove can end a rule that denies operations, so it asks you at a terminal, and --yes does not skip that: run this in your own terminal

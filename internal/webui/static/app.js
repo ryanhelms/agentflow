@@ -17,9 +17,9 @@ let saveTimer;
 let loadSequence = 0;
 // Providers and Autonomy are groups of the Settings page. Their screen names
 // stay, so agentflow ui --screen providers and saved links keep working.
-const screenNames = {overview: "repository overview", settings: "settings", providers: "provider settings", autonomy: "autonomy settings", configuration: "configuration editor", handoff: "handoff screen"};
+const screenNames = {overview: "repository overview", settings: "settings", providers: "provider settings", autonomy: "autonomy settings", plugins: "plugins page", configuration: "configuration editor", handoff: "handoff screen"};
 const views = Object.keys(screenNames);
-const pages = {overview: "overview", settings: "settings", providers: "settings", autonomy: "settings", configuration: "configuration", handoff: "handoff"};
+const pages = {overview: "overview", settings: "settings", providers: "settings", autonomy: "settings", plugins: "plugins", configuration: "configuration", handoff: "handoff"};
 const settingsStore = "agentflow.settings:" + location.pathname;
 const roleNames = {
   code_hosting: "Code hosting", task_management: "Task management", knowledge_base: "Knowledge base",
@@ -336,6 +336,7 @@ function showPage(focus = false) {
     else link.removeAttribute("aria-current");
   }
   if (pages[screen] === "settings" && state) settingsPage.open(settingsGroup(where));
+  pluginsPage.tick();
   if (screen === "configuration" && state) renderEditor();
   if (focus) {
     $("main").focus({preventScroll: true});
@@ -477,7 +478,9 @@ let configTimer;
 // A change of the personal layer is a "global" event. The stream sends the
 // states it changes without a topic for it (ADR, "Phase 2 scoping").
 const liveTopics = ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**",
-  "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**"];
+  "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**",
+  // A plugin's note on an operation is not an op.* event (ADR, "Phase 5 timeline annotations").
+  "*/*/plugin.annotation.added"];
 const live = AgentflowEvents.connect({
   endpoint: new URL("api/events",location.href).href,
   credential: () => session,
@@ -497,13 +500,14 @@ const live = AgentflowEvents.connect({
     showRepository("activity",states.find(repositoryState("activity"))?.state ?? null);
     showRepository("approvals",states.find(repositoryState("approvals"))?.state ?? null);
     showRepository("timeline",states.find(repositoryState("timeline"))?.state ?? null);
+    showRepository("plugins",states.find(repositoryState("plugins"))?.state ?? null);
     showSettings(states.find(ownSettings)?.state ?? null,false);
     tabs.receive(states.find(ownTabs)?.state ?? null);
   },
   onDelta({states,event}) {
     const own = states.find(ownOverview);
     if (own) showLive(own.state);
-    for (const name of ["activity","approvals","timeline"]) {
+    for (const name of ["activity","approvals","timeline","plugins"]) {
       const next = states.find(repositoryState(name));
       if (next) showRepository(name,next.state);
     }
@@ -535,9 +539,19 @@ function repositoryState(name) {
 // Activity and approvals (docs/design/ui/live-stream.md, "Live panels").
 // liveRepository holds the raw state last received; the panels keep the last
 // values on screen when the stream has none.
-const liveRepository = {activity: null, approvals: null, timeline: null};
+const liveRepository = {activity: null, approvals: null, timeline: null, plugins: null};
+// The Plugins page (docs/design/ui/plugins.md). Its values are the
+// repository's "plugins" state; it sends no request. The plugins state has
+// no topic of its own: it rides in the repository's frames (ADR, phase 5
+// decision 10).
+const pluginsPage = AgentflowPlugins.createPlugins({
+  root: document, announce,
+  actionName: action => commonActions[action],
+  visible: () => !$("console-shell").hidden && pages[destination().screen] === "plugins"
+});
 const panels = AgentflowPanels.createPanels({
   root: document, worktree: worktreeID, announce,
+  command: pluginsPage.command,
   actionName: action => commonActions[action]
 });
 // The operation timeline (docs/design/ui/live-stream.md, "Timeline").
@@ -578,7 +592,12 @@ function renderRepository(name, flash = false) {
     panels.showActivity(liveRepository.activity,flash);
     renderHandoff(flash);
   } else if (name === "timeline") timeline.show(liveRepository.timeline,flash);
-  else panels.showApprovals(liveRepository.approvals,flash);
+  else if (name === "plugins") pluginsPage.show(liveRepository.plugins,flash);
+  else {
+    panels.showApprovals(liveRepository.approvals,flash);
+    // A plugin's card lists the approvals its writes wait for.
+    pluginsPage.showApprovals(liveRepository.approvals,flash);
+  }
   renderStream();
 }
 
@@ -661,6 +680,7 @@ function renderStream() {
     $(key + "-wait").hidden = shown || Boolean(text);
   }
   timeline.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.timeline)});
+  pluginsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.plugins)});
   settingsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveSettings)});
   const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
   $("handoff-note").textContent = stale;
@@ -833,6 +853,7 @@ async function loadState() {
     renderRepository("activity");
     renderRepository("approvals");
     renderRepository("timeline");
+    renderRepository("plugins");
     settingsPage.show(liveSettings);
     $("connection").hidden = true;
     $("connection-options").hidden = true;
@@ -856,6 +877,7 @@ $("refresh").addEventListener("click", () => {
   liveRepository.activity = null;
   liveRepository.approvals = null;
   liveRepository.timeline = null;
+  liveRepository.plugins = null;
   liveSettings = null;
   liveReady = false;
   live.resync();

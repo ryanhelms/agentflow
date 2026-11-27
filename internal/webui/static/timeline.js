@@ -18,6 +18,15 @@
   const states = ["requested", "suggested", "awaiting_approval", "prepared", "applied", "failed", "approved", "cancelled", "expired"];
   const stepStates = [...states, "consumed"];
   const linkKinds = ["commit", "branch", "pr", "task", "doc", "release"];
+  // Plugin annotations (ADR, "Phase 5 timeline annotations").
+  const annotationLevels = ["info", "warning"];
+  const maxAnnotations = 5; // MaxTimelineAnnotations
+  const pluginID = /^[a-z][a-z0-9-]{0,38}[a-z0-9]$/;
+  // A plugin's text: one line, no control characters, bounded.
+  const pluginText = value => {
+    const line = text(value).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+    return line.length > 400 ? line.slice(0, 399) + "…" : line;
+  };
   const pageSize = 10;
   // A request with no result after this long most likely lost its process.
   const stalledAfter = 10 * 60 * 1000;
@@ -39,7 +48,7 @@
       if (!op || !text(op.id) || seen.has(op.id)) continue;
       seen.add(op.id);
       const approval = record(op.approval);
-      const stepIDs = new Set(), linkIDs = new Set();
+      const stepIDs = new Set(), linkIDs = new Set(), noteIDs = new Set();
       operations.push({
         id: op.id, operation: text(op.operation), action: text(op.action), klass: text(op.class), client: text(op.client),
         worktree: text(op.worktree), subject: text(op.subject), task: text(op.task), branch: text(op.branch),
@@ -56,6 +65,14 @@
           stepIDs.add(step.event_id);
           return true;
         }).map(step => ({id: step.event_id, type: text(step.type), at: time(step.time), state: pick(step.state, stepStates, "unknown"), code: text(step.code), seq: number(step.seq)})),
+        // Oldest first, as the server orders them. Text and URL come from a
+        // plugin: the text stays text and only an https address becomes a link.
+        annotations: list(op.annotations).map(record).filter(note => {
+          if (!note || !text(note.event_id) || noteIDs.has(note.event_id) || !pluginText(note.text)) return false;
+          noteIDs.add(note.event_id);
+          return true;
+        }).slice(-maxAnnotations).map(note => ({id: note.event_id, plugin: pluginID.test(text(note.plugin)) ? note.plugin : "", text: pluginText(note.text),
+          url: outbound(text(note.url)), level: pick(note.level, annotationLevels, "info"), at: time(note.time)})),
         truncated: op.truncated === true
       });
     }
@@ -291,13 +308,14 @@
       jump.addEventListener("click", () => showApproval(op.id));
       approval.append(slot("approval", {klass: ""}), " ", jump);
       const steps = element("ol", "", "timeline-steps");
+      const notes = element("ul", "", "timeline-annotations");
       const links = element("ul", "", "timeline-links");
       const audit = element("p", "", "timeline-audit");
       const copy = element("button", "Copy ID", "timeline-jump");
       copy.type = "button";
       copy.addEventListener("click", () => copyID(op.id));
       audit.append(element("span", "Operation ID"), " ", element("code", op.id), " ", copy);
-      row.append(head, slot("subject", {tag: "p", klass: "timeline-subject"}), facts, slot("reason", {tag: "p", klass: "row-note"}), approval, steps, links, audit);
+      row.append(head, slot("subject", {tag: "p", klass: "timeline-subject"}), facts, slot("reason", {tag: "p", klass: "row-note"}), approval, steps, notes, links, audit);
       return row;
     }
 
@@ -326,6 +344,34 @@
         node.rel = "noopener noreferrer";
       }
       item.append(node);
+      return item;
+    }
+
+    // One plugin note under an operation. The plugin's ID labels both the
+    // note and its link, so its text is never read as Agentflow's own.
+    function buildAnnotation(note) {
+      const item = element("li", "", "timeline-annotation");
+      item.dataset.level = note.level;
+      const from = note.plugin || "an unknown plugin";
+      const label = element("span", "", "fact timeline-annotation-from");
+      label.dataset.state = note.level;
+      const shape = element("span", "", "state-mark");
+      shape.setAttribute("aria-hidden", "true");
+      label.append(shape, element("span", (note.level === "warning" ? "Warning from plugin " : "Note from plugin ") + from, "fact-text"));
+      item.append(label, " ", element("span", note.text, "timeline-annotation-text"));
+      if (note.url) {
+        const link = element("a", new URL(note.url).host + " (link from plugin " + from + ")");
+        link.href = note.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        item.append(" ", link);
+      }
+      const when = element("time", clock(note.at, now()));
+      if (note.at) {
+        when.dateTime = new Date(note.at).toISOString();
+        when.title = new Date(note.at).toLocaleString();
+      }
+      item.append(" ", when);
       return item;
     }
 
@@ -365,6 +411,10 @@
       stepList.setAttribute("aria-label", "Steps of " + title);
       reconcile(stepList, steps, step => step.id, buildStep, null, flash);
       if (op.truncated) stepList.prepend(element("li", "Earlier steps are not shown.", "timeline-step muted"));
+      const noteList = row.querySelector(".timeline-annotations");
+      noteList.setAttribute("aria-label", "Plugin notes on " + title);
+      noteList.hidden = !op.annotations.length;
+      reconcile(noteList, op.annotations, note => note.id, buildAnnotation, null, flash);
       const linkList = row.querySelector(".timeline-links");
       linkList.setAttribute("aria-label", "Links of " + title);
       linkList.hidden = !op.links.length;

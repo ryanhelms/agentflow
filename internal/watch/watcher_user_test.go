@@ -263,7 +263,18 @@ func TestPersonalConfigAndClientSettingsInTheGlobalRepository(t *testing.T) {
 				t.Fatalf("provider paths = %v", p.Paths)
 			}
 
+			// The plugin registry lives in ~/.agentflow/plugins, which does not
+			// exist yet either: the host reloads on this event.
+			writeFile(t, env.path("plugins", "installed.json"), `{"version":1,"plugins":[]}`)
+			e = h.wait(t, "plugin registry", isGlobal(bus.TypeConfigLayerChanged))
+			if p := payload[bus.ConfigLayerChanged](t, e); p.Layer != bus.LayerPersonal || !slices.Equal(p.Paths, []string{"plugins/installed.json"}) {
+				t.Fatalf("registry paths = %+v", p)
+			}
+
 			// What else lives in the home does not signal anything.
+			writeFile(t, env.path("plugins", "installed.json.lock"), "")
+			writeFile(t, env.path("plugins", "ci-notify", "data", "plugin.log"), "line\n")
+			writeFile(t, env.path("plugins", "deadletter.jsonl"), "{}\n")
 			writeFile(t, env.path("audit.log"), "{}\n")
 			writeFile(t, env.path("confirm.key"), "secret")
 			writeFile(t, env.path("config.yml.lock"), "")

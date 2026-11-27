@@ -1,0 +1,3 @@
+$ agentflow plugin list
+--- stdout
+ci-notify 0.1.0  declarative  turned off

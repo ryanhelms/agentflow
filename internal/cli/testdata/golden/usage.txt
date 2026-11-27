@@ -70,6 +70,14 @@ Work
   policy explain [ACTION]          show autonomy, repository ceilings and review windows
   policy status ID                inspect a shared approval
   policy approve ID --confirm-token TOKEN   record a reviewed approval for its worker
+  plugin list [--json]           list installed plugins, their checks and their state
+  plugin add PATH [--json]       install a plugin from a local directory or YAML file, turned off
+                                 run it yourself at a terminal: it always asks; --yes is ignored
+  plugin remove ID [--json]      delete a plugin, its data and its settings
+                                 run it yourself at a terminal: it always asks; --yes is ignored
+  plugin approve OP_ID [--decline] [--json]
+                                 approve a write a plugin asked for; the console then runs it once
+                                 run it yourself at a terminal: it always asks; --yes is ignored
   push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
   pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
   commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow

@@ -1,0 +1,36 @@
+$ agentflow config set plugins.ci-notify.enabled=true --yes
+--- stdout
+personal:plugins.ci-notify.enabled: (unset) → true
+status: saved
+--- stderr
+Agentflow console.settings: confirm (default)
+default sets console.settings (local) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+{
+  "operation": "config.set",
+  "confirm": [
+    {
+      "id": "personal:plugins.ci-notify.enabled",
+      "reason": "loosens",
+      "message": "Turns on the plugin ci-notify, which then runs in the console with the permissions its manifest lists."
+    }
+  ],
+  "changes": [
+    {
+      "id": "personal:plugins.ci-notify.enabled",
+      "before": {
+        "set": false
+      },
+      "after": {
+        "json": true,
+        "set": true
+      }
+    }
+  ],
+  "base": {
+    "personal": "sha256:<digest-2>",
+    "repo": "sha256:<digest-3>"
+  },
+  "after": {
+    "personal": "sha256:<digest-4>"
+  }
+}

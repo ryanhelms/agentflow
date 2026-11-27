@@ -1,7 +1,9 @@
 // Package policy's local approval journal is shared by CLI and MCP processes.
 // A kernel lock protects the scope index and all state transitions. Each
 // durable record contains only a fingerprint and metadata, never the bearer
-// token, command, message, paths, or provider payload.
+// token, command line, message, paths, or provider payload. A plugin's record
+// also holds a PluginRequest: the command name and its safe Detail, never its
+// input.
 package policy
 
 import (
@@ -76,7 +78,20 @@ type approvalRecord struct {
 	Related           []string  `json:"related,omitempty"`
 	Forced            bool      `json:"forced,omitempty"`
 	Source            string    `json:"source"`
+	// RequestedBy is the client whose call created the record. A plugin
+	// client (PluginClientPrefix) may redeem only records it created.
+	RequestedBy string `json:"requested_by,omitempty"`
+	// Request is the safe summary of a plugin's held write
+	// (DescribePluginRequest), shown by plugin approve.
+	Request *PluginRequest `json:"request,omitempty"`
 }
+
+// PluginClientPrefix starts the client name of a plugin's calls.
+const PluginClientPrefix = "plugin:"
+
+// ErrNotRequester: a plugin tried to redeem an approval another client
+// requested.
+var ErrNotRequester = fmt.Errorf("%w: this approval was requested by another client", ErrToken)
 
 const (
 	pending   = "pending"
@@ -87,8 +102,30 @@ const (
 	cancelled = "cancelled"
 )
 
+// ErrReservedClient: a caller named itself a plugin. The client prefix
+// PluginClientPrefix belongs to the plugin host (NewPluginGate).
+var ErrReservedClient = errors.New(`client names that start with "plugin:" are reserved for the agentflow plugin host`)
+
 // NewGate opens the same per-user secret across restarts and concurrent clients.
+// It refuses a client name with PluginClientPrefix: only NewPluginGate makes
+// a plugin's gate.
 func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
+	if strings.HasPrefix(client, PluginClientPrefix) {
+		return nil, ErrReservedClient
+	}
+	return newGate(dir, a, client)
+}
+
+// NewPluginGate opens plugin id's gate, client PluginClientPrefix + id. Only
+// the plugin host calls it.
+func NewPluginGate(dir string, a config.Autonomy, id string) (*Gate, error) {
+	if id == "" || strings.ContainsAny(id, ": \t\r\n") {
+		return nil, fmt.Errorf("%q is not a plugin ID", id)
+	}
+	return newGate(dir, a, PluginClientPrefix+id)
+}
+
+func newGate(dir string, a config.Autonomy, client string) (*Gate, error) {
 	g := &Gate{Autonomy: a, initial: a, Client: client, auditDir: dir, now: time.Now}
 	key := filepath.Join(dir, "confirm.key")
 	secret, err := os.ReadFile(key)
@@ -393,7 +430,7 @@ func (g *Gate) prepare(d *Decision, class Class, action string, related []string
 	}
 	now := g.now().UTC()
 	r := approvalRecord{Approval: Approval{OperationID: "op_" + hex.EncodeToString(uid[:]), Class: class, Action: action, ExpiresAt: now.Add(d.Policy.Window)},
-		IssuedAt: now, Fingerprint: digest, Related: related, Forced: force, Source: d.Policy.Source}
+		IssuedAt: now, Fingerprint: digest, Related: related, Forced: force, Source: d.Policy.Source, RequestedBy: g.Client}
 	if !deadline.IsZero() && deadline.Before(r.ExpiresAt) {
 		r.ExpiresAt = deadline.UTC()
 	}
@@ -471,6 +508,9 @@ func (g *Gate) consume(d *Decision, credential, digest string) error {
 	if err = stateError(r.State); err != nil {
 		return err
 	}
+	if strings.HasPrefix(g.Client, PluginClientPrefix) && r.RequestedBy != g.Client {
+		return ErrNotRequester
+	}
 	if r.Fingerprint != digest || r.State == prepared && d.Policy.Level != config.Auto {
 		g.logEvent(&r, "operation_changed")
 		return ErrChanged
@@ -484,6 +524,8 @@ func (g *Gate) consume(d *Decision, credential, digest string) error {
 	return g.change(&r, consumed)
 }
 
+// A plugin client sees only the records it requested: any other is
+// ErrNotRequester, so its state and expiry stay hidden.
 func (g *Gate) Status(id string) (Approval, error) {
 	var r approvalRecord
 	err := g.locked(func() error {
@@ -491,8 +533,14 @@ func (g *Gate) Status(id string) (Approval, error) {
 		if r, err = g.load(id); err != nil {
 			return err
 		}
+		if strings.HasPrefix(g.Client, PluginClientPrefix) && r.RequestedBy != g.Client {
+			return ErrNotRequester
+		}
 		return g.refresh(&r)
 	})
+	if errors.Is(err, ErrNotRequester) {
+		return Approval{}, err
+	}
 	return r.Approval, err
 }
 

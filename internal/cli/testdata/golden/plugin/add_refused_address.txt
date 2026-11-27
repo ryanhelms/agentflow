@@ -1,0 +1,4 @@
+$ agentflow plugin add https://example.com/plugin
+--- stdout
+--- error
+plugin add takes a local directory or YAML file, never an address: "https://example.com/plugin" looks like an address; build or download the plugin first, then give its local path (start a relative path with ./)

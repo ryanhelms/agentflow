@@ -321,3 +321,12 @@ a.row-title:not([href]) { color: var(--text); }
 @media (forced-colors: active) {
   .state-mark { color: CanvasText; }
 }
+
+/* The Plugins page's rail entry (docs/design/ui/plugins.md). The page's own rules are in plugins.css. */
+span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
+.ico-plugin::after { content: ""; position: absolute; inset: 50% auto auto 100%; width: .22rem; height: .34rem; translate: 0 -50%; background: currentColor; }
+/* How many plugins need attention: a number on the entry, with its sentence for screen readers beside it. */
+.nav-count { margin-inline-start: auto; min-width: 1.25rem; padding: 0 .3rem; color: var(--brand-midnight); background: var(--warn); font: 650 var(--fs-2xs)/1.6 var(--font); text-align: center; font-variant-numeric: tabular-nums; }
+@media (forced-colors: active) {
+  .nav-count { border: 1px solid CanvasText; }
+}

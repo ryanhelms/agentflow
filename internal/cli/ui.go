@@ -79,7 +79,7 @@ func runUI(ctx context.Context, args []string) error {
 	port := f.Int("port", 0, "loopback port for the daemon (default: reuse its port, otherwise try 80, then an available port)")
 	noOpen := f.Bool("no-open", false, "print the one-time launch URL without opening a browser")
 	foreground := f.Bool("foreground", false, "keep a newly started daemon attached to this terminal")
-	screen := f.String("screen", "", "open overview, providers, autonomy, configuration, or handoff (default: overview)")
+	screen := f.String("screen", "", "open overview, providers, autonomy, plugins, configuration, or handoff (default: overview)")
 	role := f.String("role", "", "select a role in the provider editor, such as task_management")
 	if err := f.Parse(args); err != nil {
 		return err

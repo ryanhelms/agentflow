@@ -104,6 +104,11 @@ type ApprovalsState struct {
 type ApprovalItem struct {
 	bus.Approval
 	State bus.ApprovalState `json:"state"`
+	// RequestedBy is the client whose call created the record, for example
+	// "plugin:ci-notify" or "mcp:claude-code"; empty for records written
+	// before it was kept. The key is always present. A "plugin:" value means
+	// the person answers it with agentflow plugin approve.
+	RequestedBy string `json:"requested_by"`
 	// Expired is true for a pending or approved record past ExpiresAt that
 	// the journal has not marked yet (watch.ObservedExpiry).
 	Expired bool `json:"expired,omitempty"`

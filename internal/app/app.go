@@ -52,6 +52,19 @@ func (e *ConfigLoadError) Unwrap() error { return e.err }
 
 // Open opens the repo containing dir. client names the calling AI client.
 func Open(ctx context.Context, dir, client string) (*App, error) {
+	if strings.HasPrefix(client, policy.PluginClientPrefix) {
+		return nil, policy.ErrReservedClient
+	}
+	return open(ctx, dir, client, "")
+}
+
+// OpenPlugin opens plugin id's App on the repo in dir: client plugin:<id>,
+// the one name Open refuses. Only the plugin host calls it.
+func OpenPlugin(ctx context.Context, dir, id string) (*App, error) {
+	return open(ctx, dir, policy.PluginClientPrefix+id, id)
+}
+
+func open(ctx context.Context, dir, client, plugin string) (*App, error) {
 	repo, err := gitx.Open(ctx, dir)
 	if err != nil {
 		return nil, err
@@ -71,7 +84,12 @@ func Open(ctx context.Context, dir, client string) (*App, error) {
 	if client == "" {
 		client = "cli"
 	}
-	gate, err := policy.NewGate(home, config.Effective(user, cfg), client)
+	var gate *policy.Gate
+	if plugin != "" {
+		gate, err = policy.NewPluginGate(home, config.Effective(user, cfg), plugin)
+	} else {
+		gate, err = policy.NewGate(home, config.Effective(user, cfg), client)
+	}
 	if err != nil {
 		return nil, err
 	}

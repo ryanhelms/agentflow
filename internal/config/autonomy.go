@@ -42,6 +42,8 @@ var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"finish":                {"remote", "Removes the worktree and deletes the local and remote branch."},
 	"jira_remote_link":      {"remote", ""},
 	"notify":                {"remote", ""},
+	"plugin.approve":        {"local", "Approving a plugin's write requires confirmation."},
+	"plugin.install":        {"local", "Installing or removing plugins requires confirmation."},
 	"pr_open":               {"remote", ""},
 	"pr_open_draft":         {"remote", ""},
 	"pr_ready_for_review":   {"remote", ""},
@@ -68,7 +70,7 @@ func ValidAutonomyAction(action string) bool {
 
 func DescribeAutonomyAction(action string) (AutonomyAction, bool) {
 	v, ok := autonomyCatalog[action]
-	required := strings.HasPrefix(action, "setup.") || strings.HasPrefix(action, "console.") || action == "release_publish" || action == "ticket_create"
+	required := strings.HasPrefix(action, "setup.") || strings.HasPrefix(action, "console.") || action == "release_publish" || action == "ticket_create" || action == "plugin.install" || action == "plugin.approve"
 	return AutonomyAction{Classes: strings.Fields(v.classes), Confirmation: v.confirmation, Mandatory: ok && required}, ok
 }
 

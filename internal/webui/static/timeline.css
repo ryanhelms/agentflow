@@ -53,3 +53,15 @@
   .timeline-approval { border-inline-start-color: CanvasText; }
   .timeline-jump { color: LinkText; }
 }
+
+/* Plugin notes under an operation (docs/design/ui/plugins.md, "Timeline annotations"). The plugin's ID leads each note, and its text is set apart from Agentflow's own. */
+.timeline-annotations { display: grid; gap: var(--s-1); margin: var(--s-2) 0 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+.timeline-annotations > li, .timeline-list .timeline-annotations > li:last-child { padding: var(--s-1) var(--s-3); border: 0; border-inline-start: 3px solid var(--border-strong); background: var(--surface-2); overflow-wrap: anywhere; }
+.timeline-annotations > li[data-level=warning] { border-inline-start-color: var(--warn); background: var(--warn-bg); }
+.timeline-annotation-from { color: var(--text-muted); font-size: var(--fs-xs); font-weight: 600; }
+.timeline-annotations time { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.timeline-panel [data-state=info] > .state-mark { background: currentColor; }
+.timeline-panel [data-state=warning] > .state-mark { color: var(--warn); border-radius: 0; }
+@media (forced-colors: active) {
+  .timeline-annotations > li { border-inline-start-color: CanvasText; }
+}

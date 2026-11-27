@@ -1,0 +1,32 @@
+$ agentflow plugin approve <operation-id> --yes
+--- stdin
+n
+--- stdout
+--- stderr
+--yes is ignored: plugin approve always asks you.
+Agentflow plugin.approve: confirm (default)
+Approve what plugin "ci-notify" asked to run:
+  command   "notify"
+  what      "notify ci.failed"
+  request   <operation-id>
+  expires   <time>
+  what the command will do, as its own confirmation shows it:
+  {
+    "deliveries": [
+      {
+        "destination": "audit",
+        "provider": "webhook",
+        "status": "planned"
+      }
+    ],
+    "notification": {
+      "body": "Failed checks: lint\nSee the run.",
+      "signal": "ci.failed",
+      "title": "CI failed on feat"
+    }
+  }
+! The console runs it once, as the plugin, right after you approve.
+Approve: plugin "ci-notify", command "notify", request <operation-id>
+Proceed? [y/N]: 
+--- error
+cancelled

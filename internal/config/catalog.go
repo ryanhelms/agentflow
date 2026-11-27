@@ -24,19 +24,25 @@ type formatMarker struct {
 	Reason string
 }
 
-// catalogFormatMarkers are the fields the walk leaves out: they say which
-// schema version a file or section uses. agentflow init and migrations write
-// them, so a control would only invite a broken file. Each role's "version"
-// never reaches the walk (roles come from ProviderCatalog, which has
-// settings only); it is listed so the exclusion is stated in one place and
-// tested.
+// catalogFormatMarkers are the fields the walk leaves out, each with its
+// reason. Most say which schema version a file or section uses: agentflow
+// init and migrations write them, so a control would only invite a broken
+// file. Each role's "version" never reaches the walk (roles come from
+// ProviderCatalog, which has settings only); it is listed so the exclusion
+// is stated in one place and tested.
+//
+// personal:plugins is the other kind: the personal layer's plugin sections.
+// Installed plugins add their own fields (manifest.CatalogFields): an
+// enabled toggle and the plugin's settings, which the compiled types cannot
+// describe.
 var catalogFormatMarkers = func() []formatMarker {
 	const reason = "schema version of the file or section, written by agentflow init and migrations"
 	markers := []formatMarker{{FieldRepo, "agentflow", reason}, {FieldRepo, "devops.version", reason}}
 	for _, role := range ProviderRoles {
 		markers = append(markers, formatMarker{FieldRepo, role + ".version", reason})
 	}
-	return markers
+	return append(markers, formatMarker{FieldPersonal, "plugins",
+		"one section per installed plugin: each plugin adds its own fields (enabled and its settings) to the catalog"})
 }()
 
 func isFormatMarker(layer FieldLayer, path string) bool {
@@ -45,9 +51,14 @@ func isFormatMarker(layer FieldLayer, path string) bool {
 	})
 }
 
-// Groups lists the sections of the Settings page in display order: the
-// provider selections, one group per provider role for that role's settings,
-// then the other groups.
+// GroupOrderPlugins is the order of the compiled "plugins" group. Each
+// installed plugin adds a group "plugins.<id>" after it (manifest.Groups).
+const GroupOrderPlugins = 900
+
+// Groups lists the compiled sections of the Settings page in display order:
+// the provider selections, one group per provider role for that role's
+// settings, then the other groups. Installed plugins add their own groups
+// after these (manifest.Groups).
 func Groups() []Group {
 	out := []Group{{ID: groupProviders, Label: "Providers", Order: 100}}
 	for i, role := range ProviderRoles {
@@ -61,6 +72,7 @@ func Groups() []Group {
 		Group{ID: groupIntegrations, Label: "Integrations", Order: 600},
 		Group{ID: groupUpdates, Label: "Updates", Order: 700},
 		Group{ID: groupInit, Label: "Automatic setup", Order: 800},
+		Group{ID: groupPlugins, Label: "Plugins", Order: GroupOrderPlugins},
 	)
 }
 

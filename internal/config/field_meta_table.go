@@ -37,6 +37,7 @@ const (
 	groupIntegrations = "integrations"
 	groupUpdates      = "updates"
 	groupInit         = "init"
+	groupPlugins      = "plugins"
 )
 
 func roleGroup(role string) string { return groupProviders + "." + role }
@@ -289,6 +290,10 @@ func (b *tableBuilder) repository() {
 	b.add(l, "commit.breaking_paths", "", ctl(groupCommit, WidgetChips, "Breaking-change paths",
 		"Path patterns whose changes mark a commit as a breaking change. A pattern may use ** to match any number of directories.",
 		withAdvanced()))
+
+	b.add(l, "plugins.disabled", "", ctl(groupPlugins, WidgetChips, "Plugins turned off here",
+		"IDs of installed plugins whose event handlers do not run for this repository. A repository can turn plugins off for itself, never on.",
+		withLoosens(LoosensShrink)))
 
 	b.add(l, "worktree.root", "", ctl(groupWorktrees, WidgetFilePicker, "Repository worktree root",
 		"Directory that holds new task worktrees, as root/repository/branch, for everyone who works in this repository.",

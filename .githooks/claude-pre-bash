@@ -3,7 +3,9 @@
 # agentflow's own pre-bash check from this checkout in convention-only mode: commit
 # messages, PR titles (as the future squash commit) and squash subjects must follow
 # the convention. The never-list is skipped here because maintainers ask agents to
-# merge explicitly; AGENTS.md still forbids pushes to main and force-pushes.
+# merge explicitly; AGENTS.md still forbids pushes to main and force-pushes. The one
+# never-list rule that still applies blocks agents from adding, removing or approving
+# agentflow plugins, which belong to the user and not to a repository.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 export AGENTFLOW_NO_UPDATE=1
