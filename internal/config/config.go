@@ -123,6 +123,7 @@ type User struct {
 	} `yaml:"atlassian"`
 	// Init controls automatic `agentflow init` by the AI-client plugins in repos without
 	// .agentflow/config.yml: auto (default), ask or off, for repos owned by Orgs.
+	// Orgs has no default: with none listed, the plugins set nothing up.
 	Init struct {
 		Auto string   `yaml:"auto"`
 		Orgs []string `yaml:"orgs"`
@@ -170,9 +171,11 @@ type UserWorktree struct {
 
 // Defaults applied when fields are missing.
 var (
-	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
-	DefaultFlowMap    = "ryanhelms/agentflow@v0:flow-map.yml"
-	DefaultInitOrgs   = []string{"nscaledev", "ryanhelms"}
+	DefaultTypes   = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
+	DefaultFlowMap = "ryanhelms/agentflow@v0:flow-map.yml"
+	// DefaultInitOrgs is empty: no GitHub owner is set up automatically until
+	// the person lists it in init.orgs.
+	DefaultInitOrgs   = []string{}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
 	DefaultCheckEvery = 6 * time.Hour
 )

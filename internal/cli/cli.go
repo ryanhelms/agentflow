@@ -472,7 +472,23 @@ func runInit(ctx context.Context, args []string) error {
 		printResult(res)
 		return err
 	}
-	prompt := *guided || (!*headless && term.IsTerminal(int(os.Stdin.Fd())))
+	// Only a person at a terminal answers the personal setup questions:
+	// --guided alone does not ask them, so an agent piping answers cannot.
+	interactive := !*headless && initStdinIsTerminal()
+	prompt := *guided || interactive
+	var home setup.HomeQuestions
+	var saveHome func() error
+	if !*detect {
+		if home, err = setup.CheckHomeQuestions(); err != nil {
+			return err
+		}
+		if home.Needed && interactive {
+			if saveHome, err = askHomeQuestions(home.Path, initStdin, initPromptOut); err != nil {
+				return err
+			}
+			home.Needed = false
+		}
+	}
 	var edit *initproviders.Edit
 	if *detect || prompt || len(answers) > 0 {
 		plan, err := initproviders.Detect(ctx, repo)
@@ -483,7 +499,7 @@ func runInit(ctx context.Context, args []string) error {
 			return printJSON(plan)
 		}
 		if prompt {
-			if err := guideProviders(plan, answers, os.Stdin, os.Stderr); err != nil {
+			if err := guideProviders(plan, answers, initStdin, initPromptOut); err != nil {
 				return err
 			}
 		}
@@ -512,6 +528,12 @@ func runInit(ctx context.Context, args []string) error {
 	}
 	for _, f := range rel.Written {
 		fmt.Println("  wrote   ", f)
+	}
+	if saveHome != nil {
+		return saveHome()
+	}
+	if home.Needed {
+		fmt.Print(setup.HomeQuestionsText(home.Path))
 	}
 	return nil
 }
