@@ -588,8 +588,10 @@ agent wrote and did (messages, thoughts, tool calls with their files, diffs and
 command output), the commands Agentflow ran for it, usage with the cost the
 harness reported, and the changed files once it ends. When an agent asks for
 permission, a card shows what Agentflow checked, in full: the file and the
-change a write would make, or the command line, the folder, the variable names
-and why it asks. The agent's own wording is kept apart and marked as the
+change a write would make, or the command line, the program it starts, the
+folder, every variable the harness sets with its whole value, and why it asks. A
+path that is a link shows where it leads, and a hidden character in a name or a
+command shows as a mark such as `<U+202E>`. The agent's own wording is kept apart and marked as the
 agent's, and a request about one of the harness's own tools says that Agentflow
 cannot check it. You answer with **Reject** or **Allow once**; **Allow once** is
 absent when the request cannot be allowed or the page cannot show all of it. A

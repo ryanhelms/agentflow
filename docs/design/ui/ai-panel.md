@@ -39,8 +39,9 @@ diffs and terminal output come from a model that anything it read can steer. So:
 - No address becomes a link. A reader who wants to open one copies it.
 - Control characters, invisible format characters, the characters that reorder text and
   spaces that are not the plain space are removed from one-line text and shown as `�` in
-  text of several lines and in paths and commands, although the session store already
-  removes most of them.
+  text of several lines and in paths and commands. In what a request names, the session
+  host has already written each one as `<U+XXXX>`, and the card draws that as a mark (see
+  "Hidden characters show as marks").
 - The page loads nothing an agent names: no image, no icon, no frame.
 - Agentflow's own words (headings, labels, reasons, state names) never contain agent text.
 
@@ -116,7 +117,7 @@ itself, and performs it itself if you allow it.
 | --- | --- | --- |
 | Heading | "Write a file", "Read a file" or "Run a command" | Agentflow's |
 | **Written by the agent. Agentflow did not check this text.** | the agent's title | the agent's |
-| **What Agentflow checked** | the command line; the file; **the change a write would make**; the folder it runs in; the names of the variables it sets (never values); the worktree; why it asks | Agentflow's |
+| **What Agentflow checked** | the command line; **the program it starts**; the file, and **where it leads when it is a link**; **the change a write would make**; the folder it runs in; **every variable it sets, with its whole value**; the worktree; why it asks | Agentflow's |
 | Effect | "If you allow it, Agentflow writes this file itself, in the session's worktree." | Agentflow's |
 | Time, buttons, status | "Answer within 4 min 05 s. After that, Agentflow rejects it.", **Reject** and **Allow once** | Agentflow's |
 
@@ -129,7 +130,7 @@ finding.
 | Heading | "The agent asks to use one of its own tools" |
 | Warning | "The harness does this itself, with its own tools. Agentflow passes your answer on and cannot check what happens then." |
 | **What the agent says it will do. Agentflow cannot check it.** | "It says it will: fetch from the network", "On this file: …", the agent's title, and its names for its choices with each one's kind |
-| About the request | the session's worktree and why it asks. The label "What Agentflow checked" is not used here |
+| About the request | the session's worktree, **Links Agentflow found** when a path the agent named is a link, and why it asks. The label "What Agentflow checked" is not used here |
 | Time, buttons, status | as above |
 
 ### A write shows its change
@@ -146,6 +147,80 @@ whole change in view. A missing `old_text` is a new file and a missing `cut` is 
 | `cut`, reason `preview_too_large`, a side over 70,000 characters, or more than 4,000 lines to show | "The change is too large to show in full, so it cannot be allowed here." |
 | the text has a character the page cannot show as it is | "The change has characters this page cannot show as they are (marked �), …" |
 | `diff.path` is not the request's one path | "This console cannot show the whole request as it is, …" |
+
+### A command shows what it starts and what it sets
+
+A `terminal` request carries `program` (a string) and `env` (a list of `{"name", "value"}`),
+both from the session host (`AIAsk` in `projection_ai_state.go`).
+
+- **Program it starts** is `program`: the file the command's first word resolved to, for
+  example `/usr/local/go/bin/go` or `~/…/tools/git`. It sits right under the command,
+  because the same word can start different files.
+- **Sets variables** lists every entry of `env`: "`GIT_EXTERNAL_DIFF` is set to:" and the
+  value in a box, in full. The card says "Set by the harness, for this command. Agentflow
+  passes each value on as it is, and a value can change what the command runs." An empty
+  value reads "is set to nothing (an empty value)."
+- A value never ends in "…". One of more than 80 characters gives its length ("is set to
+  this value of 3,006 characters:"). A value taller than 12rem scrolls in its box, which
+  takes focus and is named "The value of `NAME`".
+- **Allow once** is absent, and the card says why, when:
+
+| Case | The card says |
+| --- | --- |
+| no `program` | "Agentflow did not say which program this command starts, so it cannot be allowed here." |
+| a name in `env_names` has no entry in `env` | "Agentflow did not send the value of every variable this command sets, so it cannot be allowed here." The names still show, with "Agentflow did not send this value." |
+| `env` is not a list, has more than 32 entries, an entry without a name or a text value, or a value over 36,864 characters | "This console cannot show the whole request as it is, …" |
+
+### A link shows where it leads
+
+`resolved_paths`, when present, has one entry for each of `paths`, in the same order: the
+place the path leads to. Where the two differ, the path is a link, and the operation would
+reach the other place. The card puts a box under that path, joined to it, with a thick
+border in the warning tone: "**This path is a link. It leads to another place:**" and the
+place. A path that leads to itself gets no box, so the box always means a difference.
+
+On a request about the harness's own tool the path stays in the agent's box, because the
+agent named it. Where it leads is Agentflow's finding, so it is under **About the request**
+as **Links Agentflow found**, with the path repeated beside it.
+
+A `resolved_paths` that is not a list, or does not have one entry for each path, means
+the card cannot show the whole request: no **Allow once**.
+
+### Hidden characters show as marks
+
+The session host writes every character that hides or reorders text as `<U+XXXX>`
+(`aisession.Visible`) in `paths`, `resolved_paths`, `line`, `cwd`, `program` and the `env`
+names and values. The card draws each one as a mark: a small bordered box in the warning
+tone, bold, with a wavy underline, that never breaks across lines. So `gnp<U+202E>txt.exe`
+cannot be read as an ordinary name.
+
+- The mark keeps its text, so a copy or a screen reader gets `<U+202E>` at its place. Its
+  tooltip names it.
+- Below the facts, above the buttons, a note names each one in words: "Look closely: this
+  request has hidden or unusual characters. Each one is shown as a mark like `<U+202E>` at
+  the place where it is. They are part of the real command, program, folder or value:
+  U+202E (right-to-left override, changes the order text is read in), U+000A (line break)."
+- Only a code from the unsafe set below is a mark. `<U+0041>` is the letter A, so it stays
+  ordinary text.
+- A marked request can be allowed: the character is in view. A character from the unsafe
+  set that arrives as itself still shows as `�` and takes **Allow once** away.
+- Limit: a file whose real name contains the ten characters `<U+202E>` looks the same as
+  one with the hidden character. The card errs toward the warning.
+
+### Why it asks
+
+`reason` is shown in Agentflow's words. Add a row to `reasons` in `ai-panel.js` when a lane
+adds one; an unknown reason shows as "Reason code `<code>`."
+
+| `reason` | The card says |
+| --- | --- |
+| `unicode_name` | "The file name has characters that are not plain English letters, digits or signs. This computer can read such a name as another file's name, so only you can allow it." |
+| `env` | "The command sets environment variables of its own. A value can change what runs, so no rule can allow it." |
+
+The page has no words of its own for the code that denies one request (`changed`,
+`rule:account:<name>` and the others): the state carries no such code, only the item's
+text. A code the page does not know never breaks it: a session's ending code shows as
+"Reason code `<code>`."
 
 ### Keeping the agent's words apart
 
@@ -166,8 +241,11 @@ whole change in view. A missing `old_text` is a new file and a missing `cut` is 
 - A path or a command line wraps, keeps its spaces and never scrolls sideways or ends in
   "…", because the hidden part could be the part that matters. It wraps with
   `overflow-wrap: anywhere`.
-- A command of more than 80 characters shows its **Program** on a line of its own, and
-  "Command, 137 characters".
+- A command of more than 80 characters reads "Command, 137 characters". **Program it
+  starts** follows it.
+- The host cuts a path, a folder or a program at 4,096 bytes and a variable's name at 256,
+  without a sign. A value within 4 bytes of that limit may have lost its end, so the card
+  has no **Allow once**.
 - Unsafe characters are: control and format characters (the text-reordering controls,
   zero-width characters, the soft hyphen, tags), line separators, private-use characters,
   variation selectors, the fillers that draw nothing, and every space that is not the plain
@@ -311,7 +389,9 @@ state.
 `go test ./internal/webui -run TestAIBrowser` runs `testdata/ai/ai-test.js` in a browser
 (set `AGENTFLOW_TEST_CHROME`) against a scripted stream and fake endpoints. It covers the
 reader, the list and the selection, the cards and what may be allowed, a write with and
-without its change, an own-tool request, unsafe and look-alike characters, both requests
+without its change, an own-tool request, unsafe and look-alike characters, a command
+with its program and its variables' values, a link that leads elsewhere, a hidden character
+shown as a mark, both requests
 and their limits, a button that moved, hostile agent text, the stream with
 200 items, diffs and output, Cancel, every page state, and that the page sends nothing
 but the two requests. No test starts a harness or a session. To look at the page without
@@ -324,4 +404,5 @@ AGENTFLOW_AI_DEMO=127.0.0.1:41736 go test ./internal/webui -run TestAIDemo -time
 Then open `http://127.0.0.1:41736/w/first/`. Add `?view=stream` to watch output arrive,
 `?view=ended` for a finished session, or `?view=empty` for no session.
 `testdata/ai/demo.js` writes the frames and answers **Allow once**, **Reject** and
-**Cancel**.
+**Cancel**. Its fourth request is a command with a program inside the worktree, three
+variables and a hidden character; its fifth is a read through a link.

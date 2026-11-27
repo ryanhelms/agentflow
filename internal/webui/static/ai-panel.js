@@ -61,6 +61,55 @@
     const line = text(value).replace(unsafeAll, "\ufffd");
     return line.length > max ? line.slice(0, max) + "…" : line;
   };
+  // The session host cuts a value it shows at a number of bytes, without a
+  // sign. A value that long may have lost its end, so it does not count as
+  // shown in full.
+  const bytes = value => new TextEncoder().encode(value).length;
+  const fits = (value, max) => whole(value, max) && bytes(value) <= max - 4;
+  // The host writes every character that hides or reorders text as
+  // "<U+XXXX>" (aisession.Visible), in paths, command lines, folders,
+  // programs and environment values. parts() splits a value into its text
+  // and those markers, so the card can draw each one as a mark that cannot
+  // pass for ordinary text. Only a code of the hazard set is a marker.
+  const markForm = /<U\+([0-9A-F]{4,6})>/g;
+  const hazardCode = code => code <= 0x10ffff && unsafe.test(String.fromCodePoint(code));
+  function parts(value) {
+    const out = [];
+    let last = 0;
+    for (const match of value.matchAll(markForm)) {
+      const code = parseInt(match[1], 16);
+      if (!hazardCode(code)) continue;
+      if (match.index > last) out.push({text: value.slice(last, match.index)});
+      out.push({text: match[0], code});
+      last = match.index + match[0].length;
+    }
+    if (last < value.length || !out.length) out.push({text: value.slice(last)});
+    return out;
+  }
+  const markNames = {
+    0x0: "null character", 0x9: "tab", 0xa: "line break", 0xd: "carriage return", 0x1b: "escape character", 0x7f: "delete character",
+    0xa0: "no-break space", 0xad: "soft hyphen", 0x200b: "zero-width space", 0x200c: "zero-width non-joiner", 0x200d: "zero-width joiner",
+    0x200e: "left-to-right mark", 0x200f: "right-to-left mark", 0x2028: "line separator", 0x2029: "paragraph separator", 0x2060: "word joiner",
+    0x202a: "left-to-right embedding", 0x202b: "right-to-left embedding", 0x202c: "end of embedding", 0x202d: "left-to-right override", 0x202e: "right-to-left override",
+    0x2066: "left-to-right isolate", 0x2067: "right-to-left isolate", 0x2068: "first-strong isolate", 0x2069: "end of isolate", 0x3000: "wide space", 0xfeff: "byte order mark"
+  };
+  const reorders = code => code === 0x61c || code === 0x200e || code === 0x200f || (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
+  function markName(code) {
+    if (markNames[code]) return markNames[code] + (reorders(code) ? ", changes the order text is read in" : "");
+    const char = String.fromCodePoint(code);
+    if (reorders(code)) return "text direction control, changes the order text is read in";
+    if (/\p{Cc}/u.test(char)) return "control character";
+    if (/\p{Zs}/u.test(char)) return "a space that is not the plain space";
+    if (/\p{Co}/u.test(char)) return "private-use character";
+    return "invisible character";
+  }
+  const codeName = code => "U+" + code.toString(16).toUpperCase().padStart(4, "0");
+  // The markers in a set of values, each once, in words.
+  function marksIn(values) {
+    const seen = new Map();
+    for (const value of values) for (const part of parts(value)) if (part.code !== undefined && !seen.has(part.code)) seen.set(part.code, codeName(part.code) + " (" + markName(part.code) + ")");
+    return [...seen.values()];
+  }
   // Letters outside plain ASCII in a path or a command can look like
   // other letters. They are allowed, and the card points each one out.
   const foreign = value => [...new Set([...value].filter(char => char.codePointAt(0) > 0x7e && char !== "\ufffd" && char !== "…"))].slice(0, 12)
@@ -94,6 +143,8 @@
   // Bounds on what the page draws. The projection has its own (ADR,
   // "Phase 7 AI projection"); these hold when it does not.
   const maxSessions = 20, maxItems = 400, maxTools = 100, maxTerminals = 64, maxAsks = 8, maxPaths = 64, maxFiles = 200;
+  // aisession.MaxAgentEnv entries, and a value of MaxAgentEnvValue bytes with every byte written as a marker.
+  const maxEnv = 32, maxEnvValue = 36864;
 
   function usageState(raw) {
     raw = record(raw);
@@ -129,11 +180,25 @@
     }
     const kind = pick(raw.kind, askKinds, "unknown");
     const change = record(raw.diff);
+    // The environment a terminal request sets, name and value, as the
+    // command would get it. Every value is shown: one can change what runs.
+    const env = [];
+    let envWhole = (raw.env === undefined || raw.env === null || Array.isArray(raw.env)) && list(raw.env).length <= maxEnv;
+    for (const entry of list(raw.env).slice(0, maxEnv).map(record)) {
+      if (!entry || entry.name === "" || !fits(entry.name, 256) || !whole(entry.value, maxEnvValue)) envWhole = false;
+      env.push({name: exact(entry?.name, 256), value: exact(entry?.value, maxEnvValue)});
+    }
+    // Where each path leads through a link, in the order of the paths.
+    const leads = raw.resolved_paths === undefined || raw.resolved_paths === null ? null : list(raw.resolved_paths);
+    const leadsWhole = !leads || (Array.isArray(raw.resolved_paths) && leads.length === paths.length && leads.every(path => path !== "" && fits(path, 4096)));
     const ask = {
       id, kind, toolKind: pick(raw.tool_kind, toolKinds, raw.tool_kind ? "unknown" : ""),
       title: quoted(raw.title, 600),
       paths: paths.slice(0, maxPaths).map(path => exact(path, 4096)).filter(Boolean), line: exact(raw.line, 16384), cwd: exact(raw.cwd, 4096),
       envNames: names.slice(0, 64).map(name => exact(name, 256)).filter(Boolean),
+      env, program: exact(raw.program, 4096),
+      // resolved[n] is where paths[n] leads; "" when Agentflow found no link.
+      resolved: leads ? paths.slice(0, maxPaths).map((path, n) => exact(path, 4096) ? exact(leads[n], 4096) : null).filter(path => path !== null) : [],
       options,
       // The change an fs_write would make: the file as it is and as it would be.
       diff: change ? {path: exact(change.path, 4096), before: text(change.old_text), after: text(change.new_text), cut: change.cut === true} : null,
@@ -143,11 +208,17 @@
     };
     // What the reader decides on must be on the card in full and as it is.
     // blocked says why a request cannot be allowed here: "" when it can.
-    const values = kind !== "unknown" && paths.length <= maxPaths && paths.every(path => path !== "" && whole(path, 4096))
-      && (raw.line === undefined || whole(raw.line, 16384)) && (raw.cwd === undefined || whole(raw.cwd, 4096))
-      && names.length <= 64 && names.every(name => name !== "" && whole(name, 256))
-      && (kind !== "terminal" || ask.line !== "");
+    const values = kind !== "unknown" && paths.length <= maxPaths && paths.every(path => path !== "" && fits(path, 4096))
+      && (raw.line === undefined || whole(raw.line, 16384)) && (raw.cwd === undefined || fits(raw.cwd, 4096))
+      && names.length <= 64 && names.every(name => name !== "" && fits(name, 256))
+      && (kind !== "terminal" || ask.line !== "")
+      && envWhole && leadsWhole && (raw.program === undefined || raw.program === "" || fits(raw.program, 4096));
     ask.blocked = kind === "unknown" ? "kind" : !values ? "values" : !ask.fingerprint ? "fingerprint" : "";
+    if (!ask.blocked && kind === "terminal") {
+      // A command is allowed only with what it starts and what it sets in view.
+      if (!ask.program) ask.blocked = "program";
+      else if (!names.every(name => env.some(entry => entry.name === name))) ask.blocked = "env";
+    }
     if (!ask.blocked && kind === "fs_write") {
       // A write is allowed only with the whole change in view.
       if (ask.reason === "preview_too_large" || change?.cut === true) ask.blocked = "large";
@@ -316,7 +387,9 @@
     rule: "A permission rule says to ask you.",
     gate: "Your autonomy settings say to confirm this.",
     ceiling: "An agent started this session, so it cannot do this without you.",
-    preview_too_large: "The change is too large to show here."
+    preview_too_large: "The change is too large to show here.",
+    unicode_name: "The file name has characters that are not plain English letters, digits or signs. This computer can read such a name as another file's name, so only you can allow it.",
+    env: "The command sets environment variables of its own. A value can change what runs, so no rule can allow it."
   };
   const reasonText = reason => reasons[reason] || (reason ? "Reason code " + reason + "." : "Agentflow did not say why.");
   const optionNames = {allow_once: "allow once", allow_always: "allow always", reject_once: "reject once", reject_always: "reject always", unknown: "a kind this console does not know"};
@@ -327,6 +400,8 @@
     fingerprint: "The request arrived without its check value, so it cannot be allowed here. You can reject it.",
     nodiff: "Agentflow did not send the change this would write, so it cannot be allowed here. You can reject it.",
     large: "The change is too large to show in full, so it cannot be allowed here. You can reject it.",
+    program: "Agentflow did not say which program this command starts, so it cannot be allowed here. You can reject it.",
+    env: "Agentflow did not send the value of every variable this command sets, so it cannot be allowed here. You can reject it.",
     text: "The change has characters this page cannot show as they are (marked \ufffd), so it cannot be allowed here. You can reject it.",
     option: "This request cannot be allowed: the agent offered no “allow once” choice. You can reject it, or it is rejected when the time runs out."
   };
@@ -644,10 +719,88 @@
       }
       return out;
     }
+    // A value shown as it is. Each "<U+XXXX>" the host wrote for a hidden
+    // character is drawn as a mark; its text stays, so a copy keeps it.
+    function exactly(value, klass = "") {
+      const code = element("code", "", ("ai-exact " + klass).trim());
+      for (const part of parts(value)) {
+        if (part.code === undefined) { code.append(part.text); continue; }
+        const mark = element("span", part.text, "ai-mark");
+        mark.title = "Hidden character " + codeName(part.code) + ": " + markName(part.code);
+        code.append(mark);
+      }
+      return code;
+    }
     function codes(values) {
       const items = element("ul", "", "ai-paths");
-      for (const value of values) items.appendChild(element("li")).append(element("code", value, "ai-exact"));
+      for (const value of values) items.appendChild(element("li")).append(exactly(value));
       return items;
+    }
+    // A path that is a link reaches another place than its name says.
+    const moved = (ask, n) => Boolean(ask.resolved[n]) && ask.resolved[n] !== ask.paths[n];
+    function leadsTo(ask, n) {
+      const box = element("div", "", "ai-ask-leads");
+      box.append(element("p", "This path is a link. It leads to another place:", "ai-ask-leads-label"), exactly(ask.resolved[n]));
+      return box;
+    }
+    // The paths of a request Agentflow performs, each with where it leads.
+    function pathList(ask) {
+      const items = element("ul", "", "ai-paths");
+      ask.paths.forEach((path, n) => {
+        const row = items.appendChild(element("li"));
+        row.append(exactly(path));
+        if (moved(ask, n)) row.append(leadsTo(ask, n));
+      });
+      return items;
+    }
+    // The links among the paths an agent named for a tool of its own.
+    function linkList(ask) {
+      const items = element("ul", "", "ai-paths");
+      ask.paths.forEach((path, n) => {
+        if (!moved(ask, n)) return;
+        const row = items.appendChild(element("li"));
+        row.append(exactly(path), leadsTo(ask, n));
+      });
+      return items;
+    }
+    // The variables a command sets, each with its whole value.
+    function variables(ask) {
+      const items = element("ul", "", "ai-env");
+      for (const entry of ask.env) {
+        const row = items.appendChild(element("li"));
+        const name = element("p", "", "ai-env-name");
+        name.append(exactly(entry.name || "\ufffd", "ai-env-key"));
+        if (entry.value === "") {
+          name.append(element("span", " is set to nothing (an empty value)."));
+          row.append(name);
+          continue;
+        }
+        const long = entry.value.length > 80;
+        name.append(element("span", long ? " is set to this value of " + number(entry.value.length) + " characters:" : " is set to:"));
+        const value = exactly(entry.value, "ai-env-value");
+        // A long value scrolls in its box; the box takes focus so the keyboard can scroll it.
+        value.tabIndex = 0;
+        value.setAttribute("role", "group");
+        value.setAttribute("aria-label", "The value of " + entry.name);
+        row.append(name, value);
+      }
+      return items;
+    }
+    // What to look at twice: hidden characters the host marked, and
+    // letters that can pass for other letters.
+    function cautions(ask) {
+      const values = [...ask.paths, ...ask.resolved, ask.cwd, ask.line, ask.program, ...ask.env.flatMap(entry => [entry.name, entry.value])];
+      const out = [];
+      const marks = marksIn(values);
+      if (marks.length) {
+        const note = element("p", "", "ai-ask-odd ai-ask-marks");
+        note.append("Look closely: this request has hidden or unusual characters. Each one is shown as a mark like ", element("span", "<" + marks[0].split(" ")[0] + ">", "ai-mark"),
+          " at the place where it is. They are part of the real " + (ask.line ? "command, program, folder or value" : "path") + ": " + marks.slice(0, 12).join(", ") + (marks.length > 12 ? ", and " + (marks.length - 12) + " more" : "") + ".");
+        out.push(note);
+      }
+      const odd = foreign(values.join(""));
+      if (odd.length) out.push(element("p", "Look closely: the " + (ask.line ? "command" : "path") + " has characters that are not plain English letters, digits or signs, and some look like other letters: " + odd.join(", ") + ".", "ai-ask-odd"));
+      return out;
     }
     function choices(ask) {
       const out = [element("p", "The agent's names for its choices. Agentflow answers only with “allow once” or “reject”, whatever a name says.", "ai-said-note")];
@@ -699,8 +852,11 @@
         if (ask.title) said.append(...quote(ask.title));
         if (ask.options.length) said.append(...choices(ask));
         const about = element("dl", "", "ai-ask-facts ai-ask-about");
-        about.append(term("Session worktree", element("code", item.worktree || "not reported", "ai-exact")), term("Why it asks", reasonText(ask.reason)));
-        card.append(said, about);
+        about.append(term("Session worktree", element("code", item.worktree || "not reported", "ai-exact")));
+        // The agent named the path; where a link leads is Agentflow's finding.
+        if (ask.paths.some((path, n) => moved(ask, n))) about.append(term("Links Agentflow found", linkList(ask)));
+        about.append(term("Why it asks", reasonText(ask.reason)));
+        card.append(said, about, ...cautions(ask));
       } else {
         // The agent's wording first, marked as the agent's; then what
         // Agentflow resolved, next to the buttons.
@@ -713,21 +869,26 @@
         if (ask.line) {
           // A long command hides its program in the crowd: name it first.
           const long = ask.line.length > 80;
-          if (long && program(ask.line)) facts.append(term("Program", element("code", program(ask.line), "ai-exact")));
-          facts.append(term(long ? "Command, " + number(ask.line.length) + " characters" : "Command", element("code", ask.line, "ai-exact")));
+          if (long && !ask.program && program(ask.line)) facts.append(term("Program", exactly(program(ask.line))));
+          facts.append(term(long ? "Command, " + number(ask.line.length) + " characters" : "Command", exactly(ask.line)));
         }
-        if (ask.paths.length) facts.append(term(ask.paths.length === 1 ? "File" : "Files", codes(ask.paths)));
+        // The file the command's first word resolved to: what Agentflow would start.
+        if (ask.program) facts.append(term("Program it starts", exactly(ask.program)));
+        if (ask.paths.length) facts.append(term(ask.paths.length === 1 ? "File" : "Files", pathList(ask)));
         // A change that arrived without its new text is not drawn: it would read as "nothing changes".
         if (ask.kind === "fs_write" && ask.diff && ask.blocked !== "nodiff") facts.append(term("Change", ...change(ask)));
-        if (ask.kind === "terminal" || ask.cwd) facts.append(term("Runs in", ask.cwd ? element("code", ask.cwd, "ai-exact") : "the worktree's top folder"));
-        if (ask.envNames.length) facts.append(term("Sets variables", codes(ask.envNames), element("p", "The agent set values for these. Agentflow does not show or keep the values.", "muted")));
+        if (ask.kind === "terminal" || ask.cwd) facts.append(term("Runs in", ask.cwd ? exactly(ask.cwd) : "the worktree's top folder"));
+        if (ask.env.length) {
+          facts.append(term("Sets variables", element("p", "Set by the harness, for this command. Agentflow passes each value on as it is, and a value can change what the command runs.", "ai-ask-set"), variables(ask)));
+        }
+        // Names that arrived without a value: the request cannot be allowed (blocked "env").
+        const bare = ask.envNames.filter(name => !ask.env.some(entry => entry.name === name));
+        if (bare.length) facts.append(term(ask.env.length ? "Also sets" : "Sets variables", codes(bare), element("p", "Set by the harness. Agentflow did not send " + (bare.length === 1 ? "this value" : "these values") + ".", "muted")));
         facts.append(term("Worktree", element("code", item.worktree || "not reported", "ai-exact")));
         facts.append(term("Why it asks", reasonText(ask.reason)));
         const resolved = element("div", "", "ai-ask-resolved");
         resolved.append(element("p", "What Agentflow checked", "ai-ask-label"), facts);
-        const odd = foreign([...ask.paths, ask.cwd, ask.line].join(""));
-        if (odd.length) resolved.append(element("p", "Look closely: the " + (ask.line ? "command" : "path") + " has characters that are not plain English letters, digits or signs, and some look like other letters: " + odd.join(", ") + ".", "ai-ask-odd"));
-        resolved.append(element("p", askEffect(ask), "ai-ask-effect"));
+        resolved.append(...cautions(ask), element("p", askEffect(ask), "ai-ask-effect"));
         card.append(resolved);
       }
       if (ask.blocked) card.append(element("p", blockedText[ask.blocked], "ai-ask-fixed"));
@@ -905,7 +1066,7 @@
     function terminalParts(terminal, key) {
       const result = terminal.signal ? "Stopped by signal " + terminal.signal : terminal.exit === null ? "Still running" : terminal.exit === 0 ? "Exit code 0" : "Failed with exit code " + terminal.exit;
       const line = element("p", "", "ai-term-line");
-      line.append(element("code", terminal.line, "ai-exact"), " ", element("span", result + (terminal.cwd ? " · in " + terminal.cwd : ""), "muted"));
+      line.append(exactly(terminal.line), " ", element("span", result + (terminal.cwd ? " · in " + terminal.cwd : ""), "muted"));
       const out = [line];
       if (terminal.output) out.push(lazy(key, "Output", () => [scroller(block(terminal.output, 70000), "Output of " + shown(terminal.line, 120), "ai-output")]));
       return out;
@@ -1275,5 +1436,5 @@
     };
   }
 
-  scope.AgentflowAI = {aiState, stateView, askHeading, askEffect, reasonText, remaining, lineDiff, createAI};
+  scope.AgentflowAI = {aiState, stateView, askHeading, askEffect, reasonText, remaining, lineDiff, parts, createAI};
 })(globalThis);
