@@ -88,7 +88,6 @@ func TestValidateRefusesWithCodes(t *testing.T) {
 		{"exec directory", timelineHints, func(m *manifest.Manifest) { m.Exec.Command = "bin/" }, manifest.CodeExec, "exec.command"},
 		{"exec dot", timelineHints, func(m *manifest.Manifest) { m.Exec.Command = "." }, manifest.CodeExec, "exec.command"},
 		{"exec too many args", timelineHints, func(m *manifest.Manifest) { m.Exec.Args = make([]string, 17) }, manifest.CodeLimit, "exec.args"},
-		{"reserved harness", ciNotify, func(m *manifest.Manifest) { m.Extensions.Harness = []map[string]any{{"name": "x"}} }, manifest.CodeReserved, "extensions.harness"},
 		{"reserved provider", ciNotify, func(m *manifest.Manifest) { m.Extensions.Provider = []map[string]any{{}} }, manifest.CodeReserved, "extensions.provider"},
 		{"reserved source", ciNotify, func(m *manifest.Manifest) { m.Extensions.Source = []map[string]any{{}} }, manifest.CodeReserved, "extensions.source"},
 		{"reserved sink", ciNotify, func(m *manifest.Manifest) { m.Extensions.Sink = []map[string]any{{}} }, manifest.CodeReserved, "extensions.sink"},

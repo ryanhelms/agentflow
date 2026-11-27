@@ -134,14 +134,25 @@ func scrubbedEnv(parent []string, data string, extra map[string]string, windows 
 	return out, nil
 }
 
-// checkEnv validates a complete child environment for Launch.
-func checkEnv(env []string) error {
+// checkEnv validates a complete child environment for Launch and Run. A
+// name passes when EnvAllowed accepts it or allow lists it (on Windows
+// without case).
+func checkEnv(env, allow []string) error {
+	return checkEnvFor(env, allow, runtime.GOOS == "windows")
+}
+
+func checkEnvFor(env, allow []string, windows bool) error {
+	for _, name := range allow {
+		if name == "" || strings.ContainsAny(name, "=\x00") {
+			return errors.New("jsonrpc: an AllowEnv name is empty or has '=' or a NUL byte") // never echo it
+		}
+	}
 	for _, kv := range env {
 		name, value, ok := strings.Cut(kv, "=")
 		if !ok {
 			return errors.New("jsonrpc: environment entry without '='") // never echo it: it may be a value
 		}
-		if !EnvAllowed(name) {
+		if !envAllowed(name, windows) && !listed(allow, name, windows) {
 			return fmt.Errorf("jsonrpc: environment variable %q is not allowed for a child", name)
 		}
 		if strings.ContainsRune(value, 0) {
@@ -149,4 +160,13 @@ func checkEnv(env []string) error {
 		}
 	}
 	return nil
+}
+
+func listed(list []string, name string, foldCase bool) bool {
+	for _, n := range list {
+		if n == name || (foldCase && strings.EqualFold(n, name)) {
+			return true
+		}
+	}
+	return false
 }

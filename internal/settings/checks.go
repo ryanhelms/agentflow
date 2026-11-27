@@ -61,7 +61,7 @@ type check struct {
 type link func(c *check)
 
 // chain is the order of the ADR's table.
-var chain = []link{syntaxLink, catalogLink, schemaLink, rulesLink, referencesLink, secretsLink, filesLink, policyLink, conflictLink, effectLink}
+var chain = []link{syntaxLink, catalogLink, schemaLink, rulesLink, referencesLink, secretsLink, filesLink, harnessLink, policyLink, conflictLink, effectLink}
 
 func (c *check) add(sev Severity, e *edit, code, msg string) {
 	d := Diagnostic{Severity: sev, Edit: -1, Code: code, Message: msg}
@@ -535,6 +535,10 @@ type policyState struct {
 	// plugins the repository turns off for itself.
 	plugins  map[string]bool
 	disabled []string
+	// autoProbe and signInCheck are the effective harness toggles (nil is
+	// on); harnessesDisabled the harness IDs agentflow ignores.
+	autoProbe, signInCheck bool
+	harnessesDisabled      []string
 }
 
 func policyOf(files [2]string) policyState {
@@ -551,6 +555,9 @@ func policyOf(files [2]string) policyState {
 	for id, plugin := range user.Plugins {
 		p.plugins[id] = plugin.Enabled
 	}
+	p.autoProbe = user.AI.Harnesses.AutoProbeOn()
+	p.signInCheck = user.AI.Harnesses.SignInCheckOn()
+	p.harnessesDisabled = user.AI.Harnesses.Disabled
 	for _, action := range append([]string{""}, config.AutonomyActions()...) {
 		for _, class := range []string{"local", "remote"} {
 			d := config.ResolveAutonomy(user, repo, class, action, false)
@@ -586,7 +593,11 @@ func (r rulePlugins) may(id string) bool { return r.unread || r.ids[id] }
 func (c *check) rulePlugins() rulePlugins {
 	if c.rules == nil {
 		c.rules = &rulePlugins{ids: map[string]bool{}}
-		reg, err := manifest.ReadRegistry(c.s.Home)
+		var reg manifest.Registry
+		err := c.s.homeErr()
+		if err == nil {
+			reg, err = manifest.ReadRegistry(c.s.Home)
+		}
 		c.rules.unread = err != nil
 		for _, p := range reg.Plugins {
 			if len(p.Manifest.Extensions.PermissionRule) > 0 {
@@ -630,6 +641,18 @@ func loosening(before, after [2]string, rules rulePlugins) string {
 	for _, branch := range a.protected {
 		if !slices.Contains(b.protected, branch) {
 			return fmt.Sprintf("Stops protecting %s.", branch)
+		}
+	}
+	// Harness toggles compare effective values: nil means on.
+	switch {
+	case b.autoProbe && !a.autoProbe:
+		return "Lets agentflow start installed harnesses without asking, and lets agents ask for probes."
+	case b.signInCheck && !a.signInCheck:
+		return "Lets agentflow run harness sign-in status commands with your real home folder."
+	}
+	for _, id := range a.harnessesDisabled {
+		if !slices.Contains(b.harnessesDisabled, id) {
+			return fmt.Sprintf("Stops ignoring the harness %s, so agentflow may list and start it.", id)
 		}
 	}
 	// A plugin is code that runs with the permissions its manifest lists, so

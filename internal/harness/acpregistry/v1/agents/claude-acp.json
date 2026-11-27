@@ -1,0 +1,59 @@
+{
+  "id": "claude-acp",
+  "name": "Claude Agent",
+  "version": "0.113.0",
+  "description": "ACP wrapper for Anthropic's Claude",
+  "repository": "https://github.com/agentclientprotocol/claude-agent-acp",
+  "authors": [
+    "Anthropic",
+    "Zed Industries",
+    "JetBrains"
+  ],
+  "license": "proprietary",
+  "license_url": "https://github.com/agentclientprotocol/claude-agent-acp/blob/main/LICENSE",
+  "distribution": {
+    "binary": {
+      "darwin-aarch64": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-darwin-arm64.zip",
+        "cmd": "./claude-agent-acp",
+        "sha256": "68064a101b35cb4b671861270909435c083fdcd35701043394d6e376b192b482"
+      },
+      "darwin-x86_64": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-darwin-x64.zip",
+        "cmd": "./claude-agent-acp",
+        "sha256": "3ecfe12daa3171bc9a2dbdb07b616ac053e360aa548f69c61f051b8450d9078b"
+      },
+      "linux-aarch64": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-linux-arm64.tar.gz",
+        "cmd": "./claude-agent-acp",
+        "sha256": "b695145e2ef07bb8ff9ce8aa9277e5538ff834a6c625fc4b5710116ded228abf"
+      },
+      "linux-x86_64": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-linux-x64.tar.gz",
+        "cmd": "./claude-agent-acp",
+        "sha256": "493595c4caef6dfb5d20f187ae96f887188262a281b0db95bb794d1977ddaf02"
+      },
+      "linux-aarch64-musl": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-linux-arm64-musl.tar.gz",
+        "cmd": "./claude-agent-acp",
+        "sha256": "1d0bc41870ea7eab5cd1c0d499143fc6ee8a47bdfa59cad0daf467166c32a04f"
+      },
+      "linux-x86_64-musl": {
+        "archive": "https://github.com/agentclientprotocol/claude-agent-acp/releases/download/v0.113.0/claude-agent-acp-linux-x64-musl.tar.gz",
+        "cmd": "./claude-agent-acp",
+        "sha256": "f57b8a21a9519f7864449f835a9d99dddebd630d94c352ebd23b946569f1a9b8"
+      }
+    },
+    "npx": {
+      "package": "@agentclientprotocol/claude-agent-acp@0.113.0"
+    }
+  },
+  "preview": {
+    "version": "0.113.1-preview.1",
+    "distribution": {
+      "npx": {
+        "package": "@agentclientprotocol/claude-agent-acp@0.113.1-preview.1"
+      }
+    }
+  }
+}

@@ -195,7 +195,7 @@ func serveRegistered(ctx context.Context, registry string, port int, op daemonRe
 	if err != nil {
 		return err
 	}
-	defer d.startEvents(withNotifySetup(ctx, notify))()
+	defer d.startEvents(withHarnessWorkDirs(withNotifySetup(ctx, notify), d.servedDirs(op.Dir)))()
 	launch, err := d.register(ctx, op)
 	if err != nil {
 		return err

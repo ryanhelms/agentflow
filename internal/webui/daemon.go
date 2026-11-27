@@ -60,6 +60,28 @@ type daemon struct {
 	events      *eventRuntime // nil until startEvents
 }
 
+// servedDirs lists the root of every worktree the daemon has registered,
+// read under d.mu on each call, plus extra (the worktree being registered
+// as the daemon starts, which is not in the index yet).
+func (d *daemon) servedDirs(extra ...string) func() []string {
+	return func() []string {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		out := make([]string, 0, len(d.entries)+len(extra))
+		for _, e := range d.entries {
+			if e.Root != "" {
+				out = append(out, e.Root)
+			}
+		}
+		for _, x := range extra {
+			if x != "" {
+				out = append(out, x)
+			}
+		}
+		return out
+	}
+}
+
 // startEvents starts the daemon's bus, watcher and per-repository stores.
 // The daemon is the only process that opens a store as store.RoleOwner.
 func (d *daemon) startEvents(ctx context.Context) func() {

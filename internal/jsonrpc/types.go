@@ -183,12 +183,23 @@ type LaunchSpec struct {
 	// copy. It is also the working directory unless Dir is set.
 	Root string
 	// Dir is the working directory, inside Root or the data directory.
-	Dir  string
-	Args []string
+	Dir string
+	// DataDir, when set, is the child's data directory: an absolute path to
+	// an existing directory. Dir must then be inside Root or DataDir (links
+	// resolved), and nothing is derived from Env. When empty, the data
+	// directory is Env's AGENTFLOW_PLUGIN_DATA, else the parent of its HOME.
+	// The harness sign-in status profile sets it, since its HOME is the
+	// person's real home.
+	DataDir string
+	Args    []string
 	// Env is the complete environment of the child, normally from
 	// ScrubbedEnv. Launch refuses a name that is not allowed by
-	// EnvAllowed.
+	// EnvAllowed or AllowEnv.
 	Env []string
+	// AllowEnv names variables this one call also allows in Env (phase 6:
+	// only the harness sign-in status profile sets it). On Windows names
+	// are compared without case.
+	AllowEnv []string
 	// Stderr receives the child's stderr line by line as it arrives, each
 	// line cut at 4 KiB, at most StderrLimit bytes in all; then one
 	// "[stderr truncated]" line and nothing more. The newest StderrLimit

@@ -141,6 +141,9 @@ const (
 	MissedPingsRestart  = 4
 	// InvokeTimeout bounds one command.invoke.
 	InvokeTimeout = 60 * time.Second
+	// DrainTimeout bounds how long Host.Stop waits for calls in flight
+	// before it cancels the approved writes among them.
+	DrainTimeout = 10 * time.Second
 	// InvokesPerMinute and PublishesPerMinute are token buckets per
 	// plugin; InvokeBurst and PublishBurst their sizes.
 	InvokesPerMinute   = 10
@@ -215,7 +218,7 @@ const (
 	RefuseRepoDisabled = "repo_disabled" // the repository disables the plugin
 	RefuseUnknownTree  = "unknown_worktree"
 	RefuseInvalid      = "invalid"   // bad input or payload
-	RefuseNotReady     = "not_ready" // called before initialize finished
+	RefuseNotReady     = "not_ready" // before initialize finished, or while the host stops
 )
 
 // CodeResumedByHost is the failed Code of a plugin's resume that the host

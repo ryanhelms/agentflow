@@ -282,7 +282,7 @@ func (v *validator) extensions(m Manifest) {
 		point Point
 		used  bool
 	}{
-		{PointHarness, e.Harness != nil}, {PointProvider, e.Provider != nil}, {PointSource, e.Source != nil},
+		{PointProvider, e.Provider != nil}, {PointSource, e.Source != nil},
 		{PointSink, e.Sink != nil}, {PointWidget, e.Widget != nil},
 	} {
 		if r.used {
@@ -290,9 +290,10 @@ func (v *validator) extensions(m Manifest) {
 			v.add("extensions."+string(r.point), CodeReserved, "the extension point %q is reserved: no agentflow release implements it yet", r.point)
 		}
 	}
-	if !reserved && len(e.Handler) == 0 && len(e.PermissionRule) == 0 {
-		v.add("extensions", CodeRequired, "a plugin adds at least one handler or permission rule")
+	if !reserved && len(e.Handler) == 0 && len(e.PermissionRule) == 0 && len(e.Harness) == 0 {
+		v.add("extensions", CodeRequired, "a plugin adds at least one handler, permission rule or harness")
 	}
+	v.harnesses(m)
 	if len(e.Handler) > MaxHandlers {
 		v.add("extensions.handler", CodeLimit, "a plugin has at most %d handlers", MaxHandlers)
 	}

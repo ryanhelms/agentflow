@@ -40,13 +40,14 @@ const (
 // Point is an extension point.
 type Point string
 
-// The extension points. Phase 5 implements handler and permission_rule;
+// The extension points. Phase 5 implements handler and permission_rule,
+// phase 6 harness;
 // the others are reserved, and Validate refuses a manifest that uses one
 // (code reserved) until the phase that implements it amends the ADR.
 const (
 	PointHandler        Point = "handler"         // phase 5: react to events
 	PointPermissionRule Point = "permission_rule" // phase 5: deny operations (declarative only)
-	PointHarness        Point = "harness"         // reserved for phase 6
+	PointHarness        Point = "harness"         // phase 6: ACP harness definitions (declarative only)
 	PointProvider       Point = "provider"        // reserved: a task, knowledge or notification provider
 	PointSource         Point = "source"          // reserved: publish new event types
 	PointSink           Point = "sink"            // reserved: durable delivery to an outside target
@@ -56,7 +57,7 @@ const (
 // PointPhase is the phase that implements each point; 0 means reserved.
 var PointPhase = map[Point]int{
 	PointHandler: 5, PointPermissionRule: 5,
-	PointHarness: 0, PointProvider: 0, PointSource: 0, PointSink: 0, PointWidget: 0,
+	PointHarness: 6, PointProvider: 0, PointSource: 0, PointSink: 0, PointWidget: 0,
 }
 
 // Manifest is agentflow-plugin.yml. Decoding is strict: an unknown key is
@@ -105,7 +106,10 @@ type Extensions struct {
 	Handler        []Handler        `yaml:"handler,omitempty" json:"handler,omitempty"`
 	PermissionRule []PermissionRule `yaml:"permission_rule,omitempty" json:"permission_rule,omitempty"`
 
-	Harness  []map[string]any `yaml:"harness,omitempty" json:"harness,omitempty"`
+	// Harness adds ACP harness definitions (phase 6, declarative plugins
+	// only; see HarnessEntry).
+	Harness []HarnessEntry `yaml:"harness,omitempty" json:"harness,omitempty"`
+
 	Provider []map[string]any `yaml:"provider,omitempty" json:"provider,omitempty"`
 	Source   []map[string]any `yaml:"source,omitempty" json:"source,omitempty"`
 	Sink     []map[string]any `yaml:"sink,omitempty" json:"sink,omitempty"`

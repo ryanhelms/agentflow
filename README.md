@@ -62,7 +62,7 @@ code. agentflow makes git the source of truth and turns the rest into automation
 | **Confluence** | Release notes, docs-as-code sync, epic design pages, sprint reports from shared templates |
 | **Signals** | Slack and webhook notifications with per-destination replay, hygiene checks (stale PRs, idle tickets), incident flow, Jira issues from security alerts and failing builds |
 | **Plugins** | Add behaviour without changing agentflow: YAML rules or a small program, installed from a local path after a confirmation that lists every permission, turned on in your personal settings, with its own settings on the Settings page · see [docs/plugins.md](docs/plugins.md) |
-| **AI assist** | 55 MCP tools, a live event stream of git and configuration changes, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
+| **AI assist** | 57 MCP tools, detection of the AI coding agents (ACP harnesses) on your machine, a live event stream of git and configuration changes, ticket context at session start, acceptance-criteria tracking, scope-drift checks, standups, Claude PR drafts (opt-in) |
 
 ## Architecture
 
@@ -454,6 +454,8 @@ Deployments and release lookup also support local JSON fixtures.
 | Add a plugin from a local path (you, at a terminal) | `agentflow plugin add PATH` | – |
 | Remove a plugin, its data and its settings (you, at a terminal) | `agentflow plugin remove ID` | – |
 | Approve or decline a write a plugin asked for (you, at a terminal) | `agentflow plugin approve OP_ID [--decline]` | – |
+| List the AI harnesses on this machine, with each one's state and fix | `agentflow ai harnesses [--probe] [--all] [--id ID]` | `agentflow_ai_harnesses` or `/agentflow:ai` |
+| Check why a harness is missing or not ready | `agentflow ai doctor [--probe]` | `agentflow_ai_doctor` or `/agentflow:ai` |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -550,6 +552,22 @@ console has no Approve button for it. `agentflow ui --screen plugins` opens the
 page.
 [Plugins page design](docs/design/ui/plugins.md)
 
+The **Harnesses** page lists the ACP harnesses Agentflow found on this computer,
+live: which are **Ready** (installed, and answered a probe) and which **Need
+attention**. Each card shows the harness's state and code, its version, the
+command and where it was found, the layers that define it, the probe result, its
+ACP capabilities, and the fix with a command to copy. It also says whether you
+are signed in, signed out, or whether Agentflow cannot tell, and lists the
+harness's own ways to sign in. **Probe now** asks the console to probe every
+harness found, or one card; the results arrive over the event stream. A harness a
+plugin added is probed only from its own card. The header
+shows the pinned registry copy, whether automatic probes are on, the PATH entries
+Agentflow skipped and any definition it refused. The page installs nothing and
+changes no setting: automatic probes, the sign-in check and harness overrides
+are on the Settings page, in the AI harnesses group. `agentflow ui --screen
+harnesses` opens the page.
+[Harnesses page design](docs/design/ui/harnesses.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field
@@ -577,7 +595,10 @@ conventional title with `agentflow pr --title "feat: add quota"` or the
 ### Control agent approvals
 
 To allow local commits while keeping other writes under review, add this to your
-personal `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`).
+personal `~/.agentflow/config.yml` (or `$AGENTFLOW_HOME/config.yml`). Keep
+`AGENTFLOW_HOME` outside every repository: agentflow ignores a home inside one (see
+[Security and governance](#security-and-governance)). `config.yml` itself may link into
+a dotfiles checkout.
 
 ```yaml
 autonomy:
@@ -707,10 +728,38 @@ it goes, for `comment` the ticket and the whole body), then asks. It refuses a
 request that does not store that summary. After you answer `y`, the console runs the
 write once, by itself, and its result appears on the timeline. `--decline` cancels
 it instead. Run it in the repository the plugin acted on, before the request
-expires, while the console that held it is still running. No AI tool adds, removes
-or turns on a plugin. **A program plugin runs as you and is not sandboxed: add
-only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
+expires, while the console that held it is still running. A console you stop waits
+up to 10 seconds for a write that is already running. No AI tool adds, removes or
+turns on a plugin. **A program plugin runs as you and is not sandboxed: add only
+plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
 permissions and how to write your own, and `examples/plugins/` has two samples.
+
+### Detect AI harnesses
+
+A harness is an AI coding agent that speaks the Agent Client Protocol (ACP), or an
+ACP adapter for one. Agentflow finds the ones on your PATH and says what to do
+about each. It never installs one and never starts a session.
+
+```text
+agentflow ai harnesses            # state and fix of each harness found
+agentflow ai harnesses --probe    # also confirm that each one speaks ACP
+agentflow ai doctor               # checks with fixes; exits 1 when one fails
+```
+
+States are `native`, `adapter_installed`, `adapter_available` (the CLI is there,
+its ACP adapter is not), `needs_auth`, `incompatible` and, with `--all`,
+`not_installed`. Agentflow shows fix commands and never runs them.
+
+A probe runs an installed harness's version command, sends one ACP `initialize`
+request and, for Claude Code and Codex, runs their sign-in status command. Probes
+are on by default. Turn off `ai.harnesses.auto_probe` and only you can ask for one:
+you, in a terminal outside an AI agent, or with the console's Probe button. Turn
+off `ai.harnesses.sign_in_check` and no sign-in command runs for anyone. A harness
+that a plugin added runs only when you probe it by name; `ai harnesses` and its card
+show the version command and the command that probe runs. Package runners,
+interpreters and shells are never run, also with a version in the name (`python3.12`).
+[AI harnesses](docs/harnesses.md) explains the states, the checks and the
+overrides.
 
 ## Commit convention
 
@@ -772,7 +821,7 @@ CI.
 The Claude Code plugin has a skill for every CLI command: `/agentflow:init`, `remove`,
 `install`, `setup`, `config`, `login`, `logout`, `doctor`, `work`, `start`, `context`, `ac`, `scope`,
 `comment`, `collisions`, `commit`, `preview`, `transition`, `pr`, `review`, `status`, `standup`, `events`,
-`eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `delegate`, `worktree` and `promote`
+`eod`, `docs`, `adr`, `release`, `update`, `version`, `finish`, `sweep`, `delegate`, `worktree`, `ai` and `promote`
 (which only explains that you run `agentflow promote` yourself). The plugin's `bin/agentflow` is on Claude's PATH and installs the latest verified
 release on first use, so the skills work in repos agentflow has not set up yet. Skills that
 change the repo or your credentials (`init`, `remove`, `install`, `login`, `logout`,
@@ -827,6 +876,32 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   turn it off but never install or enable it. A plugin never holds a confirmation
   token: its writes wait for you. A program plugin gets a clean environment, which is
   not a sandbox: it runs as you. [Plugins](docs/plugins.md)
+- **AI harnesses.** Agentflow starts only a harness program that you put on your PATH
+  or named in your own settings; a repository cannot choose one. It skips PATH entries
+  inside a repository it is working in, under `node_modules` or writable by others, and
+  never runs a package runner, installer or download. A probe gets a scrubbed
+  environment without tokens or keys. The sign-in status command is the exception: it
+  runs with your real home folder, and agentflow keeps only its verdict, never its
+  output. Who asked is set by agentflow, not by the caller's input: MCP calls count as
+  an agent, and an agent can probe only while `ai.harnesses.auto_probe` is on. A
+  harness a plugin defines is never probed automatically, for an agent or in a probe of
+  every harness, only when you probe it by name (`--id`, or its card's **Probe now**),
+  and its arguments must be plain words or flags, never a path, host or URL.
+  [AI harnesses](docs/harnesses.md)
+- **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
+  `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
+  provider definitions, approvals and plugins. A repository's environment (direnv, an
+  editor or AI-client setting) can set those variables, so agentflow ignores a home that
+  sits inside a git repository: any checkout, linked worktree or git directory, after
+  following links and `..`, and a home whose location cannot be checked. It then uses
+  `~/.agentflow` of your OS account (looked up from the account, not `$HOME`) and prints
+  a warning on stderr, also shown by the session-start hook, that names the variable
+  and how to fix it. Your account's own `~/.agentflow` is always used, also when it is a
+  link into a dotfiles checkout, and so is a home inside a repository whose root is
+  your account's home directory. To keep settings in a separate dotfiles checkout, link
+  `~/.agentflow` (or just its `config.yml`) there instead of setting `AGENTFLOW_HOME`.
+  The pre-bash, commit-msg and pre-push hooks never read the home, so they enforce the
+  same rules either way.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release
@@ -946,6 +1021,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/worktrees.md](docs/worktrees.md) | Task worktrees, `go.work`, `finish`, `sweep`, `promote` and the hooks |
 | [docs/plugins.md](docs/plugins.md) | Add, turn on and remove plugins, what a plugin may do, and how to write one |
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
+| [docs/harnesses.md](docs/harnesses.md) | AI harness detection: states, `ai harnesses`, `ai doctor`, what a probe runs and who may ask |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |

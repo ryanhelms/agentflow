@@ -1,0 +1,24 @@
+gemini      native             0.71.1  gemini --acp
+codex-acp   needs_auth         2.12.1  codex-acp
+    Sign in to Codex, then probe again.
+      codex login
+    ChatGPT: Start Codex in your terminal and sign in with its own login, then probe again.
+    Device code:
+      codex-acp login --device
+    Custom: agentflow does not show this sign-in command: it is not safe to paste into a shell.
+claude-acp  adapter_available  -       claude-agent-acp
+    Claude Code is installed, but its ACP adapter is not. Install the adapter yourself; agentflow never installs it.
+      npm install -g @agentclientprotocol/claude-agent-acp@1.0.0
+    https://github.com/agentclientprotocol/claude-agent-acp
+odd         incompatible       -       -
+    The ACP registry has quarantined this agent: fails checks
+    line one
+    line]0;title two
+
+Skipped on your PATH:
+  ~/app/bin  inside_repository
+
+Problems:
+  personal my-agent: command: npx is never run
+
+Not probed: automatic probes are off, so only you can ask. Run `agentflow ai harnesses --probe` in your own terminal, outside an AI agent.

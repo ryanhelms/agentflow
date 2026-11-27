@@ -12,15 +12,16 @@ Phase gates:
 | 2 | #51 | `develop-p2` at `a5648e3` | approvals, the commit hook, config, client settings and tabs live; MCP reload | done |
 | 3 | #59 (contract, issue #52) | `develop-p3` at `c555ac4` | a write such as `commit --prepare` or `notify` shows `op.requested` and its outcome in `agentflow events` | done; promoted to `main` by auto-promote, released as v0.57.0 on 2026-11-26 |
 | 4 | #72 (contract, issue #68) | `develop-p4` at `33f5ffd` | `config set --dry-run` flags a loosening edit; `console.autonomy: suggest` blocks an autonomy raise; the Settings page review with loosening ticks | done; promoted to `main`, released as v0.58.0 on 2026-11-26 |
-| 5 | #82 (contract, issue #77) | | `plugin add` both samples; a CI failure becomes a `notify` operation from `plugin:ci-notify` on the timeline; a failed operation gets a `timeline-hints` annotation; the Plugins page shows live state and a restart after a crash; plugin settings on the Settings page | lanes merged into `develop`; approval lane #91 in review; not yet tagged |
+| 5 | #82 (contract, issue #77) | `develop-p5` at `013e2f4` | on an isolated build both sample plugins installed; a failed commit produced a `timeline-hints` annotation; `ci-notify` approve-then-run-once is covered by `TestApprovedPluginWriteRunsOnceThroughTheDaemon` | done; promoted to `main` by auto-promote (`f0928d4`), released as v0.59.0 (`e282e6d`) on 2026-11-26 |
+| 6 | #104 (contract, issue #97) | | `ai harnesses --probe` and `ai doctor` show every state with its fix against the fake ACP agent and fake CLI, including a sign-in check (`signed_out`, and `unknown` with a credential variable set); an agent's probe is refused while `auto_probe` is off; the Harnesses page follows a harness being removed and added again | contract in review |
 
 Lanes:
 
 | Lane | Work | Model | Issue | PR | Status |
 | --- | --- | --- | --- | --- | --- |
-| 0.1 | Create `develop`. PR into `main` (you merge it): `policy.coordinator_merge: true`, CI on `push` to `develop`, the `AGENTS.md` "Active program" section, `docs/plans/acp-platform/{goal,plan,ledger}.md`, and a README/`docs/worktrees.md` note | O | #12 | | in progress |
-| 0.2 | Golden tests that pin today's `Pending` JSON and CLI `--json` output for about 10 operations | S | #13 | | in progress |
-| 1.0 | Phase 1 contract ADR | O | #14 | | in progress |
+| 0.1 | Create `develop`. PR into `main` (you merge it): `policy.coordinator_merge: true`, CI on `push` to `develop`, the `AGENTS.md` "Active program" section, `docs/plans/acp-platform/{goal,plan,ledger}.md`, and a README/`docs/worktrees.md` note | O | #12 | #15 | done (merged into `main`; issue #12 still open) |
+| 0.2 | Golden tests that pin today's `Pending` JSON and CLI `--json` output for about 10 operations | S | #13 | #22 | done (merged into `main`; issue #13 still open) |
+| 1.0 | Phase 1 contract ADR | O | #14 | #16 | done |
 | 1.1 | Bus: Pub-Sub, Point-to-Point, Wire Tap to `policy.Gate.Audit`, Dead Letter, bounded buffers | O | | #31 | done |
 | 1.2 | Message store: JSONL, rotation, 7 days / 50 MB retention, replay from cursor, single-writer rule | O | | #31 | done |
 | 1.3 | Watcher, git and repo config only: HEAD, index, refs, worktrees, rebase state, `.agentflow/*`; fsnotify with polling fallback; debounce (Aggregator) | O | | #31 | done |
@@ -46,11 +47,12 @@ Lanes:
 | 5.2 | Plugin host: three tiers, registry (Abstract Factory), lifecycle, crash isolation into Dead Letter | O | #79 | #90 (with #87, #88, #89) | done |
 | 5.3 | Plugin commands, the two sample plugins, docs (`docs/plugins.md`) | S | #80 | #85, #86 | done |
 | 5.4 | Plugins page: installed plugins, status, what each adds, live health | F | #81 | #84 | done |
-| 5.5 | `plugin approve` and the host's resume of an approved plugin write; `requested_by` on approvals | O | #91 | | in review |
-| 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | | | pending |
-| 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | | | pending |
-| 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | | | pending |
-| 6.4 | Harnesses page: states, fixes, sign-in guidance | F | | | pending |
+| 5.5 | `plugin approve` and the host's resume of an approved plugin write; `requested_by` on approvals | O | #91 | #92, #94, #96 | done |
+| 6.0 | Phase 6 contract ADR: `Harness`, definitions and layers, pinned registry copy, `initialize` slice, launch profile, sign-in check, states and fixes, config keys, events, harnesses projection, commands, security, ownership | O | #97 | #104 | in review |
+| 6.1 | Harness registry from the pinned ACP registry copy, plus YAML overrides; PATH and version probes; no installs | S | #100 | | pending |
+| 6.2 | `initialize` probe with timeout and cache; `harness.*` events from slow polling and focus checks | O | #101 | | pending |
+| 6.3 | `ai harnesses` and `ai doctor` commands, skills, README | S | #102 | | pending |
+| 6.4 | Harnesses page: states, fixes, sign-in guidance | F | #103 | | pending |
 | 7.1 | ACP v1 client and fake ACP agent for tests | O | | | pending |
 | 7.2 | Background sessions (Process Manager), session store, permission chain, worktree-only file and terminal access | O | | | pending |
 | 7.3 | `ai run/status/respond/cancel` commands; agentflow's own MCP server passed to the harness, with a guard against starting sessions without limit | S | | | pending |
@@ -82,3 +84,7 @@ Phase 11 hardening backlog (found in phase 5, left for 11.1):
 - A panic mid-operation leaves `op.requested` without an outcome event.
 - A plugin write held for approval lives in the daemon's memory: an approval granted after a daemon restart runs nothing.
 - The commit-message check may reject a valid heredoc `-m` message (unverified).
+Outside the backlog:
+
+- A personal home that a repository's environment points inside the repository (`AGENTFLOW_HOME` set by direnv) is being fixed in its own issue, #105.
+- The test cleanup race in `internal/plugin` that failed the first v0.59.0 release run is fixed by #99.

@@ -1,0 +1,130 @@
+# The agentflow overlay: agentflow's own data about harnesses in the pinned
+# ACP registry copy (internal/harness/acpregistry/v1). Reviewed like code.
+# ADR docs/knowledge/engineering/decisions/event-driven-platform.md, section
+# "Phase 6 harness definitions".
+#
+# Each key is a pinned registry ID (TestOverlayMatchesRegistry). A row exists
+# only where the registry's default command is wrong, the harness is an
+# adapter, or agentflow has a verified sign-in status command. Every fact
+# below cites where it was checked, against the pinned registry entry's
+# version.
+
+# Adapter for Claude Code. Base CLI: the npm package @anthropic-ai/claude-code
+# installs the bin "claude". The adapter needs a Claude login
+# (agentclientprotocol/claude-agent-acp README at 9918571).
+# Sign-in check: Claude Code CLI reference,
+# https://code.claude.com/docs/en/cli-reference ("claude auth status": exit 0
+# when logged in, 1 when not). Variables: Claude Code environment variable
+# reference, https://code.claude.com/docs/en/env-vars (checked 2026-11-27:
+# ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
+# AWS_BEARER_TOKEN_BEDROCK, ANTHROPIC_AWS_API_KEY, CLAUDE_CODE_OAUTH_TOKEN,
+# CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CONFIG_DIR are
+# each listed verbatim; checked again 2026-11-27 for the phase 6 security
+# review: CLAUDE_CODE_USE_FOUNDRY, CLAUDE_CODE_USE_ANTHROPIC_AWS,
+# CLAUDE_CODE_USE_MANTLE, CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD,
+# ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID (workload identity
+# federation), ANTHROPIC_PROFILE and CLAUDE_CODE_OAUTH_REFRESH_TOKEN are each
+# listed verbatim too).
+claude-acp:
+  kind: adapter
+  command: claude-agent-acp
+  base_name: Claude Code
+  base_commands: [claude]
+  status_from: base
+  status_args: [auth, status]
+  status_signed_in: [0]
+  status_signed_out: [1]
+  credential_env:
+    - ANTHROPIC_API_KEY
+    - ANTHROPIC_AUTH_TOKEN
+    - ANTHROPIC_FOUNDRY_API_KEY
+    - AWS_BEARER_TOKEN_BEDROCK
+    - ANTHROPIC_AWS_API_KEY
+    - CLAUDE_CODE_OAUTH_TOKEN
+    - CLAUDE_CODE_USE_BEDROCK
+    - CLAUDE_CODE_USE_VERTEX
+    - CLAUDE_CODE_USE_FOUNDRY
+    - CLAUDE_CODE_USE_ANTHROPIC_AWS
+    - CLAUDE_CODE_USE_MANTLE
+    - CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD
+    - ANTHROPIC_FEDERATION_RULE_ID
+    - ANTHROPIC_ORGANIZATION_ID
+    - ANTHROPIC_PROFILE
+    - CLAUDE_CODE_OAUTH_REFRESH_TOKEN
+  config_env: [CLAUDE_CONFIG_DIR]
+  status_source: https://code.claude.com/docs/en/cli-reference and https://code.claude.com/docs/en/env-vars
+
+# Adapter for Codex. Base CLI: the npm package @openai/codex installs the bin
+# "codex"; the adapter uses Codex's own sign-in (agentclientprotocol/codex-acp
+# README at 08746f8). Sign-in check and variables: openai/codex at
+# bee5dc55ac118d9136171fed55ffd89af26f8d21, codex-rs/cli/src/login.rs
+# (run_login_status), codex-rs/cli/src/main.rs (LoginSubcommand::Status) and
+# codex-rs/login/src/auth/manager.rs. Workload identity sign-in:
+# codex-rs/login/src/auth/workload_identity.rs, with the names defined in
+# codex-rs/protocol/src/shell_environment.rs (OPENAI_FEDERATION_RULE_ID,
+# OPENAI_IDENTITY_TOKEN_FILE, OPENAI_IDENTITY_TOKEN_SOURCE,
+# OPENAI_SPIFFE_AUDIENCE, OPENAI_SPIFFE_ID). Exit 1 is also used for errors,
+# so a signed-out verdict also needs the line "Not logged in".
+codex-acp:
+  kind: adapter
+  command: codex-acp
+  base_name: Codex
+  base_commands: [codex]
+  status_from: base
+  status_args: [login, status]
+  status_signed_in: [0]
+  status_signed_out: [1]
+  status_signed_out_line: Not logged in
+  credential_env:
+    - OPENAI_API_KEY
+    - CODEX_API_KEY
+    - CODEX_ACCESS_TOKEN
+    - OPENAI_FEDERATION_RULE_ID
+    - OPENAI_IDENTITY_TOKEN_FILE
+    - OPENAI_IDENTITY_TOKEN_SOURCE
+    - OPENAI_SPIFFE_AUDIENCE
+    - OPENAI_SPIFFE_ID
+  config_env: [CODEX_HOME]
+  status_source: openai/codex@bee5dc55ac118d9136171fed55ffd89af26f8d21 codex-rs/cli/src/login.rs, codex-rs/cli/src/main.rs, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/auth/workload_identity.rs, codex-rs/protocol/src/shell_environment.rs
+
+# Adapter for Amp: "amp-acp uses the Amp CLI as its default execution
+# runtime" and "Run `amp login` before starting amp-acp"
+# (tao12345666333/amp-acp README at 6d5b506a9653987abee4313267eb1edee22221b6).
+# The npm package @sourcegraph/amp installs the bin "amp".
+amp-acp:
+  kind: adapter
+  base_name: Amp
+  base_commands: [amp]
+
+# Adapter for pi: "the adapter runs the `pi` executable"
+# (svkozak/pi-acp README at 41fb17a54f4599a0ca4723887cce0f40aaea325a).
+pi-acp:
+  kind: adapter
+  base_name: pi
+  base_commands: [pi]
+
+# npm bin names that differ from the registry's default (the package's last
+# path segment), from each package.json at the pinned version on
+# registry.npmjs.org.
+gemini: # @google/gemini-cli@0.71.1 installs "gemini"
+  kind: native
+  command: gemini
+dirac: # dirac-cli@0.6.3 installs "dirac"
+  command: dirac
+kilo: # @kilocode/cli@7.8.32 installs "kilo" (the binary distribution's cmd is ./kilo too)
+  command: kilo
+kimi-code: # @moonshot-ai/kimi-code@2.8.1 installs "kimi", the same name as the legacy "kimi" entry
+  command: kimi
+qwen-code: # @qwen-code/qwen-code@0.28.7 installs "qwen"
+  command: qwen
+
+# Native harnesses the ADR lists; the command is the registry default.
+github-copilot-cli: # @github/copilot@1.0.116 installs "copilot"
+  kind: native
+  command: copilot
+goose:
+  kind: native
+opencode:
+  kind: native
+cursor:
+  kind: native

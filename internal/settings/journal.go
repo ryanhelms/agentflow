@@ -33,6 +33,9 @@ func (s *Service) JournalPath(ctx context.Context) string {
 
 // Journal returns the scope's last save, or nil when there is none.
 func (s *Service) Journal(ctx context.Context) (*JournalRecord, error) {
+	if err := s.homeErr(); err != nil {
+		return nil, err
+	}
 	path := s.JournalPath(ctx)
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -55,6 +58,9 @@ func (s *Service) Journal(ctx context.Context) (*JournalRecord, error) {
 
 // writeJournal replaces the scope's record: directory 0700, file 0600.
 func (s *Service) writeJournal(ctx context.Context, rec JournalRecord) error {
+	if err := s.homeErr(); err != nil {
+		return err
+	}
 	dir := filepath.Join(s.Home, JournalDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -74,6 +80,9 @@ var writeJournalFile = func(path, content string) error { return writeAtomic(pat
 
 // journalWritable checks that a new journal record can be written.
 func (s *Service) journalWritable() error {
+	if err := s.homeErr(); err != nil {
+		return err
+	}
 	dir := filepath.Join(s.Home, JournalDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err

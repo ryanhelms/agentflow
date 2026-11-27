@@ -15,7 +15,7 @@ func TestNotifyCLIPlansAndReportsConfigurationFailure(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("AGENTFLOW_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AGENTFLOW_HOME", t.TempDir()) // outside the test repository
 	t.Setenv("WEBHOOK_URL", "")
 	if b, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v %s", err, b)
