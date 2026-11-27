@@ -709,3 +709,33 @@ func TestRepositoryWorktreesFailsClosed(t *testing.T) {
 		t.Fatal("an unknown repository set does not skip every entry")
 	}
 }
+
+// TestDetectConfigProblemsShowNoValues: a config.yml that does not load,
+// or an override whose ID is not valid, gives a problem with a position or
+// a placeholder, never the text from the file.
+func TestDetectConfigProblemsShowNoValues(t *testing.T) {
+	e := newEnv(t, harnesstest.Settings{})
+	const secret = "sk-very-secret-value"
+	cfg := "ai:\n  harnesses:\n    auto_probe: " + secret + "\n"
+	if err := os.WriteFile(filepath.Join(e.home, "config.yml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := e.detect(t, DetectOptions{Requester: RequesterAgent})
+	if len(r.Problems) != 1 || strings.Contains(r.Problems[0].Message, secret) || !strings.Contains(r.Problems[0].Message, "line 3") {
+		t.Fatalf("problems %+v", r.Problems)
+	}
+	const key = "SK_Live_Secret_Value"
+	cfg = "ai:\n  harnesses:\n    auto_probe: false\n    sign_in_check: false\n    overrides:\n      \"" + key + "\":\n        command: x\n"
+	if err := os.WriteFile(filepath.Join(e.home, "config.yml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = e.detect(t, DetectOptions{Requester: RequesterAgent})
+	for _, p := range r.Problems {
+		if strings.Contains(p.Message, key) || strings.Contains(p.ID, key) {
+			t.Fatalf("problem shows the key: %+v", p)
+		}
+	}
+	if len(r.Problems) == 0 {
+		t.Fatal("the invalid ID gave no problem")
+	}
+}

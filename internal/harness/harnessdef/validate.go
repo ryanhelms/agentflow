@@ -55,10 +55,21 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string {
+	id := SafeID(e.ID)
 	if e.Field == "" {
-		return fmt.Sprintf("harness %q (%s): %s", e.ID, e.Layer, e.Message)
+		return fmt.Sprintf("harness %q (%s): %s", id, e.Layer, e.Message)
 	}
-	return fmt.Sprintf("harness %q (%s): %s: %s", e.ID, e.Layer, e.Field, e.Message)
+	return fmt.Sprintf("harness %q (%s): %s: %s", id, e.Layer, e.Field, e.Message)
+}
+
+// SafeID is id when it passes the ID rule, otherwise "(invalid ID)": an ID
+// is a key of the person's config.yml, and a key that breaks the rule may
+// be any text (a pasted value), so it is never shown.
+func SafeID(id string) string {
+	if idRule.MatchString(id) {
+		return id
+	}
+	return "(invalid ID)"
 }
 
 // ValidArg reports whether s passes the registry arg rule

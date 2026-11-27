@@ -83,7 +83,7 @@ func Compose(l Layers) ([]Layered, []Problem) {
 	var problems []Problem
 	byID := map[string]*Layered{}
 	add := func(layer, id, code, msg string) {
-		problems = append(problems, Problem{Layer: layer, ID: id, Code: code, Message: msg})
+		problems = append(problems, Problem{Layer: layer, ID: harnessdef.SafeID(id), Code: code, Message: msg})
 	}
 	if l.Catalog != nil {
 		for _, p := range l.Catalog.Problems {

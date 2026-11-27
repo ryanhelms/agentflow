@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -452,7 +453,7 @@ func (d *detector) settings() (settings, []Problem) {
 	switch {
 	case err == nil:
 		if err := yaml.Unmarshal(b, u); err != nil {
-			return st, []Problem{{Layer: SourcePersonal, Code: harnessdef.CodeRule, Message: "Your config.yml does not load, so agentflow ignores your harness settings: " + err.Error() + "."}}
+			return st, []Problem{{Layer: SourcePersonal, Code: harnessdef.CodeRule, Message: "Your config.yml does not load" + yamlPosition(err) + ", so agentflow ignores your harness settings. Check its syntax."}}
 		}
 		if err := config.ValidateAI(u.AI); err != nil {
 			return st, []Problem{{Layer: SourcePersonal, Code: harnessdef.CodeRule, Message: "Your harness settings are not valid, so agentflow ignores them: " + err.Error() + "."}}
@@ -745,4 +746,15 @@ func layerRank(sources []string) int {
 		}
 	}
 	return r
+}
+
+var yamlLineRule = regexp.MustCompile(`\bline ([0-9]{1,7})\b`)
+
+// yamlPosition is " (line N)" from a YAML error, or "". The error text
+// itself is never shown: it can quote values from config.yml.
+func yamlPosition(err error) string {
+	if m := yamlLineRule.FindStringSubmatch(err.Error()); m != nil {
+		return " (line " + m[1] + ")"
+	}
+	return ""
 }
