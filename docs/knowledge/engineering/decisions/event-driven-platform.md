@@ -3648,6 +3648,40 @@ A session is hosted by the process that starts it, never by the console daemon (
 - **`LaunchSpec.AllowDir`** (lane 7.1 declares it, lane 7.2 implements its check in `launch.go`): an absolute existing directory that `Dir` may also be inside (links resolved). Empty means the old rule. Only the session profile sets it.
 - **`harness.Locate`** (new file `internal/harness/session.go`, lane 7.2, added after issue #120 merges; no existing harness file changes): `Locate(ctx, home, version string, workDirs func() []string, id string) (Found, Harness, error)` resolves one definition with the same layers, PATH rules and probe cache as `Detect`, and never probes. It returns `ErrNotReady` unless the state is `native` or `adapter_installed` with a probe result `ok` (or `cached` `ok`) for the current identity, and reports `Harness.Probe` and the fix otherwise. The same file exports `GuardPath(path string) error`, the test guard of `guard.go`.
 
+### Phase 7 package dependencies (lanes 7.2 and 7.3)
+
+`internal/command` imports `internal/app`; `internal/webui`, `internal/command/ops` and `internal/command/deliver` import `internal/app` and `internal/plugin`; `internal/plugin` imports `internal/app` (checked with `go list -deps` on `develop` at `fdf0eca`). `internal/app` (lane 7.3) and `internal/webui` (lane 7.2) will import `internal/aisession`. So `aisession` calling any of them directly would be an import cycle.
+
+- **`internal/aisession` may import only:** `internal/acp`, `internal/jsonrpc`, `internal/harness`, `internal/policy`, `internal/config`, `internal/boundary`, `internal/bus`, `internal/notifysock`, `internal/filelock`, `internal/gitx` and the standard library.
+- **It must never import:** `internal/app`, `internal/command/**`, `internal/webui`, `internal/mcpserver`, `internal/plugin`, `internal/cli`. A test in lane 7.2 (`TestAISessionImports`) fails on any of them.
+- **What it needs from those layers comes in through `aisession.Options`** (declared in lane 7.2's `types.go`):
+
+```go
+type Options struct {
+    Home    string // the agentflow home
+    Version string // agentflow's version, for clientInfo
+    // Emit delivers one event (command/deliver: the store.Exists check, the
+    // socket, the unknown_worktree retry). nil drops events.
+    Emit func(ctx context.Context, e bus.Event) error
+    // WorktreeID is webui.IdentifyWorktree's ID for dir.
+    WorktreeID func(ctx context.Context, dir string) (string, error)
+    // PluginDeny runs the registered Invoker stages (command.CheckStages)
+    // for a synthetic operation "ai.request" with the request's gate class
+    // and action and the session's branch; a non-nil error is a plugin deny.
+    PluginDeny func(ctx context.Context, class, action, branch string) error
+    // MergeBase is policy.NeverOptions.MergeBase, as the pre-bash hook wires it.
+    MergeBase func(cmd string) (string, error)
+    // Detach starts the detached host; nil means re-execute os.Executable.
+    Detach func(ctx context.Context, id ID) error
+    // MCPServer is the server entry for session/new, or nil for none.
+    MCPServer func(id ID) *acp.MCPServer
+    Now func() time.Time
+}
+```
+
+- **Lane 7.3 wires them** in `internal/command/ops/ai_sessions.go` (`ops.AISessionOptions`, which may import `command`, `command/deliver` and `webui`; `deliver` does not import `ops`) and uses the same function in `internal/cli/ai_host.go`. `app.AIRun`, `app.AIStatus`, `app.AIRespond` and `app.AICancel` take the `Options` from their caller: `internal/app` never imports `internal/command`.
+- The console's routes (lane 7.2, `internal/webui/ai.go`) answer and cancel through the `ai.respond` and `ai.cancel` Specs, by name through the daemon's Invoker, so they need no `Options` of their own. The `ai` projection reads the store with `aisession.OpenStore(home)`, which needs none.
+
 ### Phase 7 session environment (lane 7.2)
 
 This is the environment the harness process gets. Open question 1 asks the owner to choose the `HOME` row; the table shows the recommended default.
@@ -4297,6 +4331,7 @@ go build -o "$T/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp
 export CONTINUOUS_INTEGRATION=1 AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
 git init -q "$T/repo" && git -C "$T/repo" commit -q --allow-empty -m init
 git -C "$T/repo" worktree add -q "$T/wt" -b demo
+printf 'hello\n' > "$T/wt/notes.txt"
 "$AF" config set --yes \
   'ai.harnesses.overrides={"demo":{"name":"Demo","command":"fake-acp","args":["--mode=session-demo"]},
                            "nested":{"name":"Nested","command":"fake-acp","args":["--mode=session-nested"]},
@@ -4309,14 +4344,14 @@ cd "$T/wt"
 "$AF" ai status --follow <ID>
 ```
 
-The `session-demo` script plays: message chunks; a plan; a permission request for an `edit` of `src/hello.txt` and `fs/write_text_file src/hello.txt` (the rule would allow both, but an agent started this session, so the ceiling makes them ask: step 2); `fs/read_text_file /etc/hosts` (denied, `outside_worktree`); `fs/write_text_file .claude/settings.json` (asks, `control_file`); `terminal/create echo hi` (asks, `terminal`); an `execute` tool call with no request (`unasked`, warned); a usage update with a cost; `end_turn`.
+The fake's `session-*` modes answer the probe's plain `initialize` like `--mode=ok`, so the probe step marks all three ready. The `session-demo` script plays: message chunks; a plan; `fs/read_text_file <worktree>/notes.txt` (allowed by the gate: reads inside the worktree are not capped by the ceiling, so this is the step where policy decides alone); a permission request for an `edit` of `src/hello.txt` and `fs/write_text_file src/hello.txt` (the rule would allow both, but an agent started this session, so the ceiling makes them ask: step 2); `fs/read_text_file /etc/hosts` (denied, `outside_worktree`); `fs/write_text_file .claude/settings.json` (asks, `control_file`); `terminal/create echo hi` (asks, `terminal`); an `execute` tool call with no request (`unasked`, warned); a usage update with a cost; `end_turn`.
 
-1. The session streams in `ai status --follow`. `/etc/hosts` is never read: the fake logs `-32001` with `outside_worktree`.
+1. The session streams in `ai status --follow`. The fake logs the content of `notes.txt` (allowed, handler `gate`). `/etc/hosts` is never read: the fake logs `-32001` with `outside_worktree`.
 2. Because an agent started it, the writes to `src/hello.txt` ask instead of following the rule (the ceiling). `ai status <ID> --json` lists the asks. `ai respond <ID> <ASK> --allow` from the agent session is refused `needs_person`. `ai respond <ID> <ASK> --reject` works. The unanswered ask is denied after 30 s (`timeout`). The session ends `end_turn` with `src/hello.txt` absent, `.claude/settings.json` absent, and the counters and the unasked tool call shown.
-3. Run it again with `ai.sessions.agent_start=false`: `ai run` is refused `agent_start_off` and nothing starts.
-4. With `slow` running (`--mode=session-hang`), a second `ai run --harness demo` is refused `limit_running`; `ai cancel <slow ID> --yes` ends it `cancelled`, with its waiting ask answered `cancelled`.
-5. `ai run --harness nested` plays a terminal request for `agentflow ai run --harness demo x` and one for `agentflow ai respond ... --allow`: both are denied `agentflow_in_session`.
-6. `ai run` in `$T/repo` (the primary checkout) is refused `primary_checkout`.
+3. With `slow` running (`--mode=session-hang`), a second `ai run --harness demo` is refused `limit_running`; `ai cancel <slow ID> --yes` ends it `cancelled`, with its waiting ask answered `cancelled`.
+4. `ai run --harness nested` plays a terminal request for `agentflow ai run --harness demo x` and one for `agentflow ai respond ... --allow`: both are denied `agentflow_in_session`.
+5. `ai run` in `$T/repo` (the primary checkout) is refused `primary_checkout`.
+6. Last, `"$AF" config set --yes ai.sessions.agent_start=false`, then `ai run --harness demo x` in `$T/wt` is refused `agent_start_off` and nothing starts.
 7. The panel: `TestAIPanelFollowsSession` (lane 7.2: a daemon runtime with a fake store and the fake agent shows the session, its asks and its end in the `ai` projection, and an allow from the console route reaches the host) and the AI panel browser test (lane 7.4). Not a live console, for the reason above.
 8. After the demo, `~/.agentflow-ui` lists no path under `$T`, and `$T/home/ai/sessions/<ID>/` holds `session.json` and `transcript.jsonl` with mode 0600 in 0700 directories.
 
@@ -4352,8 +4387,8 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 | Lane | Issue | Owns | Must not touch |
 | --- | --- | --- | --- |
 | 7.1 ACP client, fake agent | #122 | `internal/acp/session_types.go` and the phase 7 paragraph of `doc.go` (contract, first PR); `internal/acp/session.go`, `client.go`, `decode.go` and their tests; `internal/acp/acptest/**` (session scripts, the session modes of `cmd/fake-acp`); in `internal/jsonrpc`: the `OrderedResponses` and `AllowDir` declarations in `types.go` (first PR), `OrderedResponses` in `conn.go` and its test | `internal/acp/types.go`, `initialize.go`; every other `internal/jsonrpc` file; `internal/aisession/**`, `internal/harness/**`, `internal/webui/**`, `internal/command/**`, `internal/config/**`, README |
-| 7.2 Sessions, chain, store, events, projection | #123 | `internal/aisession/**` (contract `types.go`, `doc.go` first); `internal/bus/types_phase7.go` and its test, the `ReservedFamilies` line in `internal/bus/types.go` (first PR); `internal/webui/projection_ai_state.go` (first PR), `projection_ai.go`, `stream_runtime_ai.go`, `ai.go`, the two route lines in `server.go`, and their tests (`TestAIPanelFollowsSession` included); `internal/harness/session.go` (new, after #120) and its test; the `AllowDir` check in `internal/jsonrpc/launch.go` and its test; `ai.session.**` in `internal/notifysock/notifysock.go`; `internal/config/ai.go`, the `AI` field of `config.Repo` in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`, the `ai.*` actions in `autonomy.go`; the `ai` checks and loosening cases in `internal/settings/checks.go` (and a new `check_ai.go`); settings and catalog golden files through `-update` only | `internal/acp/**`, every other `internal/harness/**` file, `internal/command/**`, `internal/app/**`, `internal/mcpserver/**`, `internal/cli/**`, `internal/policy/**`, `internal/plugin/**`, `internal/webui/static/**`, `internal/webui/destination.go`, README |
-| 7.3 Commands, MCP, guard, docs | #124 | `internal/command/ops/ai_sessions.go` and its test; the `ai` rows in `internal/command/ops/emit_test.go`; `internal/app/ai_sessions.go`, `internal/app/ai_session_client.go` (`OpenSession`) and tests; `AgentEnvironment` in `internal/app/worktree.go`; `SessionClientPrefix`, `NewSessionGate` and the refusal in `internal/policy/approvals.go`, the never-list entry in `internal/policy/policy.go`, and tests; `internal/mcpserver/session.go` and the session-mode lines in `internal/mcpserver/server.go`, with tests; `internal/cli/ai_host.go` and the `ai host` line in `cli.go`'s fixed switch; `internal/webui/destination.go` (screen `ai`); golden files (`internal/mcpserver/testdata/golden/tools.json`, `internal/cli/testdata/golden/**`, `internal/app/testdata/golden/**`) through `-update` only; the session lines in `scripts/e2e-claude.sh`; `adapters/claude-code/skills/ai/SKILL.md`, the four tools in `adapters/claude-code/skills/agentflow/SKILL.md`; `docs/ai-sessions.md`; README sections on the `ai` commands, MCP tools, sessions and their security; the blueprint capability table (`docs/artifact/`, then `scripts/build-blueprint.sh`) | `internal/acp/**`, `internal/aisession/**`, `internal/harness/**`, `internal/config/**`, `internal/settings/**`, `internal/webui/**` except `destination.go`, `parity_test.go` |
+| 7.2 Sessions, chain, store, events, projection | #123 | `internal/aisession/**` (contract `types.go`, `doc.go` first; `Options` and the import rule of "package dependencies"); `internal/bus/types_phase7.go` and its test, the `ReservedFamilies` line in `internal/bus/types.go` (first PR); `internal/webui/projection_ai_state.go` (first PR), `projection_ai.go`, `stream_runtime_ai.go`, `ai.go`, the two route lines in `server.go`, and their tests (`TestAIPanelFollowsSession` included); `internal/harness/session.go` (new, after #120) and its test; the `AllowDir` check in `internal/jsonrpc/launch.go` and its test; `ai.session.**` in `internal/notifysock/notifysock.go`; `internal/config/ai.go`, the `AI` field of `config.Repo` in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`, the `ai.*` actions in `autonomy.go`; the `ai` checks and loosening cases in `internal/settings/checks.go` (and a new `check_ai.go`); settings and catalog golden files through `-update` only | `internal/acp/**`, every other `internal/harness/**` file, `internal/command/**`, `internal/app/**`, `internal/mcpserver/**`, `internal/cli/**`, `internal/policy/**`, `internal/plugin/**`, `internal/webui/static/**`, `internal/webui/destination.go`, README |
+| 7.3 Commands, MCP, guard, docs | #124 | `internal/command/ops/ai_sessions.go` (with `ops.AISessionOptions`, the production `aisession.Options`) and its test; the `ai` rows in `internal/command/ops/emit_test.go`; `internal/app/ai_sessions.go`, `internal/app/ai_session_client.go` (`OpenSession`) and tests; `AgentEnvironment` in `internal/app/worktree.go`; `SessionClientPrefix`, `NewSessionGate` and the refusal in `internal/policy/approvals.go`, the never-list entry in `internal/policy/policy.go`, and tests; `internal/mcpserver/session.go` and the session-mode lines in `internal/mcpserver/server.go`, with tests; `internal/cli/ai_host.go` and the `ai host` line in `cli.go`'s fixed switch; `internal/webui/destination.go` (screen `ai`); golden files (`internal/mcpserver/testdata/golden/tools.json`, `internal/cli/testdata/golden/**`, `internal/app/testdata/golden/**`) through `-update` only; the session lines in `scripts/e2e-claude.sh`; `adapters/claude-code/skills/ai/SKILL.md`, the four tools in `adapters/claude-code/skills/agentflow/SKILL.md`; `docs/ai-sessions.md`; README sections on the `ai` commands, MCP tools, sessions and their security; the blueprint capability table (`docs/artifact/`, then `scripts/build-blueprint.sh`) | `internal/acp/**`, `internal/aisession/**`, `internal/harness/**`, `internal/config/**`, `internal/settings/**`, `internal/webui/**` except `destination.go`, `parity_test.go` |
 | 7.4 AI panel | #125 | `internal/webui/static/ai-panel.*`; the AI nav entry, page section and script tag in `static/index.html`; `ai` rules in `static/style.css`; the AI wiring in `static/app.js` (screen name, page, state dispatch); `internal/webui/ai_browser_test.go`; `internal/webui/testdata/ai/**`; `docs/design/ui/ai-panel.md`; the README section on the AI panel | every Go file other than its browser test, `internal/webui/destination.go`, every other static file |
 
 **Every shared file has one owner:**
