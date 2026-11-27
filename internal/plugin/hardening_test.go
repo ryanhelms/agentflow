@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
+	"github.com/ryanhelms/agentflow/internal/bus/store"
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/plugin"
+	"github.com/ryanhelms/agentflow/internal/plugin/install"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
@@ -231,5 +234,50 @@ func TestDeadLetterFileStaysSmall(t *testing.T) {
 	// Reopened, it holds the same letters.
 	if again := plugin.OpenDeadLetterForTest(path).Letters(); len(again) != len(ls) {
 		t.Fatalf("reopened %d letters, kept %d", len(again), len(ls))
+	}
+}
+
+// TestPluginListReadsTheHostsCappedDeadLetters: plugin list reads the dead
+// letters the host writes, after payload caps and rewrites.
+func TestPluginListReadsTheHostsCappedDeadLetters(t *testing.T) {
+	home := t.TempDir()
+	src := t.TempDir()
+	m := "schema: 1\nid: ci-notify\nname: CI\nversion: 0.1.0\ntier: declarative\npermissions:\n  subscribe: [gh.ci.updated]\n  invoke: [notify]\n" +
+		"extensions:\n  handler:\n    - name: h\n      on: [gh.ci.updated]\n      actions:\n        - invoke: {command: notify, input: {signal: ci.failed}}\n"
+	if err := os.WriteFile(filepath.Join(src, manifest.FileName), []byte(m), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := install.PlanAdd(home, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := install.Add(home, plan, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(home, func(p string, d os.DirEntry, err error) error {
+			if err == nil && d.IsDir() {
+				_ = os.Chmod(p, 0o700)
+			}
+			return nil
+		})
+	})
+	old := app.OpenGlobalEventStore
+	app.OpenGlobalEventStore = func(context.Context, store.Role) (store.Store, error) { return nil, os.ErrNotExist }
+	t.Cleanup(func() { app.OpenGlobalEventStore = old })
+
+	d := plugin.OpenDeadLetterForTest(filepath.Join(manifest.PluginsPath(home), manifest.DeadLetterFile))
+	big := json.RawMessage(`{"blob":"` + strings.Repeat("x", 8000) + `"}`)
+	for i := 0; i < 600; i++ { // past 1 MiB: at least one rewrite
+		d.Dead(context.Background(), bus.Letter{Event: bus.Event{ID: fmt.Sprintf("evt-%03d", i), Type: bus.TypeGHCIUpdated, Repo: repo, Payload: big},
+			Consumer: "plugin:ci-notify", Reason: bus.PluginCodeTimeout, Time: time.Unix(int64(i), 0).UTC()})
+	}
+	list, err := (&app.App{Home: home}).PluginList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls := list.Plugins[0].DeadLetters
+	if len(ls) != app.MaxPluginLetters || ls[0].EventID != "evt-599" || ls[0].Reason != bus.PluginCodeTimeout || ls[0].EventType != bus.TypeGHCIUpdated {
+		t.Fatalf("letters: %+v", ls)
 	}
 }

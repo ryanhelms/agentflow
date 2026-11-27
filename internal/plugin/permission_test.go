@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -172,5 +173,65 @@ func TestBranchRuleMatchesTheBranchBeingWritten(t *testing.T) {
 	}
 	if err := run(a, "push", "push"); err != nil {
 		t.Fatalf("push on feature was denied by a main rule: %v", err)
+	}
+}
+
+// TestPluginsDocRuleDeniesAReleasePush runs the permission-rule example of
+// docs/plugins.md: it denies a push from a release/* branch and nothing
+// else.
+func TestPluginsDocRuleDeniesAReleasePush(t *testing.T) {
+	b, err := os.ReadFile("../../docs/plugins.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var block string
+	for _, m := range regexp.MustCompile("(?s)```yaml\n(.*?)```").FindAllStringSubmatch(string(b), -1) {
+		if strings.HasPrefix(m[1], "extensions:") && strings.Contains(m[1], "permission_rule") {
+			block = m[1]
+		}
+	}
+	if block == "" {
+		t.Fatal("no permission rule example in docs/plugins.md")
+	}
+	m, err := manifest.Load([]byte("schema: 1\nid: pause-pushes\nname: Pause pushes\nversion: 0.1.0\ntier: declarative\n" + block))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, layers := &plugintest.Source{}, &plugintest.Layers{}
+	src.Set(manifest.Installed{ID: m.ID, Tier: m.Tier, Manifest: m})
+	layers.SetPersonal(m.ID, plugin.PersonalPlugin{Enabled: true})
+	st := &plugin.PermissionStage{Source: func() manifest.Source { return src }, Layers: func() plugin.Layers { return layers }}
+	inv := command.NewInvoker(command.Options{Stages: []command.Stage{st}})
+
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	repo, err := gitx.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app.App{Repo: repo}
+	push := func() error {
+		s := command.Spec[fakeIn, any]{Name: "push", Policy: command.Policy{Class: policy.Remote, Action: "push"},
+			Run: func(context.Context, *app.App, fakeIn) (any, error) { return "ok", nil }}
+		_, err := command.Invoke(context.Background(), inv, a, s, fakeIn{}, command.Origin{Source: "cli"})
+		return err
+	}
+	if err := push(); err != nil {
+		t.Fatalf("push from main denied: %v", err)
+	}
+	git("checkout", "-q", "-b", "release/1.4")
+	var denied *plugin.DeniedError
+	if err := push(); !errors.As(err, &denied) || denied.Plugin != "pause-pushes" || !strings.HasPrefix(denied.Message, "Pushes to release branches are paused.") {
+		t.Fatalf("push from release/1.4: %v", err)
 	}
 }

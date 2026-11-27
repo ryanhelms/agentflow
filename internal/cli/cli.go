@@ -374,7 +374,7 @@ func runHook(ctx context.Context, args []string) error {
 	name := args[0]
 	fs := flag.NewFlagSet("hook", flag.ContinueOnError)
 	client := fs.String("client", "", "calling client")
-	conventionOnly := fs.Bool("convention-only", false, "pre-bash: check messages and titles only, not the never-list")
+	conventionOnly := fs.Bool("convention-only", false, "pre-bash: check messages, titles, the repository boundary and the plugin add, remove and approve rule; skip the rest of the never-list")
 	rest := args[1:]
 	var positional []string
 	for len(rest) > 0 {
