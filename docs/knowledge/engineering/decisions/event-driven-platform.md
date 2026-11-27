@@ -1982,7 +1982,7 @@ Everything in the phase 1 to 5 sections still holds unless a paragraph here says
 | What | Value |
 | --- | --- |
 | Pinned commit | `4273056f03b93f8ce41e9276256ea47b057b794c` (committed 2026-11-26T23:54:34Z, branch `main`) |
-| Files copied, verbatim | `<id>/agent.json` for every top-level directory that has one (48 at this commit), `quarantine.json`, `agent.schema.json`, `LICENSE` |
+| Files copied, verbatim | `<id>/agent.json` for every top-level directory that has one (46 at this commit), `quarantine.json`, `agent.schema.json`, `LICENSE` |
 | Files never copied | `icon.svg` (SVG in the console is a risk), workflows, protocol-matrix snapshots, the docs |
 | Where | `internal/harness/acpregistry/v1/agents/<id>.json`, `.../v1/quarantine.json`, `.../v1/agent.schema.json`, `.../v1/LICENSE`, and `.../v1/SOURCE.json` |
 | Refresh | `scripts/refresh-acp-registry.sh COMMIT` |
@@ -1995,7 +1995,7 @@ Everything in the phase 1 to 5 sections still holds unless a paragraph here says
   "repository": "https://github.com/agentclientprotocol/registry",
   "commit": "4273056f03b93f8ce41e9276256ea47b057b794c",
   "committed_at": "2026-11-26T23:54:34Z",
-  "agents": 48,
+  "agents": 46,
   "spec": {
     "repository": "https://github.com/agentclientprotocol/agent-client-protocol",
     "tag": "schema-v1.35.0",
@@ -2059,7 +2059,7 @@ type Preview struct {
 
 - **Registry text is data.** Name and description are display text: one line, control and bidirectional characters removed, at most 64 and 256 bytes. URLs must be `https`. A package name must match `^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(@[0-9A-Za-z.+-]+)?$` (`npx`) or `^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9,._-]+\])?([=@<>~!]=?[0-9A-Za-z.*+-]+)?$` (`uvx`). Args must match `^[A-Za-z0-9._=:/@+,-]{1,128}$`, at most 16. A value that fails is dropped with a `registry` problem, never shown or used.
 - **Registry `env` is never applied** to a probe. An entry that sets one gets the note `registry_env_ignored`.
-- **Quarantine.** At the pinned commit `quarantine.json` is a map of ID to reason, and none of the registry's workflows read it. agentflow keeps quarantined agents in the catalog, flags them (`quarantined: true`), and shows the note "The ACP registry has quarantined this agent: <reason>." The reason is registry text, clamped like a description.
+- **Quarantine.** At the pinned commit `quarantine.json` is a map of ID to reason. The registry's own CI skips those agents when it verifies agents and updates versions (`verify_agents.py`, `update_versions.py`), but `build_registry.py` still publishes them. agentflow keeps quarantined agents in the catalog, flags them (`quarantined: true`), and shows the note "The ACP registry has quarantined this agent: <reason>." The reason is registry text, clamped like a description.
 - `TestPinnedRegistry` (lane 6.1) decodes every file strictly, checks `SOURCE.json` against the files, and fails when an agent fails the rules above.
 
 ### Phase 6 ACP `initialize` slice (lane 6.2)
@@ -2153,9 +2153,13 @@ type AuthMethod struct {
     Env         map[string]string `json:"env,omitempty"`  // terminal only
 }
 
-// Initialize sends initialize on c and decodes the answer. Unknown fields
-// are ignored (ACP is extensible); a missing or non-integer protocolVersion
-// is ErrProtocol. A peer error is returned as *jsonrpc.Error.
+// Initialize sends initialize on c and decodes the answer as the ACP schema
+// says: unknown fields are ignored (ACP is extensible); protocolVersion is
+// required and must be an integer from 0 to 65535, else ErrProtocol; a
+// capability object, agentInfo or clientInfo that fails to decode becomes
+// its zero value ("default on error"); an authMethods item that fails to
+// decode is dropped ("skip invalid items"). A peer error is returned as
+// *jsonrpc.Error. Lane 7.1 keeps this rule for every ACP message.
 func Initialize(ctx context.Context, c jsonrpc.Conn, req InitializeRequest) (InitializeResponse, error)
 ```
 
@@ -2267,14 +2271,16 @@ The finder looks up each definition's `command`, then its `base_commands`, in th
 | --- | --- |
 | Empty, `.` or relative entry | `relative` |
 | Entry does not exist or is not a directory | `missing` (not reported) |
-| Entry, after resolving links, is inside a git working tree: it or an ancestor has `.git` (catches direnv, `node_modules/.bin`, a repository's `bin/`) | `inside_repository` |
+| Entry, after resolving links, is inside a worktree of a repository agentflow is working in: for the CLI, any worktree of the repository that contains its working directory; for the daemon, any worktree of every repository it serves (catches direnv and a repository's `bin/`) | `inside_repository` |
+| Entry has a `node_modules` path segment (a project's `node_modules/.bin`) | `node_modules` |
 | Unix: the directory is writable by group or others without the sticky bit, or owned by neither the user nor root | `unsafe_permissions` |
 | Unix: the found file, after resolving links, is writable by group or others, or owned by neither the user nor root | `unsafe_permissions` (that file only) |
 | Windows: the found file is `.cmd` or `.bat` (`cmd.exe` would re-parse the arguments) | `shim` (that file only) |
 | In a test binary: the entry is outside the test's temporary directory (below) | `test_guard`, and detection fails |
 
-- A personal absolute `command` skips the PATH walk and the `inside_repository` check (the person named that file), but not the permission checks.
-- **The agentflow home must be safe** before personal overrides and plugin definitions are read: `config.HomeDir()` resolved outside every git working tree, owned by the user, not writable by group or others. Otherwise both layers are ignored and `ai doctor` reports `home_unsafe`. This stops a repository's environment (`AGENTFLOW_HOME` set by direnv) from supplying a personal layer.
+- The rule is not "any directory with a `.git` above it". Homebrew (`/opt/homebrew/.git`), nvm, asdf and pyenv are git clones, and their `bin` directories are where most harnesses live. The threat is a repository the person is working in, so the check is against those repositories' worktrees.
+- A personal absolute `command` skips the PATH walk and the `inside_repository` and `node_modules` checks (the person named that file), but not the permission checks.
+- **The agentflow home must be safe** before personal overrides and plugin definitions are read: `config.HomeDir()`, resolved, must not be inside a worktree of the repository the CLI runs in or of a repository the daemon serves, and must be owned by the user and not writable by group or others. Otherwise both layers are ignored and `ai doctor` reports `home_unsafe`. This stops a repository's environment (`AGENTFLOW_HOME` set by direnv) from supplying a personal layer. A personal `config.yml` that is a link into a dotfiles checkout (phase 4) stays allowed: the dotfiles checkout is not a repository agentflow works in.
 - **Identity.** A found harness has an identity: the PATH path, the resolved target, its size, modification time, and device and inode on Unix, plus a hash of the effective `args` and `version_args`. Any change is a new identity, and old probe results no longer apply.
 
 ### Phase 6 harness launch profile (lanes 6.1 and 6.2)
@@ -2638,6 +2644,8 @@ ai:
 | `personal:ai.harnesses.poll_interval` | `duration` | 30s | 10s to 10m | How often to look for harnesses | How often the console daemon checks your PATH for harnesses that were installed, changed or removed. | `live` | |
 | `personal:ai.harnesses.probe_timeout` | `duration` | 5s | 1s to 30s | Probe time limit | How long a harness has to answer the ACP initialize request before the probe gives up. | `next-run` | |
 | `personal:ai.harnesses.disabled` | `chips` | [] | 64 items | Harnesses to ignore | Harness IDs agentflow never lists or starts. | `live` | `shrink` |
+
+**The loosening check is code, not metadata.** `settings.loosening` reads specific keys (`policyOf` in `internal/settings/checks.go`); `FieldMeta.Loosens` only says that a field is checked. Lane 6.1 adds the harness cases there: `auto_probe` false to true gives "Lets agentflow start installed harnesses without asking, and lets agents ask for probes.", and an ID removed from `disabled` gives "Stops ignoring the harness <id>, so agentflow may list and start it." 
 | `personal:ai.harnesses.overrides` | `kv-table`, key = harness ID, `columns` below | {} | 64 entries | Harness overrides | Changes how agentflow finds or starts a harness, or adds one that is not in the ACP registry. | `live` | |
 
 `overrides` columns (one `FieldMeta` each): `name` (`text`, "Name"), `kind` (`select` `native`/`adapter`, "Kind"), `command` (`text`, "Command", "A command name on your PATH, or an absolute path."), `args` (`chips`, "ACP arguments"), `version_args` (`chips`, "Version arguments"), `no_version` (`toggle`, "Never ask for a version"), `base_name` (`text`, "Base CLI name"), `base_commands` (`chips`, "Base CLI commands"), `min_version` (`text`, "Oldest version").
@@ -2738,7 +2746,7 @@ One delta frame:
 ```text
 event: delta
 id: v1:3f2a9c1b7d4e5f60=57
-data: {"event":{"type":"harness.changed","repo":"global",...},"states":[{"projection":"harnesses","repo":"3f2a9c1b7d4e5f60","worktree":"","state":{"detector":true,"registry":{"commit":"4273056f03b93f8ce41e9276256ea47b057b794c","committed_at":"2026-11-26T23:54:34Z","agents":48},"auto_probe":false,"harnesses":[{"id":"gemini","name":"Gemini CLI","kind":"native","state":"native","code":"","sources":["registry","agentflow"],"command":"gemini","args":["--acp"],"path":"~/.local/bin/gemini","version":"0.71.1","registry_version":"0.71.1","probe":{"status":"ok","code":"ok","probed_at":"2026-11-27T09:00:00Z","duration_ms":812},"acp":{"protocol_version":1,"agent_name":"gemini-cli","load_session":true,"image":true,"audio":false,"embedded_context":true,"mcp_http":true,"mcp_sse":false,"logout":false},"sign_in":[{"method":"oauth-personal","type":"agent","name":"Log in with Google"}]}],"checked_at":"2026-11-27T09:00:01Z"}}]}
+data: {"event":{"type":"harness.changed","repo":"global",...},"states":[{"projection":"harnesses","repo":"3f2a9c1b7d4e5f60","worktree":"","state":{"detector":true,"registry":{"commit":"4273056f03b93f8ce41e9276256ea47b057b794c","committed_at":"2026-11-26T23:54:34Z","agents":46},"auto_probe":false,"harnesses":[{"id":"gemini","name":"Gemini CLI","kind":"native","state":"native","code":"","sources":["registry","agentflow"],"command":"gemini","args":["--acp"],"path":"~/.local/bin/gemini","version":"0.71.1","registry_version":"0.71.1","probe":{"status":"ok","code":"ok","probed_at":"2026-11-27T09:00:00Z","duration_ms":812},"acp":{"protocol_version":1,"agent_name":"gemini-cli","load_session":true,"image":true,"audio":false,"embedded_context":true,"mcp_http":true,"mcp_sse":false,"logout":false},"sign_in":[{"method":"oauth-personal","type":"agent","name":"Log in with Google"}]}],"checked_at":"2026-11-27T09:00:01Z"}}]}
 ```
 
 (The values are an example of the shape, not real output.)
@@ -2764,7 +2772,7 @@ Lane 6.3 adds these Specs in `internal/command/ops/ai_harnesses.go`, calling `in
 | `ai.doctor` | `ai doctor [--probe] [--json]` | `agentflow_ai_doctor` (read-only) | `read` | none | none | `DoctorReport` |
 
 - **Tool inputs.** `agentflow_ai_harnesses`: `{probe?: bool, all?: bool, ids?: [string]}`. `agentflow_ai_doctor`: `{probe?: bool}`. No `confirm_token`: neither writes a repository or provider.
-- **Requester.** The MCP tools are always `agent`. The CLI is `person` only with a terminal on stdin and no agent environment; otherwise `agent`. See "Phase 6 who may probe".
+- **Requester.** The calling surface sets it, never a client name string: the MCP adapter always passes `agent`; the CLI Verb passes `person` only with a terminal on stdin and `app.AgentEnvironment() == ""`, otherwise `agent`; the console's probe handler passes `person`; the daemon source passes `daemon`. The input has no requester field, so a caller cannot choose one. See "Phase 6 who may probe".
 - **Why `read`.** They change only the user's cache under the agentflow home, and a probe runs only what the rules above allow. No approval, no audit line (phase 3: reads are not audited). Decision 4.
 - **`ai harnesses` text output:** one line per harness, `ID  STATE  VERSION  COMMAND`, then the fix text and command indented under any harness that has one, then skipped PATH entries and problems. With nothing found: "No ACP harnesses found on your PATH." and the `ai doctor` hint.
 - **`DoctorReport`** is `{checks: [{id, status, message, fix?}], report: harness.Report}`, `status` one of `ok`, `warn`, `fail`. Checks, in order:
@@ -2802,6 +2810,7 @@ No test may resolve or start a real harness (plan guardrail).
 - **`harnesstest`** (lane 6.1): `harnesstest.PATH(tb, dirs...)` sets `PATH` to temporary directories only, and `HOME` and `AGENTFLOW_HOME` to fresh temporary directories (`tb.Setenv`). `harnesstest.Bin(tb, name, version)` writes a non-ACP executable that prints a version, for finder and version tests. Fake ACP agents come from `acptest.Install` (lane 6.2).
 - `TestGuardRefusesRealPATH` (lane 6.1) runs detection with `PATH=/usr/bin:/bin` and expects `ErrTestGuard`.
 - Every test that reaches detection, in any lane (CLI, MCP, webui, ops), sets its PATH with `harnesstest.PATH`.
+- **Existing daemon tests.** `stream_runtime_harnesses.go` registers from `init`, so every webui test that starts a daemon runtime would reach detection. As with `newPluginOptions` (phase 5), the extension reads its dependencies from `newHarnessOptions`; in a test binary that returns no `Detector` unless a test sets one, so the extension starts no source and the state has `detector: false`. Lane 6.2 tests set it with a fake PATH.
 
 ### Phase 6 demo and gate
 
@@ -2829,7 +2838,7 @@ export AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
 1. The five states and their fixes appear as above, from the CLI and from `agentflow_ai_harnesses` over MCP.
 2. After `./agentflow config set --yes ai.harnesses.auto_probe=false`, `agentflow_ai_harnesses {"probe": true}` returns `probe_refused: needs_person` and runs nothing (the fake agent's `probe.log` gets no new line).
 3. `./agentflow ui` (started with the PATH above): the Harnesses page shows the same list. `rm "$T/bin/fake-cli"` makes `demo-adapter` disappear (`harness.removed`) within one poll, or at once on focus; `cp` it back and it returns (`harness.detected`). `agentflow events --follow --topic 'global/*/harness.**'` prints the same events.
-4. Put a copy of `fake-acp` in a `bin/` directory inside a git repository and first on PATH: `ai doctor` lists that entry as skipped (`inside_repository`), and it is never started.
+4. In a scratch git repository, put a copy of `fake-acp` in its `bin/` and that directory first on PATH, then run `ai doctor` from inside the repository: it lists the entry as skipped (`inside_repository`), and nothing from it is started.
 
 **Gate:** all four lanes merged; `make check` green on `develop` (including `TestPinnedRegistry`, `TestOverlayMatchesRegistry`, `TestGuardRefusesRealPATH`, `TestEveryConfigFieldHasControl`, `TestEveryMCPToolHasCLICommand`); `make e2e` passes (new MCP tools); the demo works; tag `develop-p6`; ledger updated.
 
@@ -2843,7 +2852,7 @@ All additive.
 | `internal/jsonrpc` | `HarnessEnv`, `Run` (no change to `Launch`, `ScrubbedEnv` or `EnvAllowlist`) | 6.1 |
 | `manifest` | `PointPhase[PointHarness] = 6`; `Extensions.Harness` becomes `[]HarnessEntry` (`{id, harnessdef.Definition}`), declarative only; `plugin add`'s summary lists them | 6.1 |
 | `config.User` | optional `ai` section; group `ai` | 6.1 |
-| settings check chain | `harness` diagnostic from `harnessdef.Validate` for `personal:ai.harnesses.overrides` | 6.1 |
+| settings check chain | `harness` diagnostic from `harnessdef.Validate` for `personal:ai.harnesses.overrides`; harness cases in `loosening` | 6.1 |
 | `globalTopics` | the three `harness.*` topics | 6.2 |
 | console routes | `POST /api/harnesses/check`, `POST /api/harnesses/probe` | 6.2 |
 
@@ -2855,7 +2864,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 
 | Lane | Issue | Owns | Must not touch |
 | --- | --- | --- | --- |
-| 6.1 Registry, PATH, versions | #100 | `internal/harness/**` except `probe.go`, `cache.go` and their tests; in it: `types.go`, `doc.go` (contract, first PR), `harnessdef/**`, `acpregistry/**`, `overlay.yml`, `registry.go`, `find.go`, `pathsafe*.go`, `version.go`, `state.go`, `fix.go`, `detect.go`, `guard.go`, `harnesstest/**`; `scripts/refresh-acp-registry.sh`; `internal/jsonrpc/harness.go` and its test; `internal/config/ai.go`, the `AI` field in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`; the `harness` check (`harnessLink` in `internal/settings/check_harness.go`, and its entry in `chain` in `internal/settings/checks.go`); `internal/plugin/manifest/harness.go`, `PointPhase` and `Extensions.Harness` in `manifest/types.go`, the harness call in `manifest/validate.go` and the summary line in `internal/plugin/install` | `internal/plugin/*.go`, `internal/acp/**`, `internal/bus/**`, `internal/watch/**`, `internal/webui/**`, `internal/command/**`, `internal/app/**`, README, `cli.go`, `server.go`, `parity_test.go` |
+| 6.1 Registry, PATH, versions | #100 | `internal/harness/**` except `probe.go`, `cache.go` and their tests; in it: `types.go`, `doc.go` (contract, first PR), `harnessdef/**`, `acpregistry/**`, `overlay.yml`, `registry.go`, `find.go`, `pathsafe*.go`, `version.go`, `state.go`, `fix.go`, `detect.go`, `guard.go`, `harnesstest/**`; `scripts/refresh-acp-registry.sh`; `internal/jsonrpc/harness.go` and its test; `internal/config/ai.go`, the `AI` field in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`; the `harness` check (`harnessLink` in `internal/settings/check_harness.go`, and its entry in `chain` in `internal/settings/checks.go`) and the harness cases in `policyOf` and `loosening` there; `internal/plugin/manifest/harness.go`, `PointPhase` and `Extensions.Harness` in `manifest/types.go`, the harness call in `manifest/validate.go` and the summary line in `internal/plugin/install` | `internal/plugin/*.go`, `internal/acp/**`, `internal/bus/**`, `internal/watch/**`, `internal/webui/**`, `internal/command/**`, `internal/app/**`, README, `cli.go`, `server.go`, `parity_test.go` |
 | 6.2 Probe, cache, events, projection | #101 | `internal/acp/doc.go`, `types.go` (contract, first PR), `initialize.go`, tests; `internal/acp/acptest/**` (including `cmd/fake-acp`); `internal/harness/probe.go`, `cache.go` and their tests; `internal/bus/types_phase6.go` and its test, the `ReservedFamilies` and `init` lines in `internal/bus/types.go`; `internal/watch/harness.go` and its test; `internal/webui/stream_runtime_harnesses.go`, `projection_harnesses.go`, `projection_harnesses_state.go` (contract, first PR), `harnesses.go`, the two route lines in `server.go`, and their tests | the lane 6.1 files, `internal/plugin/**`, `internal/webui/static/**`, `internal/command/**`, README |
 | 6.3 Commands, skills, README | #102 | `internal/command/ops/ai_harnesses.go` and its test; `internal/app/harnesses.go` and its test; golden files through `-update` only; `adapters/claude-code/skills/ai/SKILL.md`; the two tools in `adapters/claude-code/skills/agentflow/SKILL.md`; `docs/harnesses.md`; README sections on the `ai` commands, MCP tools, harness detection and its security; the blueprint capability table (`docs/artifact/` then `scripts/build-blueprint.sh`) | `internal/harness/**`, `internal/acp/**`, `internal/webui/**`, `cli.go`, `server.go`, `parity_test.go` |
 | 6.4 Harnesses page | #103 | `internal/webui/static/harnesses.*`; the Harnesses nav entry, page section and script tag in `static/index.html`; harnesses rules in `static/style.css`; `internal/webui/harnesses_browser_test.go`; `internal/webui/testdata/harnesses/**`; `docs/design/ui/harnesses.md`; the README section on the Harnesses page | every Go file other than its browser test, every other static file |
@@ -2874,7 +2883,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 
 - [ ] Nothing fetches the registry, an adapter or a package at runtime. The only network use is the maintainer's refresh script.
 - [ ] No code path runs `npx`, `uvx`, a refused launcher, a shell, an install, an `adapter_available` adapter or its base CLI, a terminal sign-in, `authenticate` or any ACP method except `initialize`.
-- [ ] A repository cannot make agentflow run a binary: PATH entries inside a working tree are skipped; no repository key names a harness; an unsafe agentflow home ignores personal overrides and plugin definitions.
+- [ ] A repository cannot make agentflow run a binary: PATH entries inside a worktree of a repository agentflow works in, or under `node_modules`, are skipped; no repository key names a harness; an unsafe agentflow home ignores personal overrides and plugin definitions.
 - [ ] Every probe goes through `jsonrpc.Launch` or `jsonrpc.Run` with `HarnessEnv`: a test sets `GH_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `CLAUDE_CODE_SESSION_ID` and `AGENTFLOW_HOME` in the parent and shows none reaches the fake agent.
 - [ ] Every probe is bounded by its timeout and ends with the process group killed. A hanging, flooding or garbage-writing fake agent cannot block the daemon, the CLI or another probe.
 - [ ] Agents cannot start a probe unless the person turned on `auto_probe`.
