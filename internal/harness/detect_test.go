@@ -644,6 +644,46 @@ func TestDetectPluginHarnessOnlyByName(t *testing.T) {
 	}
 }
 
+// TestDetectPluginHarnessShowsItsLaunch: a plugin's harness reports what a
+// probe by name runs: its args and the version command ("--version" by
+// default, or none), so the page and the CLI can show them before the
+// person probes it. A plugin that names a versioned interpreter is left
+// out with a launcher problem, and nothing runs.
+func TestDetectPluginHarnessShowsItsLaunch(t *testing.T) {
+	e := pluginEnv(t,
+		manifest.HarnessEntry{ID: "acme-agent", Definition: harnessdef.Definition{Command: "acme", Args: []string{"acp"}}},
+		manifest.HarnessEntry{ID: "acme-short", Definition: harnessdef.Definition{Command: "acme-short", VersionArgs: []string{"version", "--short"}}},
+		manifest.HarnessEntry{ID: "acme-quiet", Definition: harnessdef.Definition{Command: "acme-quiet", NoVersion: true}},
+		manifest.HarnessEntry{ID: "acme-python", Definition: harnessdef.Definition{Command: "python3.12", Args: []string{"-m", "acme"}}},
+	)
+	var logs []*harnesstest.StatusLog
+	for _, name := range []string{"acme", "acme-short", "acme-quiet", "python3.12"} {
+		logs = append(logs, harnesstest.StatusCLI(t, e.bin, name, 0, name+" 1.0.0"))
+	}
+	r := e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true, All: true})
+	for id, want := range map[string]struct {
+		version   []string
+		noVersion bool
+	}{"acme-agent": {[]string{"--version"}, false}, "acme-short": {[]string{"version", "--short"}, false}, "acme-quiet": {nil, true}} {
+		h := byID(t, r, id)
+		if !slices.Equal(h.VersionArgs, want.version) || h.NoVersion != want.noVersion || h.Probe.Code != CodePluginLaunch {
+			t.Errorf("%s: version %v, no_version %v, probe %+v", id, h.VersionArgs, h.NoVersion, h.Probe)
+		}
+	}
+	if slices.ContainsFunc(r.Harnesses, func(h Harness) bool { return h.ID == "acme-python" }) ||
+		!slices.ContainsFunc(r.Problems, func(p Problem) bool { return p.ID == "acme-python" && p.Code == harnessdef.CodeLauncher }) {
+		t.Errorf("python3.12 was not refused: %+v %+v", r.Harnesses, r.Problems)
+	}
+	if r := e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true, IDs: []string{"acme-python"}}); len(r.Harnesses) != 0 {
+		t.Errorf("a probe by name of a refused harness listed %+v", r.Harnesses)
+	}
+	for _, log := range logs {
+		if calls, _ := log.Calls(); len(calls) != 0 {
+			t.Fatalf("a plugin harness ran %d commands without being named", len(calls))
+		}
+	}
+}
+
 // TestDetectPluginArgBypassesRefused: the security review's bypasses of the
 // old deny rules (a path glued to -C or -f, a long flag followed by a path,
 // user@host), including `git -C/path reset --hard`, leave the definition out

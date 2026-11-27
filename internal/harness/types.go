@@ -185,7 +185,12 @@ type Harness struct {
 	// found; a path under the OS home is shown as "~/...". Never in events.
 	Command string   `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
-	Path    string   `json:"path,omitempty"`
+	// VersionArgs are the arguments of the version command a probe runs
+	// first ("--version" when the definition sets none); NoVersion means
+	// it runs none. Both are set only with Command. Never in events.
+	VersionArgs []string `json:"version_args,omitempty"`
+	NoVersion   bool     `json:"no_version,omitempty"`
+	Path        string   `json:"path,omitempty"`
 	// Base is the base CLI's command and where it was found, for adapters.
 	Base *Base `json:"base,omitempty"`
 	// Version: from the version command. RegistryVersion: the pinned copy's.

@@ -314,6 +314,11 @@ func TestSignInRefusals(t *testing.T) {
 	if v := check.Check(context.Background(), bad, person()); v.Code != CodeLaunch {
 		t.Errorf("unsafe args: %+v", v)
 	}
+	linked := f
+	linked.Target = filepath.Join(filepath.Dir(f.Target), "python3.12")
+	if v := check.Check(context.Background(), linked, person()); v.Code != CodeLaunch {
+		t.Errorf("a status command that resolves to python3.12: %+v", v)
+	}
 	if n := len(calls(t, log)); n != 0 {
 		t.Fatalf("ran %d times", n)
 	}
