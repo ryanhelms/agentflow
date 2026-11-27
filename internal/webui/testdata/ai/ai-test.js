@@ -97,6 +97,11 @@
       && writes({paths:[".claude/settings.json","b"]}).blocked === "values" && writes({can_allow:false}).blocked === "option" && [writes({diff:undefined}),writes({can_allow:false}),writes({diff:{...change,cut:true}})].every(item => item.canAllow === false),
       "a write can be allowed without its whole change: " + JSON.stringify([writes({}).blocked,writes({diff:undefined}).blocked,writes({diff:{...change,cut:true}}).blocked,writes({diff:{...change,new_text:"ok \u202e hidden"}}).blocked]));
     check(writes({diff:{...change,old_text:undefined}}).canAllow === true && writes({diff:{...change,new_text:"tab\tand\nline"}}).canAllow === true,"a new file or a tab stops a write from being allowed");
+    // Lane 7.2 leaves out old_text when it is empty and cut when it is false; new_text is always sent.
+    const created = writes({diff:{path:change.path,new_text:"a\nb\n"}}), emptied = writes({diff:{path:change.path,old_text:"a\n",new_text:""}}), blank = writes({diff:{path:change.path,new_text:""}});
+    check(created.canAllow === true && created.diff.before === "" && created.diff.cut === false && emptied.canAllow === true && emptied.diff.after === "" && blank.canAllow === true
+      && writes({diff:{path:change.path}}).blocked === "nodiff" && writes({diff:{path:change.path,old_text:"a\n"}}).blocked === "nodiff" && writes({diff:{path:change.path,new_text:null}}).blocked === "nodiff",
+      "a new file or an emptied file is not read as lane 7.2 sends it, or a write without new_text can be allowed");
     // Invisible characters and spaces that are not the plain space are unsafe; other letters are allowed.
     for (const [name, char] of [["no-break space","\u00a0"],["zero-width space","\u200b"],["zero-width joiner","\u200d"],["word joiner","\u2060"],["soft hyphen","\u00ad"],["byte order mark","\ufeff"],["ideographic space","\u3000"],
       ["thin space","\u2009"],["hangul filler","\u3164"],["variation selector","\ufe0f"],["tag character","\u{e0041}"],["private use","\ue000"],["line separator","\u2028"]]) {
@@ -363,6 +368,16 @@
     check(buttons(lookalike).length === 2 && lookalike.querySelector(".ai-ask-odd").textContent.includes("\u0441 (U+0441)") && lookalike.querySelector(".ai-ask-odd").textContent.includes("look like other letters") && !longRun.querySelector(".ai-ask-odd"),"a letter outside ASCII in a path is not pointed out");
     const named = [...longRun.querySelectorAll(".ai-ask-facts dt")].map(node => node.textContent);
     check(named[0] === "Program" && longRun.querySelector(".ai-exact").textContent === "/usr/bin/env" && named[1] === "Command, " + wordy.line.length + " characters" && longRun.querySelectorAll(".ai-exact")[1].textContent === wordy.line,"a long command does not name its program and its length: " + named.join());
+    // A new file, a file made empty and an empty new file, as lane 7.2 sends them.
+    const fresh = {...writeAsk,id:"ask_00000000000000b1",diff:{path:change.path,new_text:"a\nb\n"},fingerprint:print("4")};
+    const wiped = {...writeAsk,id:"ask_00000000000000b2",diff:{path:change.path,old_text:"a\nb\n",new_text:""},fingerprint:print("5")};
+    const nothing = {...writeAsk,id:"ask_00000000000000b3",diff:{path:change.path,new_text:""},fingerprint:print("6")};
+    const noText = {...writeAsk,id:"ask_00000000000000b4",diff:{path:change.path},fingerprint:print("7")};
+    await post("emit",delta(302,"ai.session.asked",[entry(state([running({asks:[fresh,wiped,nothing,noText]}),finished,failed]))]));
+    await until(() => cards().length === 4 && cards()[0].querySelector(".ai-ask-count"),"the new-file requests did not show");
+    const counts = cards().map(card => (card.querySelector(".ai-ask-count")?.textContent || "none") + "/" + buttons(card).length + "/" + [...card.querySelectorAll(".ai-ask-diff .ai-diff-row")].map(node => node.textContent).join(","));
+    check(counts.join("|") === "2 lines put in, 0 lines taken out./2/+a,+b|0 lines put in, 2 lines taken out./2/-a,-b|The file is empty, before and after./2/|none/1/" && cards()[3].querySelector(".ai-ask-fixed").textContent.startsWith("Agentflow did not send the change"),
+      "a new file, an emptied file or an empty new file is shown wrongly: " + counts.join("|"));
     await post("emit",delta(301,"ai.session.asked",[entry(state([running({asks:[hidden]}),finished,failed]))]));
     await until(() => cards().length === 1,"the cards did not go back");
 

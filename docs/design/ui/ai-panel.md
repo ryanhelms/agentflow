@@ -137,11 +137,12 @@ finding.
 An `fs_write` request carries `diff` (`path`, `old_text`, `new_text`, `cut`). The card shows
 it inside **What Agentflow checked**, in a box that scrolls and takes focus: "4 lines put
 in, 1 line taken out", then the lines, with `+` and `-` as text. **Allow once** needs the
-whole change in view. It is absent, and the card says why, when:
+whole change in view. A missing `old_text` is a new file and a missing `cut` is not cut;
+`new_text` may be empty. **Allow once** is absent, and the card says why, when:
 
 | Case | The card says |
 | --- | --- |
-| no `diff` | "Agentflow did not send the change this would write, so it cannot be allowed here." |
+| no `diff`, or a `diff` without `new_text` | "Agentflow did not send the change this would write, so it cannot be allowed here." |
 | `cut`, reason `preview_too_large`, a side over 70,000 characters, or more than 4,000 lines to show | "The change is too large to show in full, so it cannot be allowed here." |
 | the text has a character the page cannot show as it is | "The change has characters this page cannot show as they are (marked �), …" |
 | `diff.path` is not the request's one path | "This console cannot show the whole request as it is, …" |

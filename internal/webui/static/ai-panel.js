@@ -672,7 +672,7 @@
         line.append(element("span", row.op === " " ? "\u00a0" : row.op, "ai-diff-op"), element("span", row.text === "" ? "\u00a0" : row.text));
         pre.append(line);
       }
-      const count = element("p", !added && !removed ? "No line changes." : plural(added, "line") + " put in, " + plural(removed, "line") + " taken out.", "ai-ask-count");
+      const count = element("p", !diff.before && !diff.after ? "The file is empty, before and after." : !added && !removed ? "No line changes." : plural(added, "line") + " put in, " + plural(removed, "line") + " taken out.", "ai-ask-count");
       return [count, pre];
     }
 
@@ -717,7 +717,8 @@
           facts.append(term(long ? "Command, " + number(ask.line.length) + " characters" : "Command", element("code", ask.line, "ai-exact")));
         }
         if (ask.paths.length) facts.append(term(ask.paths.length === 1 ? "File" : "Files", codes(ask.paths)));
-        if (ask.kind === "fs_write" && ask.diff) facts.append(term("Change", ...change(ask)));
+        // A change that arrived without its new text is not drawn: it would read as "nothing changes".
+        if (ask.kind === "fs_write" && ask.diff && ask.blocked !== "nodiff") facts.append(term("Change", ...change(ask)));
         if (ask.kind === "terminal" || ask.cwd) facts.append(term("Runs in", ask.cwd ? element("code", ask.cwd, "ai-exact") : "the worktree's top folder"));
         if (ask.envNames.length) facts.append(term("Sets variables", codes(ask.envNames), element("p", "The agent set values for these. Agentflow does not show or keep the values.", "muted")));
         facts.append(term("Worktree", element("code", item.worktree || "not reported", "ai-exact")));
