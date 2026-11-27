@@ -167,3 +167,20 @@ func TestAISessionAutonomyActions(t *testing.T) {
 		}
 	}
 }
+
+// An explicit level for ai.fs.read is honoured; other read operations stay
+// auto whatever their action says.
+func TestReadActionHonoursExplicitLevel(t *testing.T) {
+	for _, l := range []Level{Suggest, Confirm} {
+		u := &User{Autonomy: Autonomy{Actions: map[string]Level{"ai.fs.read": l, "context": l}}}
+		if d := ResolveAutonomy(u, nil, "read", "ai.fs.read", false); d.Level != l || d.Source != "autonomy.actions.ai.fs.read" {
+			t.Errorf("ai.fs.read %s: %+v", l, d)
+		}
+		if d := ResolveAutonomy(u, nil, "read", "context", false); d.Level != Auto {
+			t.Errorf("context with %s: %+v", l, d)
+		}
+	}
+	if d := ResolveAutonomy(&User{}, nil, "read", "ai.fs.read", false); d.Level != Auto {
+		t.Errorf("ai.fs.read unset: %+v", d)
+	}
+}

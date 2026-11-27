@@ -155,6 +155,17 @@ func resolveAutonomy(user *User, repo *Repo, class, action string, forceConfirm,
 	d.ApprovalWindow = d.Window.String()
 	if class == "read" {
 		d.Level, d.Source = Auto, "read"
+		// A catalog action of class read (ai.fs.read) honours an explicit
+		// level, so a person can make a session's reads ask or stop. No
+		// other read operation changes.
+		if k, ok := DescribeAutonomyAction(action); ok && len(k.Classes) == 1 && k.Classes[0] == "read" {
+			if l := user.Autonomy.Actions[action]; l == Suggest || l == Confirm {
+				d.UserAction, d.Level, d.Source = l, l, "autonomy.actions."+action
+			}
+			if l := repo.Policy.MaxAutonomy.Actions[action]; (l == Suggest || l == Confirm) && l.rank() < d.Level.rank() {
+				d.RepoAction, d.Level, d.Source = l, l, "policy.max_autonomy.actions."+action
+			}
+		}
 		return d
 	}
 	if class != "local" && class != "remote" {
