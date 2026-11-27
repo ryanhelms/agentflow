@@ -259,11 +259,18 @@ func TestAIRunRefusalsReachTheCaller(t *testing.T) {
 	f := newFixture(t)
 	m := resetFake(t)
 	for _, code := range []string{aisession.RefuseAgentStartOff, aisession.RefuseRepoDisabled, aisession.RefusePrimaryCheckout, aisession.RefuseNotReady, aisession.RefusePluginLaunch, aisession.RefuseLimitRunning} {
-		m.refuse = &aisession.Refusal{Code: code, Message: "refused: " + code, Fix: "fix it"}
+		m.refuse = &aisession.Refusal{Code: code, Message: "the session was refused", Fix: "Run agentflow start <task> --worktree."}
 		cs, _ := aiTool(t, f.app, "agentflow_ai_run")
 		text, isErr := callText(t, cs, "agentflow_ai_run", map[string]any{"harness": "fake", "prompt": "x"})
-		if !isErr || !strings.Contains(text, code) {
-			t.Errorf("%s: %s", code, text)
+		if !isErr || !strings.Contains(text, code) || !strings.Contains(text, "agentflow start <task> --worktree") {
+			t.Errorf("tool, %s: %s", code, text)
+		}
+		env := &commandtest.Env{App: f.app, Answer: true}
+		_, inv := recording()
+		err := dispatch(t, env, inv, "ai", "run", "--harness", "fake", "--yes", "x")
+		var r *aisession.Refusal
+		if err == nil || !errors.As(err, &r) || r.Code != code || !strings.Contains(err.Error(), code) || !strings.Contains(err.Error(), "--worktree") {
+			t.Errorf("CLI, %s: %v", code, err)
 		}
 	}
 	if len(m.starts) != 0 {

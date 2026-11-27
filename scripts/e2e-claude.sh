@@ -59,6 +59,7 @@ mkdir -p "$XDG_CACHE_HOME/agentflow/dev" "$AGENTFLOW_HOME"
 # command or a session. The only harness the session checks may ever reach is
 # the fake agent, built here and named e2e-fake (ADR "Phase 7 test guard",
 # step 1). Its --log file records every message it receives.
+mkdir -p "$tmp/bin"
 (cd "$root" && go build -o "$tmp/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp)
 fake_log="$tmp/fake-acp.log"
 write_config() { # write_config <auto_probe> <agent_start> [disabled IDs...]
@@ -240,8 +241,18 @@ session_results=$(jq -r 'select(.type=="user") | .message.content[]? | select(.t
 check "status and run called" jq -e -s '[.[].name | sub(".*__"; "")] | index("agentflow_ai_status") != null and index("agentflow_ai_run") != null' <<<"$session_calls"
 check "no confirm_token passed" jq -e -s 'all(.[]; (.input.confirm_token // "") == "")' <<<"$session_calls"
 check "status lists no sessions" grep -Eq '"sessions": \[\]' <<<"$session_results"
-check "claude-acp refused" grep -Eq 'not_ready|not found|unknown harness' <<<"$session_results"
-check "e2e-fake needs confirmation" grep -q needs_confirmation <<<"$session_results"
+run_result() { # run_result <harness>: the reply to the agentflow_ai_run call for that harness
+  local id
+  id=$(jq -r --arg h "$1" 'select(.name | endswith("__agentflow_ai_run")) | select(.input.harness == $h) | .id' <<<"$session_calls" | head -n1)
+  [ -n "$id" ] || return 0
+  jq -r --arg id "$id" 'select(.type=="user") | .message.content[]? | select(.type=="tool_result" and .tool_use_id == $id) | .content | tostring' "$tmp/7.jsonl"
+}
+claude_acp_result=$(run_result claude-acp)
+fake_result=$(run_result e2e-fake)
+check "claude-acp refused" grep -Eq 'not_ready|not found|unknown harness' <<<"$claude_acp_result"
+no_confirmation() { ! grep -q needs_confirmation <<<"$1"; }
+check "claude-acp did not ask for confirmation" no_confirmation "$claude_acp_result"
+check "e2e-fake needs confirmation" grep -q needs_confirmation <<<"$fake_result"
 # Nothing passed the gate: no session store, no session/new in the fake's
 # log (only the probe's initialize), and a probe record for e2e-fake only.
 check "no session created" test ! -e "$AGENTFLOW_HOME/ai/sessions"

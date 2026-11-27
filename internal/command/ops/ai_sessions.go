@@ -375,15 +375,17 @@ func hostForeground(ctx context.Context, a *app.App, id aisession.ID) error {
 	asks := make(chan aisession.AskRecord, aisession.MaxAsksWaiting)
 	go func() {
 		for ask := range asks {
+			// The lock covers printing only: reading the answer must never
+			// hold up the host's items, a timeout, a cancel or the end.
 			mu.Lock()
 			printAsk(os.Stdout, ask)
+			mu.Unlock()
 			answer := false
 			if ask.CanAllow {
 				answer = strings.HasPrefix(strings.ToLower(askLine(fmt.Sprintf("Allow once? [y/N] (denied at %s): ", ask.ExpiresAt.Local().Format("15:04:05")))), "y")
 			} else {
 				askLine("Press Enter to reject it: ")
 			}
-			mu.Unlock()
 			decision := aisession.Deny
 			if answer && ask.CanAllow {
 				decision = aisession.Allow
@@ -654,7 +656,8 @@ var aiRespondSpec = command.Spec[aiRespondIn, aisession.AnswerResult]{
 		decision := aisession.Deny
 		if in.Decision == decisionAllow {
 			if !in.person || !isPerson(ctx) {
-				return nil, &aisession.Refusal{Code: aisession.AnswerNeedsPerson, Message: "only the user can allow a request"}
+				return nil, &app.AIRefusal{Refusal: &aisession.Refusal{Code: aisession.AnswerNeedsPerson, Message: "only the user can allow a request",
+					Fix: "Ask the user to answer in the console's AI panel, or with agentflow ai respond --allow in their own terminal."}}
 			}
 			decision = aisession.Allow
 		}

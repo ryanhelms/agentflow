@@ -27,6 +27,31 @@ var NewAIManager func(aisession.Options) aisession.Manager
 // ErrNoAISessions: this build cannot run AI sessions.
 var ErrNoAISessions = errors.New("AI sessions are not available in this build of agentflow")
 
+// AIRefusal shows an aisession.Refusal with its code and fix, so both reach
+// the CLI's error line and the tool's error text. errors.As still finds the
+// *aisession.Refusal.
+type AIRefusal struct{ Refusal *aisession.Refusal }
+
+func (e *AIRefusal) Error() string {
+	msg := e.Refusal.Message + " (" + e.Refusal.Code + ")"
+	if e.Refusal.Fix != "" {
+		msg += ". " + e.Refusal.Fix
+	}
+	return msg
+}
+
+func (e *AIRefusal) Unwrap() error { return e.Refusal }
+
+// refused wraps a *aisession.Refusal in err as an AIRefusal.
+func refused(err error) error {
+	var r *aisession.Refusal
+	var done *AIRefusal
+	if err == nil || errors.As(err, &done) || !errors.As(err, &r) {
+		return err
+	}
+	return &AIRefusal{Refusal: r}
+}
+
 func aiManager(o aisession.Options) (aisession.Manager, error) {
 	if NewAIManager == nil {
 		return nil, ErrNoAISessions
@@ -63,9 +88,9 @@ func (a *App) inSession(ctx context.Context) bool {
 // nested is the refusal for a session that asks to start a session. The
 // Manager refuses it too; this check keeps it out of the Manager's hands.
 func nested() error {
-	return &aisession.Refusal{Code: aisession.RefuseNested,
+	return &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.RefuseNested,
 		Message: "an AI session cannot start an AI session",
-		Fix:     "Ask the person to run agentflow ai run in their own terminal."}
+		Fix:     "Ask the person to run agentflow ai run in their own terminal."}}
 }
 
 // startRequest is r in this App's worktree.
@@ -82,7 +107,8 @@ func (a *App) AIPlan(ctx context.Context, o aisession.Options, r AIRunRequest) (
 	if err != nil {
 		return aisession.Plan{}, err
 	}
-	return m.Prepare(ctx, a.startRequest(r))
+	p, err := m.Prepare(ctx, a.startRequest(r))
+	return p, refused(err)
 }
 
 // AIRun starts the session: the Manager checks again, writes the record
@@ -98,7 +124,7 @@ func (a *App) AIRun(ctx context.Context, o aisession.Options, r AIRunRequest) (A
 	}
 	s, err := m.Start(ctx, a.startRequest(r))
 	if err != nil {
-		return AIRunResult{}, err
+		return AIRunResult{}, refused(err)
 	}
 	detached := s.Host.Mode != aisession.HostForeground
 	return AIRunResult{Session: s.ID, State: s.State, Harness: s.Harness, Worktree: tildePath(s.Worktree), Detached: detached,
@@ -111,7 +137,8 @@ func (a *App) AIHost(ctx context.Context, o aisession.Options, id aisession.ID, 
 	if err != nil {
 		return aisession.Session{}, err
 	}
-	return m.Host(ctx, id, h)
+	s, err := m.Host(ctx, id, h)
+	return s, refused(err)
 }
 
 // AISessionStatus is one session with its waiting asks.
@@ -197,7 +224,7 @@ func (a *App) AIStatus(ctx context.Context, o aisession.Options, id aisession.ID
 	}
 	s, asks, err := m.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, refused(err)
 	}
 	items, next, err := m.Items(ctx, id, since, MaxStatusItems)
 	if err != nil {
@@ -215,20 +242,22 @@ func (a *App) AISession(ctx context.Context, o aisession.Options, id aisession.I
 	if err != nil {
 		return aisession.Session{}, nil, err
 	}
-	return m.Get(ctx, id)
+	s, asks, err := m.Get(ctx, id)
+	return s, asks, refused(err)
 }
 
 // AIRespond answers an ask. The answer rules (who may allow) are the
 // Manager's; a session never answers.
 func (a *App) AIRespond(ctx context.Context, o aisession.Options, r aisession.AnswerRequest) (aisession.AnswerResult, error) {
 	if a.inSession(ctx) {
-		return aisession.AnswerResult{}, &aisession.Refusal{Code: aisession.AnswerSelf, Message: "an AI session cannot answer requests"}
+		return aisession.AnswerResult{}, &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.AnswerSelf, Message: "an AI session cannot answer requests"}}
 	}
 	m, err := aiManager(o)
 	if err != nil {
 		return aisession.AnswerResult{}, err
 	}
-	return m.Answer(ctx, r)
+	res, err := m.Answer(ctx, r)
+	return res, refused(err)
 }
 
 // AICancelResult is what ai cancel returns.
@@ -240,7 +269,7 @@ type AICancelResult struct {
 // AICancelPlan is the confirmation summary of ai cancel.
 func (a *App) AICancelPlan(ctx context.Context, o aisession.Options, id aisession.ID) (map[string]any, error) {
 	if a.inSession(ctx) {
-		return nil, &aisession.Refusal{Code: aisession.RefuseNested, Message: "an AI session cannot cancel a session"}
+		return nil, &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.RefuseNested, Message: "an AI session cannot cancel a session"}}
 	}
 	s, _, err := a.AISession(ctx, o, id)
 	if err != nil {
@@ -252,7 +281,7 @@ func (a *App) AICancelPlan(ctx context.Context, o aisession.Options, id aisessio
 // AICancel asks the session's host to cancel it.
 func (a *App) AICancel(ctx context.Context, o aisession.Options, id aisession.ID) (AICancelResult, error) {
 	if a.inSession(ctx) {
-		return AICancelResult{}, &aisession.Refusal{Code: aisession.RefuseNested, Message: "an AI session cannot cancel a session"}
+		return AICancelResult{}, &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.RefuseNested, Message: "an AI session cannot cancel a session"}}
 	}
 	m, err := aiManager(o)
 	if err != nil {
@@ -260,7 +289,7 @@ func (a *App) AICancel(ctx context.Context, o aisession.Options, id aisession.ID
 	}
 	s, err := m.Cancel(ctx, id)
 	if err != nil {
-		return AICancelResult{}, err
+		return AICancelResult{}, refused(err)
 	}
 	return AICancelResult{Session: s.ID, State: s.State}, nil
 }
