@@ -95,7 +95,14 @@ one of its own tool calls, agentflow decides in this order: the never-list, the
 worktree boundary, your permission rules, then your autonomy policy. When nothing
 allows the request, it is denied.
 
-- Reads inside the worktree follow your policy.
+- Reads inside the worktree follow your policy. Your own `fs_read` allow rule
+  beats your own `confirm` level for `ai.fs.read`: a path the rule matches is
+  read without asking.
+- A `terminal` rule matches the program's name only, never its arguments, so
+  allowing a program allows everything it can do: a rule for `cat` lets the
+  harness read any file `cat` can open, and a rule for `git` lets it run any git
+  command the never-list and the boundary do not refuse. Allow only programs you
+  would let do anything they are able to.
 - Writes and commands follow your policy, but a session an agent started asks you
   for every request except reads inside the worktree.
 - Writes to control files (`.agentflow/`, `.claude/`, `.github/workflows/`,
@@ -108,10 +115,13 @@ allows the request, it is denied.
   worktree always asks you (`unicode_name`): those file systems open, for
   example, `id_rſa` as `id_rsa`, so no list can tell what it names.
 - Right before a read or write, agentflow checks again that the path still
-  leads where it did. If it changed, the request is denied (`changed`).
+  leads where it did. If it changed, the request is denied (`changed`). A read
+  must open the very file agentflow checked, and a write goes into the very
+  folder it checked, even when a link is swapped in afterwards.
 - Anything outside the worktree, in `.git` or in a nested repository is denied.
-- A command that names the agentflow home, the console registry or the session
-  store is denied, whatever your rules say. Agentflow compares the names and the
+- A command that names the agentflow home (the session's and, when
+  `AGENTFLOW_HOME` points elsewhere, your account's own `~/.agentflow`), the
+  console registry or the session store is denied, whatever your rules say. Agentflow compares the names and the
   files they open, so a link or a folded spelling counts too. It is still a text
   check: a path built while the command runs gets past it.
 - A command that sets any environment variable of its own always asks you, whatever
@@ -227,9 +237,13 @@ account's own agentflow home (`~/.agentflow`, found from your account, not from
 - The session limits and the time limits take the lower value.
 - A harness you turned off stays off.
 - Every autonomy level takes the lower one.
-- Your `deny` and `ask` rules apply first; your `allow` rules there never apply
-  on their own.
-- The running, per-worktree and hourly limits count the sessions of both homes.
+- Your `deny` and `ask` rules apply first. No `allow` rule applies, neither
+  yours nor one in the other home, so a rule there cannot skip a request your
+  settings ask about.
+- The running, per-worktree and hourly limits count the sessions of every home:
+  a session in another home leaves a small record in your own home (its ID,
+  worktree, state and times, never its prompt or transcript), and every start
+  counts those records.
 
 Such a session is still not shown in your console, which reads your own home.
 
