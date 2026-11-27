@@ -256,6 +256,7 @@ const (
 	VerdictHardlink         = "hardlink"
 	VerdictNotFound         = "not_found" // answered -32002
 	VerdictIO               = "io"
+	VerdictChanged          = "changed" // the file changed since its preview was shown
 	// never-lists ("Phase 7 terminals")
 	VerdictNeverList          = "never_list"
 	VerdictAgentflowInSession = "agentflow_in_session"
@@ -296,6 +297,9 @@ const (
 	ReasonRule              = "rule"
 	ReasonGate              = "gate"
 	ReasonCeiling           = "ceiling"
+	// ReasonPreviewTooLarge: an fs_write whose preview is cut or not text;
+	// no one can allow it.
+	ReasonPreviewTooLarge = "preview_too_large"
 )
 
 // Gate actions and their classes ("Per request kind").
@@ -320,7 +324,8 @@ const CeilingConfirm = "confirm"
 // session's host writes it. Fingerprint is the SHA-256 of the canonical
 // ask; every answer is bound to it and to ExpiresAt.
 type AskRecord struct {
-	ID         string                 `json:"id"` // "ask_" and 16 hex characters
+	// ID is "ask_" and 16 lowercase hex characters (^ask_[0-9a-f]{16}$).
+	ID         string                 `json:"id"`
 	Session    ID                     `json:"session"`
 	Kind       Kind                   `json:"kind"`
 	ToolCallID string                 `json:"tool_call,omitempty"`
@@ -333,14 +338,38 @@ type AskRecord struct {
 	Cwd      string   `json:"cwd,omitempty"`  // worktree-relative
 	EnvNames []string `json:"env_names,omitempty"`
 	Size     int64    `json:"size,omitempty"`
-	Reason   string   `json:"reason"`
+	// Diff, for an fs_write ask, is what the write would change: the
+	// current content and the exact bytes that will be written, each at
+	// most MaxPreview. It is not redacted (the person judges the real
+	// content), lives only in this 0600 file, and is removed when the ask is
+	// answered, expires or the session ends: never in the transcript, an
+	// event, a log or the audit. NewSHA256 is the SHA-256 of the content
+	// (covered by the fingerprint); agentflow writes exactly those bytes.
+	Diff      *AskDiff `json:"diff,omitempty"`
+	NewSHA256 string   `json:"new_sha256,omitempty"`
+	Reason    string   `json:"reason"`
 	// CanAllow is false for a permission request without an allow_once
 	// option: the ask then shows only Reject.
-	CanAllow    bool      `json:"can_allow"`
-	CreatedAt   time.Time `json:"created_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Fingerprint string    `json:"fingerprint"` // hex SHA-256
+	CanAllow  bool      `json:"can_allow"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	// Fingerprint is the SHA-256 of the canonical ask as 64 lowercase hex
+	// characters (^[0-9a-f]{64}$).
+	Fingerprint string `json:"fingerprint"`
 }
+
+// AskDiff is an fs_write ask's preview. Cut is set when either text was
+// longer than MaxPreview or is not valid UTF-8: the ask then cannot be
+// allowed (CanAllow false, reason preview_too_large).
+type AskDiff struct {
+	Path    string `json:"path"`
+	OldText string `json:"old_text,omitempty"` // empty for a new file
+	NewText string `json:"new_text"`
+	Cut     bool   `json:"cut,omitempty"`
+}
+
+// MaxPreview bounds each text of an AskDiff.
+const MaxPreview = 256 << 10
 
 // AnswerRecord is asks/<ask>.answer.json, created with O_EXCL: the first
 // answer wins. An allow carries MAC, the hex HMAC-SHA256 of the
@@ -437,8 +466,16 @@ type Usage struct {
 }
 
 type Counters struct {
-	Updates, ToolCalls, Asks, Allowed, Denied, Unasked, Terminals int
-	BytesRead, BytesWritten, TranscriptBytes                      int64
+	Updates         int   `json:"updates"`
+	ToolCalls       int   `json:"tool_calls"`
+	Asks            int   `json:"asks"`
+	Allowed         int   `json:"allowed"`
+	Denied          int   `json:"denied"`
+	Unasked         int   `json:"unasked"`
+	Terminals       int   `json:"terminals"`
+	BytesRead       int64 `json:"bytes_read"`
+	BytesWritten    int64 `json:"bytes_written"`
+	TranscriptBytes int64 `json:"transcript_bytes"`
 }
 
 // Item is one transcript line.

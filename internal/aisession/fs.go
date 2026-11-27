@@ -1,0 +1,202 @@
+package aisession
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"io/fs"
+	"os"
+	"path"
+	"strings"
+	"unicode/utf8"
+)
+
+// files does every file operation of a session through one os.Root opened
+// at the worktree root's resolved path ("Phase 7 file access", step 6): a
+// link that leaves the root at the moment of use is refused, so a link
+// swapped in after the checks still cannot escape.
+type files struct {
+	root *os.Root
+}
+
+func openFiles(w worktree) (*files, error) {
+	r, err := os.OpenRoot(w.real)
+	if err != nil {
+		return nil, err
+	}
+	return &files{root: r}, nil
+}
+
+func (f *files) Close() error { return f.root.Close() }
+
+// fsError is a refused or failed file operation, with its verdict code.
+type fsError struct{ code string }
+
+func (e *fsError) Error() string { return "aisession: file access: " + e.code }
+
+func fsCode(err error) string {
+	var fe *fsError
+	if errors.As(err, &fe) {
+		return fe.code
+	}
+	return VerdictIO
+}
+
+func rootErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, fs.ErrNotExist):
+		return &fsError{VerdictNotFound}
+	case strings.Contains(err.Error(), "path escapes from parent"):
+		return &fsError{VerdictOutsideWorktree}
+	}
+	return &fsError{VerdictIO}
+}
+
+// read returns the content of rel: a regular file of at most MaxFileBytes
+// of valid UTF-8, optionally from line (1-based) for limit lines.
+func (f *files) read(rel string, line, limit *uint32) (string, int64, error) {
+	name := path.Clean(rel)
+	file, err := f.root.Open(name)
+	if err != nil {
+		return "", 0, rootErr(err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return "", 0, rootErr(err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", 0, &fsError{VerdictNotRegular}
+	}
+	if info.Size() > MaxFileBytes {
+		return "", 0, &fsError{VerdictTooLarge}
+	}
+	b, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
+	if err != nil {
+		return "", 0, rootErr(err)
+	}
+	if len(b) > MaxFileBytes {
+		return "", 0, &fsError{VerdictTooLarge}
+	}
+	if !utf8.Valid(b) {
+		return "", 0, &fsError{VerdictNotText}
+	}
+	n := int64(len(b))
+	s := string(b)
+	if line != nil || limit != nil {
+		s = lines(s, line, limit)
+	}
+	return s, n, nil
+}
+
+func lines(s string, line, limit *uint32) string {
+	all := strings.SplitAfter(s, "\n")
+	start := 0
+	if line != nil && *line > 1 {
+		start = int(*line) - 1
+	}
+	if start >= len(all) {
+		return ""
+	}
+	end := len(all)
+	if limit != nil && start+int(*limit) < end {
+		end = start + int(*limit)
+	}
+	return strings.Join(all[start:end], "")
+}
+
+// write replaces rel with content: at most MaxFileBytes; the final
+// component is not a link; an existing file has one link only (Unix);
+// parents are created inside the root (0755); the file keeps its mode or
+// gets 0644; the content goes to a temporary file in the same directory,
+// then is renamed through the root. It returns the content's SHA-256.
+func (f *files) write(rel, content string) (string, error) {
+	if len(content) > MaxFileBytes {
+		return "", &fsError{VerdictTooLarge}
+	}
+	name := path.Clean(rel)
+	mode := os.FileMode(0o644)
+	switch info, err := f.root.Lstat(name); {
+	case err == nil:
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", &fsError{VerdictLink}
+		}
+		if !info.Mode().IsRegular() {
+			return "", &fsError{VerdictNotRegular}
+		}
+		if links(info) > 1 {
+			return "", &fsError{VerdictHardlink}
+		}
+		mode = info.Mode().Perm()
+	case errors.Is(err, fs.ErrNotExist):
+	default:
+		return "", rootErr(err)
+	}
+	if dir := path.Dir(name); dir != "." {
+		if err := f.root.MkdirAll(dir, 0o755); err != nil {
+			return "", rootErr(err)
+		}
+	}
+	tmp := path.Join(path.Dir(name), ".agentflow-write-"+randomHex(8))
+	file, err := f.root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return "", rootErr(err)
+	}
+	_, werr := io.Copy(file, bytes.NewReader([]byte(content)))
+	cerr := file.Close()
+	if werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = f.root.Chmod(tmp, mode)
+	}
+	if werr == nil {
+		// Checked again right before the rename: a link or hard link made
+		// meanwhile is refused.
+		if info, err := f.root.Lstat(name); err == nil && (info.Mode()&os.ModeSymlink != 0 || links(info) > 1) {
+			werr = &fsError{VerdictLink}
+		}
+	}
+	if werr == nil {
+		werr = f.root.Rename(tmp, name)
+	}
+	if werr != nil {
+		_ = f.root.Remove(tmp)
+		var fe *fsError
+		if errors.As(werr, &fe) {
+			return "", werr
+		}
+		return "", rootErr(werr)
+	}
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// state is what rel holds now: whether it exists, the SHA-256 of its
+// content and the content (at most MaxFileBytes + 1 bytes read). A file
+// that cannot be read as a regular file has ok false.
+func (f *files) state(rel string) (exists bool, sum string, content []byte, ok bool) {
+	name := path.Clean(rel)
+	file, err := f.root.Open(name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, "", nil, true
+	}
+	if err != nil {
+		return false, "", nil, false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return true, "", nil, false
+	}
+	b, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
+	if err != nil {
+		return true, "", nil, false
+	}
+	s := sha256.Sum256(b)
+	return true, hex.EncodeToString(s[:]), b, true
+}
