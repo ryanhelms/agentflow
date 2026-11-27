@@ -33,7 +33,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := resolveDir(s.Dir, root, s.Env, len(s.AllowEnv) > 0)
+	dir, err := resolveDir(s.Dir, root, s.Env, s.DataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -145,11 +145,26 @@ func resolveExecutable(path, root string) (exe, rootReal string, err error) {
 }
 
 // resolveDir returns the working directory: Root by default, otherwise a
-// directory inside Root or inside the child's data directory (its
-// AGENTFLOW_PLUGIN_DATA, else the parent of its HOME). With realHome
-// (LaunchSpec.AllowEnv is set) HOME may be the person's own home, so its
-// parent is not a data directory.
-func resolveDir(dir, root string, env []string, realHome bool) (string, error) {
+// directory inside Root or inside the child's data directory. With
+// dataDir set (LaunchSpec.DataDir) that is the only data directory: it must
+// be an absolute, existing directory, and nothing is derived from env.
+// Without it the data directory is the child's AGENTFLOW_PLUGIN_DATA, else
+// the parent of its HOME.
+func resolveDir(dir, root string, env []string, dataDir string) (string, error) {
+	var data string
+	if dataDir != "" {
+		if !filepath.IsAbs(dataDir) {
+			return "", errors.New("jsonrpc: launch: the data directory must be absolute")
+		}
+		real, err := filepath.EvalSymlinks(dataDir)
+		if err != nil {
+			return "", fmt.Errorf("jsonrpc: launch: resolve data directory: %w", err)
+		}
+		if info, err := os.Stat(real); err != nil || !info.IsDir() {
+			return "", errors.New("jsonrpc: launch: the data directory is not a directory")
+		}
+		data = real
+	}
 	if dir == "" {
 		return root, nil
 	}
@@ -166,22 +181,27 @@ func resolveDir(dir, root string, env []string, realHome bool) (string, error) {
 	if within(real, root) {
 		return real, nil
 	}
-	if data := dataDir(env, realHome); data != "" {
-		if dataReal, err := filepath.EvalSymlinks(data); err == nil && within(real, dataReal) {
-			return real, nil
+	if data == "" {
+		if d := envDataDir(env); d != "" {
+			if dReal, err := filepath.EvalSymlinks(d); err == nil {
+				data = dReal
+			}
 		}
+	}
+	if data != "" && within(real, data) {
+		return real, nil
 	}
 	return "", errors.New("jsonrpc: launch: the working directory is outside the root and the data directory")
 }
 
-func dataDir(env []string, realHome bool) string {
+func envDataDir(env []string) string {
 	var home string
 	for _, kv := range env {
 		name, value, _ := strings.Cut(kv, "=")
 		switch {
 		case strings.EqualFold(name, EnvPluginData):
 			return value
-		case !realHome && strings.EqualFold(name, EnvHome) && filepath.IsAbs(value):
+		case strings.EqualFold(name, EnvHome) && filepath.IsAbs(value):
 			home = filepath.Dir(value)
 		}
 	}

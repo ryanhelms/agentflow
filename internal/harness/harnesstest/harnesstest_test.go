@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/harness/harnesstest"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 )
@@ -52,6 +53,9 @@ func TestPATHSetsOnlyTemporaryDirectories(t *testing.T) {
 		if !strings.HasPrefix(v, tmp) {
 			t.Errorf("%s = %q is not temporary", name, os.Getenv(name))
 		}
+	}
+	if got, err := config.HomeDir(); err != nil || got != home {
+		t.Fatalf("config.HomeDir() = %q, %v; want the harnesstest home %s", got, err, home)
 	}
 	if os.Getenv("HOME") == home {
 		t.Error("HOME and AGENTFLOW_HOME are the same directory")

@@ -108,7 +108,7 @@ func Run(ctx context.Context, s LaunchSpec, maxStdout int) (RunResult, error) {
 	if err != nil {
 		return RunResult{}, err
 	}
-	dir, err := resolveDir(s.Dir, root, s.Env, len(s.AllowEnv) > 0)
+	dir, err := resolveDir(s.Dir, root, s.Env, s.DataDir)
 	if err != nil {
 		return RunResult{}, err
 	}

@@ -324,31 +324,81 @@ func TestAllowEnvAddsOnlyListedNames(t *testing.T) {
 	}
 }
 
-// With AllowEnv set HOME may be the person's real home, so a working
-// directory beside it (anywhere under its parent) is no longer accepted as
-// the data directory.
-func TestAllowEnvDoesNotTrustHOMEForDir(t *testing.T) {
+// TestDataDirStatusProfile is the sign-in status profile's layout: HOME is
+// the person's real home, DataDir is <home>/harnesses/<id> and Dir its
+// status directory. With DataDir set, HOME's parent never counts as a data
+// directory, whether AllowEnv is empty or not.
+func TestDataDirStatusProfile(t *testing.T) {
 	base := t.TempDir()
-	home := filepath.Join(base, "me")
-	repo := filepath.Join(base, "work", "repo")
-	for _, d := range []string{home, repo} {
+	home := filepath.Join(base, "me") // the person's real home
+	agentflowHome := filepath.Join(home, ".agentflow")
+	data := filepath.Join(agentflowHome, "harnesses", "claude-acp")
+	status := filepath.Join(data, "status")
+	repo := filepath.Join(base, "work", "repo") // beside HOME, under its parent
+	outside := t.TempDir()
+	for _, d := range []string{status, repo, outside} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
+	escape := filepath.Join(data, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Skipf("symbolic links: %v", err)
+	}
+
+	for _, allow := range [][]string{nil, {"USER"}} {
+		s := runSpec(t, "run-pwd")
+		s.Env = append(withoutName(withoutName(s.Env, "HOME"), jsonrpc.EnvPluginData), "HOME="+home, "USER=me")
+		if allow == nil {
+			s.Env = withoutName(s.Env, "USER")
+		}
+		s.AllowEnv = allow
+		s.DataDir = data
+
+		s.Dir = status
+		res, err := jsonrpc.Run(context.Background(), s, 4096)
+		want, _ := filepath.EvalSymlinks(status)
+		if err != nil || string(res.Stdout) != want {
+			t.Fatalf("AllowEnv %v: status directory: %q, %v", allow, res.Stdout, err)
+		}
+		for name, dir := range map[string]string{"under HOME's parent": repo, "link out of DataDir": escape, "HOME itself": home} {
+			s.Dir = dir
+			if _, err := jsonrpc.Run(context.Background(), s, 64); err == nil {
+				t.Errorf("AllowEnv %v: %s was accepted", allow, name)
+			}
+			if p, err := jsonrpc.Launch(context.Background(), s); err == nil {
+				_ = p.Kill()
+				<-p.Exited()
+				t.Errorf("AllowEnv %v: Launch accepted %s", allow, name)
+			}
+		}
+	}
+
+	// Without DataDir the behaviour is as before: HOME's parent counts.
 	s := runSpec(t, "run-pwd")
 	s.Env = append(withoutName(withoutName(s.Env, "HOME"), jsonrpc.EnvPluginData), "HOME="+home)
 	s.Dir = repo
 	if _, err := jsonrpc.Run(context.Background(), s, 64); err != nil {
-		t.Fatalf("without AllowEnv (unchanged behaviour): %v", err)
+		t.Fatalf("without DataDir (unchanged behaviour): %v", err)
 	}
-	s.AllowEnv = []string{"USER"}
-	if _, err := jsonrpc.Run(context.Background(), s, 64); err == nil {
-		t.Fatal("with AllowEnv, a Dir under HOME's parent was accepted")
+}
+
+func TestDataDirMustBeAnExistingAbsoluteDirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	s.Env = append(s.Env, jsonrpc.EnvPluginData+"="+filepath.Dir(repo))
-	if _, err := jsonrpc.Run(context.Background(), s, 64); err != nil {
-		t.Fatalf("with AllowEnv, a Dir in AGENTFLOW_PLUGIN_DATA: %v", err)
+	for _, bad := range []string{"relative/data", filepath.Join(t.TempDir(), "missing"), file} {
+		s := runSpec(t, "run-pwd")
+		s.DataDir = bad
+		if _, err := jsonrpc.Run(context.Background(), s, 64); err == nil {
+			t.Errorf("DataDir %q accepted by Run", bad)
+		}
+		if p, err := jsonrpc.Launch(context.Background(), s); err == nil {
+			_ = p.Kill()
+			<-p.Exited()
+			t.Errorf("DataDir %q accepted by Launch", bad)
+		}
 	}
 }
 

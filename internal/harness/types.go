@@ -172,6 +172,9 @@ type Harness struct {
 	// "registry", "agentflow", "plugin:<id>", "personal".
 	Sources     []string `json:"sources"`
 	Quarantined bool     `json:"quarantined,omitempty"`
+	// QuarantineReason is the registry's reason, clamped and sanitized like
+	// a description.
+	QuarantineReason string `json:"quarantine_reason,omitempty"`
 	// Command, Args: what is (or would be) started. Path: where Command was
 	// found; a path under the OS home is shown as "~/...". Never in events.
 	Command string   `json:"command,omitempty"`
