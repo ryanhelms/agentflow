@@ -52,76 +52,21 @@ func TestHarnessesDemo(t *testing.T) {
 	}
 }
 
-// harnessesWiring is what app.js needs to feed the page: the screen, the
-// "harnesses" state from the stream, the stream's status and the page
-// object. Each pair is text in app.js and the text that replaces it.
-//
-// app.js is not one of this lane's files, so until it has these lines the
-// fixture serves a copy with them applied. wireHarnesses leaves an app.js
-// that already creates the page as it is.
-var harnessesWiring = [][2]string{
-	{`plugins: "plugins page", `, `plugins: "plugins page", harnesses: "harnesses page", `},
-	{`plugins: "plugins", configuration: "configuration"`, `plugins: "plugins", harnesses: "harnesses", configuration: "configuration"`},
-	{"  pluginsPage.tick();\n", "  pluginsPage.tick();\n  harnessesPage.tick();\n"},
-	{`    showRepository("plugins",states.find(repositoryState("plugins"))?.state ?? null);` + "\n",
-		`    showRepository("plugins",states.find(repositoryState("plugins"))?.state ?? null);` + "\n" +
-			`    showRepository("harnesses",states.find(repositoryState("harnesses"))?.state ?? null);` + "\n"},
-	{`["activity","approvals","timeline","plugins"]`, `["activity","approvals","timeline","plugins","harnesses"]`},
-	{`timeline: null, plugins: null};`, `timeline: null, plugins: null, harnesses: null};`},
-	{"const panels = AgentflowPanels.createPanels({", `// The Harnesses page (docs/design/ui/harnesses.md). Its values are the
-// repository's "harnesses" state; its requests are probe and check.
-const harnessesPage = AgentflowHarnesses.createHarnesses({
-  root: document, request, announce, settingsRoute: groupRoute,
-  visible: () => !$("console-shell").hidden && pages[destination().screen] === "harnesses"
-});
-const panels = AgentflowPanels.createPanels({`},
-	{`  else if (name === "plugins") pluginsPage.show(liveRepository.plugins,flash);` + "\n",
-		`  else if (name === "plugins") pluginsPage.show(liveRepository.plugins,flash);` + "\n" +
-			`  else if (name === "harnesses") harnessesPage.show(liveRepository.harnesses,flash);` + "\n"},
-	{`present: Boolean(liveRepository.plugins)});` + "\n",
-		`present: Boolean(liveRepository.plugins)});` + "\n" +
-			`  harnessesPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.harnesses)});` + "\n"},
-	{`    renderRepository("plugins");` + "\n", `    renderRepository("plugins");` + "\n" + `    renderRepository("harnesses");` + "\n"},
-	{"  liveRepository.plugins = null;\n", "  liveRepository.plugins = null;\n  liveRepository.harnesses = null;\n"},
-}
-
-// wireHarnesses returns app.js with harnessesWiring applied. It fails when
-// a line it replaces is missing or not unique, so a change to app.js that
-// breaks the wiring shows here.
-func wireHarnesses(t *testing.T, app string) string {
-	t.Helper()
-	if strings.Contains(app, "AgentflowHarnesses") {
-		return app
-	}
-	for _, pair := range harnessesWiring {
-		if n := strings.Count(app, pair[0]); n != 1 {
-			t.Fatalf("app.js has %d places for the Harnesses wiring %q, want 1", n, pair[0])
-		}
-		app = strings.Replace(app, pair[0], pair[1], 1)
-	}
-	return app
-}
-
-// The wiring applies to the app.js of this tree, or app.js already has it.
-func TestHarnessesWiringApplies(t *testing.T) {
-	app, err := assets.ReadFile("static/app.js")
+// The Harnesses page is a console screen: agentflow ui --screen harnesses
+// and the reconnect screen's command reach it.
+func TestHarnessesDestination(t *testing.T) {
+	dest, err := (Destination{Screen: "harnesses"}).Normalize("overview")
 	if err != nil {
 		t.Fatal(err)
 	}
-	wired := wireHarnesses(t, string(app))
-	for _, want := range []string{"AgentflowHarnesses.createHarnesses(", `harnesses: "harnesses"`, "harnessesPage.show(", "harnessesPage.status(", "harnessesPage.tick()"} {
-		if !strings.Contains(wired, want) {
-			t.Errorf("the wired app.js lacks %q", want)
-		}
+	if got := dest.command(); got != "agentflow ui --screen harnesses" {
+		t.Fatalf("command = %q", got)
 	}
-	page, err := assets.ReadFile("static/index.html")
-	if err != nil {
-		t.Fatal(err)
+	if got := dest.Fragment(); got != "screen=harnesses" {
+		t.Fatalf("fragment = %q", got)
 	}
-	for _, want := range []string{`<script src="harnesses.js" defer></script>`, `id="page-harnesses"`, `data-page="harnesses"`} {
-		if !strings.Contains(string(page), want) {
-			t.Errorf("index.html lacks %q", want)
-		}
+	if _, err := (Destination{Screen: "harnesses", Role: "secops"}).Normalize("overview"); err == nil {
+		t.Fatal("a role was accepted on the harnesses screen")
 	}
 }
 
@@ -202,30 +147,20 @@ func harnessesConsoleFixture(t *testing.T, mux *http.ServeMux, origin, checksFil
 	worktree.HandleFunc("POST /api/harnesses/probe", endpoints.serve("probe", s.authorized))
 	worktree.HandleFunc("POST /api/harnesses/check", endpoints.serve("check", s.authorized))
 
-	read := func(name string) []byte {
-		data, err := assets.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return data
+	page, err := assets.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
 	}
-	page := string(read("static/index.html"))
-	app := wireHarnesses(t, string(read("static/app.js")))
 	checks, err := os.ReadFile(checksFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	worktree.HandleFunc("GET /app.js", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = io.WriteString(w, app)
-	})
 	worktree.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		// The console's own policy, so the page is checked under it: no
 		// inline style or script, and nothing loaded from another origin.
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-		_, _ = io.WriteString(w, strings.Replace(page, "</head>", `<script src="/fixture/checks.js" defer></script></head>`, 1))
+		_, _ = io.WriteString(w, strings.Replace(string(page), "</head>", `<script src="/fixture/checks.js" defer></script></head>`, 1))
 	})
 	mux.HandleFunc("GET /fixture/checks.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")

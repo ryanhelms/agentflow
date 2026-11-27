@@ -101,7 +101,7 @@
         kind: pick(item.kind, kinds, "unknown"),
         state: pick(item.state, states, "unknown"), code: plainCode.test(text(item.code)) ? item.code : "",
         sources: list(item.sources).map(source => shown(source, 80)).filter(Boolean).slice(0, 8),
-        quarantined: item.quarantined === true,
+        quarantined: item.quarantined === true, quarantineReason: shown(item.quarantine_reason, 256),
         command: shown(item.command, 256), args: list(item.args).filter(arg => typeof arg === "string").slice(0, 16).map(arg => shown(arg, 256)),
         path: shown(item.path, 1024),
         base: base ? {name: shown(base.name, 64), command: shown(base.command, 256), path: shown(base.path, 1024)} : null,
@@ -537,7 +537,10 @@
       }
 
       const notes = card.querySelector('[data-part="notes"]');
-      const noteList = [...new Set(harness.notes.concat(harness.quarantined ? ["quarantined"] : []))];
+      // The reason is registry text: shown after agentflow's own sentence, as text.
+      const quarantine = harness.quarantineReason ? "The ACP registry has quarantined this agent: " + harness.quarantineReason : "";
+      const noted = harness.notes.concat(harness.quarantined || quarantine ? ["quarantined"] : []);
+      const noteList = [...new Set(noted)].map(note => note === "quarantined" && quarantine ? quarantine : note);
       notes.hidden = !noteList.length;
       fill(notes, JSON.stringify(noteList), () => noteList.map(note => element("li", noteCodes[note] || note)));
 
@@ -836,10 +839,6 @@
     for (const link of options.root.querySelectorAll("#page-harnesses a[data-settings]")) link.setAttribute("href", settingsRoute());
     document.addEventListener("visibilitychange", check);
     (options.view || scope).addEventListener("focus", check);
-    // The rail entry stays hidden until the console creates the page, so it
-    // never leads to a page that nothing feeds.
-    const entry = options.root.querySelector('nav a[data-page="harnesses"]');
-    if (entry) entry.hidden = false;
 
     return {
       show, status, tick, check,

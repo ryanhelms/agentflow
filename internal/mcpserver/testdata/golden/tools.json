@@ -2010,7 +2010,7 @@
           "type": "string"
         },
         "screen": {
-          "description": "Console screen: overview, providers (default for chat), autonomy, plugins, configuration, or handoff.",
+          "description": "Console screen: overview, providers (default for chat), autonomy, plugins, harnesses, configuration, or handoff.",
           "type": "string"
         }
       },

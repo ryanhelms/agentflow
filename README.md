@@ -561,7 +561,8 @@ harness found, or one card; the results arrive over the event stream. The header
 shows the pinned registry copy, whether automatic probes are on, the PATH entries
 Agentflow skipped and any definition it refused. The page installs nothing and
 changes no setting: automatic probes, the sign-in check and harness overrides
-are on the Settings page, in the AI harnesses group.
+are on the Settings page, in the AI harnesses group. `agentflow ui --screen
+harnesses` opens the page.
 [Harnesses page design](docs/design/ui/harnesses.md)
 
 The **Configuration** page edits the other registered files (provider

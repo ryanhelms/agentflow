@@ -10,6 +10,7 @@ The page follows [live stream patterns](live-stream.md) for everything it shows.
 | --- | --- |
 | `static/harnesses.js` | the page: the state reader, the groups and cards, the probe and check requests |
 | `static/index.html` | the rail entry, `#page-harnesses` and the script tag |
+| `static/app.js` | creates the page and feeds it the `harnesses` state |
 | `static/style.css` | every rule of the page (`hn-`), tokens only, and the rail entry's icon |
 
 ## Everything shown comes from the stream
@@ -62,7 +63,7 @@ highlights survive.
 | Runs, Found at, Base CLI | the command and its arguments, the path (`~/…`), and for an adapter its base CLI and where it is |
 | Fix | Agentflow's text for the state, the command with **Copy**, and the link. A ready harness has none |
 | Sign-in | the verdict, when it was checked, and **How to sign in** with each method |
-| Notes | `registry_env_ignored`, `quarantined`, or a note's own text |
+| Notes | `registry_env_ignored`; "The ACP registry has quarantined this agent", with `quarantine_reason` after a colon when the report sends one; or a note's own text |
 | Detection details | the state and its code, the probe result and time, the layers that define the harness, the ACP protocol version and agent, what it supports and what it does not |
 | **Probe now** | probes this harness (not shown for an adapter that is not installed) |
 
@@ -181,19 +182,14 @@ const harnessesPage = AgentflowHarnesses.createHarnesses({
 });
 ```
 
-It also needs `harnesses` in `screenNames` and `pages`, `showRepository("harnesses")` from
-`onSnapshot` and `onDelta`, `harnessesPage.show` in `renderRepository`,
-`harnessesPage.status` in `renderStream`, `harnessesPage.tick()` in `showPage`, and the
-reset on **Resync**. The `harnesses` state has no topic: it rides in the repository's frames
-(ADR, "Phase 6 harnesses projection").
+`harnesses` is in `screenNames` and `pages`. The state arrives through
+`showRepository("harnesses")` from `onSnapshot` and `onDelta`, `renderRepository` calls
+`harnessesPage.show`, `renderStream` calls `harnessesPage.status`, `showPage` calls
+`harnessesPage.tick()`, and **Resync** clears the stored state. The `harnesses` state has no
+topic: it rides in the repository's frames (ADR, "Phase 6 harnesses projection").
 
-`app.js` is not one of the files of the lane that built this page (ADR, phase 6 ownership),
-so these lines are listed in `harnessesWiring` in `internal/webui/harnesses_browser_test.go`,
-and the fixture serves `app.js` with them applied. The rail entry is `hidden` in
-`index.html` and `createHarnesses` shows it, so the entry appears only in a console whose
-`app.js` creates the page. `agentflow ui --screen harnesses` also needs `harnesses` in
-`internal/webui/destination.go`. When `app.js` has the lines, `wireHarnesses` serves it
-unchanged.
+`harnesses` is a console screen, so `agentflow ui --screen harnesses` and the reconnect
+screen's command open it (`internal/webui/destination.go`).
 
 ## Tests and the fixture
 

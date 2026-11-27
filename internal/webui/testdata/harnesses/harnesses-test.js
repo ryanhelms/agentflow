@@ -42,7 +42,7 @@
   const opencode = harness("opencode",{name:"OpenCode",code:"timeout",version:"",version_code:"no_version",probe:{status:"failed",code:"timeout",probed_at:at(-420000),duration_ms:5000},acp:undefined,
     fix:{text:"`opencode` did not answer within 5s. Probe again, or allow more time.",command:"agentflow config set ai.harnesses.probe_timeout=15s"},notes:["registry_env_ignored"]});
   const goose = harness("goose",{state:"incompatible",code:"protocol_version",probe:{status:"failed",code:"protocol_version",probed_at:at(-400000)},acp:undefined,
-    fix:{text:"goose speaks ACP version 2; agentflow needs version 1. Update goose.",url:"https://github.com/block/goose"}});
+    fix:{text:"goose speaks ACP version 2; agentflow needs version 1. Update goose.",url:"https://github.com/block/goose"},quarantined:true,quarantine_reason:"<b>fails</b> its own checks",notes:["quarantined"]});
   const pi = harness("pi-acp",{name:"pi ACP",kind:"adapter",state:"adapter_available",code:"base_only",path:"",version:"",base:{name:"pi",command:"pi",path:"~/bin/pi"},probe:{status:"none",code:"not_probed"},acp:undefined,
     auth:{status:"unknown",code:"base_missing"},fix:{text:"pi is installed, but its ACP adapter is not. Install the adapter yourself; agentflow never installs it.",command:"npm install -g pi-acp@0.0.26",url:"https://github.com/svkozak/pi-acp"}});
   const mine = harness("my-agent",{name:"My agent",sources:["plugin:team-agents","personal"],probe:{status:"cached",code:"ok",probed_at:at(-72000000),duration_ms:96},
@@ -168,6 +168,7 @@
       && part("opencode","fix").querySelector(".hn-fix-text").textContent === "opencode did not answer within 5s. Probe again, or allow more time." && part("opencode","notes").textContent.includes("never applies them"),"the failed probe card is wrong");
     const repoLink = part("goose","fix").querySelector("a");
     check(card("goose").dataset.mark === "bad" && shows("goose","status") === "Incompatible" && fact("goose","status").dataset.state === "bad" && part("goose","fix").dataset.tone === "bad" && fact("goose","state").textContent === "Incompatible protocol_version"
+      && part("goose","notes").children.length === 1 && part("goose","notes").textContent === "The ACP registry has quarantined this agent: <b>fails</b> its own checks" && !part("goose","notes").querySelector("b")
       && repoLink.href === "https://github.com/block/goose" && repoLink.textContent === "https://github.com/block/goose" && repoLink.target === "_blank" && repoLink.rel === "noopener noreferrer","the incompatible card is wrong");
     check(shows("pi-acp","status") === "Adapter not installed" && shows("pi-acp","path") === "Not on your PATH" && fact("pi-acp","runs").previousSibling.textContent === "Would run" && fact("pi-acp","base").textContent === "pi at ~/bin/pi" && part("pi-acp","sign-in").hidden
       && part("pi-acp","probe").parentNode.hidden && commands(part("pi-acp","fix")).join() === "npm install -g pi-acp@0.0.26" && shows("pi-acp","version") === "","the missing adapter card is wrong");
