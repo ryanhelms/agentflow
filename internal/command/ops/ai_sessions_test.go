@@ -441,3 +441,61 @@ func TestAISessionOptionsMCPServer(t *testing.T) {
 		t.Fatalf("options %+v", o)
 	}
 }
+
+// The console allows through ai.respond with the person requester it sets
+// and the fingerprint it showed. No other requester can allow, and an MCP
+// call is an agent's whatever its context says.
+func TestAIRespondAllowFromTheConsoleOnly(t *testing.T) {
+	f := newFixture(t)
+	m := resetFake(t)
+	c, ok := command.Default.Lookup("ai.respond")
+	if !ok {
+		t.Fatal("ai.respond is not registered")
+	}
+	jc := c.(command.JSONCommand)
+	_, inv := recording()
+	input := json.RawMessage(`{"session":"` + string(testSession) + `","ask":"` + testAsk + `","decision":"allow","fingerprint":"f00d"}`)
+	console := command.Origin{Source: "daemon", Client: "repository-console"}
+
+	if res := jc.InvokeJSON(t.Context(), inv, f.app, input, "", console); res.Err == nil {
+		t.Fatalf("allow without a requester: %+v", res.Value)
+	}
+	agent := aisession.WithRequester(t.Context(), aisession.Requester{Kind: aisession.RequesterAgent, Surface: aisession.SurfaceMCP})
+	if res := jc.InvokeJSON(agent, inv, f.app, input, "", console); res.Err == nil {
+		t.Fatalf("allow by an agent: %+v", res.Value)
+	}
+	// A person requester on the context of an MCP call is replaced by the
+	// agent's.
+	person := aisession.WithRequester(t.Context(), aisession.Requester{Kind: aisession.RequesterPerson, Surface: aisession.SurfaceConsole, Client: "repository-console"})
+	if res := jc.InvokeJSON(person, inv, f.app, input, "", command.Origin{Source: "mcp:claude", Client: "claude"}); res.Err == nil {
+		t.Fatalf("allow over MCP with a person context: %+v", res.Value)
+	}
+	if len(m.answers) != 0 {
+		t.Fatalf("answers written: %+v", m.answers)
+	}
+	res := jc.InvokeJSON(person, inv, f.app, input, "", console)
+	if res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	if len(m.answers) != 1 || m.answers[0].Decision != aisession.Allow || m.answers[0].Fingerprint != "f00d" {
+		t.Fatalf("answers %+v", m.answers)
+	}
+	if r := m.last(); r.Kind != aisession.RequesterPerson || r.Surface != aisession.SurfaceConsole {
+		t.Fatalf("requester %+v", r)
+	}
+
+	// The tool refuses allow, with or without a fingerprint, and its schema
+	// has no fingerprint.
+	cs, _ := aiTool(t, f.app, "agentflow_ai_respond")
+	for _, args := range []map[string]any{
+		{"session": string(testSession), "ask": testAsk, "decision": "allow"},
+		{"session": string(testSession), "ask": testAsk, "decision": "allow", "fingerprint": "f00d"},
+	} {
+		if text, isErr := callText(t, cs, "agentflow_ai_respond", args); !isErr {
+			t.Errorf("tool allowed with %v: %s", args, text)
+		}
+	}
+	if len(m.answers) != 1 {
+		t.Fatalf("a tool call wrote an answer: %+v", m.answers)
+	}
+}

@@ -568,12 +568,14 @@ type aiRespondIn struct {
 	Session  string `json:"session" jsonschema:"the session ID"`
 	Ask      string `json:"ask" jsonschema:"the waiting request's ID, from agentflow_ai_status"`
 	Decision string `json:"decision" jsonschema:"reject: the only answer an agent may give. Only the user allows, in the console or their own terminal."`
+	// Fingerprint is the ask's fingerprint as the person was shown it (the
+	// console sends it). It is not in the tool's schema.
+	Fingerprint string `json:"fingerprint,omitempty"`
 	// Command-line only: set by ai respond --allow after a person said yes
 	// at a terminal. No tool call can set it.
-	person      bool
-	fingerprint string
-	yes         bool
-	asJSON      bool
+	person bool
+	yes    bool
+	asJSON bool
 }
 
 const (
@@ -591,6 +593,7 @@ func aiRespondSchema() (*jsonschema.Schema, error) {
 		return nil, errors.New("respond schema has no decision")
 	}
 	d.Enum = []any{decisionReject}
+	delete(s.Properties, "fingerprint")
 	s.Required = []string{"session", "ask", "decision"}
 	return s, nil
 }
@@ -640,12 +643,9 @@ var aiRespondSpec = command.Spec[aiRespondIn, aisession.AnswerResult]{
 		if !askIDRe.MatchString(in.Ask) {
 			return fmt.Errorf("invalid request ID %q: it is ask_ and 16 hex characters", in.Ask)
 		}
-		switch {
-		case in.Decision == decisionReject:
-		case in.Decision == decisionAllow && in.person:
-		case in.Decision == decisionAllow:
-			return errors.New("needs_person: only the user can allow a request, in the console's AI panel or with agentflow ai respond --allow in their own terminal")
-		default:
+		// Who may allow is decided in Run, from the requester the surface
+		// set: an input cannot say it is a person.
+		if in.Decision != decisionReject && in.Decision != decisionAllow {
 			return errors.New("decision must be reject")
 		}
 		return nil
@@ -655,15 +655,43 @@ var aiRespondSpec = command.Spec[aiRespondIn, aisession.AnswerResult]{
 		ctx = aiRequester(ctx, a)
 		decision := aisession.Deny
 		if in.Decision == decisionAllow {
-			if !in.person || !isPerson(ctx) {
+			if !mayAllow(ctx, in) {
 				return nil, &app.AIRefusal{Refusal: &aisession.Refusal{Code: aisession.AnswerNeedsPerson, Message: "only the user can allow a request",
 					Fix: "Ask the user to answer in the console's AI panel, or with agentflow ai respond --allow in their own terminal."}}
 			}
 			decision = aisession.Allow
 		}
-		return a.AIRespond(ctx, aiOptions(a), aisession.AnswerRequest{Session: aisession.ID(in.Session), Ask: in.Ask, Decision: decision, Fingerprint: in.fingerprint})
+		return a.AIRespond(ctx, aiOptions(a), aisession.AnswerRequest{Session: aisession.ID(in.Session), Ask: in.Ask, Decision: decision, Fingerprint: in.Fingerprint})
 	},
 }
+
+// mayAllow: a person in the console (the surface set the requester), or a
+// person at a terminal who said yes to ai respond --allow. The Manager's
+// answer rules and the allow HMAC still apply after this.
+func mayAllow(ctx context.Context, in aiRespondIn) bool {
+	r, ok := aisession.RequesterFrom(ctx)
+	if !ok || r.Kind != aisession.RequesterPerson {
+		return false
+	}
+	return r.Surface == aisession.SurfaceConsole || in.person && r.Surface == aisession.SurfaceTerminal
+}
+
+// mcpRequesterStage gives every ai.* call from an MCP client the agent (or
+// session) requester, whatever its context holds, so no person requester can
+// reach an operation through a tool.
+var mcpRequesterStage = command.StageFunc(func(ctx context.Context, c *command.Call, next command.Handler) (any, error) {
+	if strings.HasPrefix(c.Meta.Name, "ai.") && strings.HasPrefix(c.Origin.Source, "mcp:") {
+		r := aisession.Requester{Kind: aisession.RequesterAgent, Surface: aisession.SurfaceMCP, Client: c.Origin.Client}
+		if c.App != nil {
+			r.Client = c.App.Client
+		}
+		if policy.IsSessionClient(r.Client) {
+			r.Kind, r.Session = aisession.RequesterSession, aisession.ID(strings.TrimPrefix(r.Client, policy.SessionClientPrefix))
+		}
+		ctx = aisession.WithRequester(ctx, r)
+	}
+	return next(ctx, c)
+})
 
 const aiRespondWhy = "allows what an AI session asked for"
 
@@ -711,7 +739,7 @@ func runAIRespond(ctx context.Context, call command.CLICall[aiRespondIn], in aiR
 	if !strings.HasPrefix(strings.ToLower(askLine("Allow once? [y/N]: ")), "y") {
 		return errors.New("cancelled: nothing was answered")
 	}
-	in.person, in.fingerprint = true, ask.Fingerprint
+	in.person, in.Fingerprint = true, ask.Fingerprint
 	out, err := call.Invoke(ctx, in)
 	return call.Env.Print(out, err)
 }
@@ -865,6 +893,7 @@ func init() {
 }
 
 func init() {
+	command.RegisterStage(mcpRequesterStage)
 	command.Register(aiRunSpec)
 	command.Register(aiStatusSpec)
 	command.Register(aiRespondSpec)
