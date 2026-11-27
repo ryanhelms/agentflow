@@ -181,7 +181,7 @@ func TestLinkFreeErrors(t *testing.T) {
 	if got := linkFree(err, false); strings.Contains(got.Error(), "launch=") {
 		t.Errorf("agent error %q", got)
 	}
-	if got := linkFree(err, true); got != err {
+	if got := linkFree(err, true); !errors.Is(got, err) || got.Error() != err.Error() {
 		t.Errorf("person error changed: %v", got)
 	}
 }
