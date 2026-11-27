@@ -127,7 +127,18 @@ Later layers win, field by field:
 3. Enabled declarative plugins, which can only add new harnesses.
 4. Your personal settings, which can change any harness or add one.
 
-A repository cannot add or change a harness.
+A repository cannot add or change a harness. An `ai` section in a repository's
+`.agentflow/config.yml` is ignored.
+
+When two built-in entries find the same program (the legacy `kimi` entry and
+`kimi-code` both install `kimi`), agentflow lists it once, as the entry its own
+corrections name. Entries you or a plugin defined are always listed.
+
+An override's `config_env` names directory variables passed to the sign-in
+check, such as `CODEX_HOME`. Agentflow refuses a name that looks like a
+credential (`TOKEN`, `SECRET`, `PASSWORD`, a `_KEY` ending and so on), one that
+changes how programs are found or loaded (`PATH`, `LD_*`, `NODE_OPTIONS` and
+so on), and any `AGENTFLOW_*` name.
 
 ```yaml
 # your agentflow config.yml
