@@ -149,6 +149,13 @@ func lex(s string) lexed {
 			}
 		case c == '(' || c == ')':
 			op(string(c))
+		case (c == '<' || c == '>') && i+1 < len(s) && s[i+1] == '(':
+			// <(...) and >(...) run the command inside, like $(...).
+			body, n := balanced(s[i+1:])
+			out.subs = append(out.subs, body)
+			cur.WriteString(string(c) + "(…)")
+			started = true
+			i += n
 		case c == '<' || c == '>':
 			if started && allDigits(cur.String()) {
 				cur.Reset()

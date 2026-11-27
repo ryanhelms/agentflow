@@ -56,6 +56,9 @@ func TestRefusesOtherRepository(t *testing.T) {
 		"gh api repos/ryanhelms/agentflow/issues/1/comments -f body=hi",
 		"gh repo create ryanhelms/new-thing --private",
 		"gh repo delete ryanhelms/agentflow --yes",
+		// process substitution runs the command inside
+		"cat <(gh pr close 3 -R ryanhelms/agentflow)",
+		"tee >(gh pr close 3 -R ryanhelms/agentflow) </dev/null",
 		// git into another checkout or worktree
 		"git -C /h/agentflow commit -m 'feat: x'",
 		"git -C ../agentflow push origin feature",

@@ -107,19 +107,6 @@ func TestCoordinatorMerge(t *testing.T) {
 	}
 }
 
-func TestMergeTarget(t *testing.T) {
-	for cmd, want := range map[string]string{
-		"gh pr merge 12 --squash":                           "12",
-		"gh pr merge --squash -t \"feat: x\" feat-1":        "feat-1",
-		"gh pr merge --auto --squash":                       "",
-		"cd x && gh pr merge https://github.com/o/r/pull/3": "https://github.com/o/r/pull/3",
-	} {
-		if got := mergeTarget(cmd); got != want {
-			t.Errorf("mergeTarget(%q) = %q want %q", cmd, got, want)
-		}
-	}
-}
-
 func TestPrePush(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

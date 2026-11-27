@@ -34,7 +34,8 @@ agentflow finds the target repository of a command from:
   arguments (`gh pr merge https://github.com/OWNER/NAME/pull/5`);
 - `gh api repos/OWNER/NAME/...`; `{owner}/{repo}` placeholders mean the current folder's
   repository;
-- `bash -c`, `sh -c` and `zsh -c` scripts, which are checked the same way.
+- `bash -c`, `sh -c` and `zsh -c` scripts, and the commands inside `$(...)`, backquotes,
+  `<(...)` and `>(...)`, which are checked the same way.
 
 Reads stay allowed because a coordinator needs to see the state of other repositories
 (a PR's checks, a branch's log) to decide what to delegate. Reads change nothing there.

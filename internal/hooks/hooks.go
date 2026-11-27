@@ -309,7 +309,12 @@ func preBash(ctx context.Context, stdin io.Reader, stderr io.Writer, conventionO
 	branch := ""
 	var rules = config.Commit{Types: config.DefaultTypes, SubjectMax: 72}
 	keyHint := ""
-	never := policy.NeverOptions{MergeBase: func(cmd string) (string, error) { return MergeBase(ctx, dir, cmd) }}
+	// gh pr merge without a number merges the PR of the branch in the command's folder.
+	mergeDir := dir
+	if in.Cwd != "" {
+		mergeDir = in.Cwd
+	}
+	never := policy.NeverOptions{MergeBase: func(cmd string) (string, error) { return MergeBase(ctx, mergeDir, cmd) }}
 	if repo, err := gitx.Open(ctx, dir); err == nil {
 		if cfg, _, err := config.LoadRepoCore(repo.Dir); err == nil {
 			protected, rules = cfg.Policy.ProtectedBranches, cfg.Commit
@@ -470,17 +475,24 @@ func foreignPushURL(ctx context.Context, dir, remote, url string) string {
 var MergeGH worktree.GH = worktree.ExecGH
 
 // MergeBase returns the base branch of the PR a `gh pr merge` command names,
-// or of the current branch's PR when it names none.
+// or of the current branch's PR when it names none. dir is the folder the
+// command runs in. It fails, so the merge is refused, unless the command is
+// exactly `gh pr merge` with known flags, at most one PR and one repository,
+// and nothing before it but an optional GH_REPO=: any other form could make
+// gh merge a different PR than the one looked up here.
 func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
+	m, err := parseMerge(cmd)
+	if err != nil {
+		return "", err
+	}
 	args := []string{"pr", "view"}
-	pr := mergeTarget(cmd)
-	if pr != "" {
-		args = append(args, pr)
+	if m.pr != "" {
+		args = append(args, m.pr)
 	}
 	// Look the PR up in its own repository, not the current folder's: a URL names
-	// it, otherwise -R/--repo or GH_REPO does.
-	if repo := mergeRepo(cmd); repo != "" && !strings.Contains(pr, "://") {
-		args = append(args, "--repo", repo)
+	// it, otherwise -R/--repo or GH_REPO does, as for gh itself.
+	if m.repo != "" && !strings.Contains(m.pr, "://") {
+		args = append(args, "--repo", m.repo)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -488,86 +500,90 @@ func MergeBase(ctx context.Context, dir, cmd string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
-// mergeTarget returns the PR argument of a `gh pr merge` command.
-func mergeTarget(cmd string) string {
-	loc := ghMergeRe.FindStringIndex(cmd)
-	if loc == nil {
-		return ""
-	}
-	valued := map[string]bool{"-A": true, "--author-email": true, "-b": true, "--body": true, "-F": true, "--body-file": true, "--match-head-commit": true, "-t": true, "--subject": true, "-R": true, "--repo": true}
-	words := shellWords(cmd[loc[1]:])
-	for i := 0; i < len(words); i++ {
-		w := words[i]
-		if strings.HasPrefix(w, "-") {
-			if valued[w] {
-				i++
-			}
-			continue
-		}
-		return w
-	}
-	return ""
+// ghMergeFlags are the flags of `gh pr merge` and whether each takes a value.
+var ghMergeFlags = map[string]bool{
+	"-A": true, "--author-email": true, "-b": true, "--body": true, "-F": true, "--body-file": true,
+	"--match-head-commit": true, "-t": true, "--subject": true, "-R": true, "--repo": true,
+	"--admin": false, "--auto": false, "-d": false, "--delete-branch": false, "--disable-auto": false,
+	"-m": false, "--merge": false, "-r": false, "--rebase": false, "-s": false, "--squash": false,
 }
 
-// mergeRepo returns the repository a merge command names with -R, --repo or a
-// GH_REPO prefix, then GH_REPO from the environment, or "".
-func mergeRepo(cmd string) string {
-	loc := ghMergeRe.FindStringIndex(cmd)
-	if loc == nil {
-		return ""
+type mergeCommand struct{ pr, repo string }
+
+// parseMerge reads the PR and repository of a `gh pr merge` command line, with
+// the words split as the shell splits them.
+func parseMerge(cmd string) (mergeCommand, error) {
+	var m mergeCommand
+	words, ok := boundary.Words(cmd)
+	if !ok {
+		return m, errors.New("not a single command")
 	}
-	words := shellWords(cmd[loc[1]:])
-	for i, w := range words {
+	envRepo, hasEnv := "", false
+	if len(words) > 0 {
+		envRepo, hasEnv = strings.CutPrefix(words[0], "GH_REPO=")
+		if hasEnv {
+			words = words[1:]
+		}
+	}
+	if len(words) < 3 || boundary.ProgramName(words[0]) != "gh" || words[1] != "pr" || words[2] != "merge" {
+		return m, errors.New("not a plain gh pr merge")
+	}
+	var prs, repos []string
+	args := words[3:]
+	for i := 0; i < len(args); i++ {
+		w := args[i]
+		name, value, inline := strings.Cut(w, "=")
 		switch {
-		case (w == "-R" || w == "--repo") && i+1 < len(words):
-			return words[i+1]
-		case strings.HasPrefix(w, "--repo="):
-			return strings.TrimPrefix(w, "--repo=")
+		case w == "--":
+			prs = append(prs, args[i+1:]...)
+			i = len(args)
+		case !strings.HasPrefix(w, "-") || w == "-":
+			prs = append(prs, w)
 		case strings.HasPrefix(w, "-R") && len(w) > 2:
-			return w[2:]
-		}
-	}
-	for _, w := range shellWords(cmd[:loc[0]]) {
-		if v, ok := strings.CutPrefix(w, "GH_REPO="); ok {
-			return v
-		}
-	}
-	return os.Getenv("GH_REPO")
-}
-
-// shellWords splits a command into words, honouring single and double quotes.
-func shellWords(s string) []string {
-	var words []string
-	var cur strings.Builder
-	in, quote, started := false, byte(0), false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case in && c == quote:
-			in = false
-		case in:
-			if quote == '"' && c == '\\' && i+1 < len(s) {
-				i++
-				c = s[i]
+			repos = append(repos, w[2:])
+		case strings.HasPrefix(w, "--") && inline:
+			if _, known := ghMergeFlags[name]; !known {
+				return m, fmt.Errorf("unknown flag %s", name)
 			}
-			cur.WriteByte(c)
-		case c == '\'' || c == '"':
-			in, quote, started = true, c, true
-		case c == ' ' || c == '\t' || c == '\n':
-			if started {
-				words = append(words, cur.String())
-				cur.Reset()
-				started = false
+			if name == "--repo" {
+				repos = append(repos, value)
 			}
 		default:
-			cur.WriteByte(c)
-			started = true
+			valued, known := ghMergeFlags[w]
+			switch {
+			case !known: // grouped short flags (-sR) or a flag this check does not know
+				return m, fmt.Errorf("unknown flag %s", w)
+			case !valued:
+			case i+1 >= len(args):
+				return m, fmt.Errorf("%s needs a value", w)
+			default:
+				i++
+				if w == "-R" || w == "--repo" {
+					repos = append(repos, args[i])
+				}
+			}
 		}
 	}
-	if started {
-		words = append(words, cur.String())
+	if len(prs) > 1 {
+		return m, errors.New("more than one PR")
 	}
-	return words
+	if len(prs) == 1 {
+		m.pr = prs[0]
+	}
+	for _, r := range repos {
+		if !strings.EqualFold(r, repos[0]) {
+			return m, errors.New("more than one repository")
+		}
+	}
+	switch {
+	case len(repos) > 0:
+		m.repo = repos[0]
+	case hasEnv:
+		m.repo = envRepo
+	default:
+		m.repo = os.Getenv("GH_REPO")
+	}
+	return m, nil
 }
 
 // PrePush is the git pre-push hook. It reads "<local ref> <local sha> <remote ref>

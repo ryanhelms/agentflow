@@ -225,7 +225,7 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 		return "force-push is never allowed through agentflow-managed agents"
 	case deleteRefRe.MatchString(cmd):
 		return "deleting remote branches is never allowed through agentflow-managed agents"
-	case ghMergeRe.MatchString(cmd):
+	case ghMergeRe.MatchString(cmd) || boundary.RunsGHMerge(cmd):
 		if reason := coordinatorMerge(cmd, opt); reason != "" {
 			return reason
 		}
@@ -311,8 +311,8 @@ func coordinatorMerge(cmd string, opt NeverOptions) string {
 	if !opt.CoordinatorMerge || opt.MergeBase == nil {
 		return human
 	}
-	// A newline runs a second command just like ";" does.
-	if strings.ContainsAny(cmd, ";&|`$\n\r") {
+	// A newline runs a second command just like ";" does, and <(...) runs one inside.
+	if _, single := boundary.Words(cmd); !single || strings.ContainsAny(cmd, ";&|`$\n\r") {
 		return human + " (policy.coordinator_merge allows only a single gh pr merge command)"
 	}
 	base, err := opt.MergeBase(cmd)

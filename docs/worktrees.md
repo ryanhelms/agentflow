@@ -144,10 +144,33 @@ local hooks next to `commit-msg` and sets `core.hooksPath=.githooks`:
   `agentflow start <issue> --worktree`. `AGENTFLOW_ALLOW_PRIMARY=1` bypasses it, for example to
   commit the files `agentflow init` wrote. A repository with no commits is allowed.
 
-The Claude Code PreToolUse hook keeps the never-list. With `policy.coordinator_merge: true` it
-allows `gh pr merge` when the PR's base, read with `gh pr view` (with the command's `-R`/`--repo`
-when it has one), is not `main` or `master`. The command must be a single `gh pr merge` with no
-shell chaining or second line. The never-list also holds
+The Claude Code PreToolUse hook keeps the never-list. It treats every spelling of a merge as a
+merge: `gh pr merge` with quoted words, `gh -R OWNER/NAME pr merge`, `gh pr -R OWNER/NAME merge`,
+a merge inside `bash -c`, `$(...)`, `<(...)` or `>(...)`, and `gh api` with a
+`pulls/N/merge` endpoint or a `mergePullRequest` or `enablePullRequestAutoMerge` mutation.
+
+With `policy.coordinator_merge: true` it allows a merge when the PR's base, read with
+`gh pr view`, is not `main` or `master`. It looks the PR up in the repository the command
+names with a PR URL, `-R`/`--repo` or `GH_REPO`, and in the folder the command runs in. It
+allows only one plain command, for example:
+
+```bash
+gh pr merge 12 --squash --repo OWNER/NAME
+```
+
+It refuses the merge as a human decision when the command:
+
+- holds `;`, `&`, `|`, `$`, a backquote, a second line, a carriage return, a redirection,
+  or a `<(...)` or `>(...)` substitution
+- is not `gh pr merge` itself, such as `gh -R OWNER/NAME pr merge`, `gh api` or a wrapper
+  like `env` or `sudo`; only `GH_REPO=OWNER/NAME` may come before `gh`
+- uses a flag `gh pr merge` does not have, or groups short flags (`-sR OWNER/NAME`)
+- names more than one PR, or two different repositories
+
+It does not see a merge through a `gh` alias, a script, a GraphQL query read from a file
+(`-F query=@file`), or another HTTP client such as `curl`.
+
+The never-list also holds
 `agentflow plugin add`, `remove` and `approve` with a plugin source or ID. It does not find
 every form of such a command: see [What the hook catches](plugins.md#what-the-hook-catches).
 `--convention-only` skips the rest of the never-list and checks messages and titles. The
