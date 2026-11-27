@@ -29,3 +29,13 @@ func (f *files) read(rel string, line, limit *uint32) (string, int64, error) {
 	}
 	return f.readChecked(rel, checked, line, limit)
 }
+
+// Fingerprint is the ask fingerprint, for tests.
+var Fingerprint = fingerprintOf
+
+// SetToolCapsForTest lowers the tool-call and diff-byte caps for one test.
+func SetToolCapsForTest(tb testing.TB, calls int, diffBytes int64) {
+	oc, od := maxToolCalls, maxDiffBytes
+	maxToolCalls, maxDiffBytes = calls, diffBytes
+	tb.Cleanup(func() { maxToolCalls, maxDiffBytes = oc, od })
+}

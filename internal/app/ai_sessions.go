@@ -151,23 +151,28 @@ type AISessionStatus struct {
 // aisession.AskRecord except the file text of a write, which only the person
 // answering sees (the console, the foreground prompt, ai respond --allow).
 type AIAsk struct {
-	ID          string                 `json:"id"`
-	Session     aisession.ID           `json:"session"`
-	Kind        aisession.Kind         `json:"kind"`
-	ToolCallID  string                 `json:"tool_call,omitempty"`
-	ToolKind    acp.ToolKind           `json:"tool_kind,omitempty"`
-	Title       string                 `json:"title,omitempty"`
-	Options     []acp.PermissionOption `json:"options,omitempty"`
-	Paths       []string               `json:"paths,omitempty"`
-	Line        string                 `json:"line,omitempty"`
-	Cwd         string                 `json:"cwd,omitempty"`
-	EnvNames    []string               `json:"env_names,omitempty"`
-	Size        int64                  `json:"size,omitempty"`
-	Reason      string                 `json:"reason"`
-	CanAllow    bool                   `json:"can_allow"`
-	CreatedAt   time.Time              `json:"created_at"`
-	ExpiresAt   time.Time              `json:"expires_at"`
-	Fingerprint string                 `json:"fingerprint"`
+	ID         string                 `json:"id"`
+	Session    aisession.ID           `json:"session"`
+	Kind       aisession.Kind         `json:"kind"`
+	ToolCallID string                 `json:"tool_call,omitempty"`
+	ToolKind   acp.ToolKind           `json:"tool_kind,omitempty"`
+	Title      string                 `json:"title,omitempty"`
+	Options    []acp.PermissionOption `json:"options,omitempty"`
+	Paths      []string               `json:"paths,omitempty"`
+	Line       string                 `json:"line,omitempty"`
+	Cwd        string                 `json:"cwd,omitempty"`
+	EnvNames   []string               `json:"env_names,omitempty"`
+	// Program is the resolved program a terminal ask would start, and
+	// ResolvedPaths where each path leads through a link. The env values
+	// are not here: only the person answering sees them.
+	Program       string    `json:"program,omitempty"`
+	ResolvedPaths []string  `json:"resolved_paths,omitempty"`
+	Size          int64     `json:"size,omitempty"`
+	Reason        string    `json:"reason"`
+	CanAllow      bool      `json:"can_allow"`
+	CreatedAt     time.Time `json:"created_at"`
+	ExpiresAt     time.Time `json:"expires_at"`
+	Fingerprint   string    `json:"fingerprint"`
 }
 
 func askViews(asks []aisession.AskRecord) []AIAsk {
@@ -177,7 +182,7 @@ func askViews(asks []aisession.AskRecord) []AIAsk {
 	out := make([]AIAsk, len(asks))
 	for i, r := range asks {
 		out[i] = AIAsk{ID: r.ID, Session: r.Session, Kind: r.Kind, ToolCallID: r.ToolCallID, ToolKind: r.ToolKind, Title: r.Title,
-			Options: r.Options, Paths: r.Paths, Line: r.Line, Cwd: r.Cwd, EnvNames: r.EnvNames, Size: r.Size, Reason: r.Reason,
+			Options: r.Options, Paths: r.Paths, Line: r.Line, Cwd: r.Cwd, EnvNames: r.EnvNames, Program: r.Program, ResolvedPaths: r.ResolvedPaths, Size: r.Size, Reason: r.Reason,
 			CanAllow: r.CanAllow, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, Fingerprint: r.Fingerprint}
 	}
 	return out

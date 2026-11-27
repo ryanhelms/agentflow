@@ -3,6 +3,7 @@ package aisession
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"regexp"
 	"strings"
 	"unicode"
@@ -46,7 +47,7 @@ func Sanitize(s string, max int) string {
 			return r
 		case r == '\r':
 			return -1
-		case unicode.IsControl(r), bidiControl(r):
+		case Hazard(r):
 			return -1
 		}
 		return r
@@ -86,6 +87,42 @@ func ClampStart(s string, max int) string {
 		start++
 	}
 	return s[start:]
+}
+
+// Hazard reports whether r is a character that hides or changes what a
+// person reads: control, format (Cf, bidirectional controls included),
+// surrogate, private use, line and paragraph separators, non-ASCII spaces,
+// and fillers and variation selectors. It is the AI panel's hazard set.
+func Hazard(r rune) bool {
+	switch {
+	case unicode.IsControl(r), unicode.Is(unicode.Cf, r), unicode.Is(unicode.Cs, r), unicode.Is(unicode.Co, r),
+		unicode.Is(unicode.Zl, r), unicode.Is(unicode.Zp, r), bidiControl(r):
+		return true
+	case r == 0x00a0, r == 0x1680, r >= 0x2000 && r <= 0x200a, r == 0x202f, r == 0x205f, r == 0x3000,
+		r == 0x034f, r == 0x115f, r == 0x1160, r == 0x17b4, r == 0x17b5, r >= 0x180b && r <= 0x180f, r == 0x3164,
+		r >= 0xfe00 && r <= 0xfe0f, r == 0xffa0, r >= 0xe0100 && r <= 0xe01ef:
+		return true
+	}
+	return false
+}
+
+// Visible shows text that names what will run or be touched (a path, a
+// command line, a working directory, an environment value): terminal
+// sequences and invalid UTF-8 are dropped, and every hazard character
+// (newline and tab included) is written as <U+XXXX>, so the person sees
+// exactly which characters are there instead of a look-alike. The result
+// is clamped to max bytes.
+func Visible(s string, max int) string {
+	s = StripTerminal(s)
+	var b strings.Builder
+	for _, r := range s {
+		if Hazard(r) {
+			fmt.Fprintf(&b, "<U+%04X>", r)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return Clamp(b.String(), max)
 }
 
 func bidiControl(r rune) bool {

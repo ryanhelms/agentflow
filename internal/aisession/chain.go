@@ -284,8 +284,18 @@ func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 			}
 		}
 	}
-	// The person's rules, by name; the first that matches decides.
-	if l.c.User != nil && !st.ask {
+	// A terminal that carries the agent's own environment is never
+	// allowed by a rule: a value can run code whatever the program
+	// (GIT_EXTERNAL_DIFF, PAGER, GOFLAGS). A person sees each value.
+	if r.Kind == KindTerminal && len(st.env) > 0 {
+		st.ask, st.askHandler = true, HandlerRule
+		if r.Reason == "" || r.Reason == ReasonTerminal {
+			r.Reason = ReasonEnv
+		}
+	}
+	// The person's rules, by name; the first that matches decides. When
+	// something above already asks, only a deny still changes the answer.
+	if l.c.User != nil {
 		rules := l.c.User.AI.Permissions.Rules
 		for _, name := range slices.Sorted(maps.Keys(rules)) {
 			rule := rules[name]
@@ -301,7 +311,9 @@ func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 					r.Reason = ReasonRule
 				}
 			case config.AIDecisionAllow:
-				st.personAllow = name
+				if !st.ask {
+					st.personAllow = name
+				}
 			}
 			break
 		}

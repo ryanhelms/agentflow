@@ -155,8 +155,12 @@ func aiSessionOf(store aisession.Store, s aisession.Session, home string) AISess
 func aiAskOf(a aisession.AskRecord) AIAsk {
 	ask := AIAsk{
 		ID: a.ID, Kind: string(a.Kind), ToolKind: string(a.ToolKind), Title: a.Title, Paths: a.Paths,
-		Line: a.Line, Cwd: a.Cwd, EnvNames: a.EnvNames, Reason: a.Reason, CanAllow: a.CanAllow,
+		Line: a.Line, Cwd: a.Cwd, EnvNames: a.EnvNames, Program: a.Program, ResolvedPaths: a.ResolvedPaths,
+		Reason: a.Reason, CanAllow: a.CanAllow,
 		ExpiresAt: a.ExpiresAt, Fingerprint: a.Fingerprint,
+	}
+	for _, e := range a.Env {
+		ask.Env = append(ask.Env, AIEnv{Name: e.Name, Value: e.Value})
 	}
 	for _, o := range a.Options {
 		ask.Options = append(ask.Options, AIOption{ID: o.OptionID, Name: o.Name, Kind: string(o.Kind)})

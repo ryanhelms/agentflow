@@ -466,7 +466,15 @@ func TestEventsAndAuditCarryNoSessionText(t *testing.T) {
 		call(acp.MethodTerminalCreate, map[string]any{"sessionId": "$SESSION", "command": "lister", "args": []string{"ARG-TEXT-1"}, "env": []map[string]string{{"name": "X", "value": "ENV-VALUE-1"}}}),
 		call(acp.MethodTerminalWaitForExit, map[string]any{"sessionId": "$SESSION", "terminalId": "$TERMINAL"}),
 	}}, set, bin)
-	s := r.run(t, person(context.Background()), "PROMPT-TEXT-1")
+	// The agent's env makes the terminal ask (no rule allows it); the
+	// person rejects it.
+	ctx := person(context.Background())
+	started := r.start(t, ctx, "PROMPT-TEXT-1")
+	a := r.waitAsk(t, started.ID)
+	if _, err := r.m.Answer(ctx, aisession.AnswerRequest{Session: started.ID, Ask: a.ID, Decision: aisession.Deny}); err != nil {
+		t.Fatal(err)
+	}
+	s := r.d.Wait(t, started.ID, 60*time.Second)
 	if s.Code != aisession.CodeEndTurn {
 		t.Fatalf("session ended %s", s.Code)
 	}

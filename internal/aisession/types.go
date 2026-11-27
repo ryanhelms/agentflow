@@ -355,7 +355,16 @@ type AskRecord struct {
 	Line          string   `json:"line,omitempty"` // POSIX-quoted command line
 	Cwd           string   `json:"cwd,omitempty"`  // worktree-relative
 	EnvNames      []string `json:"env_names,omitempty"`
-	Size          int64    `json:"size,omitempty"`
+	// Env, for a terminal ask, is each of the agent's environment entries
+	// with its value, as the process would get it: a value can run code
+	// (GIT_EXTERNAL_DIFF, PAGER, GOFLAGS), so the person judges it. Like
+	// Diff it lives only in this 0600 file, is covered by the fingerprint
+	// and never reaches the transcript, an event, a log or the audit.
+	Env []AskEnv `json:"env,omitempty"`
+	// Program, for a terminal ask, is the resolved program agentflow would
+	// start ("~/..." under the account home).
+	Program string `json:"program,omitempty"`
+	Size    int64  `json:"size,omitempty"`
 	// Diff, for an fs_write ask, is what the write would change: the
 	// current content and the exact bytes that will be written, each at
 	// most MaxPreview. It is not redacted (the person judges the real
@@ -374,6 +383,12 @@ type AskRecord struct {
 	// Fingerprint is the SHA-256 of the canonical ask as 64 lowercase hex
 	// characters (^[0-9a-f]{64}$).
 	Fingerprint string `json:"fingerprint"`
+}
+
+// AskEnv is one environment entry of a terminal ask.
+type AskEnv struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // AskDiff is an fs_write ask's preview. Cut is set when either text was

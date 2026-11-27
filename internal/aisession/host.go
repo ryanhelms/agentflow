@@ -62,6 +62,7 @@ type host struct {
 	tools       map[string]*toolState
 	activity    time.Time
 	updateBytes int64
+	diffBytes   int64 // diff text held in tools
 	cancelling  bool
 	cancelCode  string
 	cancelCh    chan struct{}
@@ -535,9 +536,9 @@ func (h *host) end(ctx context.Context, code string) Session {
 	if h.w.real != "" {
 		changed = changedFiles(ctx, h.w.real)
 	}
-	_ = os.RemoveAll(filepath.Join(h.st.Dir(h.id), "tmp"))
-	// No ask outlives its session: their previews go with them.
-	_ = os.RemoveAll(h.st.path(h.id, asksDir))
+	// No ask outlives its session (their previews and env values go with
+	// them), nor its TMPDIR or answer key.
+	h.st.removeEnded(h.id)
 	h.ev.flush(ctx)
 	s := h.transition(ctx, StateEnded, code, func(s *Session) {
 		s.ChangedFiles = changed
@@ -676,20 +677,23 @@ func (h *host) ask(ctx context.Context, r *Request) Verdict {
 	}
 	moved := false
 	for _, p := range r.Paths {
-		rec.Paths = append(rec.Paths, display(p))
+		rec.Paths = append(rec.Paths, Visible(display(p), 4096))
 		res := display(p)
 		if forms, _ := h.w.forms(p); len(forms) > 1 {
 			res, moved = forms[1], true
 		}
-		rec.ResolvedPaths = append(rec.ResolvedPaths, res)
+		rec.ResolvedPaths = append(rec.ResolvedPaths, Visible(res, 4096))
 	}
 	if !moved {
 		rec.ResolvedPaths = nil
 	}
 	if c := r.Command; c != nil {
-		rec.Line, rec.Cwd, rec.EnvNames = c.Line, c.Cwd.Rel, c.EnvNames
+		rec.Line, rec.Cwd, rec.EnvNames, rec.Program = Visible(c.Line, 64<<10), Visible(c.Cwd.Rel, 4096), c.EnvNames, Visible(tilde(c.Resolved), 4096)
 		if rec.Cwd == "" {
 			rec.Cwd = "."
+		}
+		for _, e := range stateOf(ctx).env {
+			rec.Env = append(rec.Env, AskEnv{Name: Visible(e.Name, 256), Value: Visible(e.Value, MaxAgentEnvValue*9)})
 		}
 	}
 	if r.Kind == KindWrite {
@@ -726,9 +730,9 @@ func (h *host) ask(ctx context.Context, r *Request) Verdict {
 		h.transition(ctx, StateWaiting, "", nil)
 	}
 	h.ev.asked(ctx, rec)
-	// The transcript never holds the write preview.
+	// The transcript never holds the write preview or env values.
 	shown := rec
-	shown.Diff = nil
+	shown.Diff, shown.Env = nil, nil
 	h.record(ctx, Item{Kind: ItemAsk, ToolCall: rec.ToolCallID, Data: dataOf(shown)})
 	if h.o.OnAsk != nil {
 		h.o.OnAsk(rec)

@@ -152,6 +152,23 @@ func TestLimitOutputEndsTheSession(t *testing.T) {
 	}
 }
 
+// The host follows at most so many tool calls: past the cap the session
+// ends limit_output, so a flood of tool calls cannot hide one that acts
+// outside the worktree.
+func TestToolCallCapEndsTheSession(t *testing.T) {
+	skipNotUnix(t)
+	aisession.SetToolCapsForTest(t, 3, 1<<20)
+	steps := []aisessiontest.Step{}
+	for _, id := range []string{"t1", "t2", "t3", "t4", "t5"} {
+		steps = append(steps, aisessiontest.Step{Update: aisessiontest.ToolCall(id, "read", "pending")})
+	}
+	steps = append(steps, aisessiontest.Step{WaitCancel: true})
+	r := newRig(t, aisessiontest.Script{Steps: steps}, aisessiontest.Settings{})
+	if s := r.run(t, person(context.Background()), "tools"); s.Code != aisession.CodeLimitOutput {
+		t.Errorf("session ended %s, want %s", s.Code, aisession.CodeLimitOutput)
+	}
+}
+
 func writeCall(path string) aisessiontest.Step {
 	return asyncCall(acp.MethodWriteTextFile, map[string]any{"sessionId": "$SESSION", "path": "$CWD/" + path, "content": "x"})
 }

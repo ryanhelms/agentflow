@@ -136,13 +136,40 @@ func (h *host) countBytes(n int) {
 
 // ---- tool calls, and the ones the harness did not ask about ----
 
-func (h *host) toolCall(ctx context.Context, tc acp.ToolCall) *toolState {
+// maxToolCalls bounds the tool calls the host follows in memory, and
+// maxDiffBytes the diff text it holds for them. Past the first the session
+// ends limit_output (dropping tool calls would blind the unasked check);
+// past the second, diffs are kept as cut, without text. Variables only for
+// tests.
+var (
+	maxToolCalls       = 4096
+	maxDiffBytes int64 = 32 << 20
+)
+
+// tool returns the state of tool call id, creating it; ok is false past
+// maxToolCalls, when the session is cancelled limit_output instead.
+func (h *host) tool(ctx context.Context, id string, init func() *toolState) (*toolState, bool) {
 	h.mu.Lock()
-	ts, ok := h.tools[tc.ToolCallID]
+	ts, ok := h.tools[id]
 	if !ok {
-		ts = &toolState{ID: SanitizeLine(tc.ToolCallID, 128), terminals: map[string]int{}}
-		h.tools[tc.ToolCallID] = ts
+		if len(h.tools) >= maxToolCalls {
+			h.mu.Unlock()
+			go h.cancel(context.WithoutCancel(ctx), CodeLimitOutput)
+			return nil, false
+		}
+		ts = init()
+		h.tools[id] = ts
 		h.sess.Counters.ToolCalls++
+	}
+	return ts, true
+}
+
+func (h *host) toolCall(ctx context.Context, tc acp.ToolCall) *toolState {
+	ts, ok := h.tool(ctx, tc.ToolCallID, func() *toolState {
+		return &toolState{ID: SanitizeLine(tc.ToolCallID, 128), terminals: map[string]int{}}
+	})
+	if !ok {
+		return &toolState{ID: SanitizeLine(tc.ToolCallID, 128)}
 	}
 	ts.Title = SanitizeLine(tc.Title, 512)
 	ts.Kind = tc.Kind
@@ -160,12 +187,11 @@ func (h *host) toolCall(ctx context.Context, tc acp.ToolCall) *toolState {
 }
 
 func (h *host) toolCallUpdate(ctx context.Context, u acp.ToolCallUpdate) *toolState {
-	h.mu.Lock()
-	ts, ok := h.tools[u.ToolCallID]
+	ts, ok := h.tool(ctx, u.ToolCallID, func() *toolState {
+		return &toolState{ID: SanitizeLine(u.ToolCallID, 128), Kind: acp.ToolOther, Status: string(acp.ToolPending), terminals: map[string]int{}}
+	})
 	if !ok {
-		ts = &toolState{ID: SanitizeLine(u.ToolCallID, 128), Kind: acp.ToolOther, Status: string(acp.ToolPending), terminals: map[string]int{}}
-		h.tools[u.ToolCallID] = ts
-		h.sess.Counters.ToolCalls++
+		return &toolState{ID: SanitizeLine(u.ToolCallID, 128)}
 	}
 	if u.Title != nil {
 		ts.Title = SanitizeLine(*u.Title, 512)
@@ -221,6 +247,11 @@ func (h *host) toolContent(ts *toolState, content []acp.ToolCallContent, locs []
 			}
 			d.Cut = d.Cut || len(c.NewText) > MaxItemText
 			if len(ts.Diffs) < 16 {
+				if n := int64(len(d.OldText) + len(d.NewText)); h.diffBytes+n > maxDiffBytes {
+					d.OldText, d.NewText, d.Cut = "", "", true
+				} else {
+					h.diffBytes += n
+				}
 				ts.Diffs = append(ts.Diffs, d)
 			}
 			if p, _ := h.w.resolve(c.Path); !containsPath(ts.paths, p) {
@@ -550,7 +581,7 @@ func (h *host) CreateTerminal(ctx context.Context, p acp.CreateTerminalRequest) 
 	}
 	cmd := &Command{Program: p.Command, Args: args, Cwd: cwd, Line: quoteLine(p.Command, args)}
 	for _, e := range p.Env {
-		cmd.EnvNames = append(cmd.EnvNames, SanitizeLine(e.Name, 128))
+		cmd.EnvNames = append(cmd.EnvNames, Visible(e.Name, 256))
 	}
 	if filepath.IsAbs(cwdAbs) {
 		if resolved, ok := lookProgram(p.Command, cwdAbs, h.env.PATH); ok {
@@ -563,7 +594,16 @@ func (h *host) CreateTerminal(ctx context.Context, p acp.CreateTerminalRequest) 
 		return acp.CreateTerminalResponse{}, cancelledErr()
 	}
 	if v.Decision != Allow {
-		h.record(ctx, Item{Kind: ItemTerminal, Data: dataOf(map[string]any{"line": SanitizeLine(cmd.Line, 4096), "cwd": cwd.Rel, "decision": "deny", "code": v.Code})})
+		h.record(ctx, Item{Kind: ItemTerminal, Data: dataOf(map[string]any{"line": Visible(cmd.Line, 4096), "cwd": Visible(cwd.Rel, 1024), "decision": "deny", "code": v.Code})})
+		return acp.CreateTerminalResponse{}, denied(v.Code)
+	}
+	// After the approval (a person may have taken minutes): the cwd must
+	// still resolve where it did, inside the worktree, and the program to
+	// the same file.
+	if !h.terminalUnchanged(cmd, cwdAbs) {
+		v = deny(HandlerBoundary, VerdictChanged)
+		h.audit(r, v, "")
+		h.record(ctx, Item{Kind: ItemTerminal, Data: dataOf(map[string]any{"line": Visible(cmd.Line, 4096), "cwd": Visible(cwd.Rel, 1024), "decision": "deny", "code": v.Code})})
 		return acp.CreateTerminalResponse{}, denied(v.Code)
 	}
 	env := append([]string{}, h.env.Terminal...)
@@ -581,11 +621,33 @@ func (h *host) CreateTerminal(ctx context.Context, p acp.CreateTerminalRequest) 
 		}
 		return acp.CreateTerminalResponse{}, denied(VerdictProgram)
 	}
+	if t.cmd.Process != nil {
+		addTerminalProc(h.st.path(h.id, terminalsFile), t.cmd.Process.Pid)
+	}
 	h.mu.Lock()
 	h.sess.Counters.Terminals++
 	h.mu.Unlock()
-	h.record(ctx, Item{Kind: ItemTerminal, Data: dataOf(map[string]any{"id": t.id, "line": SanitizeLine(cmd.Line, 4096), "cwd": cwd.Rel, "decision": "allow", "code": v.Code})})
+	h.record(ctx, Item{Kind: ItemTerminal, Data: dataOf(map[string]any{"id": t.id, "line": Visible(cmd.Line, 4096), "cwd": Visible(cwd.Rel, 1024), "decision": "allow", "code": v.Code})})
 	return acp.CreateTerminalResponse{TerminalID: t.id}, nil
+}
+
+// terminalUnchanged re-resolves a terminal's cwd and program right before
+// it starts.
+func (h *host) terminalUnchanged(cmd *Command, cwdAbs string) bool {
+	real, err := filepath.EvalSymlinks(cwdAbs)
+	if err != nil || real != cmd.Cwd.Real {
+		return false
+	}
+	if _, inside := relOf(h.w.real, real); !inside {
+		return false
+	}
+	if rel, ok := relOf(h.w.real, real); ok && rel != "" {
+		if _, code := h.w.resolve(real); code != "" && code != VerdictNotRegular {
+			return false
+		}
+	}
+	resolved, ok := lookProgram(cmd.Program, cwdAbs, h.env.PATH)
+	return ok && resolved == cmd.Resolved
 }
 
 func (h *host) terminal(p acp.TerminalRequest) (*terminal, error) {
@@ -645,7 +707,7 @@ func (h *host) ReleaseTerminal(ctx context.Context, p acp.TerminalRequest) error
 // terminal sequences removed.
 func (h *host) recordTerminal(ctx context.Context, t *terminal) {
 	out := t.output()
-	data := map[string]any{"id": t.id, "line": SanitizeLine(t.line, 4096), "cwd": t.cwd, "output": t.shown()}
+	data := map[string]any{"id": t.id, "line": Visible(t.line, 4096), "cwd": Visible(t.cwd, 1024), "output": t.shown()}
 	if st := out.ExitStatus; st != nil {
 		if st.ExitCode != nil {
 			data["exit"] = int(*st.ExitCode)

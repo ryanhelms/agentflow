@@ -15,7 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unicode"
 
 	"github.com/google/jsonschema-go/jsonschema"
 
@@ -766,17 +765,29 @@ func printAsk(w io.Writer, ask aisession.AskRecord) {
 		fmt.Fprintf(w, " (%s)", printable(string(ask.ToolKind)))
 	}
 	fmt.Fprintf(w, ", because: %s\n", printable(ask.Reason))
-	for _, p := range ask.Paths {
-		fmt.Fprintf(w, "  path:    %s\n", printable(p))
+	for i, p := range ask.Paths {
+		fmt.Fprintf(w, "  path:    %s\n", visible(p))
+		if i < len(ask.ResolvedPaths) && ask.ResolvedPaths[i] != p {
+			fmt.Fprintf(w, "    leads to: %s\n", visible(ask.ResolvedPaths[i]))
+		}
 	}
 	if ask.Line != "" {
-		fmt.Fprintf(w, "  command: %s\n", printable(ask.Line))
+		fmt.Fprintf(w, "  command: %s\n", visible(ask.Line))
+	}
+	if ask.Program != "" {
+		fmt.Fprintf(w, "  runs:    %s\n", visible(ask.Program))
 	}
 	if ask.Cwd != "" {
-		fmt.Fprintf(w, "  in:      %s\n", printable(ask.Cwd))
+		fmt.Fprintf(w, "  in:      %s\n", visible(ask.Cwd))
 	}
-	if len(ask.EnvNames) > 0 {
-		fmt.Fprintf(w, "  env:     %s\n", printable(strings.Join(ask.EnvNames, " ")))
+	switch {
+	case len(ask.Env) > 0:
+		fmt.Fprintln(w, "  env (the harness's values; each can change what runs):")
+		for _, e := range ask.Env {
+			fmt.Fprintf(w, "    %s=%s\n", visible(e.Name), visible(e.Value))
+		}
+	case len(ask.EnvNames) > 0:
+		fmt.Fprintf(w, "  env:     %s\n", visible(strings.Join(ask.EnvNames, " ")))
 	}
 	if ask.Size > 0 {
 		fmt.Fprintf(w, "  size:    %d bytes\n", ask.Size)
@@ -810,13 +821,15 @@ func printDiff(w io.Writer, d *aisession.AskDiff) {
 	if d == nil {
 		return
 	}
-	fmt.Fprintf(w, "  change to %s (the harness's content, shown as text):\n", printable(d.Path))
-	fmt.Fprintln(w, "  ----- old -----")
+	fmt.Fprintf(w, "  change to %s (the harness's content, shown as text):\n", visible(d.Path))
+	// Every content line carries its side as a prefix, so no line of the
+	// file can pass for a marker or for the other side.
+	fmt.Fprintln(w, "  ----- old (each line starts with \"old| \") -----")
 	if d.OldText != "" {
-		fmt.Fprintln(w, indentText(d.OldText))
+		fmt.Fprintln(w, prefixLines(d.OldText, "  old| "))
 	}
-	fmt.Fprintln(w, "  ----- new -----")
-	fmt.Fprintln(w, indentText(d.NewText))
+	fmt.Fprintln(w, "  ----- new (each line starts with \"new| \") -----")
+	fmt.Fprintln(w, prefixLines(d.NewText, "  new| "))
 	fmt.Fprintln(w, "  ----- end -----")
 	if d.Cut {
 		fmt.Fprintln(w, "  (cut: the change is longer than shown)")
@@ -943,12 +956,26 @@ func aiText(s string) string {
 		if r == '\n' || r == '\t' {
 			return r
 		}
-		if unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) {
+		if aisession.Hazard(r) {
 			return -1
 		}
 		return r
 	}, s)
 }
+
+// prefixLines prints s with prefix on every line, terminal sequences and
+// hazard characters other than tab shown as <U+XXXX>.
+func prefixLines(s string, prefix string) string {
+	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	for i, l := range lines {
+		lines[i] = prefix + strings.ReplaceAll(aisession.Visible(strings.ReplaceAll(l, "\t", "    "), 0), "<U+0009>", "\t")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// visible shows text that names what will run or be touched with every
+// hazard character escaped (aisession.Visible).
+func visible(s string) string { return aisession.Visible(s, 0) }
 
 func indentText(s string) string {
 	return "  " + strings.ReplaceAll(strings.TrimRight(aiText(s), "\n"), "\n", "\n  ")

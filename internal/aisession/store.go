@@ -32,6 +32,7 @@ const (
 	heartbeatFile  = "host.heartbeat"
 	cancelFile     = "cancel.json"
 	harnessPIDFile = "harness.pid"
+	terminalsFile  = "terminals.json"
 	claimFile      = "host.claim"
 )
 
@@ -170,6 +171,16 @@ func (s *fileStore) endLost(sess *Session, now time.Time) {
 	sess.EndedAt = &t
 	_ = s.write(*sess)
 	killLostHarness(s.path(sess.ID, harnessPIDFile))
+	killLostTerminals(s.path(sess.ID, terminalsFile))
+	s.removeEnded(sess.ID)
+}
+
+// removeEnded removes what no ended session keeps: its asks (write
+// previews and env values), its TMPDIR and its answer key.
+func (s *fileStore) removeEnded(id ID) {
+	_ = os.RemoveAll(s.path(id, asksDir))
+	_ = os.RemoveAll(s.path(id, "tmp"))
+	_ = os.Remove(s.path(id, answerKeyFile))
 }
 
 func (s *fileStore) listLocked() ([]Session, error) {
