@@ -26,7 +26,7 @@ func probeRequest() acp.InitializeRequest {
 
 // answer runs Initialize against a peer that answers with result (raw
 // JSON) or rerr, and returns what the peer received.
-func answer(t *testing.T, result string, rerr *jsonrpc.Error) (acp.InitializeResponse, error, json.RawMessage) {
+func answer(t *testing.T, result string, rerr *jsonrpc.Error) (acp.InitializeResponse, json.RawMessage, error) {
 	t.Helper()
 	var got json.RawMessage
 	agent := jsonrpc.HandlerFunc(func(_ context.Context, r *jsonrpc.Request) (any, error) {
@@ -43,11 +43,11 @@ func answer(t *testing.T, result string, rerr *jsonrpc.Error) (acp.InitializeRes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resp, err := acp.Initialize(ctx, client, probeRequest())
-	return resp, err, got
+	return resp, got, err
 }
 
 func TestInitializeSendsTheProbeRequest(t *testing.T) {
-	_, err, got := answer(t, `{"protocolVersion":1}`, nil)
+	_, got, err := answer(t, `{"protocolVersion":1}`, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestInitializeSendsTheProbeRequest(t *testing.T) {
 }
 
 func TestInitializeDecodesAnAnswer(t *testing.T) {
-	resp, err, _ := answer(t, `{
+	resp, _, err := answer(t, `{
 		"protocolVersion": 1,
 		"agentCapabilities": {"loadSession": true, "promptCapabilities": {"image": true, "audio": false, "embeddedContext": true},
 			"mcpCapabilities": {"http": true, "sse": false}, "sessionCapabilities": {"list": {}}, "auth": {"logout": {}}, "futureThing": 3},
@@ -88,7 +88,7 @@ func TestInitializeDecodesAnAnswer(t *testing.T) {
 }
 
 func TestInitializeDefaultsOnError(t *testing.T) {
-	resp, err, _ := answer(t, `{
+	resp, _, err := answer(t, `{
 		"protocolVersion": 1,
 		"agentCapabilities": {"loadSession": "yes", "promptCapabilities": {"image": 1}, "mcpCapabilities": {"http": true}},
 		"authMethods": [1, null, {"id": "a"}, {"id": "", "name": "x"}, {"id": "ok", "name": "OK"}, {"id": "b", "name": "B", "args": "nope"}],
@@ -108,7 +108,7 @@ func TestInitializeDefaultsOnError(t *testing.T) {
 		t.Errorf("agent info %+v", resp.AgentInfo)
 	}
 
-	resp, err, _ = answer(t, `{"protocolVersion": 1, "agentCapabilities": [], "authMethods": {}}`, nil)
+	resp, _, err = answer(t, `{"protocolVersion": 1, "agentCapabilities": [], "authMethods": {}}`, nil)
 	if err != nil || resp.AgentCapabilities.LoadSession || len(resp.AuthMethods) != 0 {
 		t.Errorf("%+v %v", resp, err)
 	}
@@ -117,30 +117,30 @@ func TestInitializeDefaultsOnError(t *testing.T) {
 func TestInitializeProtocolVersion(t *testing.T) {
 	for _, raw := range []string{`{}`, `{"protocolVersion": "1"}`, `{"protocolVersion": 1.5}`, `{"protocolVersion": -1}`,
 		`{"protocolVersion": 65536}`, `{"protocolVersion": null}`, `[]`, `"x"`, `null`} {
-		_, err, _ := answer(t, raw, nil)
+		_, _, err := answer(t, raw, nil)
 		if !errors.Is(err, acp.ErrProtocol) {
 			t.Errorf("%s: err = %v", raw, err)
 		}
 	}
-	resp, err, _ := answer(t, `{"protocolVersion": 2}`, nil)
+	resp, _, err := answer(t, `{"protocolVersion": 2}`, nil)
 	if err != nil || resp.ProtocolVersion != 2 {
 		t.Errorf("v2: %+v %v", resp, err)
 	}
-	resp, err, _ = answer(t, `{"protocolVersion": 0}`, nil)
+	resp, _, err = answer(t, `{"protocolVersion": 0}`, nil)
 	if err != nil || resp.ProtocolVersion != 0 {
 		t.Errorf("v0: %+v %v", resp, err)
 	}
 }
 
 func TestInitializePeerErrorKeepsACPMeaning(t *testing.T) {
-	_, err, _ := answer(t, "", &jsonrpc.Error{Code: acp.CodeAuthRequired, Message: "Authentication required"})
+	_, _, err := answer(t, "", &jsonrpc.Error{Code: acp.CodeAuthRequired, Message: "Authentication required"})
 	var rerr *jsonrpc.Error
 	if !errors.As(err, &rerr) || rerr.Code != acp.CodeAuthRequired {
 		t.Fatalf("err = %v", err)
 	}
 	// -32002 means "resource not found" from an ACP peer, whatever jsonrpc
 	// calls it.
-	_, err, _ = answer(t, "", &jsonrpc.Error{Code: acp.CodeResourceNotFound, Message: "nope"})
+	_, _, err = answer(t, "", &jsonrpc.Error{Code: acp.CodeResourceNotFound, Message: "nope"})
 	if !errors.As(err, &rerr) || rerr.Code != acp.CodeResourceNotFound || strings.Contains(err.Error(), "rate") {
 		t.Fatalf("err = %v", err)
 	}

@@ -49,6 +49,15 @@ var harnessIDRule = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 // in; tests replace it.
 var harnessCommands = func() *command.Registry { return command.Default }
 
+// personProbeContext marks a console probe's context as a person's
+// request. WIRING POINT (lane 6.3, PR #110): once app.WithHarnessRequester
+// is on develop, this becomes
+//
+//	return app.WithHarnessRequester(ctx, harness.RequesterPerson)
+//
+// Until then ai.harnesses counts a console probe as an agent's.
+var personProbeContext = func(ctx context.Context) context.Context { return ctx }
+
 // harnessLimits are the per-console rate limits, by server.
 var harnessLimits struct {
 	mu    sync.Mutex
@@ -153,7 +162,7 @@ func (s *server) harnessesProbe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		inv := command.NewInvoker(command.Options{Auditor: command.AuditLog{}})
-		res := jc.InvokeJSON(ctx, inv, a, input, "", command.Origin{Source: "daemon", Client: harnessesClient})
+		res := jc.InvokeJSON(personProbeContext(ctx), inv, a, input, "", command.Origin{Source: "daemon", Client: harnessesClient})
 		if res.Err != nil && !errors.Is(res.Err, context.Canceled) {
 			fmt.Fprintln(os.Stderr, "agentflow: harness probe failed")
 		}

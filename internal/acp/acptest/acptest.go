@@ -330,7 +330,7 @@ func copyFile(from, to string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(to, b, 0o755) //nolint:gosec // the fake agent must be executable
+	return os.WriteFile(to, b, 0o755)
 }
 
 func shQuote(s string) string {

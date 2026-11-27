@@ -48,7 +48,6 @@ type HarnessOptions struct {
 // newHarnessOptions gives the source's production dependencies. In a test
 // binary it gives no Detector unless a test replaces it, so no daemon test
 // reaches detection by accident ("Phase 6 test guard").
-//
 var newHarnessOptions = func() HarnessOptions {
 	if testing.Testing() {
 		return HarnessOptions{}

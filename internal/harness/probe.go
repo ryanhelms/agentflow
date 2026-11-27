@@ -253,9 +253,9 @@ func harnessDir(home, id, sub string) (string, error) {
 	}
 	if !windowsOS() {
 		for d := dir; d != filepath.Join(home, "harnesses") && strings.HasPrefix(d, filepath.Join(home, "harnesses")); d = filepath.Dir(d) {
-			_ = os.Chmod(d, 0o700)
+			_ = os.Chmod(d, 0o700) //nolint:gosec // G302: a directory needs its search bit; 0700 is owner only
 		}
-		_ = os.Chmod(filepath.Join(home, "harnesses"), 0o700)
+		_ = os.Chmod(filepath.Join(home, "harnesses"), 0o700) //nolint:gosec // G302: a directory, owner only
 	}
 	return dir, nil
 }
@@ -510,7 +510,7 @@ func signInCommandSafe(cmd string) bool {
 		return false
 	}
 	for _, r := range cmd {
-		if !(r == ' ' || r == '\'' || r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._=:/@+,-", r))) {
+		if r != ' ' && r != '\'' && !shellSafe(r, "._=:/@+,-") {
 			return false
 		}
 	}
@@ -521,11 +521,16 @@ func signInCommandSafe(cmd string) bool {
 // [A-Za-z0-9._/:=-]. s already passed the arg rule, so it has no quote.
 func shellWord(s string) string {
 	for _, r := range s {
-		if !(r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/:=-", r))) {
+		if !shellSafe(r, "._/:=-") {
 			return "'" + s + "'"
 		}
 	}
 	return s
+}
+
+// shellSafe reports an ASCII letter or digit, or one of extra.
+func shellSafe(r rune, extra string) bool {
+	return r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune(extra, r))
 }
 
 // acpText is the Content Filter for agent-supplied text: valid UTF-8, the

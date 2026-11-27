@@ -125,7 +125,8 @@ func (s *FileStore) Put(r ProbeRecord) error {
 				out = append(out, old)
 			}
 		}
-		f.Records = append(out, r)
+		out = append(out, r)
+		f.Records = out
 	})
 }
 
@@ -227,7 +228,7 @@ func (s *FileStore) update(fn func(*cacheFile)) error {
 		return fmt.Errorf("harness: probe cache directory: %w", err)
 	}
 	if !windowsOS() {
-		_ = os.Chmod(s.Dir, 0o700)
+		_ = os.Chmod(s.Dir, 0o700) //nolint:gosec // G302: a directory needs its search bit; 0700 is owner only
 	}
 	lock, err := os.OpenFile(filepath.Join(s.Dir, cacheLockFile), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
