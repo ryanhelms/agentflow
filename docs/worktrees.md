@@ -82,18 +82,26 @@ directory, or from the branch name. It refuses when:
 - the worktree has uncommitted changes
 - the branch has commits that are on no `origin` branch and not part of the merged PR head
 - the branch is protected or is the default branch
-- the PR is not merged
-- the local or remote branch has commits after the merged PR's head, such as follow-up work
-  pushed after the merge
+- the PR is not merged, or GitHub reports a merged PR without its head commit
+- the local or remote branch has commits that are not in the merged work, such as follow-up
+  work pushed after the merge, or pushed from another machine
 
 The PR counts as merged when `gh pr view <branch> --json state,mergedAt,baseRefName,headRefOid`
-says so. Without a PR, the branch must have advanced past its starting commit and be an
-ancestor of `origin/<default>` after a fetch.
+says so. Both the local branch and `origin/<branch>` must then be the PR's head commit or
+behind it. Without a PR, or when `gh` fails, the local branch must have advanced past its
+starting commit and be an ancestor of `origin/<default>` after a fetch, and so must
+`origin/<branch>`.
 
 Then it runs `git worktree remove`, deletes the local branch, runs `git worktree prune`,
 deletes the remote branch if it still exists, and prints the primary checkout path. Running
 it again reports `already_finished`. The confirmation flow is the same as other agentflow
 writes (`finish` action, remote class).
+
+Finish deletes each branch only while it is still at the commit it checked. When the local
+branch has moved, it stops before removing the worktree. It deletes the remote branch with
+`git push --force-with-lease=refs/heads/<branch>:<checked commit> origin :refs/heads/<branch>`,
+so a push made after the check, or since the last fetch when `origin` could not be read, makes
+the delete fail and the branch stays. Run `finish` again to check the new commits.
 
 ## sweep
 
@@ -113,6 +121,9 @@ its own repository ([repo-boundary.md](repo-boundary.md)). Merged worktrees else
 | `orphaned` | the directory is gone | reports; `git worktree prune` clears the entry |
 | `other_repo` | merged, in another repository (`--all-repos`) | reports; finish it from a session there |
 | `detached`, `protected`, `active` | nothing to do | reports |
+
+Sweep uses finish's checks. A merged worktree whose branch holds later commits stays
+`active`, and its detail names the branch that holds them.
 
 It then runs `git worktree prune` and `git remote set-head origin -a`. Sweep never deletes a
 worktree that is not merged.

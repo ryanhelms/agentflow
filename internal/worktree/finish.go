@@ -95,10 +95,18 @@ type Plan struct {
 	removeWorktree bool
 	deleteLocal    bool
 	deleteRemote   bool
+	// localTip and remoteTip are the commits the checks accepted. Apply deletes
+	// a branch only while it is still at that commit.
+	localTip  string
+	remoteTip string
 }
 
 // RefusedError explains why a worktree cannot be finished yet.
-type RefusedError struct{ Outcome Outcome }
+type RefusedError struct {
+	Outcome Outcome
+	// beyond is set when the branch was merged but holds later work.
+	beyond bool
+}
 
 func (e *RefusedError) Error() string {
 	return fmt.Sprintf("not finishing %s: %s (%s)", e.Outcome.Branch, e.Outcome.Detail, e.Outcome.State)
@@ -204,15 +212,17 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 			}
 		}
 	}
-	local := c.hasRef(ctx, "refs/heads/"+branch)
+	localTip := c.revParse(ctx, "refs/heads/"+branch)
+	local := localTip != ""
 	c.fetch(ctx)
-	remote := c.remoteBranchExists(ctx, branch)
+	remoteTip := c.remoteTip(ctx, branch)
+	remote := remoteTip != ""
 	if entry == nil && !local && !remote {
 		p.State, p.Detail = StateAlreadyFinished, "no worktree, local branch or remote branch"
 		return p, nil
 	}
 	pr := c.pullRequest(ctx, branch)
-	merged, how := c.merged(ctx, branch, local, pr)
+	merged, how, into := c.merged(ctx, branch, local, pr)
 	if !merged {
 		return refuse(StateUnmerged, how)
 	}
@@ -221,9 +231,15 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 			return refuse(StateUnpushed, fmt.Sprintf("%d commit(s) not on origin", n))
 		}
 	}
-	if detail := c.beyondPR(ctx, branch, local, pr); detail != "" {
-		return refuse(StateUnmerged, detail)
+	// Every tip that finish deletes must hold only merged work: commits pushed
+	// after the merge, or from another machine, live only on the branch.
+	for _, tip := range []struct{ where, sha string }{{"local branch", localTip}, {"origin/" + branch, remoteTip}} {
+		if tip.sha != "" && !c.contains(ctx, into, tip.sha) {
+			p.State, p.Detail = StateUnmerged, beyondDetail(tip.where, into, pr)
+			return p, &RefusedError{Outcome: p.Outcome, beyond: true}
+		}
 	}
+	p.localTip, p.remoteTip = localTip, remoteTip
 	p.Detail = how
 	if entry != nil {
 		p.removeWorktree = true
@@ -238,21 +254,36 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 	p.Actions = append(p.Actions, "git worktree prune")
 	if remote {
 		p.deleteRemote = true
-		p.Actions = append(p.Actions, "git push origin --delete "+branch)
+		p.Actions = append(p.Actions, "git push origin --delete "+branch+" (only while it is at "+short(remoteTip)+")")
 	}
 	p.State = StateWouldFinish
 	return p, nil
 }
 
-func (c *checker) remoteBranchExists(ctx context.Context, branch string) bool {
-	if c.opt.Offline {
-		return c.hasRef(ctx, "refs/remotes/origin/"+branch)
+// remoteTip returns the commit of origin's branch, or "" when it has none. When
+// origin cannot be read it falls back to the last fetched origin/<branch>; Apply
+// then deletes the branch only if origin still has that commit.
+func (c *checker) remoteTip(ctx context.Context, branch string) string {
+	if !c.opt.Offline {
+		ref := "refs/heads/" + branch
+		if out, err := c.git(ctx, "ls-remote", "--heads", "origin", ref); err == nil {
+			for _, line := range strings.Split(out, "\n") {
+				if f := strings.Fields(line); len(f) == 2 && f[1] == ref {
+					return f[0]
+				}
+			}
+			return ""
+		}
 	}
-	out, err := c.git(ctx, "ls-remote", "--heads", "origin", "refs/heads/"+branch)
+	return c.revParse(ctx, "refs/remotes/origin/"+branch)
+}
+
+func (c *checker) revParse(ctx context.Context, ref string) string {
+	out, err := c.git(ctx, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	if err != nil {
-		return c.hasRef(ctx, "refs/remotes/origin/"+branch)
+		return ""
 	}
-	return strings.TrimSpace(out) != ""
+	return strings.TrimSpace(out)
 }
 
 func (c *checker) pullRequest(ctx context.Context, branch string) *pullRequest {
@@ -272,19 +303,24 @@ func (c *checker) pullRequest(ctx context.Context, branch string) *pullRequest {
 
 // merged reports whether the branch's work is in its base: a merged PR, or a
 // branch that advanced and is an ancestor of origin/<default> (or the PR base).
-func (c *checker) merged(ctx context.Context, branch string, local bool, pr *pullRequest) (bool, string) {
+// into is what every branch tip must be contained in: the merged PR's head
+// commit, or the base the branch was found in.
+func (c *checker) merged(ctx context.Context, branch string, local bool, pr *pullRequest) (ok bool, how, into string) {
 	if pr != nil && (strings.EqualFold(pr.State, "MERGED") || pr.MergedAt != "") {
+		if pr.HeadRefOid == "" {
+			return false, "the merged PR reports no head commit to compare the branch with", ""
+		}
 		base := pr.BaseRefName
 		if base == "" {
 			base = c.def
 		}
-		return true, "PR merged into " + base
+		return true, "PR merged into " + base, pr.HeadRefOid
 	}
 	if !local {
 		if pr != nil {
-			return false, "PR is " + strings.ToLower(pr.State)
+			return false, "PR is " + strings.ToLower(pr.State), ""
 		}
-		return false, "no merged PR found and no local branch to compare"
+		return false, "no merged PR found and no local branch to compare", ""
 	}
 	bases := []string{"origin/" + c.def}
 	if pr != nil && pr.BaseRefName != "" && pr.BaseRefName != c.def {
@@ -295,43 +331,30 @@ func (c *checker) merged(ctx context.Context, branch string, local bool, pr *pul
 			continue
 		}
 		if _, err := c.git(ctx, "merge-base", "--is-ancestor", "refs/heads/"+branch, base); err == nil && c.advanced(ctx, branch) {
-			return true, "merged into " + base
+			return true, "merged into " + base, base
 		}
 	}
 	if pr != nil {
-		return false, "PR is " + strings.ToLower(pr.State)
+		return false, "PR is " + strings.ToLower(pr.State), ""
 	}
-	return false, "no merged PR and not merged into origin/" + c.def
+	return false, "no merged PR and not merged into origin/" + c.def, ""
 }
 
-// beyondPR reports commits on the branch that a merged PR did not include, such as
-// follow-up work pushed after the merge, or a PR found by name that belongs to
-// another branch. Both the local and the remote tip must be the PR head or behind it.
-func (c *checker) beyondPR(ctx context.Context, branch string, local bool, pr *pullRequest) string {
-	if pr == nil || pr.HeadRefOid == "" || (!strings.EqualFold(pr.State, "MERGED") && pr.MergedAt == "") {
-		return ""
+// contains reports whether tip is into or one of its ancestors. A commit that
+// is not available locally is never contained.
+func (c *checker) contains(ctx context.Context, into, tip string) bool {
+	if tip == into {
+		return true
 	}
-	tips := map[string]string{}
-	if local {
-		if sha, err := c.git(ctx, "rev-parse", "refs/heads/"+branch); err == nil {
-			tips["local branch"] = strings.TrimSpace(sha)
-		}
+	_, err := c.git(ctx, "merge-base", "--is-ancestor", tip, into)
+	return err == nil
+}
+
+func beyondDetail(where, into string, pr *pullRequest) string {
+	if pr != nil && into == pr.HeadRefOid {
+		return where + " has commits after the merged PR head " + short(into)
 	}
-	if out, err := c.git(ctx, "ls-remote", "--heads", "origin", "refs/heads/"+branch); err == nil {
-		if f := strings.Fields(out); len(f) > 0 {
-			tips["origin/"+branch] = f[0]
-		}
-	}
-	for _, where := range slices.Sorted(maps.Keys(tips)) {
-		tip := tips[where]
-		if tip == pr.HeadRefOid {
-			continue
-		}
-		if _, err := c.git(ctx, "merge-base", "--is-ancestor", tip, pr.HeadRefOid); err != nil {
-			return where + " has commits after the merged PR head " + short(pr.HeadRefOid)
-		}
-	}
-	return ""
+	return where + " has commits that are not in " + into
 }
 
 func short(sha string) string {
@@ -377,13 +400,23 @@ func Apply(ctx context.Context, p *Plan) (Outcome, error) {
 		return out, nil
 	}
 	repo := &gitx.Repo{Dir: p.Primary}
+	// Refuse before deleting anything when the branch moved since the plan: a
+	// commit made in the worktree meanwhile lives only on the local branch.
+	if p.deleteLocal {
+		if now, err := repo.Git(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.Branch); err == nil && strings.TrimSpace(now) != p.localTip {
+			return out, fmt.Errorf("%s moved to %s after the check; run finish again", p.Branch, short(strings.TrimSpace(now)))
+		}
+	}
 	if p.removeWorktree && isDir(p.Path) {
 		if _, err := repo.Git(ctx, "worktree", "remove", p.Path); err != nil {
 			return out, err
 		}
 	}
 	if p.deleteLocal {
-		if _, err := repo.Git(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.Branch); err == nil {
+		if now, err := repo.Git(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.Branch); err == nil {
+			if strings.TrimSpace(now) != p.localTip {
+				return out, fmt.Errorf("%s moved after the check; run finish again", p.Branch)
+			}
 			if _, err := repo.Git(ctx, "branch", "-D", p.Branch); err != nil {
 				return out, err
 			}
@@ -393,8 +426,11 @@ func Apply(ctx context.Context, p *Plan) (Outcome, error) {
 		return out, err
 	}
 	if p.deleteRemote {
-		if _, err := repo.Git(ctx, "push", "--quiet", "origin", "--delete", p.Branch); err != nil {
-			if remaining, lsErr := repo.Git(ctx, "ls-remote", "--heads", "origin", "refs/heads/"+p.Branch); lsErr != nil || strings.TrimSpace(remaining) != "" {
+		// Delete origin's branch only while it is still at the checked commit, so
+		// work pushed after the check, or since the last fetch, is kept.
+		ref := "refs/heads/" + p.Branch
+		if _, err := repo.Git(ctx, "push", "--quiet", "--force-with-lease="+ref+":"+p.remoteTip, "origin", ":"+ref); err != nil {
+			if remaining, lsErr := repo.Git(ctx, "ls-remote", "--heads", "origin", ref); lsErr != nil || strings.TrimSpace(remaining) != "" {
 				return out, err
 			}
 		}
@@ -462,7 +498,10 @@ func (c *checker) inspect(ctx context.Context, e *Entry, res *SweepResult) Outco
 	}
 	o = refused.Outcome
 	if o.State == StateUnmerged {
-		o.State, o.Detail = StateActive, ""
+		o.State = StateActive
+		if !refused.beyond {
+			o.Detail = ""
+		}
 		if n := c.unpushed(ctx, e.Branch, nil); n > 0 {
 			o.State, o.Detail = StateUnpushed, fmt.Sprintf("%d commit(s) not on origin", n)
 		}
