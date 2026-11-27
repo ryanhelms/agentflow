@@ -156,7 +156,7 @@ func TestAnnotationTextLosesControlAndBidiCharacters(t *testing.T) {
 	}
 	env := spyEnvs()[0]
 	if _, err := env.Publish(context.Background(), plugin.PublishRequest{Type: bus.TypePluginAnnotationAdded,
-		Payload: annotation("safe‮gnp.exe\u0007 ⁦x⁩\x1b[31m"), Repo: repo}); err != nil {
+		Payload: annotation("safe\u202Egnp.exe\u0007 \u2066x\u2069\x1b[31m"), Repo: repo}); err != nil {
 		t.Fatal(err)
 	}
 	e := <-notes.Events()
@@ -165,7 +165,7 @@ func TestAnnotationTextLosesControlAndBidiCharacters(t *testing.T) {
 	if p.Text != "safegnp.exe x[31m" {
 		t.Fatalf("text %q", p.Text)
 	}
-	if got := plugin.SafeText("a‏b؜c\x7f\u0085d\nsecond", 100); got != "abcd" {
+	if got := plugin.SafeText("a\u200Fb\u061Cc\x7f\u0085d\nsecond", 100); got != "abcd" {
 		t.Fatalf("SafeText %q", got)
 	}
 }
