@@ -26,6 +26,8 @@ func (a *App) jiraSettings() config.JiraSettings {
 	return config.JiraSettings{Site: a.Cfg.Jira.Site, Projects: a.Cfg.Jira.Projects}
 }
 
+var errNoJiraSite = errors.New("no Jira site is configured: set task_management.settings.site in .agentflow/config.yml")
+
 func validateSite(site string) error {
 	u, err := url.Parse(site)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" ||
@@ -41,7 +43,7 @@ func (a *App) jiraSite() (string, error) {
 	}
 	site := a.jiraSettings().Site
 	if site == "" {
-		return "", errors.New("no Jira site is configured: set task_management.settings.site in .agentflow/config.yml")
+		return "", errNoJiraSite
 	}
 	return site, validateSite(site)
 }

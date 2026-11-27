@@ -941,7 +941,8 @@ manager, then add them again.
 
 In each repository set up for Claude Code, delete `extraKnownMarketplaces.nscale` and
 `enabledPlugins."agentflow@nscale"` from `.claude/settings.json`, then run
-`agentflow install --client claude`. `agentflow remove` still undoes the old entries.
+`agentflow install --client claude`. `agentflow remove` still undoes old entries that name
+`ryanhelms/agentflow`; delete older ones by hand.
 
 ## Security and governance
 

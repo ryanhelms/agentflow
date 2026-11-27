@@ -8,7 +8,7 @@
 # Transitions only go forward: never out of a Done-category status, never to an earlier
 # status category, and never to an earlier entry in the project's optional `order:` list.
 #
-# Owners: Engineering Enablement owns this file; each project block also needs approval
+# Owners: the agentflow maintainer owns this file; each project block also needs approval
 # from that team's lead (see CODEOWNERS). Scope today: the pilot project only.
 version: 1
 

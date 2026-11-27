@@ -222,6 +222,29 @@ func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project defini
 	return c, found, nil
 }
 
+// AtlassianSite is the site that login and logout act on when none is given: the
+// Jira task provider's, then jira.site, then the Confluence one. It is empty when
+// the repository at root names none.
+func AtlassianSite(root string) string {
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		// A provider definition that cannot be loaded must not stop a sign-in.
+		if c, _, err = LoadRepoCore(root); err != nil {
+			return ""
+		}
+	}
+	if s, ok := c.Providers.TaskManagement.Settings.(*JiraSettings); ok && s.Site != "" {
+		return s.Site
+	}
+	if c.Jira.Site != "" {
+		return c.Jira.Site
+	}
+	if s, ok := c.Providers.KnowledgeBase.Settings.(*ConfluenceSettings); ok && s.Site != "" {
+		return s.Site
+	}
+	return c.Confluence.Site
+}
+
 // LoadRepoCore reads repository policy, update and commit settings independently
 // of optional provider files. Provider operations must use LoadRepo.
 func LoadRepoCore(root string) (*Repo, bool, error) {
