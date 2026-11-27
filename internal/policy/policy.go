@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -131,6 +132,9 @@ func (g *Gate) CheckActionsUntil(class Class, action string, related []string, p
 	if class == Read {
 		return d, nil
 	}
+	if IsSessionClient(g.Client) {
+		return Decision{}, ErrSessionReadOnly
+	}
 	if rule.Level == config.Suggest {
 		d.Outcome, d.Reason = SuggestOnly, fmt.Sprintf("%s sets %s to suggest. Run it yourself", rule.Source, rule.Action)
 		return d, nil
@@ -246,10 +250,14 @@ func ForbiddenWith(cmd string, protected []string, currentBranch string, opt Nev
 // ForbiddenAlways returns a reason for the never-list entries that hold in
 // every mode and repository, including pre-bash --convention-only. Plugins
 // belong to the user, not to a repository, so no repository's mode lets an
-// agent add, remove or approve one.
+// agent add, remove or approve one. Allowing what an AI session asks for is
+// a person's decision for the same reason.
 func ForbiddenAlways(cmd string) string {
 	if changesPlugins(cmd) {
 		return "adding, removing and approving plugins is a human decision; ask the user to run agentflow plugin add, remove or approve in their own terminal"
+	}
+	if allowsSessionAsk(cmd) {
+		return "allowing what an AI session asks for is a human decision; ask the user to answer in the console's AI panel, or to run agentflow ai respond --allow in their own terminal"
 	}
 	return ""
 }
@@ -274,6 +282,45 @@ var pluginDecisions = []string{"add", "remove", "approve"}
 // that only mentions the words in an argument of another program does not
 // match.
 func changesPlugins(cmd string) bool {
+	for _, args := range agentflowInvocations(cmd) {
+		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) && namesSomething(args[2:]) {
+			return true
+		}
+	}
+	return false
+}
+
+// allowsSessionAsk reports whether cmd runs agentflow ai respond with
+// --allow (also --allow=true), found the way changesPlugins finds plugin
+// decisions and with the same limits. --reject stays open to agents.
+func allowsSessionAsk(cmd string) bool {
+	for _, args := range agentflowInvocations(cmd) {
+		if len(args) < 2 || args[0] != "ai" || args[1] != "respond" {
+			continue
+		}
+		for _, a := range args[2:] {
+			if a == "--" {
+				break
+			}
+			if !strings.HasPrefix(a, "-") {
+				continue
+			}
+			name, value, hasValue := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-"), "=")
+			if on, err := strconv.ParseBool(value); name == "allow" && (!hasValue || err != nil || on) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// agentflowInvocations returns the arguments of every agentflow invocation in
+// cmd, after the program and an optional --native-client NAME. It finds the
+// program by name, by the path of a launcher or of a cached build, or
+// through go run, also inside a shell, script or another wrapper
+// (boundary.SimpleCommands).
+func agentflowInvocations(cmd string) [][]string {
+	var out [][]string
 	for _, words := range boundary.SimpleCommands(cmd) {
 		program, args := words[0], words[1:]
 		switch name := boundary.ProgramName(program); {
@@ -288,11 +335,9 @@ func changesPlugins(cmd string) bool {
 		if len(args) > 1 && args[0] == "--native-client" {
 			args = args[2:]
 		}
-		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) && namesSomething(args[2:]) {
-			return true
-		}
+		out = append(out, args)
 	}
-	return false
+	return out
 }
 
 // IsProtected reports whether branch matches any protected pattern.
