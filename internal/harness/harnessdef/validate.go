@@ -254,32 +254,33 @@ func (v *validator) args(field string, args []string) {
 }
 
 // pluginArgs refuses, in a plugin's args and version_args, any value that
-// could point the program at a file or a host: an absolute path (also after
-// "=" or ",", and Windows drive forms), "..", "~", and anything with a ":"
-// (URLs, host:path, drive letters). A plugin chooses these values, not the
-// person, and the program they reach may be any program on PATH.
+// is not a plain token (PluginArgAllowed). A plugin chooses these values,
+// not the person, and the program they reach may be any program on PATH, so
+// no value may name a file, a directory or a host. The registry and overlay
+// layers keep their own rule (ValidArg).
 func (v *validator) pluginArgs(field string, args []string) {
 	for _, a := range args {
 		if PluginArgRefused(a) {
-			v.fail(field, CodeArgs, "a plugin's arguments may not hold a path, a host or a URL (no leading /, no .., ~ or :)")
+			v.fail(field, CodeArgs, "a plugin's arguments must be plain words or flags: an optional - or --, then letters, digits, . _ or -, optionally =value of the same characters, and no ..")
 			return
 		}
 	}
 }
 
-// PluginArgRefused reports whether a plugin-layer argument holds a path,
-// a host or a URL.
-func PluginArgRefused(a string) bool {
-	if strings.ContainsAny(a, ":~\\") || strings.Contains(a, "..") {
-		return true
-	}
-	for _, part := range strings.FieldsFunc(a, func(r rune) bool { return r == '=' || r == ',' }) {
-		if strings.HasPrefix(part, "/") || strings.HasPrefix(part, "@") {
-			return true
-		}
-	}
-	return false
+// pluginArgRule is the plugin-layer allowlist: an optional "-" or "--",
+// a word that starts with a letter or digit, and optionally "=" and a value
+// of the same characters. "/", ":", "@", "~", "\" and "," never match.
+var pluginArgRule = regexp.MustCompile(`^(--?)?[A-Za-z0-9][A-Za-z0-9._-]*(=[A-Za-z0-9._-]+)?$`)
+
+// PluginArgAllowed reports whether a plugin-layer argument is a plain token
+// (pluginArgRule, at most 128 bytes, no "..").
+func PluginArgAllowed(a string) bool {
+	return len(a) <= 128 && pluginArgRule.MatchString(a) && !strings.Contains(a, "..")
 }
+
+// PluginArgRefused reports whether a plugin-layer argument is not a plain
+// token (the inverse of PluginArgAllowed).
+func PluginArgRefused(a string) bool { return !PluginArgAllowed(a) }
 
 func hasStatus(d Definition) bool {
 	return d.StatusFrom != "" || len(d.StatusArgs) > 0 || len(d.StatusSignedIn) > 0 ||

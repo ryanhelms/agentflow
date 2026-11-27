@@ -204,3 +204,44 @@ func TestCleanText(t *testing.T) {
 		t.Errorf("len = %d", len(got))
 	}
 }
+
+// TestPluginArgAllowlist: a plugin's args and version_args must be plain
+// tokens. The security review's bypasses of the old deny rules (a path
+// glued to a short or long flag, a user@host) are refused; the arguments
+// the pinned registry and overlay use still pass.
+func TestPluginArgAllowlist(t *testing.T) {
+	for _, a := range []string{"acp", "--acp", "-V", "--short", "--experimental-skills", "--mode=acp", "-n", "v1.2.3", "x_y", "--level=0.5"} {
+		if !harnessdef.PluginArgAllowed(a) || harnessdef.PluginArgRefused(a) {
+			t.Errorf("PluginArgAllowed(%q) = false", a)
+		}
+	}
+	for _, a := range []string{
+		"-C/Users/x/repo", "-f/etc/passwd", "--output-file/x", "user@host",
+		"/etc/passwd", "--files-from=/etc/passwd", "evil.example:loot", "https://evil.example/drop",
+		"@file", "~/x", "~", "..", "a..b", "--x=..", "a\\b", "a,b", "--a=b,c", "a/b", "--x=", "=x",
+		"---x", "-", "--", "-.x", "_x", "a=b=c", "a+b", "", strings.Repeat("a", 129),
+	} {
+		if harnessdef.PluginArgAllowed(a) || !harnessdef.PluginArgRefused(a) {
+			t.Errorf("PluginArgAllowed(%q) = true", a)
+		}
+	}
+}
+
+// TestValidatePluginGitReset is the review's example: a plugin that names
+// git with -C/path, reset, --hard is refused in the plugin layer, in args
+// and in version_args. The registry layer keeps its own rule.
+func TestValidatePluginGitReset(t *testing.T) {
+	for _, d := range []harnessdef.Definition{
+		{Command: "git", Args: []string{"-C/path", "reset", "--hard"}},
+		{Command: "git", VersionArgs: []string{"-C/path", "reset", "--hard"}},
+	} {
+		err := harnessdef.Validate("git-acp", d, harnessdef.LayerPlugin)
+		var ve *harnessdef.ValidationError
+		if !errors.As(err, &ve) || ve.Code != harnessdef.CodeArgs {
+			t.Fatalf("%+v: err = %v, want code args", d, err)
+		}
+	}
+	if err := harnessdef.Validate("git-acp", harnessdef.Definition{Command: "git", Args: []string{"-C/path"}}, harnessdef.LayerRegistry); err != nil {
+		t.Fatalf("registry layer: %v", err)
+	}
+}
