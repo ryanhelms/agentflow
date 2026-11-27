@@ -2240,6 +2240,10 @@ type Definition struct {
     StatusSource string `yaml:"status_source,omitempty" json:"status_source,omitempty"`
 }
 
+// Layer is the layer a definition comes from: "registry", "agentflow",
+// "plugin" or "personal" (constants LayerRegistry ... LayerPersonal).
+type Layer string
+
 // Validate checks d for the layer it comes from.
 func Validate(id string, d Definition, layer Layer) error
 ```
@@ -2310,7 +2314,7 @@ The finder looks up each definition's `command`, then its `base_commands`, in th
 
 ### Phase 6 harness launch profile (lanes 6.1 and 6.2)
 
-Probes run through the lane 5.1 launcher with a profile for PATH binaries. Lane 6.1 adds `internal/jsonrpc/harness.go` (additive, no change to existing behaviour):
+Probes run through the lane 5.1 launcher with a profile for PATH binaries. Lane 6.1 adds `internal/jsonrpc/harness.go` and `LaunchSpec.DataDir string` (additive, no change to existing behaviour). `DataDir`, when set, must be an absolute path to an existing directory, and `Dir` must then be inside `Root` or `DataDir` (links resolved); nothing is derived from the environment (neither `AGENTFLOW_PLUGIN_DATA` nor the parent of `HOME`). When it is empty, `Launch` and `Run` behave as before. `Run` keeps the first `maxStdout` bytes of stdout (its argument).
 
 ```go
 // HarnessEnv is ScrubbedEnv(parent, data, nil) with PATH set to pathDirs
@@ -2319,7 +2323,7 @@ func HarnessEnv(parent []string, data string, pathDirs []string) ([]string, erro
 
 // RunResult is a finished child that does not speak JSON-RPC.
 type RunResult struct {
-    Stdout   []byte // at most RunSpec.MaxStdout bytes, the first ones
+    Stdout   []byte // at most maxStdout bytes, the first ones
     ExitCode int    // -1 when killed
     TimedOut bool
 }
@@ -2430,7 +2434,7 @@ No other pinned harness has a verified status command:
 | Field | Value |
 | --- | --- |
 | Path, Root | as the probe: the found file and the deepest common directory |
-| Dir | `<home>/harnesses/<id>/status`, an empty directory (0700). Never a repository, so no project settings, hooks or project config load. |
+| Dir, DataDir | `Dir` is `<home>/harnesses/<id>/status`, an empty directory (0700), and `DataDir` is `<home>/harnesses/<id>`, so `Dir` is checked against it and never against the parent of the real `HOME`. Never a repository, so no project settings, hooks or project config load. |
 | Env | from the parent, only: `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TZ`, `TMPDIR`; `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` when set; on Windows `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `HOMEDRIVE`, `HOMEPATH` and the phase 5 Windows names; and the definition's `config_env` names when set (directory variables such as `CODEX_HOME`). `PATH` is the found directory plus the fixed system PATH. Nothing else: no credential variable, token, key, proxy setting, `SSH_AUTH_SOCK`, `AGENTFLOW_*` or session ID. |
 | Timeout | 5 s (`DefaultStatusTimeout`), then the process group is killed (`jsonrpc.Run`) |
 | Output | stdout and stderr, at most 4 KiB each, read into memory only to match `status_signed_out_line`, then dropped. Never written to the cache, a log (not even `probe.log`), an event, a result or the page. |
@@ -2499,7 +2503,7 @@ type Fix struct {
 
 **Sign-in guidance** (`Harness.SignIn`, from the last good `initialize`, shown for every found harness and first for `needs_auth`):
 
-- A `terminal` method → `{method, name, command}`, where `command` is the found command name (not its path), the definition's `args`, then the method's `args`, with the method's `env` as a prefix (`NAME=value`). The person runs it in their own terminal. The command is omitted (`unsafe: true`) when an arg fails the arg rule, there are more than 8 args, an env name is not `^[A-Z_][A-Z0-9_]*$`, an env value is over 128 bytes, or an env name changes program lookup, loading or trust: `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` (any case), `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `GIT_SSH_COMMAND`, `GIT_SSH`.
+- A `terminal` method → `{method, name, command}`, where `command` is the found command name (not its path), the definition's `args`, then the method's `args`, with the method's `env` as a prefix (`NAME=value`). The person runs it in their own terminal. The command is omitted (`unsafe: true`) when an arg fails the arg rule, there are more than 8 args, an env name is not `^[A-Z_][A-Z0-9_]*$`, an env value does not match the arg rule (the value comes from the agent and is pasted into a shell) or is over 128 bytes, or an env name changes program lookup, loading or trust: `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` (any case), `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `GIT_SSH_COMMAND`, `GIT_SSH`.
 - An `agent` method → `{method, name, description}` and the text "Start <name> in your terminal and sign in with its own login, then probe again." agentflow does not call `authenticate`.
 - Agent-supplied text is sanitized (Content Filter): one line, control and bidirectional characters removed; `id` and `name` at most 64 bytes, `description` 256, at most 8 methods.
 
@@ -2520,6 +2524,9 @@ type Harness struct {
     // "registry", "agentflow", "plugin:<id>", "personal".
     Sources     []string          `json:"sources"`
     Quarantined bool              `json:"quarantined,omitempty"`
+    // QuarantineReason is the registry's reason, clamped and sanitized like
+    // a description.
+    QuarantineReason string        `json:"quarantine_reason,omitempty"`
     // Command, Args: what is (or would be) started. Path: where Command was
     // found; a path under the OS home is shown as "~/...". Never in events.
     Command     string            `json:"command,omitempty"`
