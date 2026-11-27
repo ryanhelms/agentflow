@@ -24,8 +24,12 @@ type ChainConfig struct {
 	// Ceiling is CeilingConfirm for a session an agent started.
 	Ceiling string
 	User    *config.User
-	Repo    *config.Repo
-	Gate    *policy.Gate
+	// AccountRules are the deny and ask rules of the account's own
+	// agentflow home when AGENTFLOW_HOME is another folder: checked before
+	// User's rules, so no rule there can allow what they deny or ask.
+	AccountRules map[string]config.AIRule
+	Repo         *config.Repo
+	Gate         *policy.Gate
 	// Never-list inputs.
 	Protected        []string
 	Branch           string
@@ -291,6 +295,22 @@ func (l *ruleLink) Decide(ctx context.Context, r *Request, next Next) Verdict {
 		st.ask, st.askHandler = true, HandlerRule
 		if r.Reason == "" || r.Reason == ReasonTerminal {
 			r.Reason = ReasonEnv
+		}
+	}
+	// The account layer's deny and ask rules (account.go): any match.
+	for _, name := range slices.Sorted(maps.Keys(l.c.AccountRules)) {
+		rule := l.c.AccountRules[name]
+		if config.ValidateAIRule(name, rule) != nil || !ruleMatches(rule, r, paths) {
+			continue
+		}
+		switch rule.Decision {
+		case config.AIDecisionDeny:
+			return deny(HandlerRule, "rule:account:"+name)
+		case config.AIDecisionAsk:
+			st.ask, st.askHandler = true, HandlerRule
+			if r.Reason == "" {
+				r.Reason = ReasonRule
+			}
 		}
 	}
 	// The person's rules, by name; the first that matches decides. When

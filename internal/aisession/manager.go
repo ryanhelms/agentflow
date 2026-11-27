@@ -155,9 +155,20 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 		}
 		return nil, refuse(RefuseHomeUnsafe, "The agentflow home "+why+", so agentflow does not start sessions.", "")
 	}
-	user, err := config.LoadUserAt(home)
+	user, _, err := m.o.loadUser()
 	if err != nil {
 		return nil, refuse(RefuseHomeUnsafe, "Your config.yml does not load, so agentflow does not start sessions: "+err.Error()+".", "Fix config.yml, then try again.")
+	}
+	// Your own account's settings hold whatever AGENTFLOW_HOME says: a
+	// harness or a start you turned off there stays off.
+	if acct, _ := m.o.accountLayer(); acct != nil {
+		if slices.Contains(acct.AI.Harnesses.Disabled, r.Harness) {
+			return nil, refuse(RefuseNotReady, fmt.Sprintf("You turned off the harness %s.", harnessText(r.Harness)), "Turn it on in Settings in your own agentflow home.")
+		}
+		k, _ := config.DescribeAutonomyAction(ActionRun)
+		if d := config.ResolveAutonomy(acct, nil, "local", ActionRun, k.Mandatory); d.Level != config.Auto && d.Level != config.Confirm {
+			return nil, refuse(RefuseAgentStartOff, "Your autonomy settings do not let ai run start sessions ("+string(d.Level)+").", "Change autonomy.actions.ai.run in your own agentflow home.")
+		}
 	}
 	sess := user.AI.Sessions
 	if req.Kind == RequesterAgent && !sess.AgentStartOn() {
@@ -339,7 +350,13 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 		StartedBy: p.req, Ceiling: p.plan.Ceiling, Home: p.plan.Home, EnvNames: p.plan.EnvNames,
 		MCP: p.plan.MCP, Host: HostInfo{Mode: mode}, CreatedAt: m.o.Now().UTC(),
 	}
-	created, err := st.Create(sess, r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour})
+	var created Session
+	err = m.withAccountCounts(p.root, func(running, here, recent int) error {
+		var err error
+		created, err = st.Create(sess, r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour,
+			Running: running, Here: here, Recent: recent})
+		return err
+	})
 	if err != nil {
 		return Session{}, err
 	}
@@ -672,7 +689,7 @@ func (m *manager) Prune(context.Context) error {
 	if err != nil {
 		return err
 	}
-	user, err := config.LoadUserAt(m.o.Home)
+	user, _, err := m.o.loadUser()
 	if err != nil {
 		user = &config.User{}
 	}

@@ -235,7 +235,7 @@ func (h *host) heartbeat(ctx context.Context) {
 func (h *host) setup(ctx context.Context) (string, error) {
 	fail := func(code string) (string, error) { return code, errors.New(code) }
 	home := h.m.o.Home
-	user, err := config.LoadUserAt(home)
+	user, accountRules, err := h.m.o.loadUser()
 	if err != nil {
 		return fail(CodeLaunch)
 	}
@@ -313,7 +313,7 @@ func (h *host) setup(ctx context.Context) (string, error) {
 		protect = append(protect, filepath.Join(hd, ".agentflow-ui"))
 	}
 	h.chain = DefaultChain(ChainConfig{
-		Session: h.id, Worktree: root, Ceiling: sess.Ceiling, User: user, Repo: repo, Gate: gate,
+		Session: h.id, Worktree: root, Ceiling: sess.Ceiling, User: user, AccountRules: accountRules, Repo: repo, Gate: gate,
 		Protected: repo.Policy.ProtectedBranches, Branch: branch, CoordinatorMerge: repo.Policy.CoordinatorMerge,
 		MergeBase: h.m.o.MergeBase, RepoHome: repoHome, Resolve: boundary.GitResolver(ctx),
 		Protect: protect, Expand: expand, PluginDeny: h.m.o.PluginDeny, InTest: testing.Testing(), Guard: harness.GuardPath,

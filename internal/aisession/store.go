@@ -244,7 +244,7 @@ func (s *fileStore) Create(sess Session, prompt string, caps Caps) (Session, err
 			return err
 		}
 		now := s.now()
-		running, here, recent := 0, 0, 0
+		running, here, recent := caps.Running, caps.Here, caps.Recent
 		for _, o := range all {
 			if o.ID == sess.ID {
 				return errors.New("aisession: the session exists")

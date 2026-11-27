@@ -182,3 +182,39 @@ func TestAgentflowHomeFoldedSpellings(t *testing.T) {
 		t.Errorf("cat src/ſ.txt = %+v, want no agentflow_home deny", v)
 	}
 }
+
+func TestFSReadActionLevel(t *testing.T) {
+	c := newChainRig(t)
+	ctx := context.Background()
+	for l, want := range map[config.Level]Decision{config.Suggest: Deny, config.Confirm: Ask, config.Auto: Allow} {
+		u := userWith(nil, config.Autonomy{Actions: map[string]config.Level{ActionFSRead: l}})
+		if v := Run(ctx, c.chain(t, u, nil, ""), c.read("src/a.go")); v.Decision != want {
+			t.Errorf("ai.fs.read %s: read = %+v, want %s", l, v, want)
+		}
+	}
+}
+
+// The account layer makes every setting the stricter of the two.
+func TestStrictestTakesTheLowerLevel(t *testing.T) {
+	two, four := 2, 4
+	off := false
+	home := &config.User{Autonomy: config.Autonomy{Local: config.Auto, Remote: config.Auto, Actions: map[string]config.Level{ActionFSWrite: config.Auto}}}
+	home.AI.Sessions.MaxRunning = &four
+	acct := &config.User{Autonomy: config.Autonomy{Local: config.Suggest, Actions: map[string]config.Level{ActionFSRead: config.Confirm}}}
+	acct.AI.Sessions.MaxRunning, acct.AI.Sessions.AgentStart = &two, &off
+	acct.AI.Harnesses.Disabled = []string{"x"}
+	got := strictest(home, acct)
+	if got.Autonomy.Local != config.Suggest || got.Autonomy.Remote != config.Confirm {
+		t.Errorf("classes = %+v", got.Autonomy)
+	}
+	if got.Autonomy.Actions[ActionFSWrite] != config.Suggest || got.Autonomy.Actions[ActionFSRead] != config.Confirm {
+		t.Errorf("actions = %+v", got.Autonomy.Actions)
+	}
+	if got.AI.Sessions.EffectiveMaxRunning() != 2 || got.AI.Sessions.AgentStartOn() || len(got.AI.Harnesses.Disabled) != 1 {
+		t.Errorf("sessions = %+v disabled %v", got.AI.Sessions, got.AI.Harnesses.Disabled)
+	}
+	// The account layer never loosens.
+	if s := strictest(acct, home); s.Autonomy.Local != config.Suggest || s.AI.Sessions.AgentStartOn() {
+		t.Errorf("reverse = %+v", s.Autonomy)
+	}
+}

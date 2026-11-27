@@ -316,6 +316,17 @@ func ValidateAIRule(name string, r AIRule) error {
 // the harness this HOME ("Phase 7 session environment").
 func AccountHome() (string, error) { return accountHome() }
 
+// AccountAgentflowHome is the agentflow home of the OS account's own home
+// folder (~/.agentflow, or a legacy ~/.devflow when only that exists),
+// whatever AGENTFLOW_HOME, DEVFLOW_HOME or HOME say.
+func AccountAgentflowHome() (string, error) {
+	home, err := accountHome()
+	if err != nil {
+		return "", err
+	}
+	return defaultHome(home)
+}
+
 // LoadUserAt reads <home>/config.yml the way LoadUser reads the default
 // home's, for a caller that was given its agentflow home (an ACP session).
 // A missing file gives the defaults.

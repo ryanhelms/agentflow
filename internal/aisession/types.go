@@ -44,6 +44,12 @@ type Options struct {
 	// only the session's own repository. (Integration amendment, 2026-11-27.)
 	WorkDirs func(ctx context.Context) ([]string, error)
 	Now      func() time.Time
+	// AccountHome is the OS account's own agentflow home (~/.agentflow of
+	// the os/user account, not $HOME or AGENTFLOW_HOME). When it differs
+	// from Home, its settings may only make a session stricter and its
+	// sessions count toward the caps (account.go). Empty: no account layer
+	// (tests, unless they set one).
+	AccountHome string
 }
 
 // ---- lifecycle ("Phase 7 session lifecycle") ----
@@ -550,6 +556,9 @@ type Caps struct {
 	MaxRunning    int // per user
 	PerWorktree   int // 1
 	StartsPerHour int
+	// Counted elsewhere (the account store, when AGENTFLOW_HOME is another
+	// folder): added to this store's own counts.
+	Running, Here, Recent int
 }
 
 // Store is the session store under <home>/ai (OpenStore). Every method

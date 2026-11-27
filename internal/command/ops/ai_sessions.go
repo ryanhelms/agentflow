@@ -24,6 +24,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/command/deliver"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/hooks"
 	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/version"
@@ -78,7 +79,23 @@ func AISessionOptions(a *app.App) aisession.Options {
 	o.MergeBase = func(cmd string) (string, error) { return hooks.MergeBase(context.Background(), dir, cmd) }
 	o.MCPServer = func(id aisession.ID) *acp.MCPServer { return sessionMCPServer(dir, id) }
 	o.WorkDirs = func(ctx context.Context) ([]string, error) { return aiServedRepos(ctx) }
+	o.AccountHome = aiAccountHome()
 	return o
+}
+
+// aiAccountHome is the OS account's own agentflow home (from os/user, not
+// $HOME or AGENTFLOW_HOME): its settings hold for a session whatever
+// AGENTFLOW_HOME the caller set. A test binary reads none (it is the
+// person's real home) unless a test sets this.
+var aiAccountHome = func() string {
+	if testing.Testing() {
+		return ""
+	}
+	home, err := config.AccountAgentflowHome()
+	if err != nil {
+		return ""
+	}
+	return home
 }
 
 // aiServedRepos lists the repositories the console daemon serves, for the
