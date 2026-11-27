@@ -105,8 +105,22 @@ func TestValidateRefuses(t *testing.T) {
 		{"config proxy", "x", harnessdef.Definition{ConfigEnv: []string{"HTTPS_PROXY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config credential suffix", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_API_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config named credential", "x", harnessdef.Definition{CredentialEnv: []string{"CODEX_SECRET"}, ConfigEnv: []string{"CODEX_SECRET"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"plugin abs version arg", "x", harnessdef.Definition{Command: "rsync", VersionArgs: []string{"/etc/passwd"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin url arg", "x", harnessdef.Definition{Command: "rsync", Args: []string{"https://evil.example/x"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin host arg", "x", harnessdef.Definition{Command: "rsync", Args: []string{"evil.example:x"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin abs after =", "x", harnessdef.Definition{Command: "a", Args: []string{"--config=/etc/x"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin abs after ,", "x", harnessdef.Definition{Command: "a", Args: []string{"--f=a,/etc/x"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin drive", "x", harnessdef.Definition{Command: "a", Args: []string{"--f=C:/x"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin dotdot", "x", harnessdef.Definition{Command: "a", VersionArgs: []string{"--f=a/../b"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
+		{"plugin at host", "x", harnessdef.Definition{Command: "a", Args: []string{"--to=@evil"}}, harnessdef.LayerPlugin, harnessdef.CodeArgs},
 		{"config agentflow", "x", harnessdef.Definition{ConfigEnv: []string{"AGENTFLOW_HOME"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
-		{"personal source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "me"}, harnessdef.LayerPersonal, harnessdef.CodeRule},
+		{"config token", "x", harnessdef.Definition{ConfigEnv: []string{"GITHUB_TOKEN"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config secret", "x", harnessdef.Definition{ConfigEnv: []string{"AWS_SECRET_ACCESS_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config password", "x", harnessdef.Definition{ConfigEnv: []string{"DB_PASSWORD"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config ssh agent", "x", harnessdef.Definition{ConfigEnv: []string{"SSH_AUTH_SOCK"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config key", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_KEY"}}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
+		{"config node options overlay", "x", harnessdef.Definition{ConfigEnv: []string{"NODE_OPTIONS"}}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
+		{"two-line source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "a\nb"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"overlay without source", "x", harnessdef.Definition{StatusFrom: "self"}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
 	}
 	for _, c := range cases {
@@ -151,7 +165,7 @@ func TestRuleHelpers(t *testing.T) {
 	if harnessdef.LaunchSafetyName("CODEX_HOME") {
 		t.Error("CODEX_HOME is not a launch-safety name")
 	}
-	for _, n := range []string{"X_API_KEY", "gh_auth_token", "A_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+	for _, n := range []string{"X_API_KEY", "gh_auth_token", "A_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "x_refresh_token"} {
 		if !harnessdef.CredentialSuffix(n) {
 			t.Errorf("CredentialSuffix(%q) = false", n)
 		}
@@ -167,4 +181,67 @@ func make17() []string {
 		out[i] = "a"
 	}
 	return out
+}
+
+func TestCleanText(t *testing.T) {
+	cases := map[string]string{
+		"plain":                   "plain",
+		"  two\nlines\r\n here ":  "two lines here",
+		"bidi\u202e text\u200b":   "bidi text",
+		"bell\x07 and \x00nul":    "bell and nul",
+		"tab\tand\u2028sep":       "tab and sep",
+		string([]byte{0xff, 'a'}): "a",
+	}
+	for in, want := range cases {
+		if got := harnessdef.CleanText(in, 64); got != want {
+			t.Errorf("CleanText(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := harnessdef.CleanText("aé", 2); got != "a" {
+		t.Errorf("cut inside a rune: %q", got)
+	}
+	if got := harnessdef.CleanText(strings.Repeat("x", 300), 256); len(got) != 256 {
+		t.Errorf("len = %d", len(got))
+	}
+}
+
+// TestPluginArgAllowlist: a plugin's args and version_args must be plain
+// tokens. The security review's bypasses of the old deny rules (a path
+// glued to a short or long flag, a user@host) are refused; the arguments
+// the pinned registry and overlay use still pass.
+func TestPluginArgAllowlist(t *testing.T) {
+	for _, a := range []string{"acp", "--acp", "-V", "--short", "--experimental-skills", "--mode=acp", "-n", "v1.2.3", "x_y", "--level=0.5"} {
+		if !harnessdef.PluginArgAllowed(a) || harnessdef.PluginArgRefused(a) {
+			t.Errorf("PluginArgAllowed(%q) = false", a)
+		}
+	}
+	for _, a := range []string{
+		"-C/Users/x/repo", "-f/etc/passwd", "--output-file/x", "user@host",
+		"/etc/passwd", "--files-from=/etc/passwd", "evil.example:loot", "https://evil.example/drop",
+		"@file", "~/x", "~", "..", "a..b", "--x=..", "a\\b", "a,b", "--a=b,c", "a/b", "--x=", "=x",
+		"---x", "-", "--", "-.x", "_x", "a=b=c", "a+b", "", strings.Repeat("a", 129),
+	} {
+		if harnessdef.PluginArgAllowed(a) || !harnessdef.PluginArgRefused(a) {
+			t.Errorf("PluginArgAllowed(%q) = true", a)
+		}
+	}
+}
+
+// TestValidatePluginGitReset is the review's example: a plugin that names
+// git with -C/path, reset, --hard is refused in the plugin layer, in args
+// and in version_args. The registry layer keeps its own rule.
+func TestValidatePluginGitReset(t *testing.T) {
+	for _, d := range []harnessdef.Definition{
+		{Command: "git", Args: []string{"-C/path", "reset", "--hard"}},
+		{Command: "git", VersionArgs: []string{"-C/path", "reset", "--hard"}},
+	} {
+		err := harnessdef.Validate("git-acp", d, harnessdef.LayerPlugin)
+		var ve *harnessdef.ValidationError
+		if !errors.As(err, &ve) || ve.Code != harnessdef.CodeArgs {
+			t.Fatalf("%+v: err = %v, want code args", d, err)
+		}
+	}
+	if err := harnessdef.Validate("git-acp", harnessdef.Definition{Command: "git", Args: []string{"-C/path"}}, harnessdef.LayerRegistry); err != nil {
+		t.Fatalf("registry layer: %v", err)
+	}
 }

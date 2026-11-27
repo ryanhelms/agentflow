@@ -1,0 +1,16 @@
+ok    registry     ACP registry copy 4273056f03b9 from 2026-11-26, 46 agents.
+ok    home         The agentflow home is not refused.
+warn  path         Skipped on your PATH: ~/app/bin (inside_repository).
+      ~/app/bin is inside a git working tree, so agentflow ignores it. Name the harness by absolute path in your overrides if you trust it.
+ok    definitions  No personal or plugin harness definition was refused.
+ok    cache        No probe results are cached.
+warn  daemon       No console daemon runs.
+      Run `agentflow ui` for live detection.
+        agentflow ui
+ok    auto_probe   Automatic probes are off; no found harness is waiting for one.
+warn  sign_in      Needs sign-in: Codex (codex-acp).
+      Sign in to Codex, then probe again.
+        codex login
+ok    harnesses    Ready: gemini.
+
+Not probed: automatic probes are off, so only you can ask. Run `agentflow ai harnesses --probe` in your own terminal, outside an AI agent.

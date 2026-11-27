@@ -5,7 +5,7 @@ argument-hint: "[--screen SCREEN] [--role ROLE] [--no-open] [--port N] [--foregr
 ---
 When the developer asks to open the console for the current worktree, call
 `agentflow_ui_open`. Use `screen: "overview"` for the dashboard,
-`"providers"` for the provider editor, `"autonomy"` for approval settings, `"plugins"` for installed plugins, `"configuration"` for repository
+`"providers"` for the provider editor, `"autonomy"` for approval settings, `"plugins"` for installed plugins, `"harnesses"` for detected ACP harnesses, `"configuration"` for repository
 files, or `"handoff"` for the handoff page. A provider role such as
 `task_management` opens that role directly. The tool opens the local browser
 and directs an existing tab for the clone to the requested worktree.

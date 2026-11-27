@@ -129,6 +129,9 @@ type User struct {
 	// Plugins holds the installed plugins' enabled flags and settings, by
 	// plugin ID. Only the personal layer enables a plugin.
 	Plugins map[string]UserPlugin `yaml:"plugins,omitempty"`
+	// AI configures ACP harness detection (phase 6). Only the personal
+	// layer has it.
+	AI UserAI `yaml:"ai,omitempty"`
 }
 
 // Worktree is the repository's worktree section: where `agentflow start --worktree`
@@ -348,6 +351,9 @@ func LoadUser() (*User, error) {
 		return nil, err
 	}
 	if err := validateAutonomy(u.Autonomy, "autonomy", u.ApprovalWindow, "approval_window"); err != nil {
+		return nil, fmt.Errorf("~/.agentflow/config.yml: %w", err)
+	}
+	if err := ValidateAI(u.AI); err != nil {
 		return nil, fmt.Errorf("~/.agentflow/config.yml: %w", err)
 	}
 	if u.Autonomy.Local == "" {

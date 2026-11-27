@@ -109,8 +109,8 @@ func writeCommands(invoke []string) []string {
 	return out
 }
 
-// DescribeExtensions describes each handler and permission rule of m in one
-// line. The lines are display text and stay stable for one manifest.
+// DescribeExtensions describes each handler, permission rule and harness of
+// m in one line. The lines are display text and stay stable for one manifest.
 func DescribeExtensions(m manifest.Manifest) []string {
 	out := []string{}
 	for _, h := range m.Extensions.Handler {
@@ -133,6 +133,31 @@ func DescribeExtensions(m manifest.Manifest) []string {
 	}
 	for _, r := range m.Extensions.PermissionRule {
 		out = append(out, fmt.Sprintf("permission rule %s: denies %s with %q", r.Name, matchText(r.Match), r.Deny))
+	}
+	// A harness is data, but its command and arguments are what agentflow
+	// starts when you probe it: show all of them. A plugin's harness is
+	// never probed automatically, for an agent or by a probe of every
+	// harness, only when you probe it by name.
+	for _, h := range m.Extensions.Harness {
+		if h.Command == "" {
+			out = append(out, "harness "+h.ID+": names no command")
+			continue
+		}
+		line := "harness " + h.ID + ": when you probe it, runs " + strings.Join(append([]string{h.Command}, h.Args...), " ")
+		switch {
+		case h.NoVersion:
+			line += ", no version command"
+		default:
+			version := h.VersionArgs
+			if len(version) == 0 {
+				version = []string{"--version"}
+			}
+			line += ", and for its version " + strings.Join(append([]string{h.Command}, version...), " ")
+		}
+		if len(h.BaseCommands) > 0 {
+			line += " (adapter for " + strings.Join(h.BaseCommands, ", ") + ")"
+		}
+		out = append(out, line+"; found on your PATH, only when you probe it by name (agentflow ai harnesses --probe --id "+h.ID+")")
 	}
 	return out
 }

@@ -129,7 +129,21 @@ func TestDurationLimitsAreTheOnesTheCodeChecks(t *testing.T) {
 		t.Helper()
 		return inspect(t, "policy:\n  max_approval_window: "+window+"\n")
 	}
-	load := map[string]func(*testing.T, string) error{"personal:approval_window": user, "repo:policy.max_approval_window": repo}
+	userKey := func(key string) func(*testing.T, string) error {
+		return func(t *testing.T, value string) error {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("ai:\n  harnesses:\n    "+key+": "+value+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := config.LoadUser()
+			return err
+		}
+	}
+	load := map[string]func(*testing.T, string) error{
+		"personal:approval_window": user, "repo:policy.max_approval_window": repo,
+		"personal:ai.harnesses.poll_interval": userKey("poll_interval"),
+		"personal:ai.harnesses.probe_timeout": userKey("probe_timeout"),
+	}
 
 	seen := map[string]bool{}
 	for _, f := range config.Catalog() {

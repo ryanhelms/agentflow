@@ -5,7 +5,7 @@ A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 - MCP server `agentflow` (all `agentflow_*` tools)
 - Skill `agentflow` with the commit, PR, confirmation and untrusted-content rules
 - A skill per CLI command, run as `/agentflow:<name>`: `init`, `remove`, `pin`, `install`,
-  `login`, `logout`, `doctor`, `work`, `start`, `context`, `commit`, `preview`, `transition`, `pr`,
+  `login`, `logout`, `doctor`, `ai`, `work`, `start`, `context`, `commit`, `preview`, `transition`, `pr`,
   `review`, `status`, `standup`, `docs`, `adr`, `release`, `update`, `version`. `init`,
   `remove`, `install`, `login`, `logout` and `update` run only when you invoke them.
 - `bin/agentflow`, on Claude's Bash PATH: runs the installed agentflow or installs the latest

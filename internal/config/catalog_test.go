@@ -176,7 +176,7 @@ func TestGroupsAreOrderedAndIncludeEachRole(t *testing.T) {
 	for _, role := range ProviderRoles {
 		want = append(want, "providers."+role)
 	}
-	want = append(want, "autonomy", "policy", "commit", "worktrees", "integrations", "updates", "init", "plugins")
+	want = append(want, "autonomy", "policy", "commit", "worktrees", "integrations", "updates", "init", "ai", "plugins")
 	if !slices.Equal(ids, want) {
 		t.Errorf("groups = %v\nwant     %v", ids, want)
 	}
@@ -254,7 +254,7 @@ func TestCatalogSchemasAreTheCompiledOnes(t *testing.T) {
 		if e == nil {
 			t.Fatalf("%s: no table entry", fieldName(f))
 		}
-		if len(e.enum)+len(e.itemSuggestions)+len(e.valueEnum)+len(e.keySuggestions) > 0 {
+		if len(e.enum)+len(e.itemSuggestions)+len(e.valueEnum)+len(e.keySuggestions)+len(e.columnEnum) > 0 {
 			continue
 		}
 		if want := raw[f.ID+"|"+f.Provider]; !reflect.DeepEqual(f.Schema, want) {

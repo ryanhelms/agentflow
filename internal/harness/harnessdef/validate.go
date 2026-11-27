@@ -40,7 +40,7 @@ var (
 		"GIT_SSH_COMMAND": true, "GIT_SSH": true,
 	}
 	launchSafetyPrefixes = []string{"LD_", "DYLD_"}
-	credentialSuffixes   = []string{"_API_KEY", "_AUTH_TOKEN", "_ACCESS_TOKEN", "_OAUTH_TOKEN"}
+	credentialSuffixes   = []string{"_API_KEY", "_AUTH_TOKEN", "_ACCESS_TOKEN", "_OAUTH_TOKEN", "_REFRESH_TOKEN"}
 )
 
 // ValidationError is the first problem Validate found. Code is one of the
@@ -55,10 +55,21 @@ type ValidationError struct {
 }
 
 func (e *ValidationError) Error() string {
+	id := SafeID(e.ID)
 	if e.Field == "" {
-		return fmt.Sprintf("harness %q (%s): %s", e.ID, e.Layer, e.Message)
+		return fmt.Sprintf("harness %q (%s): %s", id, e.Layer, e.Message)
 	}
-	return fmt.Sprintf("harness %q (%s): %s: %s", e.ID, e.Layer, e.Field, e.Message)
+	return fmt.Sprintf("harness %q (%s): %s: %s", id, e.Layer, e.Field, e.Message)
+}
+
+// SafeID is id when it passes the ID rule, otherwise "(invalid ID)": an ID
+// is a key of the person's config.yml, and a key that breaks the rule may
+// be any text (a pasted value), so it is never shown.
+func SafeID(id string) string {
+	if idRule.MatchString(id) {
+		return id
+	}
+	return "(invalid ID)"
 }
 
 // ValidArg reports whether s passes the registry arg rule
@@ -100,12 +111,44 @@ func LaunchSafetyName(name string) bool {
 }
 
 // CredentialSuffix reports whether the environment variable name ends in
-// _API_KEY, _AUTH_TOKEN, _ACCESS_TOKEN or _OAUTH_TOKEN (in any case): a
+// _API_KEY, _AUTH_TOKEN, _ACCESS_TOKEN, _OAUTH_TOKEN or _REFRESH_TOKEN (in any case): a
 // variable that could sign any harness in.
 func CredentialSuffix(name string) bool {
 	up := strings.ToUpper(name)
 	for _, s := range credentialSuffixes {
 		if strings.HasSuffix(up, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// ConfigEnvRefused reports why name may not be a config_env name, or "".
+// config_env names are passed, with their values, to a status command that
+// runs with the person's real home, so only directory variables belong
+// there: never a name that changes program lookup, loading or trust, never
+// a credential-like name (one with TOKEN, SECRET, PASSWORD, PASSWD,
+// CREDENTIAL or a _KEY ending, the credential suffixes, SSH_AUTH_SOCK, or a
+// name in credentialEnv), and never an agentflow variable.
+func ConfigEnvRefused(name string, credentialEnv []string) string {
+	up := strings.ToUpper(name)
+	switch {
+	case LaunchSafetyName(name):
+		return "names a variable that changes program lookup, loading or trust"
+	case CredentialSuffix(name) || contains(credentialEnv, name) || credentialLike(up):
+		return "names a credential variable, which is never passed to a status command"
+	case strings.HasPrefix(up, "AGENTFLOW_") || strings.HasPrefix(up, "DEVFLOW_"):
+		return "names an agentflow variable, which is never passed to a status command"
+	}
+	return ""
+}
+
+func credentialLike(up string) bool {
+	if up == "SSH_AUTH_SOCK" || strings.HasSuffix(up, "_KEY") || up == "KEY" {
+		return true
+	}
+	for _, w := range []string{"TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"} {
+		if strings.Contains(up, w) {
 			return true
 		}
 	}
@@ -162,6 +205,10 @@ func (v *validator) check(d Definition) {
 	}
 	v.args("args", d.Args)
 	v.args("version_args", d.VersionArgs)
+	if v.layer == LayerPlugin {
+		v.pluginArgs("args", d.Args)
+		v.pluginArgs("version_args", d.VersionArgs)
+	}
 	if d.BaseName != "" && !oneLine(d.BaseName, MaxNameLen) {
 		v.fail("base_name", CodeName, "must be one line of at most 64 bytes")
 	}
@@ -205,6 +252,35 @@ func (v *validator) args(field string, args []string) {
 		}
 	}
 }
+
+// pluginArgs refuses, in a plugin's args and version_args, any value that
+// is not a plain token (PluginArgAllowed). A plugin chooses these values,
+// not the person, and the program they reach may be any program on PATH, so
+// no value may name a file, a directory or a host. The registry and overlay
+// layers keep their own rule (ValidArg).
+func (v *validator) pluginArgs(field string, args []string) {
+	for _, a := range args {
+		if PluginArgRefused(a) {
+			v.fail(field, CodeArgs, "a plugin's arguments must be plain words or flags: an optional - or --, then letters, digits, . _ or -, optionally =value of the same characters, and no ..")
+			return
+		}
+	}
+}
+
+// pluginArgRule is the plugin-layer allowlist: an optional "-" or "--",
+// a word that starts with a letter or digit, and optionally "=" and a value
+// of the same characters. "/", ":", "@", "~", "\" and "," never match.
+var pluginArgRule = regexp.MustCompile(`^(--?)?[A-Za-z0-9][A-Za-z0-9._-]*(=[A-Za-z0-9._-]+)?$`)
+
+// PluginArgAllowed reports whether a plugin-layer argument is a plain token
+// (pluginArgRule, at most 128 bytes, no "..").
+func PluginArgAllowed(a string) bool {
+	return len(a) <= 128 && pluginArgRule.MatchString(a) && !strings.Contains(a, "..")
+}
+
+// PluginArgRefused reports whether a plugin-layer argument is not a plain
+// token (the inverse of PluginArgAllowed).
+func PluginArgRefused(a string) bool { return !PluginArgAllowed(a) }
 
 func hasStatus(d Definition) bool {
 	return d.StatusFrom != "" || len(d.StatusArgs) > 0 || len(d.StatusSignedIn) > 0 ||
@@ -258,18 +334,13 @@ func (v *validator) status(d Definition) {
 	v.envNames("credential_env", d.CredentialEnv)
 	v.envNames("config_env", d.ConfigEnv)
 	for _, name := range d.ConfigEnv {
-		switch {
-		case LaunchSafetyName(name):
-			v.fail("config_env", CodeStatus, "names a variable that changes program lookup, loading or trust")
-		case CredentialSuffix(name) || contains(d.CredentialEnv, name):
-			v.fail("config_env", CodeStatus, "names a credential variable, which is never passed to a status command")
-		case strings.HasPrefix(name, "AGENTFLOW_"):
-			v.fail("config_env", CodeStatus, "names an agentflow variable, which is never passed to a status command")
+		if why := ConfigEnvRefused(name, d.CredentialEnv); why != "" {
+			v.fail("config_env", CodeStatus, why)
 		}
 	}
 	switch {
-	case v.layer == LayerPersonal && d.StatusSource != "":
-		v.fail("status_source", CodeRule, "is only for agentflow's overlay")
+	case d.StatusSource != "" && !oneLine(d.StatusSource, MaxStatusSourceLen):
+		v.fail("status_source", CodeStatus, "must be one line of at most 512 bytes")
 	case v.layer == LayerAgentflow && d.StatusFrom != "" && strings.TrimSpace(d.StatusSource) == "":
 		v.fail("status_source", CodeStatus, "an overlay sign-in check must cite its source")
 	}
@@ -291,6 +362,38 @@ func (v *validator) envNames(field string, names []string) {
 			return
 		}
 	}
+}
+
+// CleanText makes untrusted display text safe to show: line breaks and tabs
+// become spaces, other control and bidirectional formatting characters and
+// invalid UTF-8 are removed, runs of spaces are joined, the ends are trimmed,
+// and the result is cut to at most max bytes at a character boundary.
+func CleanText(s string, max int) string {
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToValidUTF8(s, "") {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t' || r == '\u2028' || r == '\u2029' || unicode.IsSpace(r):
+			space = b.Len() > 0
+			continue
+		case unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) || unicode.Is(unicode.Cf, r):
+			continue
+		}
+		if space {
+			b.WriteByte(' ')
+			space = false
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if len(out) > max {
+		cut := max
+		for cut > 0 && !utf8.RuneStart(out[cut]) {
+			cut--
+		}
+		out = strings.TrimSpace(out[:cut])
+	}
+	return out
 }
 
 // oneLine reports whether s is valid UTF-8 of at most max bytes with no

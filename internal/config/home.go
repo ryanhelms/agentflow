@@ -285,6 +285,17 @@ func resolvePath(p string) (string, bool) {
 // git working tree root (it has a .git entry: a primary checkout, a linked
 // worktree or a submodule) or a git directory. ok is false when a folder on
 // the way cannot be checked.
+// EnclosingRepository walks up from dir (resolved first) to the nearest
+// git working tree or git directory. ok is false when a folder on the way
+// cannot be read, so the answer is unknown.
+func EnclosingRepository(dir string) (repo string, inside, ok bool) {
+	resolved, rok := resolvePath(dir)
+	if !rok {
+		return "", false, false
+	}
+	return enclosingRepository(resolved)
+}
+
 func enclosingRepository(dir string) (repo string, inside, ok bool) {
 	for d := dir; ; {
 		_, err := os.Lstat(filepath.Join(d, ".git"))

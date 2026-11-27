@@ -51,6 +51,9 @@ const (
 	CodeNeedsPerson = "needs_person"
 	CodeShim        = "shim"
 	CodeTestGuard   = "test_guard"
+	// CodePluginLaunch: a plugin chose what is started, so only a person's
+	// own probe runs it (never the daemon or an agent).
+	CodePluginLaunch = "plugin_launch"
 )
 
 // Version codes (Harness.VersionCode).
@@ -98,6 +101,9 @@ const (
 const (
 	NoteRegistryEnvIgnored = "registry_env_ignored"
 	NoteQuarantined        = "quarantined"
+	// NotePluginLaunch: a plugin chose the command or its arguments, so
+	// agentflow starts it only when a person probes it.
+	NotePluginLaunch = "plugin_launch"
 )
 
 // Requesters (DetectOptions.Requester; see "Phase 6 who may probe").
@@ -278,7 +284,12 @@ type Found struct {
 	Target     string // resolved
 	PathDir    string // the PATH entry
 	Identity   string // "sha256:<hex>" of the identity fields
-	BaseFound  *Base
+	// BaseFound is the adapter's base CLI as found on PATH, by the same
+	// rules as the main file: Path absolute, PathDir its PATH entry, Target
+	// resolved, Identity IdentityOf(Path, StatusArgs, nil). Its ID is the
+	// harness's; its Definition holds only Name (the base name) and Command
+	// (the base command that matched). nil when no base command was found.
+	BaseFound *Found
 }
 
 // ProbeRecord is the stored result for one identity.
@@ -294,8 +305,10 @@ type ProbeRecord struct {
 	ProbedAt       time.Time  `json:"probed_at"`
 	DurationMS     int64      `json:"duration_ms"`
 	AuthRequiredAt *time.Time `json:"auth_required_at,omitempty"`
-	// Auth is the last sign-in verdict for this identity (and its base
-	// CLI's identity), with its time; never any output.
+	// Auth is the last sign-in verdict for this identity, with its time;
+	// never any output. BaseIdentity is the base CLI's identity
+	// (Found.BaseFound.Identity) when that verdict was taken, "" without a
+	// base: a later pass checks again when it changes.
 	Auth         *SignInStatus `json:"auth,omitempty"`
 	BaseIdentity string        `json:"base_identity,omitempty"`
 }
@@ -314,6 +327,9 @@ type PublishedState struct {
 	State   State  `json:"state"`
 	Code    string `json:"code,omitempty"`
 	Version string `json:"version,omitempty"`
+	// ProbeStatus is Harness.Probe.Status, so a probe-status change is seen
+	// after a daemon restart.
+	ProbeStatus string `json:"probe_status,omitempty"`
 }
 
 // Prober runs one initialize probe (lane 6.2: probe.go). The version

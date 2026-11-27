@@ -330,3 +330,130 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
 @media (forced-colors: active) {
   .nav-count { border: 1px solid CanvasText; }
 }
+
+/* The Harnesses page (docs/design/ui/harnesses.md). Tokens only: light and dark share these rules. */
+/* The rail entry: a terminal window with its cursor. */
+.ico-harness::after { content: ""; position: absolute; inset: auto auto 2px 2px; width: .34rem; height: 1.5px; background: currentColor; }
+#harnesses-note { margin: 0 0 var(--s-4); }
+#page-harnesses code { padding: .05rem .3rem; background: var(--surface-2); color: var(--text); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+#page-harnesses dt { color: var(--text-muted); font-size: var(--fs-xs); }
+#page-harnesses dd { margin: 0; overflow-wrap: anywhere; }
+/* A probe button that waits stays in the tab order and says why (docs/design/ui/harnesses.md, "Probe now"). */
+#page-harnesses .button[aria-disabled=true] { opacity: .57; cursor: not-allowed; }
+.hn-hint { max-width: 78ch; margin-top: var(--s-2); font-size: var(--fs-xs); }
+
+/* The header: what was checked, the probe button, the registry copy and the settings that steer detection. */
+.hn-bar { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: var(--s-3) var(--s-5); }
+.hn-summary { margin-top: var(--s-1); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.hn-probe { display: flex; flex-direction: row-reverse; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
+.hn-probe-status { color: var(--text-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+#harnesses-probe-error { margin: var(--s-3) 0 0; font-size: var(--fs-sm); }
+.hn-detection, .hn-where, .hn-about-facts { display: grid; gap: var(--s-2); }
+.hn-detection { margin-top: var(--s-4); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }
+.hn-detection > div, .hn-where > div, .hn-about-facts > div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; font-size: var(--fs-sm); }
+#harnesses-registry { font-variant-numeric: tabular-nums; }
+#harnesses-auto { font-weight: 600; }
+.hn-problems, .hn-skipped { margin: var(--s-4) 0 0; font-size: var(--fs-sm); }
+.hn-problems ul, .hn-skipped ul, .hn-notes, .hn-method-list { margin: var(--s-2) 0 0; padding: 0; list-style: none; }
+.hn-problems li, .hn-skipped li { padding: var(--s-2) 0; border-top: var(--keyline) solid var(--border); overflow-wrap: anywhere; }
+.hn-problems code { background: var(--surface); }
+
+/* Two groups: ready, then what needs attention. */
+.hn-group { margin-top: var(--s-6); }
+.hn-group > h2 { display: flex; align-items: center; gap: var(--s-2); }
+.hn-group > p { margin-top: var(--s-2); font-size: var(--fs-sm); }
+.hn-count { min-width: 1.5rem; padding: 0 .4rem; border: var(--keyline) solid var(--border-strong); color: var(--text-muted); background: var(--surface-2); font: 600 var(--fs-xs)/1.6 var(--font); letter-spacing: 0; text-align: center; font-variant-numeric: tabular-nums; }
+.hn-count:empty { display: none; }
+.hn-list { display: grid; gap: var(--s-4); margin: var(--s-3) 0 0; padding: 0; list-style: none; }
+
+/* One card per harness. The keyline on the left repeats the state tag's tone. */
+.hn-card { border-inline-start: 3px solid var(--border-strong); }
+.hn-card[data-mark=ready] { border-inline-start-color: var(--ok); }
+.hn-card[data-mark=attention] { border-inline-start-color: var(--warn); }
+.hn-card[data-mark=bad] { border-inline-start-color: var(--bad); }
+.hn-head { display: flex; align-items: center; gap: var(--s-2) var(--s-3); }
+.hn-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.hn-name .fact { gap: .55rem; }
+.hn-name .state-mark { width: .6rem; height: .6rem; }
+.hn-tags { display: inline-flex; flex: none; flex-wrap: wrap; justify-content: end; gap: var(--s-2); }
+.hn-tags .tag { white-space: nowrap; }
+.hn-probing { color: var(--info); background: var(--info-bg); }
+/* The page's own icon per kind; no registry icon is loaded. Native: a prompt in a terminal. Adapter: a part attached to a program. */
+.hn-icon { position: relative; flex: none; width: 1.5rem; height: 1.3rem; border: 1.5px solid currentColor; color: var(--text-muted); }
+.hn-icon::before, .hn-icon::after { content: ""; position: absolute; }
+.hn-card[data-kind=native] .hn-icon::before { inset: .3rem auto auto .22rem; width: .32rem; height: .32rem; border: solid currentColor; border-width: 1.5px 1.5px 0 0; rotate: 45deg; }
+.hn-card[data-kind=native] .hn-icon::after { inset: auto .2rem .26rem auto; width: .4rem; height: 1.5px; background: currentColor; }
+.hn-card[data-kind=adapter] .hn-icon { width: .95rem; margin-inline-end: .55rem; }
+.hn-card[data-kind=adapter] .hn-icon::before { inset: 50% auto auto 100%; width: .22rem; height: 1.5px; translate: 0 -50%; background: currentColor; }
+.hn-card[data-kind=adapter] .hn-icon::after { inset: 50% auto auto calc(100% + .22rem); width: .34rem; height: .6rem; translate: 0 -50%; border: 1.5px solid currentColor; }
+.hn-card[data-kind=unknown] .hn-icon { border-style: dashed; }
+.hn-facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); margin-top: var(--s-2); color: var(--text-muted); font-size: var(--fs-sm); }
+.hn-facts > code { font-size: var(--fs-sm); }
+.hn-facts [data-fact=kind] { text-decoration: underline dotted; text-underline-offset: .2em; cursor: help; }
+.hn-description { max-width: 78ch; margin-top: var(--s-2); overflow-wrap: anywhere; }
+.hn-where { margin-top: var(--s-3); }
+.hn-where dd { display: flex; flex-wrap: wrap; gap: .2rem .35rem; }
+.hn-path { font: var(--fs-xs)/1.6 var(--mono); }
+
+/* What to do about the state: the text, the command to copy and the link. */
+.hn-fix { max-width: 78ch; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--border-strong); background: var(--surface-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.hn-fix[data-tone=warn] { border-inline-start-color: var(--warn); background: var(--warn-bg); }
+.hn-fix[data-tone=bad] { border-inline-start-color: var(--bad); background: var(--bad-bg); }
+.hn-fix code, .hn-fix .hn-command pre { background: var(--surface); }
+.hn-fix-link { margin-top: var(--s-2); font-size: var(--fs-xs); }
+
+/* Sign-in: the verdict, then the ways to sign in. */
+.hn-signin { margin-top: var(--s-4); padding-top: var(--s-3); border-top: var(--keyline) solid var(--border); }
+.hn-card h4 { margin-bottom: var(--s-1); color: var(--text-muted); font: 600 var(--fs-sm)/1.4 var(--font); letter-spacing: 0; }
+.hn-verdict { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); max-width: 78ch; font-size: var(--fs-sm); }
+.hn-verdict .fact { font-weight: 600; white-space: nowrap; }
+.hn-verdict time { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hn-methods summary, .hn-about summary, .hn-skipped summary { font-size: var(--fs-sm); }
+.hn-method-list { display: grid; gap: var(--s-3); font-size: var(--fs-sm); }
+.hn-method-list > li { max-width: 78ch; padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); overflow-wrap: anywhere; }
+.hn-kind { padding: .05rem .4rem; border: var(--keyline) solid var(--border-strong); color: var(--text-muted); background: var(--surface-2); font: 550 var(--fs-xs)/1.45 var(--font); white-space: nowrap; }
+.hn-notes { display: grid; gap: var(--s-1); max-width: 78ch; margin-top: var(--s-3); color: var(--text-muted); font-size: var(--fs-sm); }
+.hn-notes li { padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); overflow-wrap: anywhere; }
+.hn-about { margin-top: var(--s-3); }
+.hn-about-facts { margin-top: var(--s-3); }
+.hn-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin-top: var(--s-4); }
+.hn-fix .hn-actions { margin-top: var(--s-2); }
+/* The summary's way down to the group that needs attention: a button that reads as a link. */
+.hn-jump { padding: 0; border: 0; color: var(--accent); background: none; font-weight: 600; text-decoration: underline; text-underline-offset: .19em; }
+.hn-group > h2:focus-visible { outline-offset: 6px; }
+.hn-group > h2 { scroll-margin-top: var(--s-4); }
+.hn-off p + p { margin-top: var(--s-1); }
+.hn-off .hn-command pre, .hn-off code { background: var(--surface); }
+
+/* A terminal command to copy. It scrolls sideways before it wraps, so what is copied is what is shown. */
+.hn-command { display: flex; align-items: stretch; gap: var(--s-2); max-width: 44rem; margin: var(--s-2) 0 0; }
+.hn-command pre { flex: 1; min-width: 0; margin: 0; padding: .5rem var(--s-3); border: var(--keyline) solid var(--border-strong); background: var(--surface-2); overflow-x: auto; }
+#page-harnesses .hn-command pre code { padding: 0; background: none; font-size: var(--fs-sm); white-space: pre; overflow-wrap: normal; }
+.hn-command pre::before { content: "$ "; color: var(--text-muted); font-family: var(--mono); font-size: var(--fs-sm); user-select: none; }
+.hn-command .button { flex: none; align-self: stretch; min-width: 4.25rem; }
+.hn-empty p { max-width: 78ch; }
+.hn-empty .hn-command + p { margin-top: var(--s-4); }
+
+/* The mark's shape carries the state, as in the live panels: filled is fine, half is a warning, a square has stopped, dotted is not known. */
+.hn-card [data-state=ready] > .state-mark, .hn-card [data-state=in] > .state-mark, #harnesses-auto[data-state=on] > .state-mark { color: var(--ok); background: currentColor; }
+.hn-card [data-state=attention] > .state-mark { color: var(--warn); background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+.hn-card [data-state=bad] > .state-mark { color: var(--bad); background: currentColor; border-radius: 0; }
+.hn-card [data-state=out] > .state-mark { color: var(--warn); border-radius: 0; }
+.hn-card [data-state=unknown] > .state-mark { border-style: dotted; }
+.hn-card [data-state=probing] > .state-mark { color: var(--info); animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+#harnesses-auto[data-state=off] > .state-mark { border-radius: 0; }
+
+@media (max-width: 38rem) {
+  .hn-head { flex-wrap: wrap; }
+  .hn-tags { justify-content: start; }
+  .hn-probe { flex-direction: row; }
+  .hn-detection > div, .hn-where > div, .hn-about-facts > div { grid-template-columns: minmax(0, 1fr); }
+  .hn-command { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hn-card .state-mark { animation: none !important; }
+}
+@media (forced-colors: active) {
+  .hn-card, .hn-fix { border-inline-start-color: CanvasText; }
+  .hn-count { border-color: CanvasText; }
+}

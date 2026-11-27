@@ -37,6 +37,7 @@ const (
 	groupIntegrations = "integrations"
 	groupUpdates      = "updates"
 	groupInit         = "init"
+	groupAI           = "ai"
 	groupPlugins      = "plugins"
 )
 
@@ -68,6 +69,9 @@ type metaEntry struct {
 	// values for the field, suggestions for its list items, enum values for
 	// its map values and suggestions for its map keys.
 	enum, itemSuggestions, valueEnum, keySuggestions []string
+	// columnEnum sets enum values on properties of a kv-table value that is
+	// an object (a select column), by property name.
+	columnEnum map[string][]string
 }
 
 func (e *metaEntry) describe() string {
@@ -101,6 +105,17 @@ func (e *metaEntry) apply(f *CatalogField) {
 	if len(e.valueEnum) > 0 && s.AdditionalProperties != nil && len(s.AdditionalProperties.Enum) == 0 {
 		v := *s.AdditionalProperties
 		v.Enum = slices.Clone(e.valueEnum)
+		s.AdditionalProperties = &v
+	}
+	if len(e.columnEnum) > 0 && s.AdditionalProperties != nil && s.AdditionalProperties.Properties != nil {
+		v := *s.AdditionalProperties
+		v.Properties = make(map[string]Field, len(s.AdditionalProperties.Properties))
+		for name, p := range s.AdditionalProperties.Properties {
+			if values, ok := e.columnEnum[name]; ok && len(p.Enum) == 0 {
+				p.Enum = slices.Clone(values)
+			}
+			v.Properties[name] = p
+		}
 		s.AdditionalProperties = &v
 	}
 	if len(e.itemSuggestions) > 0 && s.Items != nil {
@@ -150,6 +165,9 @@ func optItems(values ...string) entryOption         { return func(e *metaEntry) 
 func optValues(values ...string) entryOption        { return func(e *metaEntry) { e.valueEnum = values } }
 func optKeys(values ...string) entryOption          { return func(e *metaEntry) { e.keySuggestions = values } }
 func optColumns(c map[string]FieldMeta) entryOption { return func(e *metaEntry) { e.columns = c } }
+func optColumnEnum(c map[string][]string) entryOption {
+	return func(e *metaEntry) { e.columnEnum = c }
+}
 
 // add appends an entry. A field's Order is 10 times its position in its group.
 func (b *tableBuilder) add(layer FieldLayer, path, provider string, m FieldMeta, opts ...entryOption) {
@@ -246,6 +264,64 @@ func (b *tableBuilder) personal() {
 		withApplies(AppliesNextRun)), optEnum("auto", "ask", "off"))
 	b.add(l, "init.orgs", "", ctl(groupInit, WidgetChips, "Organisations",
 		"GitHub owners whose repositories the plugins may set up automatically.", withApplies(AppliesNextRun)))
+
+	b.aiHarnesses()
+}
+
+// aiHarnesses lists the personal ai.harnesses fields (ADR "Phase 6
+// configuration keys"). The repository layer has no ai keys.
+func (b *tableBuilder) aiHarnesses() {
+	const l = FieldPersonal
+	b.add(l, "ai.harnesses.auto_probe", "", ctl(groupAI, WidgetToggle, "Probe harnesses automatically",
+		"Lets agentflow start an installed harness for a few seconds to read its version and check that it speaks ACP, when the harness appears or changes, and lets agents ask for a probe. When off, agentflow only looks at files on your PATH until you ask for a probe.",
+		withLoosens(LoosensEnable)))
+	b.add(l, "ai.harnesses.sign_in_check", "", ctl(groupAI, WidgetToggle, "Check sign-in",
+		"Runs a harness's own sign-in status command, such as `claude auth status`, with your real home folder, to show whether you are signed in. agentflow keeps only the answer (signed in, signed out or unknown), never the command's output. When off, agentflow never runs these commands.",
+		withLoosens(LoosensEnable)))
+	b.add(l, "ai.harnesses.poll_interval", "", ctl(groupAI, WidgetDuration, "How often to look for harnesses",
+		"How often the console daemon checks your PATH for harnesses that were installed, changed or removed.",
+		withDurationLimits(MinHarnessPollInterval.String(), MaxHarnessPollInterval.String()), withPlaceholder(DefaultHarnessPollInterval.String())))
+	b.add(l, "ai.harnesses.probe_timeout", "", ctl(groupAI, WidgetDuration, "Probe time limit",
+		"How long a harness has to answer the ACP initialize request before the probe gives up.",
+		withApplies(AppliesNextRun), withDurationLimits(MinHarnessProbeTimeout.String(), MaxHarnessProbeTimeout.String()),
+		withPlaceholder(DefaultHarnessProbeTimeout.String())))
+	b.add(l, "ai.harnesses.disabled", "", ctl(groupAI, WidgetChips, "Harnesses to ignore",
+		"Harness IDs agentflow never lists or starts.", withLoosens(LoosensShrink)))
+	b.add(l, "ai.harnesses.overrides", "", ctl(groupAI, WidgetKVTable, "Harness overrides",
+		"Changes how agentflow finds or starts a harness, or adds one that is not in the ACP registry."),
+		optColumnEnum(map[string][]string{
+			"kind":        {"native", "adapter"},
+			"status_from": {"self", "base"},
+		}),
+		optColumns(map[string]FieldMeta{
+			"status_from":    col(WidgetSelect, "Sign-in check runs", "Which program runs the sign-in status command: the harness itself, or the CLI an adapter bridges. Empty means no sign-in check."),
+			"status_args":    col(WidgetChips, "Sign-in check arguments", "Arguments of the sign-in status command."),
+			"credential_env": col(WidgetChips, "Sign-in variables", "Environment variables that sign this harness in; agentflow checks only that one is set."),
+			"name":           col(WidgetText, "Name", "Name shown for the harness."),
+			"kind":           col(WidgetSelect, "Kind", "Whether the program speaks ACP itself, or is an adapter for another CLI."),
+			"command":        col(WidgetText, "Command", "A command name on your PATH, or an absolute path."),
+			"args":           col(WidgetChips, "ACP arguments", "Arguments that start the harness's ACP server on standard input and output."),
+			"version_args":   col(WidgetChips, "Version arguments", "Arguments that print the version. Empty means --version."),
+			"no_version":     col(WidgetToggle, "Never ask for a version", "Never runs a version command for this harness."),
+			"base_name":      col(WidgetText, "Base CLI name", "Name of the CLI an adapter bridges."),
+			"base_commands":  col(WidgetChips, "Base CLI commands", "Command names of the CLI an adapter bridges, looked up on your PATH."),
+			"min_version":    col(WidgetText, "Oldest version", "The oldest version agentflow accepts, as X.Y.Z."),
+			"status_signed_in": withAdvancedCol(col(WidgetChips, "Signed-in exit codes",
+				"Exit codes of the sign-in status command that mean signed in. Empty means 0.")),
+			"status_signed_out": withAdvancedCol(col(WidgetChips, "Signed-out exit codes",
+				"Exit codes of the sign-in status command that mean signed out. Empty means 1.")),
+			"status_signed_out_line": withAdvancedCol(col(WidgetText, "Signed-out line",
+				"When set, a signed-out answer also needs this whole line in the command's output.")),
+			"config_env": withAdvancedCol(col(WidgetChips, "Sign-in configuration variables",
+				"Directory variables, such as CODEX_HOME, passed to the sign-in status command.")),
+			"status_source": withAdvancedCol(col(WidgetText, "Sign-in check source",
+				"Where the meaning of the sign-in status command is documented. For your own notes.")),
+		}))
+}
+
+func withAdvancedCol(m FieldMeta) FieldMeta {
+	m.Advanced = true
+	return m
 }
 
 // repository lists the fields of <worktree>/.agentflow/config.yml that are not
