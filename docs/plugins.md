@@ -243,6 +243,11 @@ failing, it runs the `notify` command.
 When a failure arrives and a route exists, the plugin's write waits for you. A
 plugin's writes never run on their own, even if your approval level is `auto`.
 
+4. Approve it: copy `agentflow plugin approve <operation ID>` from the Approvals
+   panel or the plugin's card, run it in your terminal and answer `y`. The console
+   then sends the notification once. See [Approve a plugin's
+   write](#approve-a-plugins-write).
+
 **`timeline-hints`** is a program. When an operation fails, it adds a one-line hint
 to that operation on the timeline, such as "The candidate changed after review.
 Prepare it again."

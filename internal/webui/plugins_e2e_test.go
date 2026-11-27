@@ -10,10 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
+	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"github.com/ryanhelms/agentflow/internal/plugin"
+	"github.com/ryanhelms/agentflow/internal/policy"
 	"github.com/ryanhelms/agentflow/internal/version"
 )
 
@@ -182,12 +186,137 @@ func TestSocketEventReachesARealProcessPluginAndItsAnnotationTheTimeline(t *test
 	}
 	waitFor(t, "delivered to ci-notify", func() bool { return hostStatus("ci-notify").Delivered == 1 })
 
-	// A restarted host gets no old event: plugins see live events only.
-	if err := currentPlugins().host.Reload(ctx); err != nil {
+	// A restarted daemon delivers no old event: the store keeps the
+	// op.failed, but plugins see live events only.
+	u.stop()
+	rt, stop, err := startEventRuntime(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond)
-	if st := hostStatus("timeline-hints"); st.Delivered != 1 {
-		t.Fatalf("delivered %d after reload", st.Delivered)
+	t.Cleanup(stop)
+	repo, err := rt.attach(u.worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "timeline-hints subscribed after the restart", func() bool {
+		st := hostStatus("timeline-hints")
+		return st.State == bus.PluginRunning && len(st.Subscriptions) == 1
+	})
+	time.Sleep(300 * time.Millisecond)
+	if st := hostStatus("timeline-hints"); st.Delivered != 0 {
+		t.Fatalf("the restarted daemon delivered %d old events", st.Delivered)
+	}
+	raw, err := (&timelineProjection{repo: repo, now: time.Now}).State(ctx, ProjectionKey{Repo: repo.id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st TimelineState
+	_ = json.Unmarshal(raw, &st)
+	for _, op := range st.Operations {
+		if op.ID == opID && len(op.Annotations) != 1 {
+			t.Fatalf("annotations after the restart: %+v", op.Annotations)
+		}
+	}
+}
+
+type fakeNotifyIn struct {
+	Signal       string `json:"signal"`
+	OperationID  string `json:"operation_id,omitempty"`
+	ConfirmToken string `json:"confirm_token,omitempty"`
+}
+
+// TestApprovedPluginWriteRunsOnceThroughTheDaemon: ci-notify's write is held
+// for a person; a person approves it in the journal, the daemon's own
+// approvals watcher reports it, and the host runs the write once with no
+// other action.
+func TestApprovedPluginWriteRunsOnceThroughTheDaemon(t *testing.T) {
+	ran := make(chan fakeNotifyIn, 4)
+	notify := command.Spec[fakeNotifyIn, map[string]string]{
+		Name: "notify", Policy: command.Policy{Class: policy.Remote, Action: "notify", Gate: command.GateByInvoker, AuditByInvoker: true},
+		Token:    func(in *fakeNotifyIn) *string { return &in.ConfirmToken },
+		Describe: func(in fakeNotifyIn) command.Detail { return command.Detail{Subject: "notify " + in.Signal} },
+		Plan: func(_ context.Context, _ *app.App, in fakeNotifyIn) (command.Plan, error) {
+			return command.Plan{Summary: map[string]string{"signal": in.Signal, "operation_id": in.OperationID}}, nil
+		},
+		Run: func(_ context.Context, _ *app.App, in fakeNotifyIn) (any, error) {
+			ran <- in
+			return map[string]string{"sent": in.Signal}, nil
+		},
+	}
+	old := newPluginOptions
+	newPluginOptions = func() plugin.Options {
+		o := plugin.DefaultOptions(plugin.Options{Version: version.Version})
+		o.Commands = func(name string) (command.Command, bool) {
+			if name == "notify" {
+				return notify, true
+			}
+			return nil, false
+		}
+		return o
+	}
+	t.Cleanup(func() { newPluginOptions = old })
+
+	u := startUserRuntime(t, nil)
+	installPlugin(t, u.home, ciNotifyManifest)
+	if err := os.WriteFile(filepath.Join(u.home, "config.yml"), []byte("plugins:\n  ci-notify:\n    enabled: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "ci-notify running", func() bool { return hostStatus("ci-notify").State == bus.PluginRunning })
+	ops, err := u.rt.bus.Subscribe(bus.SubscribeOptions{Name: "ops", Buffer: 64}, bus.Topic{Repo: u.repo.id, Worktree: bus.Any, Types: "op.**"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	wt := u.repo.worktreeIDs()[0]
+	if _, err := u.rt.bus.Publish(ctx, bus.Event{Type: bus.TypeGHCIUpdated, Source: "watch.github", Repo: u.repo.id, Worktree: wt,
+		Payload: json.RawMessage(`{"state":"failure","previous":"success","head_sha":"abc","head_ref":"main"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the write held", func() bool { return len(currentPlugins().host.Held()) == 1 })
+	id := currentPlugins().host.Held()[0]
+	select {
+	case in := <-ran:
+		t.Fatalf("ran before approval: %+v", in)
+	default:
+	}
+
+	person, err := policy.NewGate(u.home, config.Autonomy{Local: config.Confirm, Remote: config.Confirm}, "cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	person.Configure(u.worktree.Common, nil, nil)
+	if _, err := person.ApprovePluginRequest(id); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case in := <-ran:
+		if in.Signal != "ci.failed" || in.OperationID != "ci-notify-abc" {
+			t.Fatalf("ran %+v", in)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the approved write never ran")
+	}
+	applied := 0
+	deadline := time.After(time.Second)
+	for done := false; !done; {
+		select {
+		case e := <-ops.Events():
+			if e.Type == bus.TypeOpApplied && e.CorrelationID == id && e.Source == "plugin:ci-notify" {
+				applied++
+			}
+		case <-deadline:
+			done = true
+		}
+	}
+	if applied != 1 {
+		t.Fatalf("%d op.applied events for the approved write", applied)
+	}
+	select {
+	case in := <-ran:
+		t.Fatalf("ran twice: %+v", in)
+	default:
+	}
+	if held := currentPlugins().host.Held(); len(held) != 0 {
+		t.Fatalf("held after the run: %v", held)
 	}
 }

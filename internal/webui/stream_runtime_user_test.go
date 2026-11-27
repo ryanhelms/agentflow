@@ -30,6 +30,7 @@ type userRuntime struct {
 	gate     *policy.Gate
 	events   bus.Subscription
 	global   bus.Subscription
+	stop     func() // stops the event runtime; also run at cleanup
 
 	mu     sync.Mutex
 	errors []string
@@ -73,7 +74,8 @@ func startUserRuntime(t *testing.T, global *storetest.Store) *userRuntime {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(stop)
+	u.stop = sync.OnceFunc(stop)
+	t.Cleanup(u.stop)
 	u.rt = rt
 	if u.repo, err = rt.attach(u.worktree); err != nil {
 		t.Fatal(err)
