@@ -48,6 +48,9 @@ type Options struct {
 	Home string
 	// Getenv reads PATH. nil means os.Getenv.
 	Getenv func(string) string
+	// Environ is the environment a stored signed_out verdict is checked
+	// against (credential variables, by name only). nil means os.Environ.
+	Environ func() []string
 	// WorkDirs are directories whose repositories' worktrees are skipped on
 	// PATH (inside_repository): the CLI's working directory, or every
 	// repository the daemon serves. Called once per pass.
@@ -88,6 +91,13 @@ func New(o Options) Detector {
 }
 
 type detector struct{ o Options }
+
+func (d *detector) environ() []string {
+	if d.o.Environ != nil {
+		return d.o.Environ()
+	}
+	return os.Environ()
+}
 
 // Process-wide limits: probes at once, and one sign-in check at a time.
 var (
@@ -388,7 +398,13 @@ func (d *detector) auth(st settings, def harnessdef.Definition, f found, rec *Pr
 	case def.StatusFrom == harnessdef.StatusFromBase && f.BaseFound == nil:
 		return SignInStatus{Status: SignInUnknown, Code: CodeBaseMissing}
 	case rec != nil && rec.Auth != nil:
-		return *rec.Auth
+		v := *rec.Auth
+		// A stored signed_out is never shown while a variable that could
+		// sign the harness in is set now (it may have been set since).
+		if v.Status == SignedOut && signInCredentialSet(d.environ(), def.CredentialEnv) {
+			v.Status, v.Code = SignInUnknown, CodeEnvCredential
+		}
+		return v
 	case o.Probe && !probeAllowed, o.Requester != RequesterPerson && !st.autoProbe:
 		return SignInStatus{Status: SignInUnknown, Code: CodeNeedsPerson}
 	}
@@ -644,8 +660,10 @@ func (m *MemoryStore) SetPublished(p map[string]PublishedState) error {
 // dropSameProgram keeps one entry per installed program. Two catalog
 // definitions can name the same command (the legacy "kimi" and "kimi-code"
 // both install "kimi"); listing the one file twice would show a person one
-// program as two harnesses. Found definitions whose file resolves to the
-// same target form a group, and only its highest-ranked
+// program as two harnesses. Found definitions that found the same file on
+// PATH (the path as found, before links are resolved: a version manager's
+// shims link many commands to one binary, and those stay apart) form a
+// group, and only its highest-ranked
 // member stays: the one with the highest layer (personal, then a plugin,
 // then the agentflow overlay, then the registry alone), then the lowest ID.
 // A definition the person or a plugin shaped is never dropped: the person
@@ -658,10 +676,11 @@ func dropSameProgram(defs []Layered, res finderResult) []Layered {
 	groups := map[string][]member{}
 	for _, d := range defs {
 		f, ok := res.found[d.ID]
-		if !ok || f.Path == "" || f.Target == "" {
+		if !ok || f.Path == "" {
 			continue
 		}
-		groups[f.Target] = append(groups[f.Target], member{id: d.ID, rank: layerRank(d.Sources)})
+		key := filepath.Clean(f.Path)
+		groups[key] = append(groups[key], member{id: d.ID, rank: layerRank(d.Sources)})
 	}
 	drop := map[string]bool{}
 	for _, ms := range groups {

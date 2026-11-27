@@ -78,10 +78,14 @@ type env struct {
 	signIn *fakeSignIn
 	store  *MemoryStore
 	now    time.Time
+	// environ is what a stored verdict is checked against; nil is none, so
+	// the developer's own credential variables never change a result.
+	environ []string
 }
 
 func (e *env) detector() Detector {
-	return New(Options{Home: e.home, Prober: e.prober, SignIn: e.signIn, Store: e.store, Now: func() time.Time { return e.now }})
+	return New(Options{Home: e.home, Prober: e.prober, SignIn: e.signIn, Store: e.store, Now: func() time.Time { return e.now },
+		Environ: func() []string { return e.environ }})
 }
 
 func (e *env) detect(t *testing.T, o DetectOptions) Report {
@@ -491,5 +495,53 @@ func TestDetectListsOneProgramOnce(t *testing.T) {
 		}
 		byID(t, r, "demo-a")
 		byID(t, r, "demo-b")
+	}
+}
+
+// TestDetectListsShimsApart: a version manager links many command names to
+// one binary; each is still its own harness.
+func TestDetectListsShimsApart(t *testing.T) {
+	e := newEnv(t, harnesstest.Settings{})
+	shim := filepath.Join(t.TempDir(), "shim")
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\necho shim 1.0.0\n"), 0o755); err != nil { //nolint:gosec // a fake program must be executable
+		t.Fatal(err)
+	}
+	for _, name := range []string{"gemini", "goose"} {
+		if err := os.Symlink(shim, filepath.Join(e.bin, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := e.detect(t, DetectOptions{Requester: RequesterAgent})
+	for _, id := range []string{"gemini", "goose"} {
+		if h := byID(t, r, id); h.State == StateNotInstalled {
+			t.Fatalf("%s = %+v", id, h)
+		}
+	}
+}
+
+// TestDetectStoredSignedOutWithCredentialVariable: a signed_out verdict in
+// the cache is shown as unknown/env_credential while a variable that could
+// sign the harness in is set, and the state is not needs_auth.
+func TestDetectStoredSignedOutWithCredentialVariable(t *testing.T) {
+	e := newEnv(t, harnesstest.Settings{AutoProbe: true, SignInCheck: true, Overrides: demo(map[string]harnessdef.Definition{
+		"demo": {Command: "demo-acp", StatusFrom: harnessdef.StatusFromSelf, StatusArgs: []string{"status"}},
+	})})
+	harnesstest.StatusCLI(t, e.bin, "demo-acp", 0, "demo-acp 1.2.3")
+	e.signIn.v = SignInStatus{Status: SignedOut, Code: CodeSignedOut}
+	if h := byID(t, e.detect(t, DetectOptions{Requester: RequesterPerson, Probe: true}), "demo"); h.State != StateNeedsAuth || h.Auth.Status != SignedOut {
+		t.Fatalf("after the check: %s %+v", h.State, h.Auth)
+	}
+	calls := e.signIn.calls
+	e.environ = []string{"DEMO_API_KEY=x"}
+	h := byID(t, e.detect(t, DetectOptions{Requester: RequesterAgent}), "demo")
+	if h.State == StateNeedsAuth || h.Auth.Status != SignInUnknown || h.Auth.Code != CodeEnvCredential {
+		t.Fatalf("with a credential variable: %s %+v", h.State, h.Auth)
+	}
+	if e.signIn.calls != calls {
+		t.Fatal("reading the cache ran a sign-in check")
+	}
+	e.environ = []string{"DEMO_API_KEY="}
+	if h := byID(t, e.detect(t, DetectOptions{Requester: RequesterAgent}), "demo"); h.Auth.Status != SignedOut {
+		t.Fatalf("an empty variable: %+v", h.Auth)
 	}
 }
