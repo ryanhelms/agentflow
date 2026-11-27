@@ -241,6 +241,13 @@ func TestPreBashBlocksPluginDecisions(t *testing.T) {
 		"(agentflow plugin add x)",
 		"out=$(agentflow plugin add x --json)",
 		"agentflow plugin list && agentflow plugin add x",
+		"agentflow plugin add -- ./x",
+		"agentflow plugin add --help ./x",
+		`agentflow plugin add "$SRC"`,
+		"agentflow plugin add -",
+		"echo ./x | xargs agentflow plugin add",
+		"echo ci-notify | xargs agentflow plugin remove --yes",
+		"echo ./x | xargs sh -c 'agentflow plugin add \"$@\"' sh",
 	} {
 		for mode, conventionOnly := range preBashModes {
 			if code, shown := preBashExit(t, command, conventionOnly); code != 2 || !strings.Contains(shown, "in their own terminal") {
@@ -274,6 +281,15 @@ func TestPreBashAllowsMentionsOfPluginCommands(t *testing.T) {
 		"bash scripts/check.sh agentflow plugin add",
 		"codex plugin add agentflow@nscale",
 		"claude plugin remove agentflow",
+		// Without a source or an ID there is nothing to decide.
+		"agentflow plugin add",
+		"agentflow plugin remove",
+		"agentflow plugin add --help",
+		"agentflow plugin remove --help",
+		"agentflow plugin approve -h",
+		".agentflow/bin/agentflow plugin add --json --yes",
+		"sh -c 'agentflow plugin add --help'",
+		"agentflow plugin add --help > help.txt && cat help.txt",
 	} {
 		for mode, conventionOnly := range preBashModes {
 			if code, shown := preBashExit(t, command, conventionOnly); code != 0 {

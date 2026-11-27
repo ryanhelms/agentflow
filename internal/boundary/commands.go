@@ -1,21 +1,30 @@
 package boundary
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // SimpleCommands returns the words of every simple command that cmd runs: of
 // the line itself, of its command substitutions, and of the command lines it
 // hands to a shell (sh -c, cmd /c, powershell -Command), to eval, to script or
 // to expect. Assignments, shell keywords and prefixes such as env, sudo and
 // nohup are removed, so words[0] is the program. Words that are only arguments
-// of another program, quoted or not, are never a command of their own.
+// of another program, quoted or not, are never a command of their own. A
+// command run through xargs ends with InputArgs, for the arguments xargs adds.
 //
 // It only reads the line. A program named through a variable, a command line
-// read from a pipe or a file, or one built while it runs is not seen.
+// read from a pipe or a file, or one built while it runs is not seen. Nor is a
+// command behind a prefix option that takes a separate value (sudo -u me), or
+// behind a shell option before -c (bash -o pipefail -c).
 func SimpleCommands(cmd string) [][]string {
 	var out [][]string
 	collect(cmd, 0, &out)
 	return out
 }
+
+// InputArgs stands for the arguments a command takes from its input (xargs).
+const InputArgs = "…"
 
 // ProgramName is the name a program is invoked by: the last element of path,
 // with either kind of separator, in lower case and without a Windows
@@ -56,9 +65,14 @@ func collect(cmd string, depth int, out *[][]string) {
 
 // addCommand records one simple command and the commands it runs in turn.
 func addCommand(words []string, depth int, out *[][]string) {
+	all := words
 	words = unwrap(words)
 	if len(words) == 0 || depth > maxDepth {
 		return
+	}
+	// unwrap only drops from the front.
+	if slices.ContainsFunc(all[:len(all)-len(words)], func(w string) bool { return ProgramName(w) == "xargs" }) {
+		words = append(slices.Clone(words), InputArgs)
 	}
 	*out = append(*out, words)
 	args := words[1:]

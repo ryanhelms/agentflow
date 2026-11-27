@@ -55,7 +55,7 @@ type check struct {
 	next     [2]string
 	planDiff string
 	// rules caches rulePlugins.
-	rules map[string]bool
+	rules *rulePlugins
 }
 
 type link func(c *check)
@@ -571,28 +571,35 @@ func rank(l config.Level) int {
 	return 1
 }
 
-// rulePlugins are the installed plugins that carry a permission rule. A rule
-// only denies operations, so turning such a plugin off loosens policy. A
-// registry that cannot be read gives none: the catalog then has no plugin
-// fields either.
-func (c *check) rulePlugins() map[string]bool {
+// rulePlugins says which plugins may carry a permission rule. A rule only
+// denies operations, so turning such a plugin off loosens policy.
+type rulePlugins struct {
+	ids map[string]bool
+	// unread is set when the registry cannot be read: any plugin may then
+	// have a rule.
+	unread bool
+}
+
+func (r rulePlugins) may(id string) bool { return r.unread || r.ids[id] }
+
+// rulePlugins reads the registry once per check.
+func (c *check) rulePlugins() rulePlugins {
 	if c.rules == nil {
-		c.rules = map[string]bool{}
+		c.rules = &rulePlugins{ids: map[string]bool{}}
 		reg, err := manifest.ReadRegistry(c.s.Home)
-		if err == nil {
-			for _, p := range reg.Plugins {
-				if len(p.Manifest.Extensions.PermissionRule) > 0 {
-					c.rules[p.ID] = true
-				}
+		c.rules.unread = err != nil
+		for _, p := range reg.Plugins {
+			if len(p.Manifest.Extensions.PermissionRule) > 0 {
+				c.rules.ids[p.ID] = true
 			}
 		}
 	}
-	return c.rules
+	return *c.rules
 }
 
 // loosening says how going from before to after loosens policy, or "".
-// rules are the plugins that carry a permission rule.
-func loosening(before, after [2]string, rules map[string]bool) string {
+// rules are the plugins that may carry a permission rule.
+func loosening(before, after [2]string, rules rulePlugins) string {
 	a, b := policyOf(before), policyOf(after)
 	keys := make([]string, 0, len(a.levels))
 	for k := range a.levels {
@@ -640,14 +647,21 @@ func loosening(before, after [2]string, rules map[string]bool) string {
 	}
 	// A permission rule only denies, so turning its plugin off loosens too:
 	// for the person, and, conservatively, for a repository.
+	why := "which has a permission rule: operations it denies are allowed again"
+	if rules.unread {
+		why = "which may have a permission rule: the plugin registry cannot be read"
+	}
 	for _, id := range slices.Sorted(maps.Keys(a.plugins)) {
-		if rules[id] && a.plugins[id] && !b.plugins[id] {
-			return fmt.Sprintf("Turns off the plugin %s, which has a permission rule: operations it denies are allowed again.", id)
+		if rules.may(id) && a.plugins[id] && !b.plugins[id] {
+			return fmt.Sprintf("Turns off the plugin %s, %s.", id, why)
 		}
 	}
+	if !rules.unread {
+		why = "which has a permission rule that denies operations"
+	}
 	for _, id := range b.disabled {
-		if rules[id] && !slices.Contains(a.disabled, id) {
-			return fmt.Sprintf("Turns off the plugin %s for this repository, and it has a permission rule that denies operations.", id)
+		if rules.may(id) && !slices.Contains(a.disabled, id) {
+			return fmt.Sprintf("Turns off for this repository the plugin %s, %s.", id, why)
 		}
 	}
 	return ""

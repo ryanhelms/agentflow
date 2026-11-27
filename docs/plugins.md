@@ -64,17 +64,29 @@ variable. `--yes` is accepted and ignored: the question is always asked.
 
 ### What the hook catches
 
-The hook reads the command line before it runs. It catches:
+The hook reads the command line before it runs. It blocks `plugin add`, `remove`
+and `approve` when they name a plugin source or an ID, so `plugin add --help`
+runs. It finds `agentflow`:
 
-- `agentflow` by name, by the path of a repository launcher or a cached build, the
-  plugin's `bin/launch` launcher, and `go run ./cmd/agentflow`;
-- the same inside `sh -c` and similar shells, `eval`, `script`, `expect`, `cmd /c`
-  and PowerShell, and behind prefixes such as `env`, `sudo`, `nohup` and `timeout`.
+- by name, by the path of a repository launcher or a cached build, through the
+  plugin's `bin/launch` launcher, and as `go run ./cmd/agentflow`;
+- in the command given to `sh -c`, `bash -c`, `bash -lc`, `zsh -c`, `eval`,
+  `script`, `expect -c`, `cmd /c` or `powershell -Command`;
+- behind a simple prefix, such as `env` (with assignments, `-i` or `-u NAME`),
+  `sudo`, `nohup`, `nice`, `time`, `setsid`, `xargs` or `timeout 30`.
 
-It does not catch a command that is built while it runs, such as a program named
-through a variable, a command line piped into a shell, or one written to a file
-and run from there. A command that only mentions the words, such as a search or a
-commit message, runs as usual.
+It does not find every form. For example, it misses:
+
+- a prefix with an option that takes a separate value, such as `sudo -u me`,
+  `timeout -k 5 30` or `nice -n 5`;
+- a shell with such an option before `-c`, such as `bash -o pipefail -c`;
+- a command that another program starts, such as `watch`, `find -exec` or `ssh`;
+- a command that is built while it runs: a program named through a variable, a
+  line or here-document fed to a shell, or one written to a file and run from
+  there.
+
+A command that only mentions the words, such as a search or a commit message,
+runs as usual.
 
 These checks stop mistakes and ordinary automation. They are not a security
 boundary: a process that runs as you can still get around them on purpose, for
@@ -151,7 +163,8 @@ the same field to `false`.
 Turning off a plugin that has a [permission rule](#permission-rules) loosens too,
 because the operations it denied are allowed again. The Save review asks for your
 tick, and the save answers to `console.autonomy`: with `console.autonomy: suggest`,
-agentflow only suggests the change and does not save it.
+agentflow only suggests the change and does not save it. If the plugin registry
+cannot be read, turning off any plugin counts, because it may have a rule.
 
 A repository can turn plugins off for itself in `.agentflow/config.yml`:
 

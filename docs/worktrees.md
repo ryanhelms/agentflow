@@ -145,8 +145,7 @@ local hooks next to `commit-msg` and sets `core.hooksPath=.githooks`:
 The Claude Code PreToolUse hook keeps the never-list. With `policy.coordinator_merge: true` it
 allows `gh pr merge` when the PR's base, read with `gh pr view`, is not `main` or `master`. The
 command must be a single `gh pr merge` with no shell chaining. The never-list also holds
-`agentflow plugin add`, `remove` and `approve`. It does not catch a command built while it
-runs, piped into a shell or written to a file first: see
-[What the hook catches](plugins.md#what-the-hook-catches).
+`agentflow plugin add`, `remove` and `approve` with a plugin source or ID. It does not find
+every form of such a command: see [What the hook catches](plugins.md#what-the-hook-catches).
 `--convention-only` skips the rest of the never-list and checks messages and titles. The
 plugin rule and the [repository boundary](repo-boundary.md) still apply in that mode.

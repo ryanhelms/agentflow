@@ -374,3 +374,42 @@ func TestConsoleAutonomySuggestKeepsADenyRuleOn(t *testing.T) {
 		})
 	}
 }
+
+// A registry that cannot be read says nothing about rules, so turning off any
+// plugin counts as loosening.
+func TestTurningOffAnyPluginLoosensWhenTheRegistryCannotBeRead(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.withPlugin(t) // ci-notify has no permission rule
+	if err := os.WriteFile(filepath.Join(f.home, "config.yml"), []byte("plugins:\n  ci-notify: {enabled: true}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.reopen(t) // the catalog keeps the plugin's fields from here on
+	if err := os.WriteFile(manifest.RegistryPath(f.home), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.ReadRegistry(f.home); err == nil {
+		t.Fatal("the damaged registry still reads")
+	}
+	for name, tc := range map[string]struct {
+		edit  settings.Edit
+		loose bool
+	}{
+		"disable":                 {set("personal:plugins.ci-notify.enabled", false), true},
+		"unset":                   {settings.Edit{ID: "personal:plugins.ci-notify.enabled", Op: settings.OpUnset}, true},
+		"keep on":                 {set("personal:plugins.ci-notify.enabled", true), false},
+		"turn off for repository": {set("repo:plugins.disabled", []string{"ci-notify"}), true},
+		"turn off another":        {set("repo:plugins.disabled", []string{"somewhere-else"}), true},
+		"turn off nothing":        {set("repo:plugins.disabled", []string{}), false},
+	} {
+		pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{tc.edit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := has(codes(pv), "info:loosens"); got != tc.loose || (len(pv.Confirm) == 1) != tc.loose {
+			t.Errorf("%s: loosens = %v (%v, %+v), want %v", name, got, codes(pv), pv.Confirm, tc.loose)
+		}
+		if tc.loose && len(pv.Confirm) == 1 && !strings.Contains(pv.Confirm[0].Message, "registry cannot be read") {
+			t.Errorf("%s: confirm %q", name, pv.Confirm[0].Message)
+		}
+	}
+}

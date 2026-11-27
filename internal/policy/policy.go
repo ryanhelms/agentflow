@@ -252,6 +252,12 @@ func ForbiddenAlways(cmd string) string {
 	return ""
 }
 
+// namesSomething reports whether args hold more than options: a plugin source
+// or an ID. Without one, as in "plugin add --help", nothing can be decided.
+func namesSomething(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return a == "-" || !strings.HasPrefix(a, "-") })
+}
+
 // pluginDecisions are the plugin subcommands that only a person may run:
 // installing, removing, and approving what a plugin asks to write.
 var pluginDecisions = []string{"add", "remove", "approve"}
@@ -259,9 +265,10 @@ var pluginDecisions = []string{"add", "remove", "approve"}
 // changesPlugins reports whether cmd runs one of agentflow's plugin
 // decisions. It finds the program by name, by the path of a launcher or of a
 // cached build, or through go run, also inside a shell, script or another
-// wrapper (boundary.SimpleCommands). It does not see a command built while it
-// runs, piped into a shell or written to a file first: this stops ordinary
-// agent use, not a deliberate way around. Unlike the patterns above, a command
+// wrapper (boundary.SimpleCommands). It does not see every form: not a command
+// built while it runs, piped into a shell or written to a file first, nor one
+// behind an option that takes a separate value (sudo -u me). This stops
+// ordinary agent use, not a deliberate way around. Unlike the patterns above, a command
 // that only mentions the words in an argument of another program does not
 // match.
 func changesPlugins(cmd string) bool {
@@ -279,7 +286,7 @@ func changesPlugins(cmd string) bool {
 		if len(args) > 1 && args[0] == "--native-client" {
 			args = args[2:]
 		}
-		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) {
+		if len(args) > 1 && args[0] == "plugin" && slices.Contains(pluginDecisions, args[1]) && namesSomething(args[2:]) {
 			return true
 		}
 	}
