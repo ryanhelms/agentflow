@@ -3,7 +3,9 @@ package plugin_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 
 func TestMain(m *testing.M) {
 	jsonrpctest.RegisterChild("plugin", childPlugin)
+	jsonrpctest.RegisterChild("plugin-env", childEnvPlugin)
 	jsonrpctest.RunChild()
 	os.Exit(m.Run())
 }
@@ -31,6 +34,19 @@ func childPlugin([]string) int {
 	}), jsonrpc.Limits{})
 	<-conn.Done()
 	return 0
+}
+
+// childEnvPlugin is childPlugin that first writes its environment, one
+// variable a line, to env.txt in its data directory.
+func childEnvPlugin(args []string) int {
+	data := os.Getenv(jsonrpc.EnvPluginData)
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		return 3
+	}
+	if err := os.WriteFile(filepath.Join(data, "env.txt"), []byte(strings.Join(os.Environ(), "\n")), 0o600); err != nil {
+		return 3
+	}
+	return childPlugin(args)
 }
 
 // realHost is a host over the real launcher, running the test binary in
@@ -100,7 +116,7 @@ func TestFloodingOrMalformedPluginBlocksOnlyItself(t *testing.T) {
 			f.start()
 			f.waitState("ci-notify", bus.PluginRunning)
 			f.eventually("protocol backoff", func() bool {
-				return f.sawBackoff(bus.PluginCodeProtocol, bus.PluginCodeTimeout, bus.PluginCodeExited, bus.PluginCodeCrashed)
+				return f.sawBackoff(bus.PluginCodeProtocol)
 			})
 			start := time.Now()
 			for i := 0; i < 50; i++ {
@@ -115,6 +131,30 @@ func TestFloodingOrMalformedPluginBlocksOnlyItself(t *testing.T) {
 			}
 			f.checkTransitions()
 		})
+	}
+}
+
+// TestRealChildSeesOnlyTheScrubbedEnvironment reads the environment a real
+// child process got: the plugin variables, and no token or session.
+func TestRealChildSeesOnlyTheScrubbedEnvironment(t *testing.T) {
+	t.Setenv("GH_TOKEN", "secret-token")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "session")
+	f, _ := realHost(t, "plugin-env")
+	f.install(processManifest("envreal"), true)
+	f.start()
+	f.waitState("envreal", bus.PluginRunning)
+	raw, err := os.ReadFile(filepath.Join(f.home, manifest.PluginsDir, "envreal", manifest.DataDir, "env.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vars := strings.Split(string(raw), "\n")
+	for _, v := range vars {
+		if strings.Contains(v, "secret-token") || strings.HasPrefix(v, "GH_TOKEN=") || strings.HasPrefix(v, "CLAUDE_CODE_SESSION_ID=") {
+			t.Errorf("the child got %s", v)
+		}
+	}
+	if !slices.Contains(vars, jsonrpc.EnvPluginID+"=envreal") {
+		t.Errorf("no %s in %v", jsonrpc.EnvPluginID, vars)
 	}
 }
 
