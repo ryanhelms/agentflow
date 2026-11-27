@@ -1,8 +1,5 @@
 /* The Plugins page (docs/design/ui/plugins.md). Tokens only: light and dark share these rules. */
 
-/* app.js does not know #plugins and shows the overview for it. While the page is open, plugins.js sets this class and the other pages step aside. */
-#main.plugins-open > section:not(#page-plugins) { display: none; }
-
 /* The standing warning: what a plugin is, before any card. Amber, because it is a caution and not a fault. */
 .pg-trust { display: grid; gap: var(--s-1); max-width: 78ch; border-inline-start-color: var(--warn); background: var(--warn-bg); }
 .pg-trust strong { font-weight: 670; }
@@ -33,6 +30,17 @@
 .pg-flags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-3); font-size: var(--fs-sm); font-weight: 600; }
 .pg-hint { margin-top: var(--s-2); font-size: var(--fs-xs); }
 .pg-enable .pg-hint { margin: 0; }
+
+/* A write of the plugin that waits for the person, with the command that approves it. */
+.pg-approvals { max-width: 78ch; margin-top: var(--s-4); padding: var(--s-3) var(--s-4); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); }
+.pg-approval-list { display: grid; gap: var(--s-3); margin: var(--s-3) 0 0; padding: 0; list-style: none; }
+.pg-approval-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem var(--s-3); }
+.pg-approval-head time { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.pg-approvals .pg-command pre { background: var(--surface); }
+/* The same command on the plugin's request in the Approvals panel. */
+.approval-plugin { margin-top: var(--s-2); font-size: var(--fs-sm); }
+/* The panel is narrow: the command wraps there, so the whole operation ID shows. */
+.approval-plugin .pg-command pre code { padding: 0; background: none; font-size: var(--fs-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* What it adds beside what it may do. */
 .pg-columns { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--s-4) var(--s-6); margin-top: var(--s-4); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }

@@ -8,7 +8,8 @@ The page follows [live stream patterns](live-stream.md) for everything it shows.
 
 | File | Holds |
 | --- | --- |
-| `static/plugins.js` | the page: the state reader, the cards, the countdown, and its wiring |
+| `static/plugins.js` | the page: the state reader, the cards, the countdown and the approve command |
+| `static/live-panels.js` | the approve command on a plugin's request in the Approvals panel |
 | `static/plugins.css` | every rule of the page, tokens only |
 | `static/index.html` | the rail entry and `#page-plugins` |
 | `static/style.css` | the rail entry's icon and count |
@@ -49,6 +50,7 @@ and running highlights survive an update.
 | What it adds | each handler with the events it reacts to, the commands it runs and whether it adds timeline notes; each permission rule with its deny message |
 | What it may do | the granted permissions: receive events, publish events, run commands |
 | Since the daemon started | events delivered, failed deliveries, events dropped, commands run, annotations added |
+| Waiting for your approval | the plugin's open approvals, each with the approve command (see below) |
 | Recent failed deliveries | the plugin's dead letters, newest first: event type, reason, time, event ID |
 | Installed files and removal | the content hash, the install time and the remove command |
 
@@ -125,26 +127,38 @@ every page.
 - State never depends on colour alone. Reduced motion and forced colours are handled as in
   `live-stream.md`.
 
-## Wiring
+## In app.js
 
-This lane owns `plugins.js` but not `app.js`, so the page attaches itself at the end of
-`plugins.js`. Each block there is marked `WIRING` and names the change that replaces it.
+`app.js` creates the page with `AgentflowPlugins.createPlugins` and feeds it like the other
+repository panels: `showRepository("plugins")` from `onSnapshot` and `onDelta`, and the
+stream's status from `renderStream`. `plugins` is a console screen, so
+`agentflow ui --screen plugins` and the reconnect screen's command open it
+(`internal/webui/destination.go`).
 
-| Block | What it does now | Replace with |
-| --- | --- | --- |
-| Announcements | calls `app.js`'s `announce()` when it is loaded | pass `announce` to `createPlugins` from `app.js` |
-| The stream | `plugins.js` loads before `app.js` and wraps `AgentflowEvents.connect`, so the one console stream also feeds the page. It adds no topic. | a `plugins` entry in `app.js`'s `onSnapshot` and `onDelta` |
-| The route | `app.js` shows the overview for `#plugins`; `plugins.js` shows its own page instead and marks its rail entry | a `plugins` screen in `app.js` and `destination.go` |
+The `plugins` state has no topic: it rides in the repository's frames (ADR, phase 5
+decision 10). The console adds one topic for this phase, `*/*/plugin.annotation.added`,
+because a plugin's note is not an `op.*` event and must reach the timeline by itself.
 
-Until the route is in `app.js` and `destination.go`, `agentflow ui --screen plugins` does
-not exist, and the reconnect screen offers the overview when the session ends on this page.
+## A plugin's write waits for you
+
+A plugin's write runs only after a person approves it. An open approval whose
+`requested_by` is `plugin:<id>` shows the command `agentflow plugin approve <operation ID>`
+with a **Copy** button in two places: on the plugin's card, under **Waiting for your
+approval**, and on its row in the Approvals panel, which then reads "Asked by plugin
+<id>". Neither place has an Approve button: the command runs in your own terminal.
+
+The command is shown only for an operation ID of the form `op_` and 32 hex characters and
+a plugin ID of the manifest's form, because it is text you copy into a shell. An approvals
+state without `requested_by` shows no command, and the rest of the panel is unchanged.
 
 ## Tests and the fixture
 
 `go test ./internal/webui -run TestPluginsBrowser` runs `testdata/plugins/plugins-test.js`
 in a browser (set `AGENTFLOW_TEST_CHROME`) against a scripted stream. It covers the cards,
 every page state, live changes, the countdown, the Settings link, the commands, hostile
-plugin text, that the page sends no request, and the timeline annotations. To look at the
+plugin text, that the page sends no request, the approve command on the card and in the
+Approvals panel, and the timeline annotations, including one that arrives with no `op.*`
+event. To look at the
 page without a backend:
 
 ```bash

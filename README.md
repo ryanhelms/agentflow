@@ -542,8 +542,11 @@ on the Settings page, so turning a plugin on goes through the same review as any
 other setting. The page does not install or remove anything: it shows
 `agentflow plugin add PATH` and `agentflow plugin remove ID` to copy into a
 terminal. Notes that plugins attach to an operation show under it on the
-**Timeline**, labelled with the plugin's ID. The page needs the plugin host of
-the console daemon; until that ships it says that the stream has no plugin state.
+**Timeline**, labelled with the plugin's ID. When a plugin's write waits for
+your approval, its card and the Approvals panel show
+`agentflow plugin approve <operation ID>` to copy into your own terminal; the
+console has no Approve button for it. `agentflow ui --screen plugins` opens the
+page.
 [Plugins page design](docs/design/ui/plugins.md)
 
 The **Configuration** page edits the other registered files (provider

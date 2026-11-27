@@ -90,9 +90,9 @@
     check(byID("plugins-nav-count").textContent === "2" && !byID("plugins-nav-count").hidden && byID("plugins-nav-label").textContent === ", 2 plugins need attention","the rail does not count the plugins that need attention");
     check(byID("plugins-add-title").textContent === "Add a plugin" && byID("plugins-add-lead").hidden && byID("plugins-orphans").hidden,"the add panel or the orphan list is wrong");
 
-    // The stream carries the state: no topic of its own, no request from the page.
+    // The stream carries the state: the plugins state has no topic of its own, and the page sends no request.
     const topics = new URLSearchParams((await requests())[0].query).getAll("topic");
-    check((await requests()).length === 1 && !topics.some(topic => topic.includes("plugin")),"the page opened a stream or added a topic");
+    check((await requests()).length === 1 && topics.filter(topic => topic.includes("plugin")).join() === "*/*/plugin.annotation.added","the page opened a stream, or the stream's plugin topics are not the annotation topic alone: " + topics.join());
 
     // A running declarative plugin: name, version, tier, state, what it adds, what it may do, counters.
     check(shows("ci-notify","name") === "CI failure notifier" && fact("ci-notify","name").dataset.state === "running" && fact("ci-notify","name").querySelector(".state-mark").getAttribute("aria-hidden") === "true","the plugin is not named with a state mark");
@@ -114,7 +114,7 @@
     const rule = card("friday-freeze").querySelector(".pg-extensions");
     check(rule.textContent.includes("Permission rule") && rule.querySelector("q").textContent === "No pushes on Fridays." && rule.textContent.includes("A rule can only deny."),"the permission rule is not described");
     const buttons = [...byID("page-plugins").querySelectorAll("button")].map(node => node.textContent);
-    check(buttons.length === 5 && buttons.every(text => text === "Copy") && !byID("page-plugins").querySelector("form, input, select"),"the page has a control other than Copy: " + buttons.join());
+    check(buttons.length === 5 && !byID("page-plugins").querySelector("[data-part=approvals]:not([hidden])") && buttons.every(text => text === "Copy") && !byID("page-plugins").querySelector("form, input, select"),"the page has a control other than Copy: " + buttons.join());
 
     // A failed plugin says why in words, and that this repository turned it off.
     check(shows("release-check","status") === "Failed" && fact("release-check","status").dataset.state === "bad" && shows("release-check","detail").startsWith("Its installed files changed after you installed it") && fact("release-check","detail").dataset.tone === "bad","the failure is not explained: " + shows("release-check","detail"));
@@ -146,6 +146,40 @@
     Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:async () => { throw new Error("denied"); }}});
     remove.querySelector("button").click();
     await until(() => said().startsWith("The browser did not allow copying."),"a refused copy is not explained");
+
+    // A plugin's write waits for the person: the card and the Approvals panel show the command to copy, never an Approve button.
+    const opID = "op_0123456789abcdef0123456789abcdef";
+    const approval = (id, extra = {}) => ({operation_id:id,action:"notify",class:"remote",client:"",policy_source:"plugin ceiling",issued_at:at(-5000),expires_at:at(290000),state:"pending",...extra});
+    const asked = approval(opID,{requested_by:"plugin:timeline-notes"});
+    const agent = approval("op_ffffffffffffffffffffffffffffffff",{client:"claude-code",action:"push"});
+    check(P.pluginApprovals({open:[asked,agent,approval("op_1",{requested_by:"plugin:timeline-notes"}),approval(opID,{requested_by:"plugin:timeline-notes"}),approval("op_" + "a".repeat(32),{requested_by:"plugin:Bad ID"}),approval("op_" + "b".repeat(32),{requested_by:"plugin:ci-notify",state:"approved"}),approval("op_" + "c".repeat(32) + "; rm -rf ~",{requested_by:"plugin:ci-notify"}),null]}).map(item => item.plugin + " " + item.id).join() === "timeline-notes " + opID
+      && P.pluginApprovals(null).length === 0 && P.pluginApprovals({open:[agent]}).length === 0 && P.approveCommand("op_1; rm") === "" && P.requester("claude-code") === "" && P.requester(undefined) === "","plugin approvals are not read safely");
+    Object.defineProperty(navigator,"clipboard",{configurable:true,value:{writeText:async value => { copied = value; }}});
+    await post("emit",delta(20,"approval.requested",[entry("approvals",{open:[agent],recent:[]})]));
+    await until(() => byID("approval-open").children.length === 1,"the agent's approval did not arrive");
+    check(!byID("page-plugins").querySelector("[data-part=approvals]:not([hidden])") && byID("approval-open").querySelector("[data-part=plugin]").hidden && !byID("approvals-panel").querySelector("button"),"an approval without requested_by shows a plugin command");
+    await post("emit",delta(21,"approval.requested",[entry("approvals",{open:[asked,agent],recent:[]})]));
+    const asks = card("timeline-notes").querySelector("[data-part=approvals]");
+    await until(() => !asks.hidden,"the plugin's approval did not reach its card");
+    check(asks.querySelector("code").textContent === "agentflow plugin approve " + opID && asks.querySelector("strong").textContent === "Notify" && asks.querySelector("time").dateTime && asks.textContent.includes("only after you approve it in your own terminal") && card("ci-notify").querySelector("[data-part=approvals]").hidden,"the card does not show the approve command: " + asks.textContent);
+    const approveButtons = [...asks.querySelectorAll("button")];
+    check(approveButtons.length === 1 && approveButtons[0].textContent === "Copy" && approveButtons[0].getAttribute("aria-label") === "Copy the command: agentflow plugin approve " + opID,"the card has a control other than Copy for the approval");
+    approveButtons[0].click();
+    await until(() => copied === "agentflow plugin approve " + opID && said().includes("Approve command copied."),"the approve command was not copied: " + said());
+    const panelRow = [...byID("approval-open").children].find(node => node.dataset.key === opID);
+    const panelPart = panelRow.querySelector("[data-part=plugin]");
+    check(!panelPart.hidden && panelPart.querySelector("code").textContent === "agentflow plugin approve " + opID && panelRow.querySelector("[data-fact=client]").textContent === "Asked by plugin timeline-notes","the Approvals panel does not show the approve command");
+    const panelButtons = [...byID("approvals-panel").querySelectorAll("button")];
+    check(panelButtons.length === 1 && panelButtons[0].textContent === "Copy" && [...byID("approval-open").children].find(node => node.dataset.key === agent.operation_id).querySelector("[data-part=plugin]").hidden,"the Approvals panel has an Approve button, or an agent's request shows the plugin command");
+    // The request keeps its Copy button while it waits, and leaves when it is answered.
+    approveButtons[0].focus();
+    await post("emit",delta(22,"approval.requested",[entry("approvals",{open:[asked,agent,approval("op_" + "d".repeat(32),{requested_by:"plugin:ci-notify"})],recent:[]})]));
+    await until(() => !card("ci-notify").querySelector("[data-part=approvals]").hidden,"a second plugin's approval did not arrive");
+    check(document.activeElement === approveButtons[0],"an update rebuilt a waiting request");
+    await post("emit",delta(23,"approval.resolved",[entry("approvals",{open:[agent],recent:[{...asked,state:"consumed"}]})]));
+    await until(() => asks.hidden && card("ci-notify").querySelector("[data-part=approvals]").hidden,"an answered approval stays on the card");
+    check(![...byID("approval-recent").children].some(node => !node.querySelector("[data-part=plugin]").hidden),"an answered approval still shows the command");
+    await until(() => !document.querySelector("#page-plugins .live-changed"),"a highlight did not fade");
 
     // A live change: the card stays, focus stays, the changed values are highlighted and announced.
     const kept = card("timeline-notes"), untouched = card("ci-notify");
@@ -225,7 +259,17 @@
     await post("status?code=0");
     await post("emit",snapshot(9,[entry("plugins",plugins(base()))]));
     await until(() => label() === "Live" && byID("plugins-note").hidden && cards().length === 4,"the page did not recover");
-    check(!document.querySelector("#page-plugins .live-changed"),"a snapshot highlighted values");
+
+    // A requested Resync replaces the values without highlights or announcements.
+    await until(() => !document.querySelector("#page-plugins .live-changed"),"a highlight did not fade");
+    const opened = (await requests()).length, hush = said();
+    byID("refresh").click();
+    await until(async () => (await requests()).length > opened,"Resync did not restart the stream");
+    await post("emit",snapshot(13,[entry("plugins",plugins([notifier,annotator({state:"running",code:"",retry_at:undefined})]))]));
+    await until(() => label() === "Live" && cards().length === 2,"Resync did not reload the plugins");
+    check(!document.querySelector("#page-plugins .live-changed") && said() === hush,"a requested resync highlighted or announced values");
+    await post("emit",delta(14,"plugin.lifecycle.changed",[entry("plugins",plugins(base()))]));
+    await until(() => cards().length === 4,"the plugins did not return");
 
     // A snapshot without the plugins state keeps the values and says so.
     await post("emit",frame("resync",0,{reason:"overflow"}));

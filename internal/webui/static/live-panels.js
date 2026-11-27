@@ -47,7 +47,9 @@
     if (!raw) return null;
     const item = entry => ({
       id: entry.operation_id, action: text(entry.action), klass: text(entry.class), client: text(entry.client), source: text(entry.policy_source),
-      issued: time(entry.issued_at), expires: time(entry.expires_at), state: text(entry.state), expired: entry.expired === true
+      issued: time(entry.issued_at), expires: time(entry.expires_at), state: text(entry.state), expired: entry.expired === true,
+      // "plugin:<id>" when a plugin's write asked (phase 5). Older states have no such field.
+      requestedBy: text(entry.requested_by)
     });
     const items = value => list(value).map(record).filter(entry => entry && text(entry.operation_id)).map(item);
     return {open: items(raw.open), recent: items(raw.recent)};
@@ -379,7 +381,12 @@
       head.append(slot("action", {tag: "strong", klass: "row-title"}), slot("status", {klass: "tag"}));
       const facts = element("p", "", "row-facts");
       facts.append(slot("expiry", {marked: true}), slot("requested"), slot("class"), slot("client"), slot("source"), slot("id", {tag: "code"}));
-      row.append(head, facts);
+      // A plugin's request is approved from the person's own terminal: the
+      // command to copy, never a button that approves.
+      const plugin = element("div", "", "approval-plugin");
+      plugin.dataset.part = "plugin";
+      plugin.hidden = true;
+      row.append(head, facts, plugin);
       return row;
     }
 
@@ -393,7 +400,15 @@
       fact(row, "expiry", open && due.state !== "expired" ? due.label : "", {state: due.state || "waiting"});
       fact(row, "requested", item.issued ? "Requested " + clock(item.issued, now()) : "");
       fact(row, "class", classNames[item.klass] || item.klass);
-      fact(row, "client", item.client ? "Asked by " + item.client : "");
+      const asker = scope.AgentflowPlugins?.requester(item.requestedBy) || "";
+      fact(row, "client", asker ? "Asked by plugin " + asker : item.client ? "Asked by " + item.client : "");
+      const approve = asker && item.state === "pending" && due.state !== "expired" ? scope.AgentflowPlugins.approveCommand(item.id) : "";
+      const part = row.querySelector("[data-part=plugin]");
+      part.hidden = !approve || !options.command;
+      if (!part.hidden && part.dataset.shown !== approve) {
+        part.dataset.shown = approve;
+        part.replaceChildren(element("p", "A plugin asked for this write. To approve it, run this in your own terminal."), options.command(approve, "Approve command"));
+      }
       // The rule and the ID help answer an open request; an outcome needs neither.
       fact(row, "source", open && item.source ? "Rule " + item.source : "");
       fact(row, "id", open ? item.id : "");

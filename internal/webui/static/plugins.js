@@ -188,6 +188,28 @@
     return "Agentflow reported a state this console does not know.";
   }
 
+  // Approvals a plugin's write waits for. requested_by is "plugin:<id>" for
+  // a plugin's request; the operation ID goes into a command the reader
+  // copies, so only an ID of the fixed form is used.
+  const operationForm = /^op_[0-9a-f]{32}$/;
+  function requester(value) {
+    const id = text(value).startsWith("plugin:") ? text(value).slice(7) : "";
+    return idForm.test(id) ? id : "";
+  }
+  const approveCommand = id => operationForm.test(id) ? "agentflow plugin approve " + id : "";
+  function pluginApprovals(raw) {
+    const seen = new Set();
+    const out = [];
+    for (const item of list(record(raw)?.open).map(record)) {
+      if (!item || item.state !== "pending" || item.expired === true) continue;
+      const plugin = requester(item.requested_by);
+      if (!plugin || !approveCommand(text(item.operation_id)) || seen.has(item.operation_id)) continue;
+      seen.add(item.operation_id);
+      out.push({id: item.operation_id, plugin, action: text(item.action), expires: time(item.expires_at)});
+    }
+    return out;
+  }
+
   function element(tag, content = "", klass = "") {
     const node = document.createElement(tag);
     if (content !== "") node.textContent = content;
@@ -195,13 +217,13 @@
     return node;
   }
 
-  // options: {root, announce(message), now(), copy(text), visible()}. root
-  // holds the page markup of index.html.
+  // options: {root, announce(message), actionName(action), now(), copy(text),
+  // visible()}. root holds the page markup of index.html.
   function createPlugins(options) {
     const find = id => options.root.querySelector("#" + id);
     const now = () => options.now ? options.now() : Date.now();
     const timers = new WeakMap();
-    let current = null, live = {state: "connecting"}, ticker = 0;
+    let current = null, waiting = [], live = {state: "connecting"}, ticker = 0;
 
     // Highlight a value that changed live (the 2 s rule of live-stream.md).
     function mark(node) {
@@ -325,6 +347,14 @@
       }
       activity.append(activityTitle, counters);
 
+      const asks = element("section", "", "pg-approvals");
+      asks.dataset.part = "approvals";
+      const asksTitle = element("h3", "Waiting for your approval");
+      asksTitle.id = "plugin-" + plugin.id + "-approvals";
+      const askList = element("ul", "", "pg-approval-list");
+      askList.setAttribute("aria-labelledby", asksTitle.id);
+      asks.append(asksTitle, element("p", "This plugin asked for a write. It runs only after you approve it in your own terminal. No agent and no button here can approve it."), askList);
+
       const failures = element("details", "", "pg-letters");
       failures.dataset.part = "letters";
       const failuresSummary = element("summary");
@@ -340,7 +370,7 @@
       remove.dataset.part = "remove";
       about.append(aboutSummary, aboutFacts, remove);
 
-      card.append(head, facts, slot("description", {tag: "p", klass: "pg-description"}), slot("detail", {tag: "p", klass: "pg-detail"}), enable, columns, activity, failures, about);
+      card.append(head, facts, slot("description", {tag: "p", klass: "pg-description"}), slot("detail", {tag: "p", klass: "pg-detail"}), enable, asks, columns, activity, failures, about);
       return card;
     }
 
@@ -407,6 +437,24 @@
       return item;
     }
 
+    // One write of a plugin that waits for the person: what it is, how long
+    // it waits, and the command that approves it. The command stays the same
+    // while the request waits, so its Copy button keeps focus across updates.
+    function approvalRow(item) {
+      const row = element("li");
+      const head = element("p", "", "pg-approval-head");
+      const known = options.actionName?.(item.action);
+      const plain = words(plainCode.test(item.action) ? item.action : "a write").replaceAll(".", " ");
+      head.append(element("strong", known || plain[0].toUpperCase() + plain.slice(1)));
+      if (item.expires) {
+        const when = element("time", "Expires at " + clock(item.expires, now()));
+        when.dateTime = new Date(item.expires).toISOString();
+        head.append(" ", when);
+      }
+      row.append(head, command(approveCommand(item.id), "Approve command"));
+      return row;
+    }
+
     function settingsRoute(plugin) {
       return plugin.valid ? "#settings?group=" + encodeURIComponent("plugins." + plugin.id) : "";
     }
@@ -458,6 +506,12 @@
       fact(card, "dropped", String(plugin.dropped), {state: plugin.dropped ? "warn" : "", flash});
       fact(card, "invocations", String(plugin.invocations), {flash});
       fact(card, "published", String(plugin.published), {flash});
+
+      const asked = waiting.filter(item => item.plugin === plugin.id);
+      const asks = card.querySelector('[data-part="approvals"]');
+      asks.hidden = !asked.length;
+      const added = fill(card.querySelector(".pg-approval-list"), JSON.stringify(asked.map(item => [item.id, item.action, item.expires])), () => asked.map(approvalRow));
+      if (added && flash && asked.length) mark(asks);
 
       const letters = current.letters.filter(letter => letter.plugin === plugin.id);
       const failures = card.querySelector('[data-part="letters"]');
@@ -606,6 +660,20 @@
       options.announce(first.join(". ") + ".");
     }
 
+    // The repository's approvals state. A card lists the open requests its
+    // plugin made (requested_by "plugin:<id>"); a state without that field
+    // lists none.
+    function showApprovals(raw, flash = false) {
+      const next = pluginApprovals(raw);
+      const before = waiting.map(item => item.id).join();
+      waiting = next;
+      if (!current || before === next.map(item => item.id).join()) return waiting;
+      const fresh = next.filter(item => !before.split(",").includes(item.id));
+      render(flash);
+      if (flash) say(fresh.map(item => "Plugin " + (current.plugins.find(plugin => plugin.id === item.plugin)?.name || item.plugin) + " waits for your approval"));
+      return waiting;
+    }
+
     // Show the plugins state. With flash, values that differ from the ones on
     // screen are highlighted and changes are announced. null keeps the last
     // values.
@@ -636,108 +704,10 @@
     if (add) add.replaceWith(command("agentflow plugin add PATH", "Install command"));
 
     return {
-      show, status, tick,
+      show, showApprovals, status, tick, command,
       get plugins() { return current; }
     };
   }
 
-  scope.AgentflowPlugins = {pluginsState, codeShort, letterShort, detail, remaining, createPlugins};
-
-  // ---------------------------------------------------------------------
-  // Wiring. Lane 5.4 owns this file but not app.js, so the page attaches
-  // itself here. Each block names the app.js change that replaces it.
-  // ---------------------------------------------------------------------
-  if (!scope.document || !scope.document.getElementById("page-plugins")) return;
-
-  const offlineNotes = {
-    unsupported: "This console does not serve live updates. Use Resync to reload the checkout.",
-    forbidden: "The console refused the live stream for this worktree. Use Resync to try again.",
-    busy: "Too many live streams are open for this console. Close another console tab, or use Resync.",
-    unavailable: "Live updates are not available for this worktree yet. The console keeps retrying."
-  };
-  const shell = document.getElementById("console-shell");
-  const main = document.getElementById("main");
-  const section = document.getElementById("page-plugins");
-  const entry = document.querySelector('.rail nav a[data-page="plugins"]');
-  const open = () => !shell.hidden && /^#plugins(\?|$)/.test(location.hash);
-
-  // WIRING 1: announcements. app.js owns #live-announcer through announce();
-  // it loads after this file, so it is looked up when a message is sent.
-  function announce(message) {
-    if (typeof scope.announce === "function") { scope.announce(message); return; }
-    const region = document.getElementById("live-announcer");
-    region.textContent = "";
-    requestAnimationFrame(() => { region.textContent = message; });
-  }
-
-  const page = createPlugins({root: document, announce, visible: open});
-
-  // WIRING 2: the stream. The console holds one stream (live-stream.md, "Use
-  // the shared stream, never open your own"), which app.js opens. This file
-  // loads before app.js and passes the same frames on to the page. It adds
-  // no topic: the plugins state rides in the repository's frames (ADR,
-  // phase 5 decision 10). Replace with a showRepository("plugins") call in
-  // app.js's onSnapshot and onDelta.
-  let stream = {state: "connecting", reason: ""}, ready = false, present = false;
-  const plugins = states => list(states).find(item => item && item.projection === "plugins" && !item.worktree);
-  function report() {
-    page.status({state: stream.state, offline: stream.state === "offline" ? offlineNotes[stream.reason] || "" : "", ready, present});
-  }
-  const events = scope.AgentflowEvents;
-  if (events && typeof events.connect === "function") {
-    const connect = events.connect;
-    events.connect = options => connect({
-      ...options,
-      onStatus(status) {
-        options.onStatus?.(status);
-        stream = record(status) || stream;
-        report();
-      },
-      onSnapshot(message) {
-        options.onSnapshot?.(message);
-        ready = true;
-        const state = plugins(message?.states)?.state ?? null;
-        present = Boolean(state);
-        page.show(state, false);
-        report();
-      },
-      onDelta(message) {
-        options.onDelta?.(message);
-        const next = plugins(message?.states);
-        if (!next) return;
-        const had = present;
-        present = Boolean(next.state);
-        page.show(next.state, had && present);
-        report();
-      }
-    });
-  }
-
-  // WIRING 3: the route. app.js does not know #plugins: it shows the
-  // overview for it. While #plugins is open this file shows its own page
-  // instead (plugins.css hides the other pages) and marks its rail entry.
-  // Replace with a "plugins" entry in screenNames and pages in app.js, and
-  // in destination.go so `agentflow ui --screen plugins` opens it.
-  function route(focus) {
-    const on = open();
-    main.classList.toggle("plugins-open", on);
-    if (section.hidden === on) section.hidden = !on;
-    for (const link of document.querySelectorAll(".rail nav a[data-page]")) {
-      const here = on && link === entry;
-      if (here && link.getAttribute("aria-current") !== "page") link.setAttribute("aria-current", "page");
-      if (!here && (on || link === entry) && link.hasAttribute("aria-current")) link.removeAttribute("aria-current");
-    }
-    page.tick();
-    if (on && focus) {
-      main.focus({preventScroll: true});
-      scope.scrollTo(0, 0);
-    }
-  }
-  scope.addEventListener("hashchange", () => route(true));
-  // app.js marks the overview's entry whenever it shows a page, and hides
-  // the shell on the reconnect screen: follow both.
-  const watch = new MutationObserver(() => route(false));
-  watch.observe(document.querySelector(".rail nav"), {attributes: true, subtree: true, attributeFilter: ["aria-current"]});
-  watch.observe(shell, {attributes: true, attributeFilter: ["hidden"]});
-  route(false);
+  scope.AgentflowPlugins = {pluginsState, pluginApprovals, requester, approveCommand, codeShort, letterShort, detail, remaining, createPlugins};
 })(globalThis);

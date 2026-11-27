@@ -80,3 +80,18 @@ func pluginsConsoleFixture(t *testing.T, mux *http.ServeMux, origin, checksFile 
 		_, _ = io.WriteString(w, mintLaunch(s.instanceKey, time.Now()))
 	})
 }
+
+// The Plugins page is a console screen: agentflow ui --screen plugins and
+// the reconnect screen's command reach it.
+func TestPluginsDestination(t *testing.T) {
+	dest, err := (Destination{Screen: "plugins"}).Normalize("overview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dest.command(); got != "agentflow ui --screen plugins" {
+		t.Fatalf("command = %q", got)
+	}
+	if _, err := (Destination{Screen: "plugins", Role: "secops"}).Normalize("overview"); err == nil {
+		t.Fatal("a role was accepted on the plugins screen")
+	}
+}

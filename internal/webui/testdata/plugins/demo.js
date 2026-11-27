@@ -66,7 +66,7 @@
     while (byID("console-shell").hidden) await wait(20);
   }
   location.hash = "#plugins";
-  await emit(frame("snapshot", {cursor: "v1:" + repo + "=1", states: [overview, {projection: "plugins", repo, state: plugins(42000)}, {projection: "timeline", repo, state: timeline}, {projection: "approvals", repo, state: {open: [], recent: []}}]}));
+  await emit(frame("snapshot", {cursor: "v1:" + repo + "=1", states: [overview, {projection: "plugins", repo, state: plugins(42000)}, {projection: "timeline", repo, state: timeline}, {projection: "approvals", repo, state: {open: view ? [] : [{operation_id: "op_5f0e1d2c3b4a59687766554433221100", action: "notify", class: "remote", policy_source: "plugin ceiling", issued_at: at(-30000), expires_at: at(270000), state: "pending", requested_by: "plugin:ci-notify"}], recent: []}}]}));
   document.documentElement.dataset.demo = "ready";
   if (view) return;
   // The annotator restarts, runs, then crashes again: the page changes live.
