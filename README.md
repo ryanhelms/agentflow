@@ -14,7 +14,7 @@ in a terminal or by an AI agent in Claude Code, Codex, Grok, Cursor, Copilot or 
 | **Owner** | Ryan Helms |
 | **Architecture** | [docs/blueprint.html](docs/blueprint.html): architecture and rollout plan |
 | **Support** | Open an issue in this repo · security issues: see [SECURITY.md](SECURITY.md) |
-| **Current release** | <!-- agentflow:version -->`v0.56.1`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
+| **Current release** | <!-- agentflow:version -->`v0.60.0`<!-- /agentflow:version --> · [CHANGELOG.md](CHANGELOG.md) · [all releases](https://github.com/ryanhelms/agentflow/releases) |
 
 ---
 
