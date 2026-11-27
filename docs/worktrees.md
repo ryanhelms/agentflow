@@ -98,7 +98,9 @@ it again reports `already_finished`. The confirmation flow is the same as other 
 writes (`finish` action, remote class).
 
 Finish deletes each branch only while it is still at the commit it checked. When the local
-branch has moved, it stops before removing the worktree. It deletes the remote branch with
+branch has moved, it stops before removing the worktree. It deletes the local branch with
+`git update-ref -d refs/heads/<branch> <checked commit>` and then its `branch.<branch>`
+settings, as `git branch -D` would, and the remote branch with
 `git push --force-with-lease=refs/heads/<branch>:<checked commit> origin :refs/heads/<branch>`,
 so a push made after the check, or since the last fetch when `origin` could not be read, makes
 the delete fail and the branch stays. Run `finish` again to check the new commits.
@@ -159,8 +161,8 @@ The Claude Code PreToolUse hook keeps the never-list. It treats every spelling o
 merge: `gh pr merge` with quoted words, `gh -R OWNER/NAME pr merge`, `gh pr -R OWNER/NAME merge`,
 zsh's `=gh`, a program named through a variable or substitution (`$GH`, `$(which gh)`), a
 merge inside `bash -c`, `$(...)`, `<(...)` or `>(...)`, a write to the `gh api`
-`pulls/N/merge` endpoint, and a `mergePullRequest` or `enablePullRequestAutoMerge`
-mutation. A GET of `pulls/N/merge`, which only asks whether the PR is merged, stays allowed.
+`pulls/N/merge` endpoint, and a `mergePullRequest`, `enablePullRequestAutoMerge` or
+`enqueuePullRequest` mutation. A GET of `pulls/N/merge`, which only asks whether the PR is merged, stays allowed.
 
 With `policy.coordinator_merge: true` it allows a merge when the PR's base, read with
 `gh pr view`, is not `main` or `master`. It looks the PR up in the repository the command

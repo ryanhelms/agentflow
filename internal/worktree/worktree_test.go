@@ -231,7 +231,7 @@ func TestFinishSquashMergedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.State != StateWouldFinish || plan.Primary != primary || len(plan.Actions) != 4 || !strings.Contains(plan.Actions[3], "push origin --delete issue-2-api") {
+	if plan.State != StateWouldFinish || plan.Primary != primary || len(plan.Actions) != 4 || !strings.Contains(plan.Actions[3], "--force-with-lease=refs/heads/issue-2-api:"+head+" origin :refs/heads/issue-2-api") {
 		t.Fatalf("plan %+v", plan.Outcome)
 	}
 	if _, err := os.Stat(dir); err != nil {
@@ -246,6 +246,9 @@ func TestFinishSquashMergedWorktree(t *testing.T) {
 	}
 	if refs := git(t, primary, "for-each-ref", "--format=%(refname)", "refs/heads/issue-2-api"); refs != "" {
 		t.Fatalf("local branch remains: %s", refs)
+	}
+	if cfg, _ := exec.Command("git", "-C", primary, "config", "--get-regexp", `^branch\.issue-2-api\.`).Output(); len(cfg) != 0 {
+		t.Fatalf("branch config remains: %s", cfg)
 	}
 	if remote := git(t, primary, "ls-remote", "--heads", "origin", "issue-2-api"); remote != "" {
 		t.Fatalf("remote branch remains: %s", remote)

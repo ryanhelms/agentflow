@@ -6,7 +6,7 @@
   "detail": "merged into origin/main",
   "actions": [
     "git worktree remove <worktrees>/issue-42-0efd766f81d9",
-    "git branch -D issue-42-0efd766f81d9",
+    "git update-ref -d refs/heads/issue-42-0efd766f81d9 <object-1>",
     "git worktree prune"
   ],
   "primary": "<repo>",
