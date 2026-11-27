@@ -71,3 +71,18 @@ func TestParseHomeAnswers(t *testing.T) {
 		}
 	}
 }
+
+// A link at config.yml, dangling or not, is never followed or replaced.
+func TestSaveHomeAnswersRefusesALink(t *testing.T) {
+	dir := t.TempDir()
+	path, target := filepath.Join(dir, "config.yml"), filepath.Join(dir, "elsewhere.yml")
+	if err := os.Symlink(target, path); err != nil {
+		t.Skip("symlinks are not available:", err)
+	}
+	if err := SaveHomeAnswers(path, []string{"acme"}, "ask"); err == nil {
+		t.Fatal("saved through a link")
+	}
+	if _, err := os.Lstat(target); !os.IsNotExist(err) {
+		t.Fatalf("wrote the link's target: %v", err)
+	}
+}

@@ -22,10 +22,11 @@ var (
 )
 
 // askHomeQuestions asks the personal setup questions (see
-// setup.CheckHomeQuestions) and saves the answers to path. End of input saves
-// nothing. It reads one line per answer and no further, so the provider
+// setup.CheckHomeQuestions) and returns what saves the answers to path, to be
+// called once the repository is set up so that a failed init asks again. End of
+// input cancels. It reads one line per answer and no further, so the provider
 // questions that follow read the rest of in.
-func askHomeQuestions(path string, in io.Reader, out io.Writer) error {
+func askHomeQuestions(path string, in io.Reader, out io.Writer) (func() error, error) {
 	read := func(question string) (string, error) {
 		fmt.Fprintf(out, "%s\n> ", question)
 		line, err := readLine(in)
@@ -42,7 +43,7 @@ func askHomeQuestions(path string, in io.Reader, out io.Writer) error {
 	for {
 		answer, err := read(setup.HomeOwnersQuestion)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if owners, err = setup.ParseOwners(answer); err == nil {
 			break
@@ -53,22 +54,24 @@ func askHomeQuestions(path string, in io.Reader, out io.Writer) error {
 	for len(owners) > 0 {
 		answer, err := read(setup.HomeModeQuestion)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if mode, err = setup.ParseAutoMode(answer); err == nil {
 			break
 		}
 		fmt.Fprintln(out, err)
 	}
-	if err := setup.SaveHomeAnswers(path, owners, mode); err != nil {
-		return err
-	}
-	if len(owners) == 0 {
-		fmt.Fprintf(out, "  saved    %s: no automatic setup\n", path)
-	} else {
-		fmt.Fprintf(out, "  saved    %s: init.orgs %s, init.auto %s\n", path, strings.Join(owners, ", "), mode)
-	}
-	return nil
+	return func() error {
+		if err := setup.SaveHomeAnswers(path, owners, mode); err != nil {
+			return err
+		}
+		if len(owners) == 0 {
+			fmt.Fprintf(out, "  saved    %s: no automatic setup\n", path)
+		} else {
+			fmt.Fprintf(out, "  saved    %s: init.orgs %s, init.auto %s\n", path, strings.Join(owners, ", "), mode)
+		}
+		return nil
+	}, nil
 }
 
 // readLine reads up to and including the next newline, one byte at a time,

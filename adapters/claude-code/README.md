@@ -12,7 +12,7 @@ A Claude Code plugin in the `agentflow` marketplace (this repository). It provid
   verified release, so the skills work before a repo is set up
 - Hooks: `SessionStart` (ticket context; in an unset repo owned by an org in `init.orgs`,
   runs `agentflow init` automatically, see the main README; `init.orgs` has no default, and
-  the hook never asks or writes your agentflow home), `PreToolUse` on Bash (blocks raw `git commit`
+  the hook never asks or changes your personal settings), `PreToolUse` on Bash (blocks raw `git commit`
   with an invalid message, force-push, pushes to protected branches and `gh pr merge`), `Stop` (reminds about uncommitted work and open criteria)
 
 To install it for yourself (Claude Code 2.1.275 or later):

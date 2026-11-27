@@ -188,3 +188,81 @@ func TestInitIgnoresAHomeInsideTheRepository(t *testing.T) {
 		t.Fatalf("account home config = %q %v", b, err)
 	}
 }
+
+func requireNoHomeConfig(t *testing.T, home string) {
+	t.Helper()
+	if _, err := os.Lstat(filepath.Join(home, "config.yml")); !os.IsNotExist(err) {
+		t.Fatalf("home config was written: %v", err)
+	}
+}
+
+func TestInitInspectionAsksNothing(t *testing.T) {
+	for _, flagName := range []string{"--detect-providers", "--guidance-only"} {
+		t.Run(flagName, func(t *testing.T) {
+			_, home, prompts := initHomeFixture(t, true, "acme\nauto\n")
+			out, err := captureCLI(t, "init", flagName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prompts.Len() != 0 || strings.Contains(out, "Personal setup") {
+				t.Errorf("asked: prompts %s\nout %s", prompts, out)
+			}
+			requireNoHomeConfig(t, home)
+		})
+	}
+}
+
+// The home, not the repository, decides whether init asks.
+func TestInitAsksInARepositoryThatIsAlreadySetUp(t *testing.T) {
+	_, home, prompts := initHomeFixture(t, false, "")
+	if _, err := captureCLI(t, "init"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := captureCLI(t, "init")
+	if err != nil || !strings.Contains(out, "agentflow config set init.orgs") {
+		t.Fatalf("second run without a terminal: %v\n%s", err, out)
+	}
+	requireNoHomeConfig(t, home)
+	initStdinIsTerminal = func() bool { return true }
+	initStdin = strings.NewReader("\n" + providerDefaults)
+	if _, err := captureCLI(t, "init"); err != nil || !strings.Contains(prompts.String(), "Personal setup") {
+		t.Fatalf("terminal run: %v\n%s", err, prompts)
+	}
+}
+
+func TestInitCancelledAtTheQuestionsSavesNothing(t *testing.T) {
+	repo, home, _ := initHomeFixture(t, true, "")
+	if _, err := captureCLI(t, "init"); err == nil || !strings.Contains(err.Error(), "personal setup cancelled") {
+		t.Fatalf("err = %v", err)
+	}
+	requireNoHomeConfig(t, home)
+	if _, err := os.Stat(filepath.Join(repo, ".agentflow")); !os.IsNotExist(err) {
+		t.Fatalf("set the repository up after a cancel: %v", err)
+	}
+}
+
+func TestInitAsksAgainForAnInvalidOwner(t *testing.T) {
+	_, _, prompts := initHomeFixture(t, true, "acme/demo\nacme\nask\n"+providerDefaults)
+	if _, err := captureCLI(t, "init"); err != nil {
+		t.Fatalf("%v\n%s", err, prompts)
+	}
+	if !strings.Contains(prompts.String(), "is not a GitHub owner name") {
+		t.Errorf("prompts:\n%s", prompts)
+	}
+}
+
+// Answers are saved only when init succeeds, so the next run asks again.
+func TestInitThatFailsKeepsNoAnswers(t *testing.T) {
+	repo, home, prompts := initHomeFixture(t, true, "acme\nauto\n"+providerDefaults)
+	// A file where init needs a folder makes the repository setup fail.
+	if err := os.WriteFile(filepath.Join(repo, ".githooks"), []byte("not a folder"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := captureCLI(t, "init"); err == nil {
+		t.Fatalf("init succeeded:\n%s", prompts)
+	}
+	if !strings.Contains(prompts.String(), "Personal setup") {
+		t.Fatalf("did not ask:\n%s", prompts)
+	}
+	requireNoHomeConfig(t, home)
+}

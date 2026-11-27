@@ -477,12 +477,13 @@ func runInit(ctx context.Context, args []string) error {
 	interactive := !*headless && initStdinIsTerminal()
 	prompt := *guided || interactive
 	var home setup.HomeQuestions
+	var saveHome func() error
 	if !*detect {
 		if home, err = setup.CheckHomeQuestions(); err != nil {
 			return err
 		}
 		if home.Needed && interactive {
-			if err := askHomeQuestions(home.Path, initStdin, initPromptOut); err != nil {
+			if saveHome, err = askHomeQuestions(home.Path, initStdin, initPromptOut); err != nil {
 				return err
 			}
 			home.Needed = false
@@ -527,6 +528,9 @@ func runInit(ctx context.Context, args []string) error {
 	}
 	for _, f := range rel.Written {
 		fmt.Println("  wrote   ", f)
+	}
+	if saveHome != nil {
+		return saveHome()
 	}
 	if home.Needed {
 		fmt.Print(setup.HomeQuestionsText(home.Path))

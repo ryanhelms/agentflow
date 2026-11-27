@@ -32,7 +32,7 @@ Set this repository up for agentflow. The `agentflow` command is on your Bash PA
    convention. Ask for a task key only when that convention requires one.
 
 Personal setup questions: when the agentflow home has no `config.yml` yet, `agentflow init`
-run from here (no terminal) writes nothing to the home and prints two questions with the
+run from here (no terminal) saves no personal settings and prints two questions with the
 command that answers them. Never answer them yourself and never pick owners for the person.
 Ask the person, in the conversation:
 

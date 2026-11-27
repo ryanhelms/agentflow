@@ -18,8 +18,8 @@ import (
 // then `agentflow init` in a terminal asks which GitHub owners the AI-client
 // session hook may set up (init.orgs) and how (init.auto), and saves the
 // answers there, an empty list included, so it asks only once. Without a
-// terminal it writes nothing to the home and prints HomeQuestionsText instead.
-// The session hook never asks and never writes the home.
+// terminal it does not create that file and prints HomeQuestionsText instead.
+// The session hook never asks and never changes it.
 
 // HomeQuestions says whether `agentflow init` should ask the personal setup
 // questions, and where the answers go.
@@ -141,7 +141,7 @@ const (
 // Only the person answers them; config set saves through the confirmation flow.
 func HomeQuestionsText(path string) string {
 	return "Personal setup: " + path + " does not exist yet, so agentflow has not asked these questions. " +
-		"Nothing was written there.\n" +
+		"It was not created.\n" +
 		"  1. " + HomeOwnersQuestion + "\n" +
 		"  2. " + HomeModeQuestion + "\n" +
 		"Ask the person, then save the answers with:\n" +

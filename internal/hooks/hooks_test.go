@@ -125,7 +125,7 @@ func TestSessionStartAutoInit(t *testing.T) {
 }
 
 // Without init.orgs the session hook sets nothing up, suggests nothing, asks
-// nothing and writes nothing to the agentflow home, whoever owns the repo.
+// nothing and leaves the home's config.yml as it was, whoever owns the repo.
 func TestSessionStartWithoutInitOrgs(t *testing.T) {
 	for name, homeConfig := range map[string]string{
 		"home not initialised": "",

@@ -177,8 +177,8 @@ init:
 
 | | Home not set up | Home set up |
 | --- | --- | --- |
-| **In a terminal** | Asks which GitHub owners may be set up automatically (empty means none; nothing is preselected) and, if you name any, `auto`, `ask` or `off`. Saves the answers to `config.yml`, an empty list included, so it never asks again. | Asks nothing. |
-| **No terminal** (an agent, CI, `--non-interactive`) | Sets the repository up, writes nothing to the home, and prints the questions with the command that answers them. | Asks nothing. |
+| **In a terminal** | Asks which GitHub owners may be set up automatically (empty means none; nothing is preselected) and, if you name any, `auto`, `ask` or `off`. Saves the answers to `config.yml`, an empty list included, so it never asks again. | Asks no personal questions. |
+| **No terminal** (an agent, CI, `--non-interactive`) | Sets the repository up, saves no settings (it does not create `config.yml`), and prints the questions with the command that answers them. | Asks no personal questions. |
 
 The command that answers the questions asks you to confirm before it saves:
 
@@ -187,7 +187,7 @@ agentflow config set init.orgs=acme init.auto=ask
 agentflow config set init.orgs=     # no automatic setup
 ```
 
-The session hook never asks and never writes to the home. Repository settings stay in
+The session hook never asks and never changes your settings. Repository settings stay in
 each repository's `.agentflow/`, and provider questions are still asked per repository,
 so several repositories share one home without interfering.
 
