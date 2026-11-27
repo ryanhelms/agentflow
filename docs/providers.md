@@ -174,7 +174,7 @@ version: 1
 providers:
   jira:
     task_management:
-      settings: {site: https://nscale.atlassian.net, projects: [PLAT]}
+      settings: {site: https://acme.atlassian.net, projects: [PLAT]}
       constraints:
         site: {lock: true}                  # no later change
         projects: {allow: [PLAT, INFRA]}    # values from this set only
@@ -183,7 +183,7 @@ providers:
       settings: {labels: [triage]}
       constraints:
         labels: {lock: append}              # may add, never remove
-        repository: {pattern: '^nscaledev/'}
+        repository: {pattern: '^acme/'}
 ```
 
 Constraints apply to merged settings after each layer. Quote literal dots in

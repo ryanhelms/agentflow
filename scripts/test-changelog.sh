@@ -52,5 +52,17 @@ if printf '%s\n' "$out" | grep -q "explain things"; then
   fail=1
 fi
 
+# Ticket keys link only when a Jira site is named.
+commit "fix(PLAT-1): bound the quota"
+for site in "" https://acme.atlassian.net; do
+  keyed=$(cd "$repo" && JIRA_SITE=$site "$root/scripts/changelog.sh" --version 0.2.0 --from v0.1.0 --date 2026-01-01)
+  want="- **PLAT-1:** bound the quota ("
+  [ -z "$site" ] || want="- **[PLAT-1]($site/browse/PLAT-1):** bound the quota ("
+  if ! printf '%s\n' "$keyed" | grep -qF -- "$want"; then
+    printf 'FAIL: with JIRA_SITE=%q want %q\n%s\n' "$site" "$want" "$keyed" >&2
+    fail=1
+  fi
+done
+
 [ "$fail" = 0 ] || { printf '%s\n' "$out" >&2; exit 1; }
 echo "changelog tests passed"

@@ -69,7 +69,7 @@ func TestInitAndInstall(t *testing.T) {
 func gitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:nscaledev/demo.git"}} {
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.com:acme/demo.git"}} {
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("%v %s", err, out)
 		}
@@ -130,14 +130,14 @@ func TestRemoveUndoesInit(t *testing.T) {
 		t.Errorf("hooksPath still %q", hp)
 	}
 	repo, _ := gitx.Open(ctx, dir)
-	if got := AutoInitDecision(ctx, repo, AutoInit, []string{"nscaledev"}); got != AutoOff {
+	if got := AutoInitDecision(ctx, repo, AutoInit, []string{"acme"}); got != AutoOff {
 		t.Errorf("remove must opt the clone out of auto init, got %q", got)
 	}
 	// an explicit init opts back in
 	if _, err := Init(ctx, dir, false); err != nil {
 		t.Fatal(err)
 	}
-	if got := AutoInitDecision(ctx, repo, AutoInit, []string{"nscaledev"}); got != AutoInit {
+	if got := AutoInitDecision(ctx, repo, AutoInit, []string{"acme"}); got != AutoInit {
 		t.Errorf("init must clear the opt-out, got %q", got)
 	}
 }
@@ -153,9 +153,9 @@ func TestAutoInitDecision(t *testing.T) {
 		orgs []string
 		want string
 	}{
-		{AutoInit, []string{"nscaledev"}, AutoInit},
-		{AutoAsk, []string{"NscaleDev"}, AutoAsk},
-		{AutoOff, []string{"nscaledev"}, AutoOff},
+		{AutoInit, []string{"acme"}, AutoInit},
+		{AutoAsk, []string{"Acme"}, AutoAsk},
+		{AutoOff, []string{"acme"}, AutoOff},
 		{AutoInit, []string{"someone-else"}, AutoOff},
 	}
 	for _, c := range cases {

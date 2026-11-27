@@ -21,11 +21,11 @@ export function agentPrompt(project) {
 export const pluginCommands = {
   claude: [
     "claude plugin marketplace add ryanhelms/agentflow",
-    "claude plugin install agentflow@nscale",
+    "claude plugin install agentflow@agentflow",
   ].join("\n"),
   codex: [
     "codex plugin marketplace add ryanhelms/agentflow",
-    "codex plugin add agentflow@nscale",
+    "codex plugin add agentflow@agentflow",
   ].join("\n"),
   gemini: "gemini extensions install https://github.com/ryanhelms/agentflow",
 };

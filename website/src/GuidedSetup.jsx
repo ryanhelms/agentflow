@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Button, Row, Select, Stack, Text } from "@nscaledev/design-components/atoms";
-import { FormField, Panel } from "@nscaledev/design-components/molecules";
+import { Button, Row, Select, Stack, Text } from "@agentflow/design-components/atoms";
+import { FormField, Panel } from "@agentflow/design-components/molecules";
 
 const preferenceKey = "agentflow.site-study.fixture.atlas-service.providers.v1";
 const taskOptions = [

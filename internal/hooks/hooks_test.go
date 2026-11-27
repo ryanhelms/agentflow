@@ -86,7 +86,7 @@ func TestSessionStartAutoInit(t *testing.T) {
 	t.Setenv("AGENTFLOW_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
-	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/nscaledev/demo.git"}} {
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "https://github.com/ryanhelms/demo.git"}} {
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("%v %s", err, out)
 		}
@@ -215,7 +215,7 @@ func TestPreBashBlocksPluginDecisions(t *testing.T) {
 		`cmd /c "C:\repo\.agentflow\bin\agentflow.cmd plugin add x"`,
 		"pwsh -File .agentflow/bin/agentflow.ps1 plugin add x",
 		"bash .agentflow/bin/agentflow plugin add x",
-		"/home/me/.claude/plugins/cache/nscale/agentflow/0.58.0/bin/launch plugin add x",
+		"/home/me/.claude/plugins/cache/agentflow/agentflow/0.58.0/bin/launch plugin add x",
 		`"${CLAUDE_PLUGIN_ROOT}/bin/launch" plugin add x`,
 		"go run ./cmd/agentflow plugin add x",
 		"agentflow --native-client codex plugin add x",
@@ -281,7 +281,7 @@ func TestPreBashAllowsMentionsOfPluginCommands(t *testing.T) {
 		`gh issue comment 80 --body "run agentflow plugin approve op_1 yourself"`,
 		`bash -c 'echo "agentflow plugin add x"'`,
 		"bash scripts/check.sh agentflow plugin add",
-		"codex plugin add agentflow@nscale",
+		"codex plugin add agentflow@agentflow",
 		"claude plugin remove agentflow",
 		// Without a source or an ID there is nothing to decide.
 		"agentflow plugin add",

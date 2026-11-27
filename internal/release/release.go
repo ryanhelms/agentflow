@@ -40,7 +40,7 @@ type Unit struct {
 	Path        string   `yaml:"path" json:"path"`
 	ReleaseType string   `yaml:"release_type" json:"release_type"` // release-please type: go, node, python, helm, terraform-module, simple
 	Builds      []string `yaml:"builds" json:"builds"`
-	Image       string   `yaml:"image,omitempty" json:"image,omitempty"` // e.g. ghcr.io/nscaledev/api
+	Image       string   `yaml:"image,omitempty" json:"image,omitempty"` // e.g. ghcr.io/acme/api
 	Chart       string   `yaml:"chart,omitempty" json:"chart,omitempty"` // chart dir relative to path
 	Dockerfile  string   `yaml:"dockerfile,omitempty" json:"dockerfile,omitempty"`
 	Publish     string   `yaml:"publish,omitempty" json:"publish,omitempty"` // library registry: npm, pypi, go (tag only), terraform (tag only)
@@ -50,7 +50,7 @@ type Unit struct {
 type Config struct {
 	Strategy      string `yaml:"strategy" json:"strategy"`
 	DefaultBranch string `yaml:"default_branch,omitempty" json:"default_branch,omitempty"`
-	Registry      string `yaml:"registry,omitempty" json:"registry,omitempty"` // default image/chart registry, e.g. ghcr.io/nscaledev
+	Registry      string `yaml:"registry,omitempty" json:"registry,omitempty"` // default image/chart registry, e.g. ghcr.io/acme
 	Units         []Unit `yaml:"units" json:"units"`
 }
 

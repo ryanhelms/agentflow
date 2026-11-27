@@ -1,6 +1,6 @@
 # Semantic versioning and GitHub Releases
 
-Every deployable asset at Nscale (apps, services, CLIs, images, Helm charts, libraries
+Every deployable asset (apps, services, CLIs, images, Helm charts, libraries
 and modules) is versioned with [Semantic Versioning 2.0](https://semver.org) and shipped
 as a GitHub Release. The GitHub Release is the system of record: production deploys
 reference a release, the task follow-up sets configured Jira fix versions, and Confluence release notes link to it.
@@ -117,7 +117,7 @@ Tag staging builds with the branch version:
 - id: version
   uses: ryanhelms/agentflow/actions/version@v0
   with: { unit: api }
-- run: docker build -t ghcr.io/nscaledev/api:${{ steps.version.outputs.version }} services/api
+- run: docker build -t ghcr.io/acme/api:${{ steps.version.outputs.version }} services/api
 ```
 
 Guard production deploys:

@@ -103,12 +103,12 @@ Agentflow rejects publication from a protected source branch.
 
 ## Org secrets and variables
 
-Set at the `nscaledev` org level, visible to repos that use agentflow. The caller
+Set at your GitHub organisation level, visible to repos that use agentflow. The caller
 workflow passes each reusable workflow only the secrets it uses (no `secrets: inherit`).
 
 | Name | Kind | Purpose |
 |---|---|---|
-| `JIRA_BASE` | variable | `https://nscale.atlassian.net` |
+| `JIRA_BASE` | variable | `https://example.atlassian.net` (your site) |
 | `CONFLUENCE_BASE` | variable | Same site URL (pages live under `/wiki`) |
 | `JIRA_USER` | secret | `svc-agentflow` account email |
 | `JIRA_TOKEN` | secret | Its scoped API token (Jira + Confluence) |
@@ -121,9 +121,8 @@ workflow passes each reusable workflow only the secrets it uses (no `secrets: in
 
 ## Actions access
 
-`ryanhelms/agentflow` is an internal repository. In its **Settings › Actions › General ›
-Access**, choose *Accessible from repositories in the nscaledev organization* so other repos
-can call its reusable workflows and actions.
+`ryanhelms/agentflow` is public, so other repos can call its reusable workflows and
+actions. An organisation that restricts which actions may run must allow it.
 
 Without org-level secrets and variables, a repo admin can set the same names on one
 repo (Settings › Secrets and variables › Actions) for a pilot.
@@ -145,7 +144,7 @@ agentflow's own releases never use it: they tag with the release deploy key.
 
 ## Atlassian service account
 
-1. Create `svc-agentflow@nscale.com` as an Atlassian service account (or a managed user).
+1. Create `svc-agentflow@example.com` as an Atlassian service account (or a managed user).
 2. Give it access to the opted-in Jira projects (Browse, Transition, Comment, Create, Edit,
    Manage versions) and Confluence spaces (View, Add pages, Edit).
 3. Create a scoped API token with Jira and Confluence read/write scopes. Store it as `JIRA_TOKEN`.

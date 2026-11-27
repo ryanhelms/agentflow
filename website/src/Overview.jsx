@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Button, Input, Link, Row, Select, Split, Stack, Text } from "@nscaledev/design-components/atoms";
-import { FormField, Panel } from "@nscaledev/design-components/molecules";
-import { PageHeader } from "@nscaledev/design-components/organisms";
-import { DashboardTemplate } from "@nscaledev/design-patterns";
+import { Button, Input, Link, Row, Select, Split, Stack, Text } from "@agentflow/design-components/atoms";
+import { FormField, Panel } from "@agentflow/design-components/molecules";
+import { PageHeader } from "@agentflow/design-components/organisms";
+import { DashboardTemplate } from "@agentflow/design-patterns";
 import { CURRENT_RELEASE, SOURCE_REPOSITORY, getDocumentSource } from "./docs-data.js";
 import GuidedSetup from "./GuidedSetup.jsx";
 import { agentPrompt, installerCommand, pluginCommands } from "./install.js";
@@ -75,7 +75,7 @@ function Installer() {
                   placeholder={platform === "windows" ? "C:\\projects\\my-service" : "/path/to/repository"} />
               </FormField>
             </div>
-            <Text as="p" tone="muted">Sign in to GitHub CLI with access to <strong>ryanhelms/agentflow</strong>.</Text>
+            <Text as="p" tone="muted">Sign in to GitHub CLI first: the installer downloads releases of <strong>ryanhelms/agentflow</strong> and verifies them with it.</Text>
             <CommandBlock key={terminal} command={terminal} label="Copy command"
               hint="Run inside the target checkout or supply its path. An invalid checkout prompts for a replacement. Repeating setup preserves saved choices." />
             <details className="install-details">
@@ -110,7 +110,7 @@ function Installer() {
                 <option value="gemini">Gemini CLI</option>
               </Select>
             </FormField>
-            <Text as="p" tone="muted">Use your Git access to the internal Nscale repository. Open your client in the target checkout.</Text>
+            <Text as="p" tone="muted">The plugin installs from the public Agentflow repository on GitHub. Open your client in the target checkout.</Text>
             <CommandBlock key={commands} command={commands} label="Copy plugin commands" />
             <Text as="p">
               {plugin === "claude" ? <>Run <code>/agentflow:manager install</code> in Claude Code.</> :

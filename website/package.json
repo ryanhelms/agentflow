@@ -10,9 +10,9 @@
   "dependencies": {
     "@fontsource-variable/dm-sans": "5.3.0",
     "@fontsource/dm-mono": "5.3.0",
-    "@nscaledev/design-components": "file:vendor/nscaledev-design-components-0.1.1.tgz",
-    "@nscaledev/design-patterns": "file:vendor/nscaledev-design-patterns-0.1.1.tgz",
-    "@nscaledev/design-tokens": "file:vendor/nscaledev-design-tokens-0.1.0.tgz",
+    "@agentflow/design-components": "file:vendor/agentflow-design-components-0.1.1.tgz",
+    "@agentflow/design-patterns": "file:vendor/agentflow-design-patterns-0.1.1.tgz",
+    "@agentflow/design-tokens": "file:vendor/agentflow-design-tokens-0.1.0.tgz",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

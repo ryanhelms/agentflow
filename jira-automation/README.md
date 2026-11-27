@@ -17,7 +17,7 @@ After creating or changing a rule:
 
 1. In the rule list, select the rule › **Export** (or *Export rules* for several).
 2. Save the JSON here as `exports/<rule-name>.json`, replacing the previous export.
-3. Open a PR. Engineering Enablement reviews rule changes like code.
+3. Open a PR. A maintainer reviews rule changes like code.
 
-Exports contain project and field IDs specific to the Nscale site; don't import them into
+Exports contain project and field IDs specific to one Jira site; don't import them into
 another site without editing those IDs.

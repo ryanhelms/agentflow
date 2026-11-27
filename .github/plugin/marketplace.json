@@ -1,7 +1,7 @@
 {
-  "name": "nscale",
+  "name": "agentflow",
   "owner": {
-    "name": "Nscale Engineering Enablement"
+    "name": "Ryan Helms"
   },
   "plugins": [
     {
