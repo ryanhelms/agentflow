@@ -22,12 +22,15 @@ x-agentflow-links:
     - title: "Phase 5 contract: plugin manifest, JSON-RPC and plugin host"
       url: https://github.com/ryanhelms/agentflow/issues/77
       ref: null
+    - title: "Phase 6 contract: harness registry, probes and detection states"
+      url: https://github.com/ryanhelms/agentflow/issues/97
+      ref: null
 ---
 # Event bus, message store and event stream
 
 ## Status
 
-Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3"), phase 4 (section "Phase 4") and phase 5 (section "Phase 5", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
+Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3"), phase 4 (section "Phase 4"), phase 5 (section "Phase 5") and phase 6 (section "Phase 6", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
 
 ## Context
 
@@ -1938,3 +1941,971 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - Every plugin action is an ordinary operation on the timeline, with client `plugin:<id>`, and every plugin change is an ordinary Settings save.
 - Phases 6 and 7 reuse `internal/jsonrpc` and the extension-point list (`harness`, the permission rules in the ACP chain).
 - Consuming repositories see no change unless a person installs and enables a plugin.
+
+## Phase 6
+
+*Amendment for phase 6 (issue #97), lanes 6.1 to 6.4 (issues #100 to #103).* Phase 6 detects the ACP harnesses installed on this machine. `agentflow ai harnesses` and `agentflow ai doctor` list each one with its state and the exact fix, and a Harnesses page shows the same list live as harnesses are installed or removed. Phase 6 never installs anything and never starts a session: the only things it may run are an installed harness's version command and one ACP `initialize` request.
+
+**Harness binaries are the person's programs, but agentflow chooses when to start them.** Every rule in this section follows from that: agentflow starts only a binary that the person put on their own PATH or named in their own personal settings, only with arguments from agentflow's own data or the person's, with a scrubbed environment and a timeout, and never a package runner, a download or a binary a repository put in reach.
+
+Everything in the phase 1 to 5 sections still holds unless a paragraph here says it changes.
+
+**No contract Go files in this PR.** Unlike phases 1 to 5, the phase 6 contract PR is documentation only. The Go declarations below are the contract. Each contract file belongs to exactly one lane, and that lane lands it first, verbatim, as a small PR of its own (as lane 5.3 merged its manifest package early). Until it merges, the other lanes code against the declarations here.
+
+| Contract | Go | First PR of lane |
+| --- | --- | --- |
+| `Harness`, `Definition` use, states, codes, `Report`, `Found`, `ProbeRecord`, `Store`, `Prober`, limits | `internal/harness/types.go`, `internal/harness/doc.go` | 6.1 |
+| Harness definition (registry overlay, personal override, plugin extension) | `internal/harness/harnessdef/types.go` | 6.1 |
+| ACP v1 `initialize` types, methods, error codes | `internal/acp/types.go`, `internal/acp/doc.go` | 6.2 |
+| Event types and payloads | `internal/bus/types_phase6.go`; `harness` leaves `ReservedFamilies` in `internal/bus/types.go` | 6.2 |
+| Harnesses projection state | `internal/webui/projection_harnesses_state.go` (`HarnessesState`) | 6.2 |
+| Harness launch helpers (added by lane 6.1) | `jsonrpc.HarnessEnv`, `jsonrpc.Run` in `internal/jsonrpc/harness.go` | 6.1 |
+
+### Phase 6 patterns
+
+| Piece | GoF / EIP pattern | Go |
+| --- | --- | --- |
+| Definition layers: registry, agentflow overlay, plugins, personal overrides | Composite; later layers win field by field | `harness.Registry` |
+| Registry JSON to a definition | Message Translator | `internal/harness/acpregistry` |
+| Detection states and their fixes | State (a decision table, not objects); Strategy per distribution kind (`npx`, `uvx`, `binary`) for install text | `harness.Resolve`, `harness.Fix` |
+| `initialize` over stdio | Proxy (GoF); Request-Reply with a timeout (EIP) | `harness.Prober` over `jsonrpc.Conn` |
+| Probe results reused until the binary changes | Idempotent Receiver keyed by binary identity | `harness.Store` (`cache.json`) |
+| Daemon detection | Polling Consumer, plus an event-driven wake on focus and personal-layer changes | `internal/watch/harness.go` |
+| Agent-supplied text (names, auth methods) | Content Filter | `harness.Sanitize*` |
+| A frame that is not JSON-RPC | Invalid Message Channel (the connection) | phase 5 rule, code `protocol` |
+| Live page | Event Notification with a server-side projection | `harness.*` → the `harnesses` projection |
+
+### Phase 6 pinned ACP registry copy (lane 6.1)
+
+**Source.** The official registry is the repository `agentclientprotocol/registry` (<https://github.com/agentclientprotocol/registry>), Apache-2.0. Its CDN index (`https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json`) has no commit, so agentflow pins the repository's per-agent files instead.
+
+| What | Value |
+| --- | --- |
+| Pinned commit | `4273056f03b93f8ce41e9276256ea47b057b794c` (committed 2026-11-26T23:54:34Z, branch `main`) |
+| Files copied, verbatim | `<id>/agent.json` for every top-level directory that has one (48 at this commit), `quarantine.json`, `agent.schema.json`, `LICENSE` |
+| Files never copied | `icon.svg` (SVG in the console is a risk), workflows, protocol-matrix snapshots, the docs |
+| Where | `internal/harness/acpregistry/v1/agents/<id>.json`, `.../v1/quarantine.json`, `.../v1/agent.schema.json`, `.../v1/LICENSE`, and `.../v1/SOURCE.json` |
+| Refresh | `scripts/refresh-acp-registry.sh COMMIT` |
+| At runtime | embedded with `//go:embed`; **never fetched** |
+
+`SOURCE.json`:
+
+```json
+{
+  "repository": "https://github.com/agentclientprotocol/registry",
+  "commit": "4273056f03b93f8ce41e9276256ea47b057b794c",
+  "committed_at": "2026-11-26T23:54:34Z",
+  "agents": 48,
+  "spec": {
+    "repository": "https://github.com/agentclientprotocol/agent-client-protocol",
+    "tag": "schema-v1.35.0",
+    "commit": "065b57951b6b2a91ac5eddd249e145d1f6d54545"
+  }
+}
+```
+
+**The refresh script** (`scripts/refresh-acp-registry.sh`, bash 3.2, shellcheck-clean, `curl` only, no `jq`):
+
+1. Takes a full 40-hex commit. It refuses a branch name, a tag or a short SHA, so a refresh is always a reviewed pin.
+2. Reads the tree at that commit from `https://api.github.com/repos/agentclientprotocol/registry/git/trees/<commit>?recursive=1` and downloads each listed file from `https://raw.githubusercontent.com/agentclientprotocol/registry/<commit>/<path>` into a new temporary directory.
+3. Replaces `internal/harness/acpregistry/v1/` with the files above and writes `SOURCE.json` (with `committed_at` from the commit API and the count).
+4. Runs `go test ./internal/harness/acpregistry/` so a schema change fails the refresh before review.
+
+It is run by a maintainer, by hand, before a release. No workflow runs it, and nothing in agentflow fetches the registry at runtime.
+
+**Go shape** (`acpregistry.Agent`, decoded with unknown fields refused, from `agent.schema.json` at the pinned commit):
+
+```go
+type Agent struct {
+    ID          string       `json:"id"`          // ^[a-z][a-z0-9-]*$
+    Name        string       `json:"name"`
+    Version     string       `json:"version"`     // X.Y.Z
+    Description string       `json:"description"`
+    Repository  string       `json:"repository,omitempty"`
+    Website     string       `json:"website,omitempty"`
+    Authors     []string     `json:"authors,omitempty"`
+    License     string       `json:"license,omitempty"`
+    LicenseURL  string       `json:"license_url,omitempty"`
+    Icon        string       `json:"icon,omitempty"`    // decoded, never used
+    Distribution Distribution `json:"distribution"`
+    Preview     *Preview     `json:"preview,omitempty"` // decoded, never used: preview builds are unverified
+}
+
+type Distribution struct {
+    Binary map[string]BinaryTarget `json:"binary,omitempty"` // keys: darwin-aarch64, darwin-x86_64, linux-aarch64, linux-aarch64-musl, linux-x86_64, linux-x86_64-musl, windows-aarch64, windows-x86_64
+    NPX    *Package                `json:"npx,omitempty"`
+    UVX    *Package                `json:"uvx,omitempty"`
+}
+
+type BinaryTarget struct {
+    Archive string            `json:"archive"`          // https URL
+    SHA256  string            `json:"sha256,omitempty"` // 64 hex
+    Cmd     string            `json:"cmd"`              // e.g. "./goose"
+    Args    []string          `json:"args,omitempty"`
+    Env     map[string]string `json:"env,omitempty"`
+}
+
+type Package struct {
+    Package string            `json:"package"` // name with optional version
+    Args    []string          `json:"args,omitempty"`
+    Env     map[string]string `json:"env,omitempty"`
+}
+
+type Preview struct {
+    Version      string       `json:"version"`
+    Distribution Distribution `json:"distribution"`
+}
+```
+
+- **Registry text is data.** Name and description are display text: one line, control and bidirectional characters removed, at most 64 and 256 bytes. URLs must be `https`. A package name must match `^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(@[0-9A-Za-z.+-]+)?$` (`npx`) or `^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9,._-]+\])?([=@<>~!]=?[0-9A-Za-z.*+-]+)?$` (`uvx`). Args must match `^[A-Za-z0-9._=:/@+,-]{1,128}$`, at most 16. A value that fails is dropped with a `registry` problem, never shown or used.
+- **Registry `env` is never applied** to a probe. An entry that sets one gets the note `registry_env_ignored`.
+- **Quarantine.** At the pinned commit `quarantine.json` is a map of ID to reason, and none of the registry's workflows read it. agentflow keeps quarantined agents in the catalog, flags them (`quarantined: true`), and shows the note "The ACP registry has quarantined this agent: <reason>." The reason is registry text, clamped like a description.
+- `TestPinnedRegistry` (lane 6.1) decodes every file strictly, checks `SOURCE.json` against the files, and fails when an agent fails the rules above.
+
+### Phase 6 ACP `initialize` slice (lane 6.2)
+
+`internal/acp` is the package phase 7 lane 7.1 owns. Lane 6.2 creates the smallest part phase 6 needs; lane 7.1 extends it and must keep these names, fields and behaviour. Shapes are from the ACP v1 schema at `schema-v1.35.0` (commit `065b57951b6b2a91ac5eddd249e145d1f6d54545`), checked against `schema/v1/schema.json` and `docs/protocol/v1/initialization.mdx` and `authentication.mdx` there.
+
+```go
+package acp
+
+// ProtocolVersion is the only ACP major version agentflow speaks.
+// On the wire it is an integer (uint16).
+const ProtocolVersion = 1
+
+// Methods used in phase 6. Phase 7 adds the session methods.
+const MethodInitialize = "initialize"
+
+// ACP error codes. They overlap internal/jsonrpc's agentflow codes
+// (-32002 is "resource not found" in ACP and "rate limited" in jsonrpc):
+// an error from an ACP peer is always read by these meanings, never by the
+// jsonrpc.Code* constants, which agentflow sends only to its own plugins.
+const (
+    CodeAuthRequired     = -32000
+    CodeResourceNotFound = -32002
+    CodeRequestCancelled = -32800
+)
+
+type InitializeRequest struct {
+    ProtocolVersion    int                `json:"protocolVersion"`
+    ClientCapabilities ClientCapabilities `json:"clientCapabilities"`
+    ClientInfo         *Implementation    `json:"clientInfo,omitempty"`
+}
+
+type ClientCapabilities struct {
+    FS       FileSystemCapabilities `json:"fs"`
+    Terminal bool                   `json:"terminal"`
+    Auth     AuthCapabilities       `json:"auth"`
+}
+
+type FileSystemCapabilities struct {
+    ReadTextFile  bool `json:"readTextFile"`
+    WriteTextFile bool `json:"writeTextFile"`
+}
+
+type AuthCapabilities struct {
+    Terminal bool `json:"terminal"`
+}
+
+type Implementation struct {
+    Name    string `json:"name"`
+    Title   string `json:"title,omitempty"`
+    Version string `json:"version"`
+}
+
+type InitializeResponse struct {
+    ProtocolVersion   int               `json:"protocolVersion"`
+    AgentCapabilities AgentCapabilities `json:"agentCapabilities"`
+    AuthMethods       []AuthMethod      `json:"authMethods"`
+    AgentInfo         *Implementation   `json:"agentInfo,omitempty"`
+}
+
+type AgentCapabilities struct {
+    LoadSession         bool               `json:"loadSession"`
+    PromptCapabilities  PromptCapabilities `json:"promptCapabilities"`
+    MCPCapabilities     MCPCapabilities    `json:"mcpCapabilities"`
+    SessionCapabilities json.RawMessage    `json:"sessionCapabilities,omitempty"` // kept raw; phase 7 decodes it
+    Auth                AgentAuthCapabilities `json:"auth"`
+}
+
+type PromptCapabilities struct {
+    Image           bool `json:"image"`
+    Audio           bool `json:"audio"`
+    EmbeddedContext bool `json:"embeddedContext"`
+}
+
+type MCPCapabilities struct {
+    HTTP bool `json:"http"`
+    SSE  bool `json:"sse"`
+}
+
+type AgentAuthCapabilities struct {
+    Logout *struct{} `json:"logout,omitempty"`
+}
+
+// AuthMethod is one advertised sign-in method. Type "" means "agent".
+type AuthMethod struct {
+    ID          string            `json:"id"`
+    Name        string            `json:"name"`
+    Description string            `json:"description,omitempty"`
+    Type        string            `json:"type,omitempty"` // "", "agent" or "terminal"
+    Args        []string          `json:"args,omitempty"` // terminal only
+    Env         map[string]string `json:"env,omitempty"`  // terminal only
+}
+
+// Initialize sends initialize on c and decodes the answer. Unknown fields
+// are ignored (ACP is extensible); a missing or non-integer protocolVersion
+// is ErrProtocol. A peer error is returned as *jsonrpc.Error.
+func Initialize(ctx context.Context, c jsonrpc.Conn, req InitializeRequest) (InitializeResponse, error)
+```
+
+**The probe's request is fixed:**
+
+```json
+{"protocolVersion": 1,
+ "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false, "auth": {"terminal": true}},
+ "clientInfo": {"name": "agentflow", "title": "agentflow", "version": "<agentflow version>"}}
+```
+
+`auth.terminal` is true so that agents list their terminal sign-in methods. The spec allows that when the client "can reproduce the configured Agent invocation in an interactive terminal". agentflow does it by showing the person the exact command to run. agentflow itself never runs a terminal sign-in and never calls `authenticate`.
+
+**The fake agent** (`internal/acp/acptest`, lane 6.2; lane 7.1 adds session scripts):
+
+- `acptest.Script{Initialize *acp.InitializeResponse; InitializeError *jsonrpc.Error; Delay time.Duration; ExitBefore bool; Garbage bool; Version string}`.
+- `acptest.Install(tb, dir, name string, s Script) (args []string)` puts an executable `name` in `dir` and returns any arguments the definition must pass. On Unix it writes a `/bin/sh` wrapper that runs the test binary in the `acptest-agent` child mode (`jsonrpctest.RegisterChild`), with the script encoded in the wrapper. On Windows it copies the test binary to `name.exe` and returns the child-mode arguments. A test binary using it calls `jsonrpctest.RunChild` from `TestMain`.
+- `cmd/fake-acp` (`internal/acp/acptest/cmd/fake-acp/main.go`): a standalone fake for the phase demo. It takes `--mode=ok|auth|v2|hang|exit|garbage` and prints `fake-acp 1.2.3` for `--version`. It is only built by hand for the demo.
+
+### Phase 6 harness definitions (lane 6.1)
+
+A **definition** says how to find and start one harness. It is the same shape in every layer (`internal/harness/harnessdef`, a leaf package that `config`, `plugin/manifest` and `harness` all import):
+
+```go
+package harnessdef
+
+type Kind string
+
+const (
+    KindNative  Kind = "native"  // the product's own CLI speaks ACP (gemini --acp, goose acp)
+    KindAdapter Kind = "adapter" // a separate program bridges a CLI to ACP (claude-agent-acp)
+)
+
+// Definition is how agentflow finds and probes one harness. Empty fields
+// inherit from the layer below.
+type Definition struct {
+    Name string `yaml:"name,omitempty" json:"name,omitempty"`
+    Kind Kind   `yaml:"kind,omitempty" json:"kind,omitempty"`
+    // Command is the executable: a bare name looked up on PATH, or (personal
+    // layer only) an absolute path.
+    Command string   `yaml:"command,omitempty" json:"command,omitempty"`
+    // Args start the ACP server on stdio.
+    Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+    // VersionArgs print the version. Empty means ["--version"]; NoVersion
+    // means never run a version command.
+    VersionArgs []string `yaml:"version_args,omitempty" json:"version_args,omitempty"`
+    NoVersion   bool     `yaml:"no_version,omitempty" json:"no_version,omitempty"`
+    // BaseName and BaseCommands name the CLI an adapter bridges. When the
+    // adapter is missing and a base command is found, the state is
+    // adapter_available.
+    BaseName     string   `yaml:"base_name,omitempty" json:"base_name,omitempty"`
+    BaseCommands []string `yaml:"base_commands,omitempty" json:"base_commands,omitempty"`
+    // MinVersion is the oldest version agentflow accepts (X.Y.Z).
+    MinVersion string `yaml:"min_version,omitempty" json:"min_version,omitempty"`
+}
+
+// Validate checks d for the layer it comes from.
+func Validate(id string, d Definition, layer Layer) error
+```
+
+Flat fields (no nested `base` object) keep each override one row in a `kv-table` (below).
+
+**Layers**, lowest first (Composite: a non-empty field of a higher layer replaces the field below; lists replace, they do not merge):
+
+| Layer | `Source` | Where | May |
+| --- | --- | --- | --- |
+| Registry | `registry` | the pinned copy | name, description, version, distribution |
+| agentflow overlay | `agentflow` | `internal/harness/overlay.yml`, embedded | set every field for a registry ID, from the pinned registry entries only |
+| Plugins | `plugin:<id>` | `extensions.harness` of an enabled declarative plugin | add **new** IDs only; bare command names only |
+| Personal | `personal` | `personal:ai.harnesses.overrides.<id>` | change any field of any ID, or add an ID; absolute command paths allowed |
+
+A repository has **no** harness layer: `repo` config has no `ai` keys in phase 6, and a repository's provider definitions, plugins or client settings cannot add or change a definition.
+
+**Defaults when no layer sets a field:**
+
+- `command`: for a `binary` distribution, the base name of the current platform's `cmd` (`./dist-package/cursor-agent` → `cursor-agent`); for `uvx`, the package name without version or extras; for `npx`, the last path segment of the package without its version (`@agentclientprotocol/codex-acp@2.12.1` → `codex-acp`). The overlay corrects the ones where the npm bin name differs (`@google/gemini-cli` → `gemini`).
+- `args`: the current platform's `binary` args, else `npx` args, else `uvx` args.
+- `kind`: `native`. The overlay marks adapters.
+
+**The agentflow overlay** (`overlay.yml`) is agentflow data, reviewed like code, built only from the pinned entries. Lane 6.1 writes at least these, checked against the pinned files:
+
+| ID | kind | command | args | base |
+| --- | --- | --- | --- | --- |
+| `claude-acp` | adapter | `claude-agent-acp` | | Claude Code, `claude` |
+| `codex-acp` | adapter | `codex-acp` | | Codex, `codex` |
+| `gemini` | native | `gemini` | `--acp` (registry) | |
+| `github-copilot-cli` | native | `copilot` | `--acp` (registry) | |
+| `goose` | native | `goose` (default) | `acp` (registry) | |
+| `opencode` | native | `opencode` (default) | `acp` (registry) | |
+| `cursor` | native | `cursor-agent` (default) | `acp` (registry) | |
+
+The lane checks every other pinned entry: where the default command is wrong, or the entry is an adapter, it adds a row. `TestOverlayMatchesRegistry` fails when an overlay ID is not in the pinned copy.
+
+**Validation** (`harnessdef.Validate`; problems are reported with their layer and ID, and the definition is left out, never half-applied):
+
+- ID `^[a-z][a-z0-9-]{0,63}$`. A plugin ID that equals a registry or overlay ID is refused (`id_taken`).
+- `command`: a bare name `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`, or an absolute path in the personal layer. Refused everywhere (`launcher`), compared without case and without `.exe`: `npx`, `npm`, `pnpm`, `pnpx`, `yarn`, `bun`, `bunx`, `deno`, `uv`, `uvx`, `pip`, `pip3`, `pipx`, `python`, `python3`, `node`, `sh`, `bash`, `zsh`, `fish`, `env`, `sudo`, `doas`, `curl`, `wget`, `cmd`, `powershell`, `pwsh`. Phase 6 never runs a package runner, an interpreter, a shell or a downloader.
+- `args`, `version_args`, `base_commands`: at most 16 items, each matching the registry arg rule above (`args`).
+- `min_version`: `X.Y.Z` (`version`). `name`: one line, at most 64 bytes.
+- A definition with no command after layering is listed with its registry data only, as `not_installed`, and never probed.
+
+**Plugins.** Phase 6 implements the `harness` extension point for **declarative plugins only**: `extensions.harness` is a list of `{id, ...Definition}`. A process plugin's harness entry is refused (`rule`). The entries are data: listed in `plugin add`'s confirmation summary with their command and args, and active only while the plugin is enabled (the phase 5 loosening tick). A repository's `plugins.disabled` does not hide them: harnesses are per user, not per repository. `manifest.PointPhase[PointHarness]` becomes 6.
+
+### Phase 6 finding a harness on PATH (lane 6.1)
+
+The finder looks up each definition's `command`, then its `base_commands`, in the PATH of the process that runs detection: the CLI's own PATH, or the daemon's. Every PATH entry and every found file passes these checks first. A skipped entry is reported once in `Report.SkippedPath` with its reason, and `ai doctor` lists it.
+
+| Check | Skip reason |
+| --- | --- |
+| Empty, `.` or relative entry | `relative` |
+| Entry does not exist or is not a directory | `missing` (not reported) |
+| Entry, after resolving links, is inside a git working tree: it or an ancestor has `.git` (catches direnv, `node_modules/.bin`, a repository's `bin/`) | `inside_repository` |
+| Unix: the directory is writable by group or others without the sticky bit, or owned by neither the user nor root | `unsafe_permissions` |
+| Unix: the found file, after resolving links, is writable by group or others, or owned by neither the user nor root | `unsafe_permissions` (that file only) |
+| Windows: the found file is `.cmd` or `.bat` (`cmd.exe` would re-parse the arguments) | `shim` (that file only) |
+| In a test binary: the entry is outside the test's temporary directory (below) | `test_guard`, and detection fails |
+
+- A personal absolute `command` skips the PATH walk and the `inside_repository` check (the person named that file), but not the permission checks.
+- **The agentflow home must be safe** before personal overrides and plugin definitions are read: `config.HomeDir()` resolved outside every git working tree, owned by the user, not writable by group or others. Otherwise both layers are ignored and `ai doctor` reports `home_unsafe`. This stops a repository's environment (`AGENTFLOW_HOME` set by direnv) from supplying a personal layer.
+- **Identity.** A found harness has an identity: the PATH path, the resolved target, its size, modification time, and device and inode on Unix, plus a hash of the effective `args` and `version_args`. Any change is a new identity, and old probe results no longer apply.
+
+### Phase 6 harness launch profile (lanes 6.1 and 6.2)
+
+Probes run through the lane 5.1 launcher with a profile for PATH binaries. Lane 6.1 adds `internal/jsonrpc/harness.go` (additive, no change to existing behaviour):
+
+```go
+// HarnessEnv is ScrubbedEnv(parent, data, nil) with PATH set to pathDirs
+// followed by the fixed system PATH. pathDirs must be absolute.
+func HarnessEnv(parent []string, data string, pathDirs []string) ([]string, error)
+
+// RunResult is a finished child that does not speak JSON-RPC.
+type RunResult struct {
+    Stdout   []byte // at most RunSpec.MaxStdout bytes, the first ones
+    ExitCode int    // -1 when killed
+    TimedOut bool
+}
+
+// Run starts s like Launch (same path, root, directory and environment
+// checks, same process group) without a connection, waits for it to exit
+// or ctx to end, and kills the group when ctx ends.
+func Run(ctx context.Context, s LaunchSpec, maxStdout int) (RunResult, error)
+```
+
+| Profile field | Value |
+| --- | --- |
+| `Path` | the found file as found on PATH (not resolved) |
+| `Root` | the deepest directory that contains both the PATH entry and the resolved target. For `/opt/homebrew/bin/claude-agent-acp` → `/opt/homebrew/lib/node_modules/...`, it is `/opt/homebrew`. |
+| `Dir` | the harness's data directory `<home>/harnesses/<id>/data` (0700) |
+| `Env` | `HarnessEnv(os.Environ(), data, [PATH entry the file was found in])`: no tokens, keys, `AGENTFLOW_*` or session IDs; `HOME` and `TMPDIR` under the data directory. The found directory comes first in PATH so a `#!/usr/bin/env node` script finds the `node` installed next to it. |
+| `Args` | the definition's `args` (initialize) or `version_args` (version) |
+| Stderr | at most 64 KiB, appended to `<home>/harnesses/<id>/probe.log` (rotated at 1 MiB, one old file kept). Never in an event, the stream, a result or a terminal. |
+
+**Not the person's HOME.** A probe sees an empty home, so it cannot read the harness's own sign-in. That is enough for `initialize`, which needs no sign-in. It is why phase 6 cannot tell whether a harness is signed in (see `needs_auth` below). Phase 7 decides the session environment in its own contract.
+
+**Limits** (`harness.Default*`):
+
+| Limit | Value |
+| --- | --- |
+| Version command | 3 s, first 4 KiB of stdout; the version is the first `v?X.Y.Z[-pre]` in it |
+| `initialize` | `personal:ai.harnesses.probe_timeout` (5 s default, 1 s to 30 s) |
+| After the answer | `Stop`: close stdin, 2 s grace, kill the process group |
+| Probes at once | 2 per process |
+| Same identity probed again | not within 30 s (the cooldown); a request inside it gets the cached result |
+| Frame | 1 MiB (`jsonrpc.DefaultMaxFrame`) |
+| Requests from the agent during a probe | answered `-32601` (method not found); nothing else is sent to it |
+
+**What is never run:** `npx`, `uvx` or any refused launcher; a download; an install; an adapter that is only `adapter_available` (its base CLI is never started either); a definition that failed validation; a registry `env`; a terminal sign-in; `authenticate`, `session/new` or any method other than `initialize`.
+
+### Phase 6 detection states
+
+```go
+package harness
+
+type State string
+
+const (
+    StateNative           State = "native"            // found; the product's own CLI speaks ACP
+    StateAdapterInstalled State = "adapter_installed" // found; an ACP adapter for a CLI
+    StateAdapterAvailable State = "adapter_available" // adapter missing; its base CLI found
+    StateNeedsAuth        State = "needs_auth"        // found; the harness said it needs sign-in
+    StateIncompatible     State = "incompatible"      // found; it does not speak ACP v1, or is too old
+    StateNotInstalled     State = "not_installed"     // nothing found; listed only with --all
+)
+```
+
+`not_installed` is the sixth state. The plan names five; this one is only shown with `--all` (decision 1).
+
+**How the state is chosen** (`harness.Resolve`, first match wins):
+
+| # | Condition | State | Code |
+| --- | --- | --- | --- |
+| 1 | Nothing found, kind `adapter`, a base command found | `adapter_available` | `base_only` |
+| 2 | Nothing found | `not_installed` | `missing` |
+| 3 | Found; the last `initialize` for this identity answered a `protocolVersion` other than 1 | `incompatible` | `protocol_version` |
+| 4 | Found; answered `initialize` with an error other than `-32000`, or wrote something that is not JSON-RPC | `incompatible` | `protocol` |
+| 5 | Found; the version is below `min_version` | `incompatible` | `version_too_old` |
+| 6 | Found; `initialize` answered `-32000`, or an ACP session recorded `auth_required` after the last good probe (`Store.MarkAuthRequired`, called by phase 7) | `needs_auth` | `auth_required` |
+| 7 | Found, kind `native` | `native` | from the probe (below) |
+| 8 | Found, kind `adapter` | `adapter_installed` | from the probe (below) |
+
+**Probe status** (`Harness.Probe`) is separate from the state, so the three cases the state alone would blur stay clear:
+
+| `probe.status` | `probe.code` | Meaning |
+| --- | --- | --- |
+| `none` | `not_probed` | Found on PATH; nothing has run for this identity yet. The state is from the file only. |
+| `ok` | `ok` | `initialize` answered with protocol version 1. |
+| `failed` | `timeout`, `exited`, `launch` | The probe ran and gave no answer: it timed out, exited first or could not start. The state stays `native` or `adapter_installed`, with the fix for the code. |
+| `failed` | `protocol`, `protocol_version` | See rows 3 and 4: the state is `incompatible`. |
+| `refused` | `needs_person`, `shim`, `test_guard` | agentflow did not run it (see "Phase 6 who may probe"). |
+| `cached` | as stored | The result is from the cache; `probed_at` says when. |
+
+A version command that times out or prints no version gives `version: ""` and `version_code: "no_version"`. It does not change the state unless `min_version` is set (then row 5 cannot be checked, and the state keeps its row 7 or 8 value with code `version_unknown`).
+
+**`needs_auth` is rare in phase 6.** ACP v1 `initialize` does not say whether the person is signed in. Every registry agent lists `authMethods`, whether or not the person has signed in, and `-32000` normally comes back only from later requests such as `session/new`. Phase 6 never sends those. So the state comes from row 6 only: an agent that already refuses `initialize`, or a phase 7 session that records it. Until then a found harness shows its sign-in methods as guidance (`sign_in`), not as a state. This differs from the plan's reading that detection finds `needs_auth` (decision 2).
+
+### Phase 6 fix text
+
+Fix text is **agentflow's own template**, chosen by state and code, in `internal/harness/fix.go`. Values are filled in only from validated fields: a command name, a package name, an https URL, a SHA-256, a version, a configuration key. Registry descriptions and agent text never become fix text. Commands are shell-quoted for POSIX shells (PowerShell on Windows) and are shown, never run.
+
+```go
+// Fix is what the person can do about a state. Command is one line to
+// copy; URL is https or empty.
+type Fix struct {
+    Text    string `json:"text"`
+    Command string `json:"command,omitempty"`
+    URL     string `json:"url,omitempty"`
+}
+```
+
+| State, code | `text` | `command` | `url` |
+| --- | --- | --- | --- |
+| `native`/`adapter_installed`, probe `ok` | none (`fix` is omitted) | | |
+| any found state, probe `none`, `not_probed` | "Not checked yet. Probe it to confirm it speaks ACP." | `agentflow ai harnesses --probe` | |
+| probe `failed`, `timeout` | "`<command>` did not answer within <timeout>. Probe again, or allow more time." | `agentflow config set ai.harnesses.probe_timeout=15s` | |
+| probe `failed`, `exited` | "`<command> <args>` exited before it answered. Check that this `<command>` is <name> and supports ACP. If it needs other arguments, set them in Harness overrides on the Settings page." | | registry `repository` |
+| probe `failed`, `launch` | "agentflow could not start `<path>`. Check that the file is executable." | | |
+| probe `refused`, `needs_person` | "Automatic probes are off. Probe it yourself, or turn them on." | `agentflow ai harnesses --probe` | |
+| probe `refused`, `shim` | "`<file>` is a Windows command script, which agentflow does not start. Point the override at the program's `.exe`." | | |
+| `adapter_available`, `base_only`, registry `npx` | "<base name> is installed, but its ACP adapter is not. Install the adapter yourself; agentflow never installs it." | `npm install -g <package@version>` | registry `repository` |
+| same, `uvx` | same text | `uv tool install <package==version>` | registry `repository` |
+| same, `binary` for this platform | "… Download it, check its SHA-256, and put `<cmd base name>` on your PATH." | none (shown: archive URL, `sha256`) | the archive URL |
+| same, no distribution (an override) | "<base name> is installed, but `<command>` is not on your PATH." | | |
+| `not_installed`, `missing` | as `adapter_available`, with the harness's name | as above | registry `repository` or `website` |
+| `incompatible`, `protocol_version` | "<name> speaks ACP version <n>; agentflow needs version 1. Update <name>." | the install command for the registry version, when there is one | registry `repository` |
+| `incompatible`, `protocol` | "`<command> <args>` did not answer like an ACP agent. Check the arguments in Harness overrides on the Settings page." | | registry `repository` |
+| `incompatible`, `version_too_old` | "<name> <version> is older than <min_version>. Update it." | the install command, when there is one | registry `repository` |
+| `needs_auth`, `auth_required` | "Sign in to <name>, then probe again." Followed by `sign_in` (below). | | |
+
+**Sign-in guidance** (`Harness.SignIn`, from the last good `initialize`, shown for every found harness and first for `needs_auth`):
+
+- A `terminal` method → `{method, name, command}`, where `command` is the found command name (not its path), the definition's `args`, then the method's `args`, with the method's `env` as a prefix (`NAME=value`). The person runs it in their own terminal. The command is omitted (`unsafe: true`) when an arg fails the arg rule, there are more than 8 args, an env name is not `^[A-Z_][A-Z0-9_]*$`, an env value is over 128 bytes, or an env name changes program lookup, loading or trust: `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `NODE_PATH`, `PYTHONPATH`, `PYTHONSTARTUP`, `BASH_ENV`, `ENV`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` (any case), `SSL_CERT_FILE`, `SSL_CERT_DIR`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `GIT_SSH_COMMAND`, `GIT_SSH`.
+- An `agent` method → `{method, name, description}` and the text "Start <name> in your terminal and sign in with its own login, then probe again." agentflow does not call `authenticate`.
+- Agent-supplied text is sanitized (Content Filter): one line, control and bidirectional characters removed; `id` and `name` at most 64 bytes, `description` 256, at most 8 methods.
+
+### Phase 6 `Harness` type (lane 6.1)
+
+```go
+package harness
+
+// Harness is one detected (or, with All, known) harness.
+type Harness struct {
+    ID          string            `json:"id"`
+    Name        string            `json:"name"`
+    Description string            `json:"description,omitempty"`
+    Kind        harnessdef.Kind   `json:"kind"`
+    State       State             `json:"state"`
+    Code        string            `json:"code,omitempty"`
+    // Sources lists the layers that shaped the definition, lowest first:
+    // "registry", "agentflow", "plugin:<id>", "personal".
+    Sources     []string          `json:"sources"`
+    Quarantined bool              `json:"quarantined,omitempty"`
+    // Command, Args: what is (or would be) started. Path: where Command was
+    // found; a path under the OS home is shown as "~/...". Never in events.
+    Command     string            `json:"command,omitempty"`
+    Args        []string          `json:"args,omitempty"`
+    Path        string            `json:"path,omitempty"`
+    // Base is the base CLI's command and where it was found, for adapters.
+    Base        *Base             `json:"base,omitempty"`
+    // Version: from the version command. RegistryVersion: the pinned copy's.
+    Version         string        `json:"version,omitempty"`
+    VersionCode     string        `json:"version_code,omitempty"` // "", "no_version"
+    RegistryVersion string        `json:"registry_version,omitempty"`
+    Probe       Probe             `json:"probe"`
+    // ACP is the sanitized initialize answer for the current identity.
+    ACP         *ACPInfo          `json:"acp,omitempty"`
+    SignIn      []SignIn          `json:"sign_in,omitempty"`
+    Fix         *Fix              `json:"fix,omitempty"`
+    Notes       []string          `json:"notes,omitempty"` // codes: registry_env_ignored, quarantined
+}
+
+type Base struct {
+    Name    string `json:"name"`
+    Command string `json:"command"`
+    Path    string `json:"path,omitempty"`
+}
+
+type Probe struct {
+    Status   string     `json:"status"` // none, ok, failed, refused, cached
+    Code     string     `json:"code"`
+    At       *time.Time `json:"probed_at,omitempty"`
+    Duration int64      `json:"duration_ms,omitempty"`
+}
+
+type ACPInfo struct {
+    ProtocolVersion int    `json:"protocol_version"`
+    AgentName       string `json:"agent_name,omitempty"`
+    AgentTitle      string `json:"agent_title,omitempty"`
+    AgentVersion    string `json:"agent_version,omitempty"`
+    LoadSession     bool   `json:"load_session"`
+    Image           bool   `json:"image"`
+    Audio           bool   `json:"audio"`
+    EmbeddedContext bool   `json:"embedded_context"`
+    MCPHTTP         bool   `json:"mcp_http"`
+    MCPSSE          bool   `json:"mcp_sse"`
+    Logout          bool   `json:"logout"`
+}
+
+type SignIn struct {
+    Method      string `json:"method"`
+    Type        string `json:"type"` // agent, terminal
+    Name        string `json:"name"`
+    Description string `json:"description,omitempty"`
+    Command     string `json:"command,omitempty"`
+    Unsafe      bool   `json:"unsafe,omitempty"`
+}
+
+// Report is one detection pass.
+type Report struct {
+    Registry    RegistryInfo  `json:"registry"` // commit, committed_at, agents
+    AutoProbe   bool          `json:"auto_probe"`
+    Harnesses   []Harness     `json:"harnesses"` // sorted by state group (ready, attention, not installed), then ID
+    SkippedPath []SkippedDir  `json:"skipped_path,omitempty"`
+    Problems    []Problem     `json:"problems,omitempty"`
+    // ProbeRefused is set when a probe was asked for and not allowed.
+    ProbeRefused string       `json:"probe_refused,omitempty"` // needs_person
+    CheckedAt   time.Time     `json:"checked_at"`
+}
+
+type RegistryInfo struct {
+    Commit      string    `json:"commit"`
+    CommittedAt time.Time `json:"committed_at"`
+    Agents      int       `json:"agents"`
+}
+
+type SkippedDir struct {
+    Dir    string `json:"dir"` // shown with "~"
+    Reason string `json:"reason"`
+}
+
+type Problem struct {
+    Layer   string `json:"layer"` // registry, agentflow, plugin:<id>, personal
+    ID      string `json:"id"`
+    Code    string `json:"code"`
+    Message string `json:"message"`
+}
+
+// Found is what the finder saw for one definition.
+type Found struct {
+    ID         string
+    Definition harnessdef.Definition
+    Sources    []string
+    Path       string // absolute, as found on PATH
+    Target     string // resolved
+    PathDir    string // the PATH entry
+    Identity   string // "sha256:<hex>" of the identity fields
+    BaseFound  *Base
+}
+
+// ProbeRecord is the stored result for one identity.
+type ProbeRecord struct {
+    ID             string             `json:"id"`
+    Identity       string             `json:"identity"`
+    Version        string             `json:"version,omitempty"`
+    VersionCode    string             `json:"version_code,omitempty"`
+    Status         string             `json:"status"`
+    Code           string             `json:"code"`
+    ACP            *ACPInfo           `json:"acp,omitempty"`
+    SignIn         []SignIn           `json:"sign_in,omitempty"`
+    ProbedAt       time.Time          `json:"probed_at"`
+    DurationMS     int64              `json:"duration_ms"`
+    AuthRequiredAt *time.Time         `json:"auth_required_at,omitempty"`
+}
+
+// Store is the probe cache (lane 6.2: cache.go).
+type Store interface {
+    Get(id, identity string) (ProbeRecord, bool, error)
+    Put(r ProbeRecord) error
+    MarkAuthRequired(id, identity string, at time.Time) error
+    // Published is the last state the daemon published per ID.
+    Published() (map[string]PublishedState, error)
+    SetPublished(map[string]PublishedState) error
+}
+
+type PublishedState struct {
+    State State  `json:"state"`
+    Code  string `json:"code,omitempty"`
+    Version string `json:"version,omitempty"`
+}
+
+// Prober runs one initialize probe (lane 6.2: probe.go). The version
+// command is the Detector's own (lane 6.1: version.go).
+type Prober interface {
+    Probe(ctx context.Context, f Found, timeout time.Duration) ProbeRecord
+}
+
+// DetectOptions select a pass.
+type DetectOptions struct {
+    All   bool     // include not_installed
+    IDs   []string // only these
+    Probe bool     // run probes now (subject to "who may probe")
+    // Requester is "person" or "agent" (see "who may probe"); the daemon
+    // uses "daemon".
+    Requester string
+}
+
+// Detector is the one entry point CLI, MCP and daemon use (lane 6.1:
+// detect.go).
+type Detector interface {
+    Detect(ctx context.Context, o DetectOptions) (Report, error)
+}
+```
+
+Lane 6.1 implements `Detector` over the registry, the finder, its own version command, a `Prober` and a `Store`. Lane 6.2 implements `Prober` and `Store` and wires them in. Until 6.2 merges, 6.1 tests with an in-memory `Store` and a fake `Prober`, and production uses a `Prober` that returns probe status `none`.
+
+**The cache** (`<home>/harnesses/cache.json`, lane 6.2): mode 0600 in a 0700 directory, replaced atomically under `cache.json.lock` (`internal/filelock`), read-modify-write per entry so the CLI and the daemon can both write. At most 256 records and 256 KiB; the oldest records go first. A record applies only to its identity, and for at most 24 hours. It holds no path, no stderr and no agent text beyond the sanitized `ACPInfo` and `SignIn`.
+
+### Phase 6 who may probe
+
+A probe runs the harness. Who may ask for one:
+
+| Requester | `--probe` / `probe: true` | Automatic |
+| --- | --- | --- |
+| A person: the CLI in a terminal with no agent environment (`app.AgentEnvironment() == ""` and a terminal on stdin), or the console's Probe button | yes | |
+| An agent: any MCP call, or the CLI inside an agent session | only when `personal:ai.harnesses.auto_probe` is true; otherwise `probe_refused: needs_person` and cached results | |
+| The daemon | | only when `auto_probe` is true, and only for a harness whose identity changed |
+
+`auto_probe` is false by default. With it off, agentflow only looks at files until a person asks for a probe. Turning it on is a loosening edit (decision 3).
+
+### Phase 6 configuration keys (lane 6.1)
+
+Lane 6.1 adds `config.User.AI` (`internal/config/ai.go`), an optional key, so it is backwards compatible:
+
+```go
+type UserAI struct {
+    Harnesses UserHarnesses `yaml:"harnesses,omitempty"`
+}
+
+type UserHarnesses struct {
+    AutoProbe    *bool                            `yaml:"auto_probe,omitempty"`
+    PollInterval *time.Duration                   `yaml:"poll_interval,omitempty"`
+    ProbeTimeout *time.Duration                   `yaml:"probe_timeout,omitempty"`
+    Disabled     []string                         `yaml:"disabled,omitempty"`
+    Overrides    map[string]harnessdef.Definition `yaml:"overrides,omitempty"`
+}
+```
+
+Example:
+
+```yaml
+ai:
+  harnesses:
+    auto_probe: false
+    poll_interval: 30s
+    probe_timeout: 5s
+    disabled: [kimi]
+    overrides:
+      gemini:
+        args: [--acp]
+      my-agent:
+        name: My agent
+        command: my-agent
+        args: [acp]
+```
+
+`config.Field` metadata, in `internal/config/field_meta_table.go`, group `ai` ("AI harnesses", order 850, between Automatic setup and Plugins):
+
+| ID | Widget | Default | Limits | Label | Description | Applies | Loosens |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `personal:ai.harnesses.auto_probe` | `toggle` | false | | Probe harnesses automatically | Lets agentflow start an installed harness for a few seconds to read its version and check that it speaks ACP, when the harness appears or changes. When off, agentflow only looks at files on your PATH until you ask for a probe. | `live` | `enable` |
+| `personal:ai.harnesses.poll_interval` | `duration` | 30s | 10s to 10m | How often to look for harnesses | How often the console daemon checks your PATH for harnesses that were installed, changed or removed. | `live` | |
+| `personal:ai.harnesses.probe_timeout` | `duration` | 5s | 1s to 30s | Probe time limit | How long a harness has to answer the ACP initialize request before the probe gives up. | `next-run` | |
+| `personal:ai.harnesses.disabled` | `chips` | [] | 64 items | Harnesses to ignore | Harness IDs agentflow never lists or starts. | `live` | `shrink` |
+| `personal:ai.harnesses.overrides` | `kv-table`, key = harness ID, `columns` below | {} | 64 entries | Harness overrides | Changes how agentflow finds or starts a harness, or adds one that is not in the ACP registry. | `live` | |
+
+`overrides` columns (one `FieldMeta` each): `name` (`text`, "Name"), `kind` (`select` `native`/`adapter`, "Kind"), `command` (`text`, "Command", "A command name on your PATH, or an absolute path."), `args` (`chips`, "ACP arguments"), `version_args` (`chips`, "Version arguments"), `no_version` (`toggle`, "Never ask for a version"), `base_name` (`text`, "Base CLI name"), `base_commands` (`chips`, "Base CLI commands"), `min_version` (`text`, "Oldest version").
+
+- `command` is `text`, not `file-picker`: the picker's `base` is only `repo` or `home`, and a harness may be in `/opt/homebrew/bin`. The save's check chain runs `harnessdef.Validate` on every override (a `harness` diagnostic), so a refused launcher or an unsafe arg is an error in the Save review.
+- An override is not marked loosening. The person saves it through the always-confirmed Save review. An agent changes it only through `config.set`, which always needs a person's confirmation (phase 4 decision 7).
+- No harness key exists in the repository layer. A repository `config.yml` with an `ai` section is a `syntax` problem, as for any unknown key.
+- `TestEveryConfigFieldHasControl` covers the five fields and the nine columns. If the Settings page cannot draw a `kv-table` column of type `chips`, `select` or `toggle`, lane 6.1 stops and reports: it must not change the Settings UI.
+
+### Phase 6 events (lane 6.2)
+
+| Type | Scope | Global | Transient | Payload | Produced when |
+| --- | --- | --- | --- | --- | --- |
+| `harness.detected` | repository-wide | only | no | `HarnessChanged` | a harness that the last published snapshot did not have (or had as `not_installed`) is now in any other state |
+| `harness.changed` | repository-wide | only | no | `HarnessChanged` | a known harness's state, code, version or probe status changed |
+| `harness.removed` | repository-wide | only | no | `HarnessRemoved` | a harness in the last snapshot is now `not_installed` or gone from the definitions |
+
+```go
+// internal/bus/types_phase6.go
+const (
+    TypeHarnessDetected Type = "harness.detected"
+    TypeHarnessChanged  Type = "harness.changed"
+    TypeHarnessRemoved  Type = "harness.removed"
+)
+
+var phase6Types = []TypeInfo{
+    {Type: TypeHarnessDetected, Scope: ScopeRepo, Phase: 6, Global: GlobalOnly},
+    {Type: TypeHarnessChanged, Scope: ScopeRepo, Phase: 6, Global: GlobalOnly},
+    {Type: TypeHarnessRemoved, Scope: ScopeRepo, Phase: 6, Global: GlobalOnly},
+}
+
+// HarnessChanged is the payload of harness.detected and harness.changed.
+type HarnessChanged struct {
+    Harness     string `json:"harness"` // definition ID
+    Kind        string `json:"kind"`    // native, adapter
+    State       string `json:"state"`   // a harness.State value
+    Previous    string `json:"previous,omitempty"`
+    Code        string `json:"code,omitempty"`
+    ProbeStatus string `json:"probe_status"`
+    Version     string `json:"version,omitempty"` // clamped
+    // Source is the highest layer: registry, agentflow, plugin:<id>, personal.
+    Source  string `json:"source"`
+    // Trigger: start, poll, focus, probe, config.
+    Trigger string `json:"trigger"`
+}
+
+// HarnessRemoved is the payload of harness.removed.
+type HarnessRemoved struct {
+    Harness  string `json:"harness"`
+    Previous string `json:"previous"`
+    Trigger  string `json:"trigger"`
+}
+```
+
+- Only the daemon's harness source produces them, on its own bus, in `global`. None is a socket type (`notifysock.Allowed` is unchanged). The CLI's probes write the cache, and the daemon publishes what changed on its next pass.
+- Source `harness.detector`. Payloads are codes and clamped versions: no path, no args, no agent text, no stderr.
+- No `global/*/harness.**` stream topic: the `harnesses` projection follows them through `globalTopics` and sends its state in each repository's frames (phase 5 decision 10).
+- Not audited by the Wire Tap. No `TestEveryWriteOperationEmitsEvents` change: they are not operation events.
+- The last published snapshot is kept in the cache (`Store.Published`), so a daemon restart publishes only real changes. With no snapshot (first start), every harness in a found state gets `harness.detected`.
+
+### Phase 6 daemon source (lane 6.2)
+
+`internal/watch/harness.go`: a Polling Consumer started by the daemon from a `runtimeExtension` in `internal/webui/stream_runtime_harnesses.go` (phase 5 precedent; `stream_runtime.go` is not edited).
+
+- **A pass** is `Detector.Detect(ctx, {Requester: "daemon", Probe: auto_probe})`: PATH lookups and stats, the cache, and probes for changed identities only when `auto_probe` is on. Then compare with the published snapshot, publish `harness.*`, and store the snapshot.
+- **When:** at start (`start`); every `poll_interval` (`poll`); on a focus check from the console (`focus`); on a personal `config.layer.changed`, which covers overrides and the plugin registry (`config`); after a console probe (`probe`). Passes never overlap. A request during a pass runs one more pass after it. Triggers within 2 s of a pass are joined.
+- The pass also re-reads `cache.json` (a stat; a new modification time means a CLI probe wrote it), so a terminal `ai harnesses --probe` reaches the page within one poll.
+
+### Phase 6 harnesses projection (lane 6.2)
+
+| Projection | Key | Topics | Reads | State |
+| --- | --- | --- | --- | --- |
+| `harnesses` | repository | `global/*/harness.detected`, `global/*/harness.changed`, `global/*/harness.removed`, `global/*/config.layer.changed` | the daemon's last `Report` (`currentHarnesses()` in `stream_runtime_harnesses.go`) | `HarnessesState` |
+
+`internal/webui/projection_harnesses_state.go`:
+
+```go
+const ProjectionHarnesses = "harnesses"
+
+// HarnessesState is the "harnesses" state. It is the daemon's last
+// harness.Report, so it is the same in every repository's frames.
+type HarnessesState struct {
+    // Detector is false when the daemon runs no harness source.
+    Detector     bool                `json:"detector"`
+    Registry     harness.RegistryInfo `json:"registry"`
+    AutoProbe    bool                `json:"auto_probe"`
+    Harnesses    []harness.Harness   `json:"harnesses"` // found states only; not_installed is left out
+    SkippedPath  []harness.SkippedDir `json:"skipped_path,omitempty"`
+    Problems     []harness.Problem   `json:"problems,omitempty"`
+    CheckedAt    time.Time           `json:"checked_at"`
+    // Probing lists IDs being probed right now.
+    Probing      []string            `json:"probing,omitempty"`
+}
+```
+
+One delta frame:
+
+```text
+event: delta
+id: v1:3f2a9c1b7d4e5f60=57
+data: {"event":{"type":"harness.changed","repo":"global",...},"states":[{"projection":"harnesses","repo":"3f2a9c1b7d4e5f60","worktree":"","state":{"detector":true,"registry":{"commit":"4273056f03b93f8ce41e9276256ea47b057b794c","committed_at":"2026-11-26T23:54:34Z","agents":48},"auto_probe":false,"harnesses":[{"id":"gemini","name":"Gemini CLI","kind":"native","state":"native","code":"","sources":["registry","agentflow"],"command":"gemini","args":["--acp"],"path":"~/.local/bin/gemini","version":"0.71.1","registry_version":"0.71.1","probe":{"status":"ok","code":"ok","probed_at":"2026-11-27T09:00:00Z","duration_ms":812},"acp":{"protocol_version":1,"agent_name":"gemini-cli","load_session":true,"image":true,"audio":false,"embedded_context":true,"mcp_http":true,"mcp_sse":false,"logout":false},"sign_in":[{"method":"oauth-personal","type":"agent","name":"Log in with Google"}]}],"checked_at":"2026-11-27T09:00:01Z"}}]}
+```
+
+(The values are an example of the shape, not real output.)
+
+- Registered through `projectionExtensions` from `projection_harnesses.go` (phase 3 decision 12). `globalTopics` gains the three `harness.*` topics from `stream_runtime_harnesses.go`'s `init`.
+- Paths under the OS home are shown as `~/...`, here and in every result.
+- **Requests from the page** (in `internal/webui/harnesses.go`, under the console's session, origin and request-header checks; route lines in `server.go`):
+
+| Route | Body | Does | Answer |
+| --- | --- | --- | --- |
+| `POST /api/harnesses/check` | none | wakes the daemon source (`focus`). Runs nothing unless `auto_probe` is on, so the page may send it on every `visibilitychange` to visible and on window focus. At most one pass every 10 s per console; more answer 202 and do nothing. | `202 {}` |
+| `POST /api/harnesses/probe` | `{"ids": ["gemini"]}`, or `{}` for all found | invokes the `ai.harnesses` Spec through the daemon's Invoker with `probe: true` and client `repository-console` (a person). At most one a minute per console (429 beyond). | `202 {}`; results arrive over the stream |
+
+  The page draws only what the stream sends. Neither answer carries harness data.
+
+### Phase 6 commands (lane 6.3)
+
+Lane 6.3 adds these Specs in `internal/command/ops/ai_harnesses.go`, calling `internal/app/harnesses.go`, which calls `harness.Detector`. They are compatibility contracts from the release that ships them.
+
+| Spec | CLI | MCP tool | Class | Gate | Events | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ai.harnesses` | `ai harnesses [--probe] [--all] [--id ID]... [--json]` | `agentflow_ai_harnesses` (read-only) | `read` | none | none | `harness.Report` |
+| `ai.doctor` | `ai doctor [--probe] [--json]` | `agentflow_ai_doctor` (read-only) | `read` | none | none | `DoctorReport` |
+
+- **Tool inputs.** `agentflow_ai_harnesses`: `{probe?: bool, all?: bool, ids?: [string]}`. `agentflow_ai_doctor`: `{probe?: bool}`. No `confirm_token`: neither writes a repository or provider.
+- **Requester.** The MCP tools are always `agent`. The CLI is `person` only with a terminal on stdin and no agent environment; otherwise `agent`. See "Phase 6 who may probe".
+- **Why `read`.** They change only the user's cache under the agentflow home, and a probe runs only what the rules above allow. No approval, no audit line (phase 3: reads are not audited). Decision 4.
+- **`ai harnesses` text output:** one line per harness, `ID  STATE  VERSION  COMMAND`, then the fix text and command indented under any harness that has one, then skipped PATH entries and problems. With nothing found: "No ACP harnesses found on your PATH." and the `ai doctor` hint.
+- **`DoctorReport`** is `{checks: [{id, status, message, fix?}], report: harness.Report}`, `status` one of `ok`, `warn`, `fail`. Checks, in order:
+
+| `id` | `fail` / `warn` when | Fix |
+| --- | --- | --- |
+| `registry` | warn: the pinned copy is older than 120 days | "Update agentflow; the registry copy is refreshed with releases." |
+| `home` | fail: `home_unsafe` | "Move the agentflow home out of the repository, or unset AGENTFLOW_HOME." |
+| `path` | warn: entries were skipped | per reason, for example "`<dir>` is inside a git working tree, so agentflow ignores it. Name the harness by absolute path in your overrides if you trust it." |
+| `definitions` | fail: a personal or plugin definition was refused | the problem's message and the key to edit |
+| `cache` | warn: the cache cannot be read or has the wrong mode | "agentflow rebuilds it on the next probe." |
+| `daemon` | warn: no daemon runs | "Run `agentflow ui` for live detection." |
+| `auto_probe` | warn: off and some harness has probe `none` | "`agentflow ai harnesses --probe`, or turn on `ai.harnesses.auto_probe`." |
+| `harnesses` | warn: no harness is `native` or `adapter_installed` with probe `ok` | the fix of the first harness that needs one |
+
+- `ai doctor` exits 1 when a check fails, so scripts can use it.
+- The `ai` namespace is new. Phase 7 adds `ai run`, `ai status`, `ai respond` and `ai cancel`. Phase 10's `harness add` keeps its name: phase 6 adds no `harness` command.
+- The plugin skill is `adapters/claude-code/skills/ai/SKILL.md` (for the `ai` command; phase 7 extends it). The `agentflow` skill lists the two tools for agents.
+- No lane edits `cli.go`, `mcpserver/server.go` or `parity_test.go`: the registry derives dispatch, usage, tools and parity rows. Lane 6.3 updates `internal/mcpserver/testdata/golden/tools.json` and the CLI golden files through `-update` only.
+
+### Phase 6 Harnesses page (lane 6.4)
+
+- One page, `#harnesses`, from `HarnessesState` only.
+- Groups: **Ready** (`native`, `adapter_installed` with probe `ok`), **Needs attention** (every other found state, and found harnesses not probed yet), each harness as a card: name, ID, kind, state with its code, version and registry version, the command and path, the layers (`sources`), the probe status and time, the ACP capabilities, the fix (text, the command with a Copy button, the link), and the sign-in methods with their commands to copy.
+- A header with the registry commit and date, whether automatic probes are on (a link to the Settings group `ai`), the skipped PATH entries and the problems.
+- **Probe now** (all, or one card) sends `POST /api/harnesses/probe`; cards show "probing" from `probing`. **Focus**: on `visibilitychange` to visible and on window focus, the page sends `POST /api/harnesses/check`.
+- Overrides and auto-probe are edited on the Settings page (group `ai`), never here.
+- Every text from the state is shown as text, never HTML. No registry icon is loaded: the page draws its own generic icon per kind.
+
+### Phase 6 test guard
+
+No test may resolve or start a real harness (plan guardrail).
+
+- **In production code** (lane 6.1, `internal/harness/guard.go`): when `testing.Testing()` is true, the finder refuses every PATH entry, override path and found file whose resolved path is not inside `os.TempDir()` (resolved). Detection then fails with `harness.ErrTestGuard` (code `test_guard`), naming the entry. The probe checks again right before `jsonrpc.Launch` and `jsonrpc.Run`. A test that forgets to set a fake PATH therefore fails, whatever package it is in.
+- **`harnesstest`** (lane 6.1): `harnesstest.PATH(tb, dirs...)` sets `PATH` to temporary directories only, and `HOME` and `AGENTFLOW_HOME` to fresh temporary directories (`tb.Setenv`). `harnesstest.Bin(tb, name, version)` writes a non-ACP executable that prints a version, for finder and version tests. Fake ACP agents come from `acptest.Install` (lane 6.2).
+- `TestGuardRefusesRealPATH` (lane 6.1) runs detection with `PATH=/usr/bin:/bin` and expects `ErrTestGuard`.
+- Every test that reaches detection, in any lane (CLI, MCP, webui, ops), sets its PATH with `harnesstest.PATH`.
+
+### Phase 6 demo and gate
+
+Runnable with no real harness, on a `make build` of `develop`:
+
+```bash
+T=$(mktemp -d)
+go build -o "$T/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp
+cp "$T/bin/fake-acp" "$T/bin/fake-cli"
+export AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
+./agentflow config set --yes ai.harnesses.auto_probe=true 'ai.harnesses.overrides={
+  "demo-ready":   {"name": "Demo ready",   "command": "fake-acp", "args": ["--mode=ok"]},
+  "demo-auth":    {"name": "Demo sign-in", "command": "fake-acp", "args": ["--mode=auth"]},
+  "demo-v2":      {"name": "Demo v2",      "command": "fake-acp", "args": ["--mode=v2"]},
+  "demo-slow":    {"name": "Demo slow",    "command": "fake-acp", "args": ["--mode=hang"]},
+  "demo-adapter": {"name": "Demo adapter", "kind": "adapter", "command": "fake-adapter-acp",
+                   "base_name": "Demo CLI", "base_commands": ["fake-cli"]}}'
+./agentflow ai harnesses            # all found, probe "none", fix: probe them
+./agentflow ai harnesses --probe    # native, needs_auth, incompatible (protocol_version), native with probe failed/timeout, adapter_available
+./agentflow ai doctor               # checks with fixes
+```
+
+`auto_probe` is on in the demo so it also works when the coordinator runs it from an agent session (an agent's `--probe` needs it). The fake agent answers `-32000` to `initialize` in `--mode=auth`; real agents normally do not (decision 2).
+
+1. The five states and their fixes appear as above, from the CLI and from `agentflow_ai_harnesses` over MCP.
+2. After `./agentflow config set --yes ai.harnesses.auto_probe=false`, `agentflow_ai_harnesses {"probe": true}` returns `probe_refused: needs_person` and runs nothing (the fake agent's `probe.log` gets no new line).
+3. `./agentflow ui` (started with the PATH above): the Harnesses page shows the same list. `rm "$T/bin/fake-cli"` makes `demo-adapter` disappear (`harness.removed`) within one poll, or at once on focus; `cp` it back and it returns (`harness.detected`). `agentflow events --follow --topic 'global/*/harness.**'` prints the same events.
+4. Put a copy of `fake-acp` in a `bin/` directory inside a git repository and first on PATH: `ai doctor` lists that entry as skipped (`inside_repository`), and it is never started.
+
+**Gate:** all four lanes merged; `make check` green on `develop` (including `TestPinnedRegistry`, `TestOverlayMatchesRegistry`, `TestGuardRefusesRealPATH`, `TestEveryConfigFieldHasControl`, `TestEveryMCPToolHasCLICommand`); `make e2e` passes (new MCP tools); the demo works; tag `develop-p6`; ledger updated.
+
+### Phase 6 amendments to earlier contracts
+
+All additive.
+
+| Contract | Change | Lane |
+| --- | --- | --- |
+| `bus` registry | `harness.*` types registered; `harness` leaves `ReservedFamilies` | 6.2 |
+| `internal/jsonrpc` | `HarnessEnv`, `Run` (no change to `Launch`, `ScrubbedEnv` or `EnvAllowlist`) | 6.1 |
+| `manifest` | `PointPhase[PointHarness] = 6`; `Extensions.Harness` becomes `[]HarnessEntry` (`{id, harnessdef.Definition}`), declarative only; `plugin add`'s summary lists them | 6.1 |
+| `config.User` | optional `ai` section; group `ai` | 6.1 |
+| settings check chain | `harness` diagnostic from `harnessdef.Validate` for `personal:ai.harnesses.overrides` | 6.1 |
+| `globalTopics` | the three `harness.*` topics | 6.2 |
+| console routes | `POST /api/harnesses/check`, `POST /api/harnesses/probe` | 6.2 |
+
+The phase 5 comment that "phase 6 harness definitions are the first" builtin plugins (`internal/plugin/types.go`) is superseded: phase 6 ships no builtin plugin. The comment is corrected in phase 11.3, because another change is in `internal/plugin` now.
+
+### File ownership for phase 6 lanes
+
+A lane changes only the files it owns. A lane that needs another lane's file, or a contract change, stops and reports.
+
+| Lane | Issue | Owns | Must not touch |
+| --- | --- | --- | --- |
+| 6.1 Registry, PATH, versions | #100 | `internal/harness/**` except `probe.go`, `cache.go` and their tests; in it: `types.go`, `doc.go` (contract, first PR), `harnessdef/**`, `acpregistry/**`, `overlay.yml`, `registry.go`, `find.go`, `pathsafe*.go`, `version.go`, `state.go`, `fix.go`, `detect.go`, `guard.go`, `harnesstest/**`; `scripts/refresh-acp-registry.sh`; `internal/jsonrpc/harness.go` and its test; `internal/config/ai.go`, the `AI` field in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`; the `harness` check (`harnessLink` in `internal/settings/check_harness.go`, and its entry in `chain` in `internal/settings/checks.go`); `internal/plugin/manifest/harness.go`, `PointPhase` and `Extensions.Harness` in `manifest/types.go`, the harness call in `manifest/validate.go` and the summary line in `internal/plugin/install` | `internal/plugin/*.go`, `internal/acp/**`, `internal/bus/**`, `internal/watch/**`, `internal/webui/**`, `internal/command/**`, `internal/app/**`, README, `cli.go`, `server.go`, `parity_test.go` |
+| 6.2 Probe, cache, events, projection | #101 | `internal/acp/doc.go`, `types.go` (contract, first PR), `initialize.go`, tests; `internal/acp/acptest/**` (including `cmd/fake-acp`); `internal/harness/probe.go`, `cache.go` and their tests; `internal/bus/types_phase6.go` and its test, the `ReservedFamilies` and `init` lines in `internal/bus/types.go`; `internal/watch/harness.go` and its test; `internal/webui/stream_runtime_harnesses.go`, `projection_harnesses.go`, `projection_harnesses_state.go` (contract, first PR), `harnesses.go`, the two route lines in `server.go`, and their tests | the lane 6.1 files, `internal/plugin/**`, `internal/webui/static/**`, `internal/command/**`, README |
+| 6.3 Commands, skills, README | #102 | `internal/command/ops/ai_harnesses.go` and its test; `internal/app/harnesses.go` and its test; golden files through `-update` only; `adapters/claude-code/skills/ai/SKILL.md`; the two tools in `adapters/claude-code/skills/agentflow/SKILL.md`; `docs/harnesses.md`; README sections on the `ai` commands, MCP tools, harness detection and its security; the blueprint capability table (`docs/artifact/` then `scripts/build-blueprint.sh`) | `internal/harness/**`, `internal/acp/**`, `internal/webui/**`, `cli.go`, `server.go`, `parity_test.go` |
+| 6.4 Harnesses page | #103 | `internal/webui/static/harnesses.*`; the Harnesses nav entry, page section and script tag in `static/index.html`; harnesses rules in `static/style.css`; `internal/webui/harnesses_browser_test.go`; `internal/webui/testdata/harnesses/**`; `docs/design/ui/harnesses.md`; the README section on the Harnesses page | every Go file other than its browser test, every other static file |
+
+- All four lanes can start at once. 6.1 and 6.2 each land their contract files first.
+- Lane 6.1 codes against `Store` and `Prober` with fakes; lane 6.2 against `harness.Found` and a fake `Detector`; lane 6.3 against `harness.Detector` with a fake; lane 6.4 against `HarnessesState` with a scripted stream fixture and fake endpoints. Each wires production in its last commit, after the lanes it uses have merged.
+- The console probe endpoint (6.2) invokes `ai.harnesses` by name through the Invoker; its tests register a fake Spec until 6.3 merges.
+- `README.md` is shared by section: 6.3 writes commands, tools, detection and security; 6.4 the Harnesses page.
+- `internal/plugin/manifest` is changed by 6.1 only after the current `internal/plugin` race fix has merged, and never `internal/plugin/*.go`.
+
+### Phase 6 security
+
+**Threat model.** A repository is hostile: its files, its `.envrc`, its `node_modules`. Registry text and a harness's `initialize` answer are untrusted data. A plugin's author may be hostile, but the person reviewed and enabled the plugin. The person and their personal layer are trusted.
+
+**Security review (lanes 6.1, 6.2 and 6.3, before merge).**
+
+- [ ] Nothing fetches the registry, an adapter or a package at runtime. The only network use is the maintainer's refresh script.
+- [ ] No code path runs `npx`, `uvx`, a refused launcher, a shell, an install, an `adapter_available` adapter or its base CLI, a terminal sign-in, `authenticate` or any ACP method except `initialize`.
+- [ ] A repository cannot make agentflow run a binary: PATH entries inside a working tree are skipped; no repository key names a harness; an unsafe agentflow home ignores personal overrides and plugin definitions.
+- [ ] Every probe goes through `jsonrpc.Launch` or `jsonrpc.Run` with `HarnessEnv`: a test sets `GH_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `CLAUDE_CODE_SESSION_ID` and `AGENTFLOW_HOME` in the parent and shows none reaches the fake agent.
+- [ ] Every probe is bounded by its timeout and ends with the process group killed. A hanging, flooding or garbage-writing fake agent cannot block the daemon, the CLI or another probe.
+- [ ] Agents cannot start a probe unless the person turned on `auto_probe`.
+- [ ] Registry and agent text is sanitized, clamped and shown as text. Fix text comes only from agentflow's templates. A sign-in command with an unsafe arg or env is not shown.
+- [ ] No event, projection or result carries stderr, tokens or agent text other than the sanitized fields. Paths appear in results and the projection, under `~`, and never in events.
+- [ ] `TestGuardRefusesRealPATH` passes, and no test resolves a file outside its temporary directory.
+
+### Phase 6 decisions
+
+*Decided by the architect in the contract PR. The coordinator confirms or changes them before the lanes start.*
+
+1. **A sixth state, `not_installed`.** It is needed for `--all` and for `harness.removed`. It is never shown on the page or in the default list, so the plan's five states are what a person sees for installed harnesses.
+2. **`needs_auth` cannot be detected in phase 6.** ACP v1 `initialize` does not say whether the person is signed in, and probes run with an empty home. The state comes only from an agent that refuses `initialize` with `-32000`, or from phase 7 sessions through `Store.MarkAuthRequired`. Found harnesses show their sign-in methods as guidance. The alternative, a `session/new` in the probe, creates sessions in the person's history and may start paid work, so it is rejected.
+3. **`auto_probe` is off by default.** agentflow runs a harness only when a person asks, until the person turns on automatic probes (a loosening toggle). With it on, the daemon probes a harness when its binary changes, and agents may ask for probes.
+4. **`ai harnesses` and `ai doctor` are reads.** They write only the user's cache. Probes are bounded and limited to what the person installed. Making them gated writes would put an approval on a list command.
+5. **Probes use the scrubbed environment with the harness's own PATH directory added.** The plan says harnesses run with a scrubbed environment; a fixed system PATH would break every npm-installed adapter (`#!/usr/bin/env node`). The added directory has already passed the PATH checks. `HOME` stays scrubbed for probes; phase 7 decides the session environment.
+6. **The registry is pinned as per-agent files at a commit, not the CDN index.** The index has no commit; the files can be diffed in review. Icons and preview channels are not used.
+7. **Native or adapter, and npm bin names, are agentflow data** (`overlay.yml`), because the registry does not record them.
+8. **Windows `.cmd` and `.bat` shims are not started.** `cmd.exe` re-parses arguments, which ACP's launch-safety guidance warns about. npm-installed adapters on Windows therefore show probe `refused`/`shim` until an override names an `.exe`.
+9. **Plugin harness definitions: declarative, new IDs, PATH names only.** A plugin cannot redirect a registry harness to another binary or ship its own harness executable in phase 6.
+10. **No contract Go files in the contract PR.** The coordinator asked for a docs-only PR. Lanes 6.1 and 6.2 land the contract files first, verbatim from this section.
+
+**Open questions for the coordinator.**
+
+- Decision 2 changes the plan's reading of `needs_auth`. Confirm, or ask for an explicit per-harness sign-in check (a command such as `<cli> auth status`, run with the person's real `HOME`), which is new execution with the person's credentials.
+- Decision 3: confirm `auto_probe` off by default, or turn it on (then the daemon runs newly installed harnesses without asking).
+- Decision 8 leaves npm adapters unprobed on Windows. Confirm, or accept `.cmd` shims with arguments limited to the arg rule.
+
+### Phase 6 consequences
+
+- `ai harnesses`, `ai doctor`, their MCP tools and the Harnesses page show the same report, from one `Detector`.
+- A person sees each installed harness's state and an exact fix, and agentflow never installs anything.
+- A repository cannot choose a binary for agentflow to run, and an agent cannot make agentflow run one unless the person allowed automatic probes.
+- Phase 7 builds on `internal/acp`, `acptest`, the harness definitions, the launch profile and `Store.MarkAuthRequired`. Phase 9's `delegate` reads its agents from the same registry, and phase 10's `harness add` adds a layer.
