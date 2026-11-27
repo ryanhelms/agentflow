@@ -453,6 +453,7 @@ Deployments and release lookup also support local JSON fixtures.
 | List installed plugins | `agentflow plugin list [--json]` | `agentflow_plugin_list` or `/agentflow:plugin` |
 | Add a plugin from a local path (you, at a terminal) | `agentflow plugin add PATH` | – |
 | Remove a plugin, its data and its settings (you, at a terminal) | `agentflow plugin remove ID` | – |
+| Approve or decline a write a plugin asked for (you, at a terminal) | `agentflow plugin approve OP_ID [--decline]` | – |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -691,13 +692,20 @@ agentflow config set plugins.ci-notify.enabled=true
 asks under every approval setting, installs the plugin turned off, and checks the
 installed files against their hash before each start.
 
-**Run `plugin add` and `plugin remove` yourself.** Agentflow refuses them from
-agent sessions and non-interactive shells, its Claude Code hook blocks agents from
-running them, and `--yes` does not skip their question. A process that runs as you
+**Run `plugin add`, `plugin remove` and `plugin approve` yourself.** Agentflow
+refuses them from agent sessions and non-interactive shells, its Claude Code hook
+blocks agents from running them, and `--yes` does not skip their question. A process that runs as you
 could still get around these checks on purpose. Turning a plugin on is a loosening
 change in the Save review, and so is turning off a plugin that has a permission
 rule. A repository can turn a plugin off for itself with
-`plugins.disabled`, and can never install or turn one on. No AI tool adds, removes
+`plugins.disabled`, and can never install or turn one on.
+
+A plugin's write, such as a `notify`, always waits for you, even under `auto`.
+`agentflow plugin approve OP_ID` shows the plugin, the command, what it does and
+when the request expires, then asks. After you answer `y`, the console runs the
+write once, by itself, and its result appears on the timeline. `--decline` cancels
+it instead. Run it in the repository the plugin acted on, before the request
+expires, while the console that held it is still running. No AI tool adds, removes
 or turns on a plugin. **A program plugin runs as you and is not sandboxed: add
 only plugins you trust.** [Plugins](docs/plugins.md) explains the commands, the
 permissions and how to write your own, and `examples/plugins/` has two samples.

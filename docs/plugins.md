@@ -42,19 +42,19 @@ What agentflow does guarantee, for every plugin:
 - A plugin never sees a confirmation token. Its writes wait for you.
 - A plugin starts turned off.
 
-## Add and remove plugins yourself
+## Add, remove and approve plugins yourself
 
-Run `plugin add` and `plugin remove` in your own terminal. Installing a program
-plugin lets it run as you, and removing a plugin can end a rule that denies
-operations. Agentflow therefore does three things:
+Run `plugin add`, `plugin remove` and `plugin approve` in your own terminal.
+Installing a program plugin lets it run as you, removing a plugin can end a rule
+that denies operations, and approving lets a plugin's write run. Agentflow
+therefore does three things:
 
-- Both commands refuse an agent session: one that sets `CLAUDECODE`,
+- The three commands refuse an agent session: one that sets `CLAUDECODE`,
   `CLAUDE_CODE_SESSION_ID`, `AGENTFLOW_CODEX_HOST_ACTIVE` or a `CODEX_` variable
   other than `CODEX_HOME`.
-- Both commands refuse a non-interactive shell, with no terminal on standard
+- They refuse a non-interactive shell, with no terminal on standard
   input, such as a script, a pipe or a CI job.
-- The Claude Code pre-bash hook blocks an agent from running them. It also blocks
-  `agentflow plugin approve`, the name kept for approving a plugin's writes. See
+- The Claude Code pre-bash hook blocks an agent from running them. See
   [What the hook catches](#what-the-hook-catches). This rule also holds in
   `--convention-only` mode, which switches off the rest of the never-list, because
   plugins belong to you and not to a repository. Codex has no such hook.
@@ -271,8 +271,33 @@ before you install.
 
 A plugin cannot run `commit`, `push`, `pr`, `promote`, `delegate`, anything under
 `approval`, `policy`, `config`, `plugin` or `setup`, or any command it did not list.
-It cannot confirm its own write: under `auto`, a plugin's write still waits for a
-person, in the console's approvals panel or with `agentflow policy approve`.
+It cannot confirm its own write: under `auto`, a plugin's write still waits for you.
+
+### Approve a plugin's write
+
+The Approvals panel and the plugin's card on the Plugins page show the command to
+run for a waiting write. Run it in the repository the plugin acted on:
+
+```text
+agentflow plugin approve op_0123456789abcdef0123456789abcdef
+```
+
+It shows the plugin, the command, what the command does (for `notify`, the signal)
+and when the request expires, then asks `Proceed? [y/N]`. It never shows the
+command's full input, and the approval record stores none. After `y`:
+
+- The console runs the write once, by itself, as the plugin. The plugin does not
+  have to ask again, and asking again does not run it twice.
+- Its `op.*` events and result appear on the timeline with the client
+  `plugin:<id>`.
+
+`--decline` cancels the write instead, and it never runs. A write that is not
+approved before it expires is dropped. Plugin approve only answers requests that
+a plugin made: it refuses any other approval.
+
+The console keeps a waiting write in memory. If the console restarts before you
+approve, the write does not run; the plugin asks again the next time its event
+arrives. A write of a plugin you turned off in the meantime does not run either.
 
 Every command a plugin runs appears on the timeline like your own, with the client
 `plugin:<id>`.
