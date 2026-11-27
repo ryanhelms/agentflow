@@ -153,7 +153,9 @@
     await until(() => !page.hidden && current() === "ai","the AI sessions page did not open");
     check(!visible(byID("page-overview")) && !visible(byID("page-harnesses")) && document.activeElement === byID("main"),"another page shows beside AI sessions, or focus did not move to the page");
     check(!byID("ai-wait").hidden && byID("ai-body").hidden && byID("ai-note").hidden,"the page does not show that it waits for the stream");
-    const streams = await (await fetch("/fixture/stream/requests")).json();
+    // The page's stream may reach the fixture after the page shows.
+    let streams = [];
+    await until(async () => (streams = await (await fetch("/fixture/stream/requests")).json()).length > 0,"the page opened no event stream");
     check(new URLSearchParams(streams[streams.length - 1].query).getAll("topic").includes("*/*/ai.session.**"),"the stream does not follow the session events");
 
     // A live stream without an ai state says so.
