@@ -5,6 +5,19 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.61.0](https://github.com/ryanhelms/agentflow/compare/v0.60.0...v0.61.0) - 2026-11-27
+
+### Features
+
+- add the phase 7 ACP session contract (#128) ([fa4fcaa](https://github.com/ryanhelms/agentflow/commit/fa4fcaa68131816986ff87d74cc95052fb9de988))
+- add the phase 7 aisession contract (#132) ([b8fe103](https://github.com/ryanhelms/agentflow/commit/b8fe103a9680957b673a62416af1f9af6b363e1d))
+- add ACP sessions behind a permission chain (#138) ([a739659](https://github.com/ryanhelms/agentflow/commit/a7396598e72ec077c921ab7a6c1c1b85094d8ecd))
+
+### Fixes
+
+- block repository-supplied binaries; pin updates launchers (#139) ([be33bcc](https://github.com/ryanhelms/agentflow/commit/be33bcc450ecee838ffbabeb65b8897d3c8d60ff))
+- stop finish deleting unmerged work and close merge gaps (#145) ([c918281](https://github.com/ryanhelms/agentflow/commit/c918281d6427b215663d640c597dbad05a3b381a))
+
 ## [0.60.0](https://github.com/ryanhelms/agentflow/compare/v0.59.0...v0.60.0) - 2026-11-27
 
 ### Features
