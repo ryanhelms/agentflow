@@ -572,6 +572,26 @@ are on the Settings page, in the AI harnesses group. `agentflow ui --screen
 harnesses` opens the page.
 [Harnesses page design](docs/design/ui/harnesses.md)
 
+The **AI sessions** page shows this repository's ACP sessions as they run: the
+harness, the state and why a session ended, who started it, its worktree and
+branch. For the session you pick it shows the prompt, the agent's plan, what the
+agent wrote and did (messages, thoughts, tool calls with their files, diffs and
+command output), the commands Agentflow ran for it, usage with the cost the
+harness reported, and the changed files once it ends. When an agent asks for
+permission, a card shows what Agentflow checked, in full: the file and the
+change a write would make, or the command line, the folder, the variable names
+and why it asks. The agent's own wording is kept apart and marked as the
+agent's, and a request about one of the harness's own tools says that Agentflow
+cannot check it. You answer with **Reject** or **Allow once**; **Allow once** is
+absent when the request cannot be allowed or the page cannot show all of it. A
+card shows the time left, and a button answers only after it has stood still
+for a moment. **Cancel session** asks once more before it stops a session.
+Everything an agent wrote is shown as plain text: never as HTML or rendered
+Markdown, and no address in it is a link. The page starts no session: it shows
+`agentflow ai run` to copy into a terminal. Every update arrives over the event
+stream.
+[AI sessions page design](docs/design/ui/ai-panel.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field

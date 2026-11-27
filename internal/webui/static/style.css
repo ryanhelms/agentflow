@@ -458,3 +458,183 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
   .hn-card, .hn-fix { border-inline-start-color: CanvasText; }
   .hn-count { border-color: CanvasText; }
 }
+/* The AI sessions page (docs/design/ui/ai-panel.md). Tokens only: light and dark share these rules. */
+.ico-ai::after { content: ""; position: absolute; inset: 1.5px; background: currentColor; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+/* The stream note keeps its room, so the page does not move when it comes or goes. */
+.ai-note-slot { min-height: 3.5rem; }
+#ai-note { margin: 0 0 var(--s-3); }
+#page-ai code { font-size: var(--fs-xs); overflow-wrap: anywhere; }
+#page-ai dt { color: var(--text-muted); font-size: var(--fs-xs); }
+#page-ai dd { margin: 0; overflow-wrap: anywhere; }
+.ai-summary { margin-bottom: var(--s-4); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.ai-hint { max-width: 78ch; font-size: var(--fs-xs); }
+.ai-part > .ai-hint { margin-bottom: var(--s-2); }
+.ai-count { color: var(--text-muted); font: 500 var(--fs-xs)/1.4 var(--font); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+
+/* The session list beside the selected session. The list stays in view while the session scrolls. */
+.ai-layout { display: grid; grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr); align-items: start; gap: var(--s-4); }
+.ai-sessions { position: sticky; top: var(--s-4); min-width: 0; }
+.ai-sessions > h2 { margin-bottom: var(--s-2); font-size: var(--fs-lg); letter-spacing: -.02em; }
+.ai-session-list { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; }
+.ai-row { display: grid; gap: .15rem; width: 100%; padding: var(--s-3); border: var(--keyline) solid var(--border-strong); border-inline-start: 3px solid var(--border-strong); color: var(--text); background: var(--surface); text-align: start; }
+.ai-row:hover { border-color: var(--accent); }
+.ai-row[aria-current=true] { border-inline-start-color: var(--accent); background: var(--surface-2); }
+.ai-row-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
+.ai-row-name { min-width: 0; font-size: var(--fs-md); overflow-wrap: anywhere; }
+.ai-row-asks { color: var(--warn); font-size: var(--fs-xs); font-weight: 650; }
+.ai-row-start, .ai-row-path { color: var(--text-muted); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.ai-row-branch { justify-self: start; max-width: 100%; padding: .05rem .3rem; border: var(--keyline) solid var(--border); background: var(--surface-2); }
+.ai-row[aria-current=true] .ai-row-branch { background: var(--surface); }
+
+/* A state tag. The label carries the state; the tone and the mark's shape repeat it. */
+.ai-state { white-space: nowrap; }
+.ai-state > .state-mark { color: currentColor; }
+.ai-state[data-tone=ok] { color: var(--ok); background: var(--ok-bg); }
+.ai-state[data-tone=ok] > .state-mark { background: currentColor; }
+.ai-state[data-tone=info] { color: var(--info); background: var(--info-bg); }
+.ai-state[data-tone=info] > .state-mark { animation: stream-pulse 1.2s var(--ease-in-out) infinite alternate; }
+.ai-state[data-tone=warn] { color: var(--warn); background: var(--warn-bg); }
+.ai-state[data-tone=warn] > .state-mark { background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+.ai-state[data-tone=bad] { color: var(--bad); background: var(--bad-bg); }
+.ai-state[data-tone=bad] > .state-mark { border-radius: 0; background: currentColor; }
+
+/* The selected session. */
+.ai-session-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
+.ai-session-head h2 { min-width: 0; overflow-wrap: anywhere; }
+.ai-session-head h2:focus-visible, .ai-asks > h3:focus-visible, .ai-ask-title:focus-visible { outline-offset: 2px; }
+/* Focus rings stay inside their own box, so none is cut by a scrolling box or covers a neighbour. */
+.ai-row:focus-visible, .ai-stream:focus-visible, .ai-text:focus-visible, .ai-command pre:focus-visible, .ai-more > summary:focus-visible, .ai-quote-more:focus-visible { outline-offset: -2px; }
+.ai-session-detail { max-width: 78ch; margin-top: var(--s-1); color: var(--text-muted); font-size: var(--fs-sm); }
+.ai-facts { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
+.ai-facts > div, .ai-ask-facts > div { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; font-size: var(--fs-sm); }
+.ai-part { margin-top: var(--s-5); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }
+.ai-part > h3 { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s-1) var(--s-2); margin-bottom: var(--s-2); }
+.ai-part > .ai-facts { margin-top: 0; }
+.ai-session-more { margin-top: var(--s-3); }
+.ai-paths { display: grid; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+.ai-changed-list { max-height: 16rem; overflow-y: auto; margin-top: var(--s-2); }
+
+/* Cancel asks once more, and focus lands on the choice that changes nothing. */
+.ai-cancel { margin-top: var(--s-4); }
+.ai-cancel-confirm { max-width: 62ch; padding: var(--s-3); border: var(--keyline) solid var(--border-strong); border-inline-start: 3px solid var(--bad); background: var(--surface-2); font-size: var(--fs-sm); }
+.ai-cancel-actions { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); margin-top: var(--s-3); }
+.button.secondary.ai-danger { border-color: var(--bad); color: var(--bad); }
+.button.secondary.ai-danger:hover:enabled { border-color: var(--bad); color: var(--bad); background: var(--bad-bg); }
+.ai-cancel-status { margin-top: var(--s-2); color: var(--text-muted); font-size: var(--fs-sm); }
+.ai-cancel-status[data-state=bad], .ai-ask-status[data-state=bad] { color: var(--bad); }
+
+/* Permission cards. The agent's words come first, in a dashed box: a full-contrast label over a muted,
+   clamped quote. What Agentflow checked sits below it in a solid box, next to the buttons. Reject and
+   Allow once have the same weight, sit at opposite ends, and wait after a card appears or moves. */
+.ai-asks { margin-top: var(--s-5); padding: var(--s-4); border: 2px solid var(--warn); background: var(--warn-bg); }
+.ai-asks-lead { max-width: 78ch; margin-top: var(--s-1); font-size: var(--fs-sm); }
+.ai-ask-list { display: grid; gap: var(--s-4); margin: var(--s-3) 0 0; padding: 0; list-style: none; }
+.ai-ask { min-width: 0; padding: var(--s-4); border: var(--keyline) solid var(--border-strong); background: var(--surface); }
+.ai-ask-title { font-size: var(--fs-lg); font-weight: 650; letter-spacing: -.02em; }
+.ai-ask-warn { max-width: 78ch; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); font-weight: 600; }
+.ai-ask-resolved { margin-top: var(--s-3); }
+.ai-ask-label, .ai-said-label { color: var(--text); font: 700 var(--fs-sm)/1.4 var(--font); }
+.ai-ask-facts { display: grid; gap: var(--s-2); margin-top: var(--s-1); padding: var(--s-3); border: var(--keyline) solid var(--border-strong); background: var(--surface-2); }
+.ai-ask-facts .muted { margin-top: var(--s-1); font-size: var(--fs-xs); }
+.ai-ask-about { margin-top: var(--s-3); }
+/* A path or a command line in full: it wraps, keeps its spaces and never scrolls out of view. */
+#page-ai .ai-exact { display: block; padding: .2rem .4rem; border: var(--keyline) solid var(--border); color: var(--text); background: var(--surface); font: var(--fs-sm)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-ask-count { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.ai-ask-diff { max-height: 16rem; margin-top: var(--s-1); }
+.ai-ask-odd { max-width: 78ch; margin-top: var(--s-2); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ai-ask-effect { max-width: 78ch; margin-top: var(--s-2); font-size: var(--fs-sm); }
+/* Emoji in the agent's words draw as text glyphs, so none can pass for a status mark of the console. */
+.ai-said { margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border: var(--keyline) dashed var(--text-muted); border-inline-start-width: 3px; font-size: var(--fs-sm); font-variant-emoji: text; }
+.ai-said .ai-claims { border-style: dashed; border-color: var(--text-muted); background: none; padding: var(--s-2) 0 0; border-width: var(--keyline) 0 0; margin-top: var(--s-2); color: var(--text-muted); }
+.ai-quote { margin: var(--s-1) 0 0; color: var(--text-muted); font-style: italic; overflow-wrap: anywhere; }
+.ai-quote::before { content: "“"; }
+.ai-quote::after { content: "”"; }
+.ai-quote[data-clamped=true] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.ai-quote-more { margin-top: var(--s-1); padding: 0; border: 0; color: var(--accent); background: none; font-size: var(--fs-xs); font-weight: 600; text-decoration: underline; text-underline-offset: .19em; }
+.ai-said-note { margin-top: var(--s-2); color: var(--text-muted); font-size: var(--fs-xs); }
+.ai-choices { margin: var(--s-1) 0 0; padding-inline-start: 1.1rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.ai-choices q { font-style: italic; }
+.ai-ask-fixed { max-width: 78ch; margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--border-strong); background: var(--surface-2); font-size: var(--fs-sm); }
+.ai-ask-time { margin-top: var(--s-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.ai-ask-time[data-state=soon], .ai-ask-time[data-state=over] { color: var(--warn); font-weight: 650; }
+.ai-ask-offline { margin-top: var(--s-2); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); font-size: var(--fs-sm); }
+.ai-ask-actions { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--s-7) var(--s-6); margin-top: var(--s-3); }
+.ai-ask-actions .button { min-width: 8.5rem; min-height: 2.75rem; }
+.ai-ask-actions .button[aria-disabled=true] { opacity: .57; cursor: not-allowed; }
+/* The status line keeps its room when empty, so answering one card does not move the next. */
+.ai-ask-status { min-height: 1.5em; margin-top: var(--s-2); font-size: var(--fs-sm); line-height: 1.5; }
+
+/* The plan. */
+.ai-plan-list { display: grid; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+.ai-plan-row { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto; gap: var(--s-1) var(--s-3); align-items: baseline; font-size: var(--fs-sm); }
+.ai-plan-state { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.ai-plan-text { overflow-wrap: anywhere; }
+.ai-plan-row[data-state=completed] .state-mark { color: var(--ok); background: currentColor; }
+.ai-plan-row[data-state=completed] .ai-plan-text { color: var(--text-muted); }
+.ai-plan-row[data-state=in_progress] .state-mark { color: var(--info); background: linear-gradient(to right, currentColor 50%, transparent 50%); }
+.ai-plan-row[data-state=in_progress] .ai-plan-text { font-weight: 600; }
+
+/* What the agent did: a box that scrolls by itself, so the request cards and Cancel above it stay in reach. */
+.ai-stream { position: relative; min-height: 5rem; max-height: min(70vh, 44rem); overflow-y: auto; overscroll-behavior: contain; padding: var(--s-3); border: var(--keyline) solid var(--border-strong); background: var(--surface-2); }
+.ai-items { display: grid; gap: var(--s-3); margin: 0; padding: 0; list-style: none; }
+.ai-item { min-width: 0; font-size: var(--fs-sm); }
+.ai-message { max-width: 86ch; font-size: var(--fs-md); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-thought { margin-top: var(--s-1); padding-inline-start: var(--s-3); border-inline-start: var(--keyline) solid var(--border-strong); color: var(--text-muted); font-size: var(--fs-sm); }
+.ai-item[data-kind=tool] { padding: var(--s-2) var(--s-3); border: var(--keyline) solid var(--border-strong); border-inline-start: 3px solid var(--border-strong); background: var(--surface); }
+.ai-item[data-kind=tool][data-tone=ok] { border-inline-start-color: var(--ok); }
+.ai-item[data-kind=tool][data-tone=info] { border-inline-start-color: var(--info); }
+.ai-item[data-kind=tool][data-tone=warn] { border-inline-start-color: var(--warn); }
+.ai-item[data-kind=tool][data-tone=bad] { border-inline-start-color: var(--bad); }
+.ai-tool-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
+.ai-kind { color: var(--text); font: 650 var(--fs-xs)/1.45 var(--font); }
+.ai-agent-line { margin-top: var(--s-1); font-style: italic; overflow-wrap: anywhere; }
+.ai-said-inline { color: var(--text-muted); font-size: var(--fs-xs); font-style: normal; }
+.ai-warn { max-width: 78ch; margin-top: var(--s-2); padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); }
+.ai-item .ai-paths, .ai-term-line { margin-top: var(--s-1); }
+.ai-event { color: var(--text-muted); overflow-wrap: anywhere; }
+.ai-item[data-tone=warn] > .ai-event { color: var(--warn); }
+.ai-item[data-tone=bad] > .ai-event { color: var(--bad); }
+.ai-more { margin-top: var(--s-1); }
+.ai-more > summary { font-size: var(--fs-xs); }
+.ai-text { max-height: 22rem; overflow: auto; margin: var(--s-2) 0 0; padding: var(--s-2) var(--s-3); border: var(--keyline) solid var(--border); color: var(--text); background: var(--surface); font-size: var(--fs-xs); line-height: 1.55; tab-size: 4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-prompt-text { max-height: 12rem; margin-top: 0; font-family: var(--font); font-size: var(--fs-sm); }
+.ai-diff { padding-inline: 0; }
+.ai-diff-row { display: flex; gap: var(--s-2); padding: 0 var(--s-3); }
+.ai-diff-op { flex: none; width: 1ch; font-weight: 700; user-select: none; }
+.ai-diff-row[data-op=add] { color: var(--ok); background: var(--ok-bg); }
+.ai-diff-row[data-op=remove] { color: var(--bad); background: var(--bad-bg); }
+.ai-diff-row[data-op=skip] { color: var(--text-muted); font-style: italic; }
+.ai-latest { margin-top: var(--s-2); }
+.ai-truncated { margin-bottom: var(--s-3); font-size: var(--fs-sm); }
+.ai-command-list { display: grid; gap: var(--s-3); margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+
+/* A terminal command to copy. */
+.ai-command { display: flex; align-items: stretch; gap: var(--s-2); max-width: 44rem; margin: var(--s-2) 0 0; }
+.ai-command pre { flex: 1; min-width: 0; margin: 0; padding: .5rem var(--s-3); border: var(--keyline) solid var(--border-strong); background: var(--surface-2); overflow-x: auto; }
+#page-ai .ai-command pre code { font-size: var(--fs-sm); white-space: pre; overflow-wrap: normal; }
+.ai-command pre::before { content: "$ "; color: var(--text-muted); font-family: var(--mono); font-size: var(--fs-sm); user-select: none; }
+.ai-command .button { flex: none; align-self: stretch; min-width: 4.25rem; }
+.ai-start { margin-top: var(--s-5); }
+.ai-start p { max-width: 78ch; }
+.ai-start p + p, .ai-start .ai-command + p { margin-top: var(--s-3); }
+
+@media (max-width: 65rem) {
+  .ai-layout { grid-template-columns: minmax(0, 1fr); }
+  .ai-sessions { position: static; }
+  .ai-session-list { grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); }
+}
+@media (max-width: 38rem) {
+  .ai-facts > div, .ai-ask-facts > div { grid-template-columns: minmax(0, 1fr); }
+  .ai-plan-row { grid-template-columns: minmax(0, 1fr); }
+  .ai-asks { padding: var(--s-3); }
+  .ai-ask { padding: var(--s-3); }
+  .ai-ask-actions { flex-direction: column; gap: var(--s-7); }
+  .ai-ask-actions .button { align-self: stretch; }
+  .ai-command { flex-wrap: wrap; }
+  .ai-stream { max-height: 60vh; }
+}
+@media (forced-colors: active) {
+  .ai-asks, .ai-ask, .ai-ask-facts { border-color: CanvasText; }
+  .ai-row[aria-current=true] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .ai-state > .state-mark { color: CanvasText; }
+}
