@@ -1,10 +1,10 @@
 package webui
 
 import (
-	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
 	"os"
 	"path/filepath"
 	"runtime"
