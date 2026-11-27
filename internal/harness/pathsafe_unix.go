@@ -59,7 +59,11 @@ func ownedByUserOrRoot(info os.FileInfo) bool {
 
 func fileID(info os.FileInfo) (dev, ino uint64) {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		return uint64(st.Dev), st.Ino //nolint:gosec // G115: Dev is int32 on darwin; the value is only compared for change
+		return widen(st.Dev), st.Ino
 	}
 	return 0, 0
 }
+
+// widen converts a Stat_t field whose type differs between systems (Dev is
+// int32 on darwin and uint64 on linux). The value is only compared for change.
+func widen[T ~int32 | ~uint32 | ~int64 | ~uint64](v T) uint64 { return uint64(v) }
