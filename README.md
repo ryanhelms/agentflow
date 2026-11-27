@@ -913,6 +913,11 @@ by `agentflow pin` through the updated launcher. Project pins and major-version
 restrictions are reported for review. Other clients have their own installation
 commands and capabilities. [Client installation guide](docs/client-plugins.md).
 
+The same marketplace offers a second plugin, `design-system`, with a skill for building React
+interfaces with the agentflow design packages. In Claude Code, run
+`claude plugin install design-system@agentflow`.
+[Install the design system plugin](docs/client-plugins.md#install-the-design-system-plugin).
+
 ### Reinstall plugins after the marketplace rename
 
 The marketplace was renamed from `nscale` to `agentflow`. A plugin installed from the old
