@@ -30,6 +30,9 @@ type JournalRecord struct {
 	IssuedAt time.Time `json:"issued_at"`
 	// Source names the policy rule that asked for approval.
 	Source string `json:"source,omitempty"`
+	// RequestedBy is the client whose call created the record, for example
+	// "plugin:ci-notify". Records written before it existed have none.
+	RequestedBy string `json:"requested_by,omitempty"`
 }
 
 // ReadJournalRecord reads the record file at path. The file must be named

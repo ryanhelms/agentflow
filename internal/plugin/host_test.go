@@ -57,7 +57,8 @@ type fakeIn struct {
 func fakeNotify(ran chan fakeIn) command.Spec[fakeIn, map[string]string] {
 	return command.Spec[fakeIn, map[string]string]{
 		Name: "notify", Policy: command.Policy{Class: policy.Remote, Action: "notify", Gate: command.GateByInvoker, AuditByInvoker: true},
-		Token: func(in *fakeIn) *string { return &in.ConfirmToken },
+		Token:    func(in *fakeIn) *string { return &in.ConfirmToken },
+		Describe: func(in fakeIn) command.Detail { return command.Detail{Subject: "notify " + in.Signal} },
 		Plan: func(_ context.Context, _ *app.App, in fakeIn) (command.Plan, error) {
 			return command.Plan{Summary: map[string]string{"signal": in.Signal}}, nil
 		},

@@ -94,6 +94,8 @@ type Host struct {
 	// crashing plugin cannot reset its budget.
 	limitsMu sync.Mutex
 	limits   map[string]*rateLimits
+
+	held heldCalls // plugin writes waiting for a person (resume.go)
 }
 
 // rateLimits are one plugin's invoke and publish token buckets.
@@ -160,6 +162,9 @@ func (h *Host) Start(ctx context.Context) error {
 	h.mu.Lock()
 	h.ctx = ctx
 	h.mu.Unlock()
+	if err := h.watchApprovals(ctx); err != nil {
+		return err
+	}
 	return h.Reload(ctx)
 }
 

@@ -35,6 +35,14 @@ type runner struct {
 	current  map[string]any
 	removed  bool
 	restarts []time.Time
+	env      *env // the current start's Env
+}
+
+// currentEnv is the Env of the plugin's current start, or nil.
+func (r *runner) currentEnv() *env {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.env
 }
 
 func newRunner(h *Host, parent context.Context, p manifest.Installed, settings map[string]any) *runner {
@@ -179,6 +187,9 @@ func (r *runner) serve() error {
 		return coded(err, bus.PluginCodeLaunch, false)
 	}
 	env := newEnv(r, newPluginLog(filepath.Join(data, "plugin.log"), r.h.o.Now))
+	r.mu.Lock()
+	r.env = env
+	r.mu.Unlock()
 	startCtx, cancelStart := context.WithTimeout(r.ctx, r.h.o.InitializeTimeout)
 	err = inst.Start(startCtx, env)
 	cancelStart()

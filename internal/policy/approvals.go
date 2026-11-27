@@ -1,7 +1,9 @@
 // Package policy's local approval journal is shared by CLI and MCP processes.
 // A kernel lock protects the scope index and all state transitions. Each
 // durable record contains only a fingerprint and metadata, never the bearer
-// token, command, message, paths, or provider payload.
+// token, command line, message, paths, or provider payload. A plugin's record
+// also holds a PluginRequest: the command name and its safe Detail, never its
+// input.
 package policy
 
 import (
@@ -79,6 +81,9 @@ type approvalRecord struct {
 	// RequestedBy is the client whose call created the record. A plugin
 	// client (PluginClientPrefix) may redeem only records it created.
 	RequestedBy string `json:"requested_by,omitempty"`
+	// Request is the safe summary of a plugin's held write
+	// (DescribePluginRequest), shown by plugin approve.
+	Request *PluginRequest `json:"request,omitempty"`
 }
 
 // PluginClientPrefix starts the client name of a plugin's calls.

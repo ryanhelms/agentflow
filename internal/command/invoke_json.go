@@ -39,6 +39,8 @@ type JSONResult struct {
 	Err   error
 	// Outcome classifies them, as the outcome event does.
 	Outcome Outcome
+	// Detail is the Spec's Describe of the input: safe to store and show.
+	Detail Detail
 }
 
 // Input refusals of InvokeJSON. The call never became an operation, so no
@@ -64,7 +66,7 @@ func (s Spec[In, Out]) InvokeJSON(ctx context.Context, inv Invoker, a *app.App, 
 	c := Bind(a, s, in, o, "", time.Now())
 	v, err := inv.Invoke(ctx, c)
 	out := c.Classify(v, err)
-	return JSONResult{OperationID: out.OperationID(c), Value: v, Err: err, Outcome: out}
+	return JSONResult{OperationID: out.OperationID(c), Value: v, Err: err, Outcome: out, Detail: c.Detail}
 }
 
 // decodeJSON decodes input into In strictly.
