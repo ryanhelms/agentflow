@@ -227,6 +227,8 @@ func TestChainNeverListsTerminals(t *testing.T) {
 		r    *Request
 		env  []acp.EnvVariable
 		code string
+		// also: a second code that is as good (see the respond case)
+		also string
 	}{
 		{name: "cat answer.key", r: c.term("cat", key), code: VerdictAgentflowHome},
 		{name: "$AGENTFLOW_HOME spelling", r: c.term("cat", "$AGENTFLOW_HOME/ai/sessions/ais_1/answer.key"), code: VerdictAgentflowHome},
@@ -242,7 +244,10 @@ func TestChainNeverListsTerminals(t *testing.T) {
 		}(), code: VerdictAgentflowHome},
 		{name: "an env value", r: c.term("cat", "README.md"), env: []acp.EnvVariable{{Name: "F", Value: key}}, code: VerdictAgentflowHome},
 		{name: "agentflow ai run", r: c.term("agentflow", "ai", "run", "--harness", "demo", "x"), code: VerdictAgentflowInSession},
-		{name: "agentflow ai respond --allow", r: c.term("agentflow", "ai", "respond", "ais_1", "ask_1", "--allow"), code: VerdictAgentflowInSession},
+		// policy.ForbiddenAlways (lane 7.3) refuses it first, never_list;
+		// without that entry the session never-list does. Either way the
+		// never handler denies it.
+		{name: "agentflow ai respond --allow", r: c.term("agentflow", "ai", "respond", "ais_1", "ask_1", "--allow"), code: VerdictNeverList, also: VerdictAgentflowInSession},
 		{name: "agentflow inside a shell line", r: c.term("sh", "-c", "agentflow ai run x"), code: VerdictAgentflowInSession},
 		{name: "a privileged program", r: c.term("sudo", "make"), code: VerdictPrivilege},
 		{name: "a refused env name", r: c.term("cat", "README.md"), env: []acp.EnvVariable{{Name: "LD_PRELOAD", Value: "/x.so"}}, code: VerdictEnv},
@@ -255,7 +260,7 @@ func TestChainNeverListsTerminals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := Run(withTerminalEnv(ctx, tt.env), c.chain(t, u, nil, ""), tt.r)
-			if v.Decision != Deny || v.Handler != HandlerNever || v.Code != tt.code {
+			if v.Decision != Deny || v.Handler != HandlerNever || v.Code != tt.code && (tt.also == "" || v.Code != tt.also) {
 				t.Errorf("verdict = %+v, want deny by never (%s)", v, tt.code)
 			}
 		})
