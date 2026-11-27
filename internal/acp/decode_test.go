@@ -1,6 +1,7 @@
 package acp_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -341,4 +342,149 @@ func TestReadRequestOptionalFieldsDefault(t *testing.T) {
 	if got := calls[0].req.(acp.ReadTextFileRequest); got.Line != nil || got.Limit != nil {
 		t.Errorf("%+v", got)
 	}
+}
+
+// The enums of schema/v1/schema.json at schema-v1.35.0 (commit
+// 065b57951b6b2a91ac5eddd249e145d1f6d54545) that the contract keeps, and
+// the contract constants that must equal them.
+func TestContractEnumsMatchTheSchema(t *testing.T) {
+	check := func(name string, got []string, want string) {
+		t.Helper()
+		if g := strings.Join(got, " "); g != want {
+			t.Errorf("%s\n got %s\nwant %s", name, g, want)
+		}
+	}
+	check("StopReason", []string{string(acp.StopEndTurn), string(acp.StopMaxTokens), string(acp.StopMaxTurnRequests), string(acp.StopRefusal), string(acp.StopCancelled)},
+		"end_turn max_tokens max_turn_requests refusal cancelled")
+	check("ToolKind", []string{string(acp.ToolRead), string(acp.ToolEdit), string(acp.ToolDelete), string(acp.ToolMove), string(acp.ToolSearch), string(acp.ToolExecute), string(acp.ToolThink), string(acp.ToolFetch), string(acp.ToolSwitchMode), string(acp.ToolOther)},
+		"read edit delete move search execute think fetch switch_mode other")
+	check("ToolCallStatus", []string{string(acp.ToolPending), string(acp.ToolInProgress), string(acp.ToolCompleted), string(acp.ToolFailed)},
+		"pending in_progress completed failed")
+	check("PermissionOptionKind", []string{string(acp.AllowOnce), string(acp.AllowAlways), string(acp.RejectOnce), string(acp.RejectAlways)},
+		"allow_once allow_always reject_once reject_always")
+	check("RequestPermissionOutcome", []string{acp.OutcomeCancelled, acp.OutcomeSelected}, "cancelled selected")
+	// SessionUpdate in the schema also has plan_update, plan_removed,
+	// notice, compaction_update, compaction_summary_chunk, subagent_update,
+	// session_message and session_message_chunk, which phase 7 keeps as
+	// unknown.
+	check("UpdateKind", []string{string(acp.UpdateUserMessageChunk), string(acp.UpdateAgentMessageChunk), string(acp.UpdateAgentThoughtChunk), string(acp.UpdateToolCall), string(acp.UpdateToolCallUpdate), string(acp.UpdatePlan), string(acp.UpdateAvailableCommands), string(acp.UpdateCurrentMode), string(acp.UpdateConfigOption), string(acp.UpdateSessionInfo), string(acp.UpdateUsage)},
+		"user_message_chunk agent_message_chunk agent_thought_chunk tool_call tool_call_update plan available_commands_update current_mode_update config_option_update session_info_update usage_update")
+}
+
+func TestEveryEnumValueDecodes(t *testing.T) {
+	for _, k := range []string{"read", "edit", "delete", "move", "search", "execute", "think", "fetch", "switch_mode", "other"} {
+		for _, st := range []string{"pending", "in_progress", "completed", "failed"} {
+			u, ok := decodeOne(t, `{"sessionUpdate":"tool_call","toolCallId":"c","title":"T","kind":"`+k+`","status":"`+st+`"}`)
+			if !ok || string(u.ToolCall.Kind) != k || string(u.ToolCall.Status) != st {
+				t.Errorf("tool_call %s %s: %+v", k, st, u.ToolCall)
+			}
+		}
+		u, ok := decodeOne(t, `{"sessionUpdate":"tool_call_update","toolCallId":"c","kind":"`+k+`"}`)
+		if !ok || u.ToolCallUpdate.Kind == nil || string(*u.ToolCallUpdate.Kind) != k {
+			t.Errorf("tool_call_update %s: %+v", k, u.ToolCallUpdate)
+		}
+	}
+	for _, p := range []string{"high", "medium", "low"} {
+		for _, st := range []string{"pending", "in_progress", "completed"} {
+			u, ok := decodeOne(t, `{"sessionUpdate":"plan","entries":[{"content":"c","priority":"`+p+`","status":"`+st+`"}]}`)
+			if !ok || len(u.Plan.Entries) != 1 {
+				t.Errorf("plan %s %s: %+v", p, st, u.Plan)
+			}
+		}
+	}
+	for _, typ := range []string{
+		`{"type":"text","text":"t"}`, `{"type":"image","data":"AA","mimeType":"image/png"}`,
+		`{"type":"audio","data":"AA","mimeType":"audio/wav"}`, `{"type":"resource_link","uri":"file:///a","name":"a"}`,
+		`{"type":"resource","resource":{"uri":"file:///a","blob":"AA"}}`,
+	} {
+		if _, ok := decodeOne(t, `{"sessionUpdate":"agent_message_chunk","content":`+typ+`}`); !ok {
+			t.Errorf("content %s dropped", typ)
+		}
+	}
+	for _, k := range []string{"available_commands_update", "config_option_update", "session_info_update"} {
+		if u, ok := decodeOne(t, `{"sessionUpdate":"`+k+`"}`); !ok || string(u.Kind) != k {
+			t.Errorf("%s: %+v", k, u)
+		}
+	}
+	rec := newRecorder()
+	a := newAgentWire(t, rec)
+	a.request(acp.MethodRequestPermission, `{"sessionId":"s","toolCall":{"toolCallId":"c"},"options":[
+		{"optionId":"1","name":"a","kind":"allow_once"},{"optionId":"2","name":"b","kind":"allow_always"},
+		{"optionId":"3","name":"c","kind":"reject_once"},{"optionId":"4","name":"d","kind":"reject_always"}]}`)
+	if m := a.answer(); m.Error != nil {
+		t.Fatal(m.Error)
+	}
+	calls, _ := rec.snapshot()
+	if n := len(calls[0].req.(acp.RequestPermissionRequest).Options); n != 4 {
+		t.Errorf("%d of 4 option kinds kept", n)
+	}
+}
+
+// Every field in the schema's "required" list, removed one at a time.
+func TestRequiredFieldsAreRequired(t *testing.T) {
+	updates := map[string][]string{
+		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"t"}}`:                    {"content"},
+		`{"sessionUpdate":"tool_call","toolCallId":"c","title":"T"}`:                                      {"toolCallId", "title"},
+		`{"sessionUpdate":"tool_call_update","toolCallId":"c"}`:                                           {"toolCallId"},
+		`{"sessionUpdate":"plan","entries":[]}`:                                                           {"entries"},
+		`{"sessionUpdate":"current_mode_update","currentModeId":"code"}`:                                  {"currentModeId"},
+		`{"sessionUpdate":"usage_update","used":1,"size":2}`:                                              {"used", "size"},
+		`{"sessionUpdate":"agent_thought_chunk","content":{"type":"resource_link","uri":"u","name":"n"}}`: {"content"},
+	}
+	for full, req := range updates {
+		if _, ok := decodeOne(t, full); !ok {
+			t.Errorf("%s dropped", full)
+		}
+		for _, field := range req {
+			if _, ok := decodeOne(t, without(t, full, field)); ok {
+				t.Errorf("%s without %s was kept", full, field)
+			}
+		}
+	}
+
+	requests := map[string]struct {
+		params string
+		req    []string
+	}{
+		acp.MethodReadTextFile:        {`{"sessionId":"s","path":"/a"}`, []string{"sessionId", "path"}},
+		acp.MethodWriteTextFile:       {`{"sessionId":"s","path":"/a","content":""}`, []string{"sessionId", "path", "content"}},
+		acp.MethodTerminalCreate:      {`{"sessionId":"s","command":"ls"}`, []string{"sessionId", "command"}},
+		acp.MethodTerminalOutput:      {`{"sessionId":"s","terminalId":"t"}`, []string{"sessionId", "terminalId"}},
+		acp.MethodTerminalWaitForExit: {`{"sessionId":"s","terminalId":"t"}`, []string{"sessionId", "terminalId"}},
+		acp.MethodTerminalKill:        {`{"sessionId":"s","terminalId":"t"}`, []string{"sessionId", "terminalId"}},
+		acp.MethodTerminalRelease:     {`{"sessionId":"s","terminalId":"t"}`, []string{"sessionId", "terminalId"}},
+		acp.MethodRequestPermission:   {`{"sessionId":"s","toolCall":{"toolCallId":"c"},"options":[]}`, []string{"sessionId", "toolCall", "options"}},
+	}
+	rec := newRecorder()
+	a := newAgentWire(t, rec)
+	for method, c := range requests {
+		a.request(method, c.params)
+		if m := a.answer(); m.Error != nil {
+			t.Errorf("%s %s: %v", method, c.params, m.Error)
+		}
+		for _, field := range c.req {
+			a.request(method, without(t, c.params, field))
+			if code, _ := errorOf(t, a.answer()); code != -32602 {
+				t.Errorf("%s without %s: code %d", method, field, code)
+			}
+		}
+	}
+}
+
+// without removes one top-level field from a JSON object.
+func without(t *testing.T, obj, field string) string {
+	t.Helper()
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(obj), &m); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m[field]; !ok {
+		t.Fatalf("%s has no %s", obj, field)
+	}
+	delete(m, field)
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

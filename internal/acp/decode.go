@@ -545,8 +545,17 @@ func decodeCreateTerminal(raw json.RawMessage) (CreateTerminalRequest, bool) {
 	}
 	r := CreateTerminalRequest{SessionID: sid, Command: cmd, OutputByteLimit: f.uint64Ptr("outputByteLimit")}
 	if v, ok := f["args"]; ok && !isNull(v) {
-		if json.Unmarshal(v, &r.Args) != nil {
+		items, ok := f.list("args")
+		if !ok {
 			return CreateTerminalRequest{}, false
+		}
+		for _, item := range items {
+			// A null item would decode as "" without an error.
+			a, ok := fields{"a": item}.str("a")
+			if !ok {
+				return CreateTerminalRequest{}, false
+			}
+			r.Args = append(r.Args, a)
 		}
 	}
 	if v, ok := f["env"]; ok && !isNull(v) {

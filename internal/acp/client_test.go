@@ -229,6 +229,8 @@ func TestClientHandlerRefusesInvalidParams(t *testing.T) {
 		{acp.MethodTerminalCreate, `{"sessionId":"s"}`},
 		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","args":["-l",7]}`},
 		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","args":"-l"}`},
+		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","args":["-l",null]}`},
+		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","env":[{"name":"A","value":null}]}`},
 		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","env":[{"name":"A"}]}`},
 		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","env":[{"name":"A","value":"1"},"B=2"]}`},
 		{acp.MethodTerminalCreate, `{"sessionId":"s","command":"ls","cwd":5}`},

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -138,6 +139,22 @@ func (h *host) ReleaseTerminal(_ context.Context, r acp.TerminalRequest) error {
 	return nil
 }
 
+func exe(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
+
+// outsideCode is what the test host answers for the demo's /etc/hosts
+// read: on Windows that path is not absolute.
+func outsideCode() string {
+	if runtime.GOOS == "windows" {
+		return "relative_path"
+	}
+	return "outside_worktree"
+}
+
 // session is one fake agent launched through jsonrpc.Launch.
 type session struct {
 	proc     jsonrpc.Process
@@ -177,7 +194,7 @@ func launch(t *testing.T, s *acptest.SessionScript, configure func(*host)) *sess
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	proc, err := jsonrpc.Launch(ctx, jsonrpc.LaunchSpec{
-		Path:     filepath.Join(bin, "fake-acp"),
+		Path:     filepath.Join(bin, exe("fake-acp")),
 		Root:     bin,
 		Dir:      data,
 		DataDir:  data,
@@ -252,7 +269,7 @@ func TestSessionDemoScript(t *testing.T) {
 		{acp.MethodReadTextFile, "", `{"content":"hello\n"}`},
 		{acp.MethodRequestPermission, "", `{"outcome":{"outcome":"selected","optionId":"reject-once"}}`},
 		{acp.MethodWriteTextFile, "timeout", ""},
-		{acp.MethodReadTextFile, "outside_worktree", ""},
+		{acp.MethodReadTextFile, outsideCode(), ""},
 		{acp.MethodWriteTextFile, "control_file", ""},
 		{acp.MethodTerminalCreate, "", `{"terminalId":"term-1"}`},
 		{acp.MethodTerminalWaitForExit, "", `{"exitCode":0,"signal":null}`},
@@ -289,11 +306,11 @@ func TestSessionDemoScript(t *testing.T) {
 		}
 		kinds = append(kinds, k)
 	}
-	wantKinds := "agent_message_chunk agent_message_chunk plan tool_call:execute:in_progress tool_call_update:completed usage_update agent_message_chunk"
+	wantKinds := "agent_message_chunk agent_message_chunk plan tool_call:edit:pending tool_call_update:failed tool_call:execute:in_progress tool_call_update:completed usage_update agent_message_chunk"
 	if got := strings.Join(kinds, " "); got != wantKinds {
 		t.Errorf("updates\n got %s\nwant %s", got, wantKinds)
 	}
-	if u := updates[5].Update.Usage; u == nil || u.Cost == nil || u.Cost.Currency != "USD" {
+	if u := updates[7].Update.Usage; u == nil || u.Cost == nil || u.Cost.Currency != "USD" {
 		t.Errorf("usage %+v", u)
 	}
 

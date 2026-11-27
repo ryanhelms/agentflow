@@ -63,8 +63,9 @@ func waitAndRelease() []Step {
 }
 
 // SessionDemo is --mode=session-demo: message chunks; a plan; a read of
-// notes.txt in the worktree; a permission request for an edit of
-// src/hello.txt and the write itself; a read of /etc/hosts; a write of
+// notes.txt in the worktree; the tool call for an edit of src/hello.txt,
+// a permission request for it, the write itself and the tool call marked
+// failed; a read of /etc/hosts; a write of
 // .claude/settings.json; terminal/create "echo hi" (waited for and
 // released when it starts); an execute tool call with no request; a usage
 // update with a cost; end_turn.
@@ -80,8 +81,14 @@ func SessionDemo() *SessionScript {
 			},
 		}),
 		askRead("{cwd}/notes.txt"),
+		update(map[string]any{
+			"sessionUpdate": acp.UpdateToolCall, "toolCallId": "edit-hello", "title": "Write src/hello.txt",
+			"kind": acp.ToolEdit, "status": acp.ToolPending,
+			"locations": []map[string]any{{"path": "{cwd}/src/hello.txt"}},
+		}),
 		askPermission("edit-hello", "Write src/hello.txt", acp.ToolEdit, "{cwd}/src/hello.txt"),
 		askWrite("{cwd}/src/hello.txt", "hello, world\n"),
+		update(map[string]any{"sessionUpdate": acp.UpdateToolCallUpdate, "toolCallId": "edit-hello", "status": acp.ToolFailed}),
 		askRead("/etc/hosts"),
 		askWrite("{cwd}/.claude/settings.json", "{}\n"),
 		askTerminal("echo", "hi"),
