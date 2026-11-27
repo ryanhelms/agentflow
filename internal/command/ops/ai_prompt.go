@@ -15,13 +15,20 @@ import (
 // own line breaks, so it can look like a prompt. Two rules keep a person's
 // answer on the request they saw:
 //
-//   - Only a line begun after a prompt is printed answers it. Anything
-//     entered earlier, or meant for an earlier prompt, is dropped.
+//   - A prompt is armed promptArmDelay after it is printed, and only a line
+//     read after that answers it. Input entered earlier, still on its way
+//     to the reader as the prompt prints, or meant for an earlier prompt,
+//     is dropped. The reader cannot tell when a line was typed, only when
+//     it read it, so the delay covers the time between the two.
 //   - While a prompt waits, transcript items are held and printed when it
 //     ends, so nothing appears below the real prompt.
 //
 // A prompt ends when it is answered, when its request is resolved another
 // way (an answer item, its expiry), or when the session ends.
+
+// promptArmDelay is how long a printed prompt ignores input. Nobody reads
+// a request and answers it faster.
+const promptArmDelay = 250 * time.Millisecond
 
 // maxAnswerLine bounds what one input line keeps.
 const maxAnswerLine = 4096
@@ -123,8 +130,11 @@ type foregroundPrompt struct {
 	errOut  io.Writer
 	respond func(aisession.AskRecord, aisession.Decision) error
 	printer *aiPrinter
-	// shown, for tests, is called once a prompt waits for its line.
+	// shown, for tests, is called once a prompt is armed.
 	shown func(id string)
+	// printed, for tests, is called once a prompt is on screen.
+	printed  func(id string)
+	armDelay time.Duration
 
 	mu       sync.Mutex
 	queue    []aisession.AskRecord
@@ -138,7 +148,7 @@ type foregroundPrompt struct {
 func newForegroundPrompt(in io.Reader, out, errOut io.Writer, respond func(aisession.AskRecord, aisession.Decision) error) *foregroundPrompt {
 	return &foregroundPrompt{
 		lines: newLineSource(in), out: out, errOut: errOut, respond: respond,
-		printer: &aiPrinter{w: out}, resolved: map[string]bool{}, wake: make(chan struct{}, 1),
+		printer: &aiPrinter{w: out}, resolved: map[string]bool{}, wake: make(chan struct{}, 1), armDelay: promptArmDelay,
 	}
 }
 
@@ -179,20 +189,20 @@ func (p *foregroundPrompt) onAsk(r aisession.AskRecord) {
 func (p *foregroundPrompt) run(done <-chan struct{}) {
 	defer p.finish()
 	for {
-		ask, lines, stop, gone, ok := p.show(done)
+		ask, gone, ok := p.show(done)
 		if !ok {
 			return
 		}
-		p.wait(ask, lines, stop, gone, done)
+		p.wait(ask, gone, done)
 	}
 }
 
 // show takes the next unresolved request and prints it with its prompt.
-func (p *foregroundPrompt) show(done <-chan struct{}) (aisession.AskRecord, <-chan lineResult, func(), <-chan struct{}, bool) {
+func (p *foregroundPrompt) show(done <-chan struct{}) (aisession.AskRecord, <-chan struct{}, bool) {
 	for {
 		select {
 		case <-done:
-			return aisession.AskRecord{}, nil, nil, nil, false
+			return aisession.AskRecord{}, nil, false
 		default:
 		}
 		p.mu.Lock()
@@ -210,36 +220,49 @@ func (p *foregroundPrompt) show(done <-chan struct{}) (aisession.AskRecord, <-ch
 			} else {
 				fmt.Fprint(p.out, "Press Enter to reject it: ")
 			}
-			lines, stop := p.lines.next()
 			p.mu.Unlock()
-			if p.shown != nil {
-				p.shown(ask.ID)
+			if p.printed != nil {
+				p.printed(ask.ID)
 			}
-			return ask, lines, stop, gone, true
+			return ask, gone, true
 		}
 		p.mu.Unlock()
 		select {
 		case <-p.wake:
 		case <-done:
-			return aisession.AskRecord{}, nil, nil, nil, false
+			return aisession.AskRecord{}, nil, false
 		}
 	}
 }
 
-// wait ends the prompt on its line, the request being resolved, its expiry
-// or the end of the session, and answers only in the first case.
-func (p *foregroundPrompt) wait(ask aisession.AskRecord, lines <-chan lineResult, stop func(), gone <-chan struct{}, done <-chan struct{}) {
+// wait arms the prompt after armDelay, then ends it on its line, the
+// request being resolved, its expiry or the end of the session, and
+// answers only in the first case. It holds no lock while it waits.
+func (p *foregroundPrompt) wait(ask aisession.AskRecord, gone <-chan struct{}, done <-chan struct{}) {
 	expiry := time.NewTimer(time.Until(ask.ExpiresAt))
 	defer expiry.Stop()
+	arm := time.NewTimer(p.armDelay)
+	defer arm.Stop()
+	var lines <-chan lineResult // nil, so never ready, until armed
+	stop := func() {}
 	var line lineResult
 	got, ended := false, false
-	select {
-	case line = <-lines:
-		got = true
-	case <-gone:
-	case <-expiry.C:
-	case <-done:
-		ended = true
+	for waiting := true; waiting; {
+		select {
+		case <-arm.C:
+			lines, stop = p.lines.next()
+			if p.shown != nil {
+				p.shown(ask.ID)
+			}
+			continue
+		case line = <-lines:
+			got = true
+		case <-gone:
+		case <-expiry.C:
+		case <-done:
+			ended = true
+		}
+		waiting = false
 	}
 	stop()
 	p.mu.Lock()

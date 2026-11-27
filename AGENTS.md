@@ -85,6 +85,10 @@ While the program is active:
   the promotion. Don't edit `CHANGELOG.md`, the README version marker or the plugin
   manifest versions on `develop`: releases write them on `main`, and an edit on `develop`
   makes the next promotion conflict.
+- The same happens for a line next to the version marker, such as the README Status row.
+  After each release, merge `main` into `develop` through a PR merged as a merge commit
+  (a squash does not record the ancestry), and before a `develop-p*` tag check
+  `git merge-tree --write-tree origin/main origin/develop`.
 
 ## Two things that are easy to confuse
 
