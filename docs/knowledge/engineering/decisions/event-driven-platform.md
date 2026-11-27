@@ -25,12 +25,15 @@ x-agentflow-links:
     - title: "Phase 6 contract: harness registry, probes and detection states"
       url: https://github.com/ryanhelms/agentflow/issues/97
       ref: null
+    - title: "Phase 7 contract: ACP sessions, permission chain and AI panel"
+      url: https://github.com/ryanhelms/agentflow/issues/121
+      ref: null
 ---
 # Event bus, message store and event stream
 
 ## Status
 
-Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3"), phase 4 (section "Phase 4"), phase 5 (section "Phase 5") and phase 6 (section "Phase 6", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
+Accepted for phase 1 of the ACP platform program, and amended for phase 2 (section "Phase 2"), phase 3 (section "Phase 3"), phase 4 (section "Phase 4"), phase 5 (section "Phase 5"), phase 6 (section "Phase 6") and phase 7 (section "Phase 7", at the end). Later phases amend this ADR before they add event types or change a contract. A lane that needs a change stops and asks the coordinator for an amendment; it never changes an exported contract on its own.
 
 ## Context
 
@@ -3131,3 +3134,1390 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - A repository cannot choose a binary for agentflow to run. Agents can ask for probes while `auto_probe` is on, the default, and the person can turn that off.
 - `needs_auth` is real for the harnesses with a verified status command; for the others agentflow says it does not know.
 - Phase 7 builds on `internal/acp`, `acptest`, the harness definitions, the launch profile and `Store.MarkAuthRequired`. The ACP "Agent Authentication State Query" RFD (`auth/status`, which `codex-acp` already implements) is a possible later source of sign-in state, once it is in the stable schema. Phase 9's `delegate` reads its agents from the same registry, and phase 10's `harness add` adds a layer.
+
+## Phase 7
+
+*Amendment for phase 7 (issue #121), lanes 7.1 to 7.4 (issues #122 to #125).* Phase 7 starts ACP sessions. `agentflow ai run --harness X "<prompt>"` runs one prompt turn of an installed harness in a task worktree and streams it, an AI panel in the console streams the same session, and `ai status`, `ai respond` and `ai cancel` work from the CLI and MCP. When the harness asks for permission, or asks agentflow to read a file, write a file or run a command, a chain of checks decides: the never-list, the repository boundary, a policy rule, then `policy.Gate`, and deny when nothing allows.
+
+**A session runs a coding agent with the person's sign-in, in the person's repository.** Every rule in this section follows from that. A probe (phase 6) ran a harness for a few seconds in an empty home; a session runs it for minutes, with the person's credentials, and lets it change files. So agentflow starts only a harness that is ready, in a worktree the person chose, with a listed environment and hard limits; it checks every request that reaches it over ACP; and it never lets an agent, a plugin, a repository or the session itself give an "allow" that only a person may give.
+
+Everything in the phase 1 to 6 sections still holds unless a paragraph here says it changes.
+
+**The owner answered the open questions** on PR #127; "Phase 7 owner decisions" records them, and the sections below follow them.
+
+**No contract Go files in this PR.** As in phase 6, the contract PR is documentation only. The Go declarations below are the contract. Each contract file belongs to one lane, and that lane lands it first, verbatim, as a small PR of its own. **Lane 7.1 lands first** (lane 7.2's types import `internal/acp`), then lane 7.2. Lanes 7.3 and 7.4 code against the declarations here from the start.
+
+| Contract | Go | First PR of lane | Order |
+| --- | --- | --- | --- |
+| ACP v1 session types, methods, `ClientHandler`, session limits | `internal/acp/session_types.go`, the phase 7 paragraph in `internal/acp/doc.go` | 7.1 | 1 |
+| `Limits.OrderedResponses` and `LaunchSpec.AllowDir` (declarations only) | `internal/jsonrpc/types.go` | 7.1 | 1 |
+| Session, states, codes, request kinds, `PermissionHandler`, `Verdict`, answers, requester, store and host interfaces, transcript items, limits | `internal/aisession/types.go`, `internal/aisession/doc.go` | 7.2 | 2 |
+| Event types and payloads | `internal/bus/types_phase7.go`; `ai` leaves `ReservedFamilies` in `internal/bus/types.go` | 7.2 | 2 |
+| AI projection state | `internal/webui/projection_ai_state.go` (`AIState`) | 7.2 | 2 |
+
+### Phase 7 what agentflow controls, and what it cannot
+
+Read this first. It sets the limits of every guarantee below.
+
+The ACP v1 security page (`docs/protocol/v1/security.mdx` at the pinned commit) says three things that shape the whole phase:
+
+- "Permission requests are advisory: the Agent performs its own operations and is responsible for honoring the user's decision."
+- The client performs file system and terminal operations itself, so it is responsible for checking them.
+- A malicious agent binary and operating-system sandboxing are out of scope.
+
+So agentflow's checks bind exactly three things:
+
+| What | Who performs it | agentflow's control |
+| --- | --- | --- |
+| `fs/read_text_file`, `fs/write_text_file` | agentflow | Full: agentflow does the read or write itself, after the chain, through `os.Root` at the worktree. |
+| `terminal/create` and the other `terminal/*` methods | agentflow | Full for the start: agentflow starts the process itself, after the chain. What the process then does is not confined (no sandbox). |
+| `session/request_permission` | the harness, afterwards | Advisory: agentflow answers; the harness decides whether to honour it. |
+| The harness's own tools (its built-in shell, editor, web fetch) | the harness | **None.** They never reach agentflow. |
+
+A harness such as `claude-agent-acp` or `codex-acp` may run its own shell or edit files with its own tools without calling `fs/*` or `terminal/*`, and without asking. agentflow cannot see that or stop it. What agentflow does about it:
+
+- It advertises `fs` and `terminal`, so a harness that supports them routes file and command work through agentflow's checks.
+- It runs every session in a task worktree only (owner decision 9), so the person's main checkout is never touched and every change is a reviewable diff.
+- It gives the harness a listed environment without tokens or keys ("Phase 7 session environment").
+- It reports tool calls the harness ran without asking, and cancels the session when one names a place outside the worktree ("Phase 7 tool calls the harness did not ask about").
+- It records which files changed in the worktree when the session ends.
+- It can set a session mode the person chose for that harness (`ai.sessions.modes`), since mode IDs are the agent's own and agentflow cannot tell which one asks more.
+
+The owner accepted this limit with these mitigations (owner decision 2). It is the main residual risk of the phase.
+
+**Same-user processes.** Every process agentflow starts runs as the person. Such a process can read any file the person can, including the agentflow home, the console registry (`~/.agentflow-ui`) and the session store. No check in this section can stop a process that deliberately reads those files and imitates a person. So no dangerous decision rests on one identity check: each rests on several layers ("Phase 7 who may start a session and who may answer"), and the section says where the last layer is a same-user limit.
+
+### Phase 7 patterns
+
+| Piece | GoF / EIP pattern | Go |
+| --- | --- | --- |
+| Background sessions, started, followed and stopped from anywhere | Process Manager (EIP) | `aisession.Host`, `aisession.Manager` |
+| Session lifecycle | State (a transition table) | `aisession.State`, `aisession.Transitions` |
+| Deciding each agent request | Chain of Responsibility | `aisession.PermissionHandler`: never-list, boundary, rule, gate, default deny |
+| The harness behind ACP | Proxy (GoF); Request-Reply (EIP) | `acp.ClientHandler` over `jsonrpc.Conn` |
+| `session/update` decoding | Message Translator; Content Filter | `acp` decode rules, `aisession` sanitizing |
+| A held request waiting for a person | Claim Check (the ask file) with a correlation ID | `asks/<ask>.json`, `asks/<ask>.answer.json` |
+| Agent text | Content Filter | sanitizing and best-effort redaction before the store |
+| Live panel | Event Notification with a server-side projection | `ai.session.*` → the `ai` projection reading the session store |
+| Session output to the stream | Aggregator (coalescing) | `ai.session.output` at most 4 a second per session |
+| Unanswered asks | Message Expiration | deny at `ask_timeout` |
+| A frame that is not JSON-RPC | Invalid Message Channel | the connection closes; the session ends `protocol` |
+
+### Phase 7 ACP v1 session types (lane 7.1)
+
+**Source.** The same pin as phase 6: `agentclientprotocol/agent-client-protocol` tag `schema-v1.35.0`, commit `065b57951b6b2a91ac5eddd249e145d1f6d54545`. It is still the newest `schema-v1.*` tag on 2026-11-27. Shapes are checked against `schema/v1/schema.json` and `schema/v1/meta.json` (the stable schema, never `schema.unstable.json`), and against `docs/protocol/v1/session-setup.mdx`, `prompt-turn.mdx`, `tool-calls.mdx`, `file-system.mdx`, `terminals.mdx`, `cancellation.mdx` and `security.mdx` at that commit.
+
+`internal/acp/session_types.go`:
+
+```go
+package acp
+
+import "encoding/json"
+
+// Agent methods agentflow calls in phase 7 (meta.json "agentMethods").
+const (
+    MethodSessionNew     = "session/new"
+    MethodSessionPrompt  = "session/prompt"
+    MethodSessionSetMode = "session/set_mode"
+    MethodSessionCancel  = "session/cancel" // a notification
+)
+
+// Client methods the agent calls on agentflow (meta.json "clientMethods").
+const (
+    MethodSessionUpdate       = "session/update" // a notification
+    MethodRequestPermission   = "session/request_permission"
+    MethodReadTextFile        = "fs/read_text_file"
+    MethodWriteTextFile       = "fs/write_text_file"
+    MethodTerminalCreate      = "terminal/create"
+    MethodTerminalOutput      = "terminal/output"
+    MethodTerminalWaitForExit = "terminal/wait_for_exit"
+    MethodTerminalKill        = "terminal/kill"
+    MethodTerminalRelease     = "terminal/release"
+)
+
+// MethodCancelRequest is the protocol notification "$/cancel_request".
+const MethodCancelRequest = "$/cancel_request"
+
+// NewSessionRequest. cwd must be absolute. additionalDirectories and
+// systemPrompt are never sent in phase 7.
+type NewSessionRequest struct {
+    Cwd        string      `json:"cwd"`
+    MCPServers []MCPServer `json:"mcpServers"` // required: [] when none
+}
+
+// MCPServer is a stdio MCP server (McpServerStdio). Phase 7 sends only
+// agentflow's own; http and sse are never sent.
+type MCPServer struct {
+    Name    string        `json:"name"`
+    Command string        `json:"command"` // absolute path
+    Args    []string      `json:"args"`
+    Env     []EnvVariable `json:"env"` // required: []
+}
+
+type EnvVariable struct {
+    Name  string `json:"name"`
+    Value string `json:"value"`
+}
+
+type NewSessionResponse struct {
+    SessionID string            `json:"sessionId"`
+    Modes     *SessionModeState `json:"modes,omitempty"` // default on error
+    // configOptions is ignored in phase 7.
+}
+
+type SessionModeState struct {
+    CurrentModeID  string        `json:"currentModeId"`
+    AvailableModes []SessionMode `json:"availableModes"` // skip invalid items
+}
+
+type SessionMode struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`
+    Description string `json:"description,omitempty"`
+}
+
+type SetSessionModeRequest struct {
+    SessionID string `json:"sessionId"`
+    ModeID    string `json:"modeId"`
+}
+
+type PromptRequest struct {
+    SessionID string         `json:"sessionId"`
+    Prompt    []ContentBlock `json:"prompt"` // phase 7 sends one text block
+}
+
+type PromptResponse struct {
+    StopReason StopReason `json:"stopReason"`
+}
+
+type StopReason string
+
+const (
+    StopEndTurn         StopReason = "end_turn"
+    StopMaxTokens       StopReason = "max_tokens"
+    StopMaxTurnRequests StopReason = "max_turn_requests"
+    StopRefusal         StopReason = "refusal"
+    StopCancelled       StopReason = "cancelled"
+)
+
+type CancelNotification struct {
+    SessionID string `json:"sessionId"`
+}
+
+// CancelRequestNotification is "$/cancel_request". RequestID is the raw
+// JSON-RPC ID (number, string or null).
+type CancelRequestNotification struct {
+    RequestID json.RawMessage `json:"requestId"`
+}
+
+// ContentBlock keeps text and the names of other blocks. Image and audio
+// data and embedded resource contents are dropped while decoding.
+type ContentBlock struct {
+    Type     string `json:"type"`               // text, image, audio, resource_link, resource
+    Text     string `json:"text,omitempty"`     // text
+    URI      string `json:"uri,omitempty"`      // resource_link, resource
+    Name     string `json:"name,omitempty"`     // resource_link
+    MimeType string `json:"mimeType,omitempty"` // image, audio, resource_link
+}
+
+type SessionNotification struct {
+    SessionID string        `json:"sessionId"`
+    Update    SessionUpdate `json:"update"`
+}
+
+// UpdateKind is the "sessionUpdate" discriminator.
+type UpdateKind string
+
+const (
+    UpdateUserMessageChunk  UpdateKind = "user_message_chunk"
+    UpdateAgentMessageChunk UpdateKind = "agent_message_chunk"
+    UpdateAgentThoughtChunk UpdateKind = "agent_thought_chunk"
+    UpdateToolCall          UpdateKind = "tool_call"
+    UpdateToolCallUpdate    UpdateKind = "tool_call_update"
+    UpdatePlan              UpdateKind = "plan"
+    UpdateAvailableCommands UpdateKind = "available_commands_update"
+    UpdateCurrentMode       UpdateKind = "current_mode_update"
+    UpdateConfigOption      UpdateKind = "config_option_update"
+    UpdateSessionInfo       UpdateKind = "session_info_update"
+    UpdateUsage             UpdateKind = "usage_update"
+)
+
+// SessionUpdate is one decoded update. Exactly the field for its Kind is
+// set. Any other kind (notice, compaction_*, plan_update, plan_removed,
+// subagent_update, session_message*, or a future one) keeps only Kind and
+// Raw: it is recorded as "unknown" and never acted on.
+type SessionUpdate struct {
+    Kind           UpdateKind
+    Content        *ContentBlock   // the three *_chunk kinds
+    MessageID      string          // the three *_chunk kinds, optional
+    ToolCall       *ToolCall       // tool_call
+    ToolCallUpdate *ToolCallUpdate // tool_call_update
+    Plan           *Plan           // plan
+    CurrentModeID  string          // current_mode_update
+    Title          string          // session_info_update
+    Usage          *UsageUpdate    // usage_update
+    Raw            json.RawMessage // unknown kinds, at most 64 KiB, else dropped
+}
+
+type ToolKind string
+
+const (
+    ToolRead       ToolKind = "read"
+    ToolEdit       ToolKind = "edit"
+    ToolDelete     ToolKind = "delete"
+    ToolMove       ToolKind = "move"
+    ToolSearch     ToolKind = "search"
+    ToolExecute    ToolKind = "execute"
+    ToolThink      ToolKind = "think"
+    ToolFetch      ToolKind = "fetch"
+    ToolSwitchMode ToolKind = "switch_mode"
+    ToolOther      ToolKind = "other" // also the value for an unknown kind
+)
+
+type ToolCallStatus string
+
+const (
+    ToolPending    ToolCallStatus = "pending"
+    ToolInProgress ToolCallStatus = "in_progress"
+    ToolCompleted  ToolCallStatus = "completed"
+    ToolFailed     ToolCallStatus = "failed"
+)
+
+type ToolCall struct {
+    ToolCallID string             `json:"toolCallId"`
+    Title      string             `json:"title"`
+    Kind       ToolKind           `json:"kind,omitempty"`   // default on error: other
+    Status     ToolCallStatus     `json:"status,omitempty"` // default on error: pending
+    Content    []ToolCallContent  `json:"content,omitempty"`
+    Locations  []ToolCallLocation `json:"locations,omitempty"`
+    RawInput   json.RawMessage    `json:"rawInput,omitempty"` // at most 64 KiB, else dropped
+}
+
+// ToolCallUpdate: nil or empty fields are unchanged.
+type ToolCallUpdate struct {
+    ToolCallID string             `json:"toolCallId"`
+    Title      *string            `json:"title,omitempty"`
+    Kind       *ToolKind          `json:"kind,omitempty"`
+    Status     *ToolCallStatus    `json:"status,omitempty"`
+    Content    []ToolCallContent  `json:"content,omitempty"`
+    Locations  []ToolCallLocation `json:"locations,omitempty"`
+    RawInput   json.RawMessage    `json:"rawInput,omitempty"`
+}
+
+// ToolCallContent: Type "content" (Content), "diff" (Path, OldText,
+// NewText) or "terminal" (TerminalID). "session" and unknown types are
+// skipped.
+type ToolCallContent struct {
+    Type       string        `json:"type"`
+    Content    *ContentBlock `json:"content,omitempty"`
+    Path       string        `json:"path,omitempty"`
+    OldText    *string       `json:"oldText,omitempty"`
+    NewText    string        `json:"newText,omitempty"`
+    TerminalID string        `json:"terminalId,omitempty"`
+}
+
+type ToolCallLocation struct {
+    Path string  `json:"path"`
+    Line *uint32 `json:"line,omitempty"`
+}
+
+type Plan struct {
+    Entries []PlanEntry `json:"entries"` // skip invalid items
+}
+
+type PlanEntry struct {
+    Content  string `json:"content"`
+    Priority string `json:"priority"` // high, medium, low
+    Status   string `json:"status"`   // pending, in_progress, completed
+}
+
+type UsageUpdate struct {
+    Used uint64 `json:"used"`
+    Size uint64 `json:"size"`
+    Cost *Cost  `json:"cost,omitempty"` // agent-reported; never trusted
+}
+
+type Cost struct {
+    Amount   float64 `json:"amount"`
+    Currency string  `json:"currency"`
+}
+
+type RequestPermissionRequest struct {
+    SessionID string             `json:"sessionId"`
+    ToolCall  ToolCallUpdate     `json:"toolCall"`
+    Options   []PermissionOption `json:"options"`
+}
+
+type PermissionOptionKind string
+
+const (
+    AllowOnce    PermissionOptionKind = "allow_once"
+    AllowAlways  PermissionOptionKind = "allow_always"
+    RejectOnce   PermissionOptionKind = "reject_once"
+    RejectAlways PermissionOptionKind = "reject_always"
+)
+
+type PermissionOption struct {
+    OptionID string               `json:"optionId"`
+    Name     string               `json:"name"`
+    Kind     PermissionOptionKind `json:"kind"`
+}
+
+type RequestPermissionResponse struct {
+    Outcome PermissionOutcome `json:"outcome"`
+}
+
+// PermissionOutcome is {"outcome":"cancelled"} or
+// {"outcome":"selected","optionId":"..."}.
+type PermissionOutcome struct {
+    Outcome  string `json:"outcome"` // OutcomeSelected or OutcomeCancelled
+    OptionID string `json:"optionId,omitempty"`
+}
+
+const (
+    OutcomeSelected  = "selected"
+    OutcomeCancelled = "cancelled"
+)
+
+type ReadTextFileRequest struct {
+    SessionID string  `json:"sessionId"`
+    Path      string  `json:"path"`
+    Line      *uint32 `json:"line,omitempty"`  // 1-based
+    Limit     *uint32 `json:"limit,omitempty"` // lines
+}
+
+type ReadTextFileResponse struct {
+    Content string `json:"content"`
+}
+
+type WriteTextFileRequest struct {
+    SessionID string `json:"sessionId"`
+    Path      string `json:"path"`
+    Content   string `json:"content"`
+}
+
+type WriteTextFileResponse struct{}
+
+type CreateTerminalRequest struct {
+    SessionID       string        `json:"sessionId"`
+    Command         string        `json:"command"`
+    Args            []string      `json:"args,omitempty"`
+    Env             []EnvVariable `json:"env,omitempty"`
+    Cwd             *string       `json:"cwd,omitempty"`
+    OutputByteLimit *uint64       `json:"outputByteLimit,omitempty"`
+}
+
+type CreateTerminalResponse struct {
+    TerminalID string `json:"terminalId"`
+}
+
+// TerminalRequest is the params of terminal/output, wait_for_exit, kill
+// and release.
+type TerminalRequest struct {
+    SessionID  string `json:"sessionId"`
+    TerminalID string `json:"terminalId"`
+}
+
+type TerminalOutputResponse struct {
+    Output     string              `json:"output"`
+    Truncated  bool                `json:"truncated"`
+    ExitStatus *TerminalExitStatus `json:"exitStatus,omitempty"`
+}
+
+// TerminalExitStatus is also the result of terminal/wait_for_exit.
+type TerminalExitStatus struct {
+    ExitCode *uint32 `json:"exitCode"`
+    Signal   *string `json:"signal"`
+}
+
+// ClientHandler is what agentflow does for each agent request. Lane 7.2
+// implements it (the session host); lane 7.1 decodes and dispatches.
+// Returning a *jsonrpc.Error sends it as is.
+type ClientHandler interface {
+    SessionUpdate(ctx context.Context, n SessionNotification)
+    RequestPermission(ctx context.Context, r RequestPermissionRequest) (RequestPermissionResponse, error)
+    ReadTextFile(ctx context.Context, r ReadTextFileRequest) (ReadTextFileResponse, error)
+    WriteTextFile(ctx context.Context, r WriteTextFileRequest) (WriteTextFileResponse, error)
+    CreateTerminal(ctx context.Context, r CreateTerminalRequest) (CreateTerminalResponse, error)
+    TerminalOutput(ctx context.Context, r TerminalRequest) (TerminalOutputResponse, error)
+    WaitForTerminalExit(ctx context.Context, r TerminalRequest) (TerminalExitStatus, error)
+    KillTerminal(ctx context.Context, r TerminalRequest) error
+    ReleaseTerminal(ctx context.Context, r TerminalRequest) error
+}
+
+// agentflow's codes in answers to an agent. ACP reserves -32000, -32002
+// and -32800; -32001 is in its "Other" range.
+const (
+    // CodeDenied: the chain denied the request. Data is {"code": "<verdict code>"}.
+    CodeDenied = -32001
+)
+
+// SessionLimits are the jsonrpc limits of a session connection.
+var SessionLimits = jsonrpc.Limits{
+    MaxFrame:         8 << 20,
+    MaxInFlight:      16,
+    CallTimeout:      30 * time.Second, // initialize, session/new, set_mode; never prompt
+    OrderedResponses: true,
+}
+
+// SessionInitialize is the initialize request of a session. It differs
+// from the probe's: fs and terminal are true, auth.terminal is false.
+func SessionInitialize(version string) InitializeRequest
+
+// NewClientHandler decodes every agent request by the phase 6 decode rules
+// and calls h. Unknown methods, ext methods ("_..."), elicitation/* and
+// every method agentflow does not advertise get -32601. A
+// "$/cancel_request" for a request h is still handling cancels its context;
+// the request is then answered -32800, or {"outcome":"cancelled"} for a
+// permission request.
+func NewClientHandler(h ClientHandler) jsonrpc.Handler
+
+func NewSession(ctx context.Context, c jsonrpc.Conn, r NewSessionRequest) (NewSessionResponse, error)
+func SetMode(ctx context.Context, c jsonrpc.Conn, r SetSessionModeRequest) error
+
+// Prompt sends session/prompt and waits until ctx ends. ctx must have a
+// deadline (ErrNoDeadline): jsonrpc's CallTimeout never applies to it.
+func Prompt(ctx context.Context, c jsonrpc.Conn, r PromptRequest) (PromptResponse, error)
+
+// Cancel sends session/cancel.
+func Cancel(ctx context.Context, c jsonrpc.Conn, sessionID string) error
+```
+
+(The imports of `context`, `time` and `internal/jsonrpc` are left out of the listing.)
+
+**The session `initialize` request** (`SessionInitialize`):
+
+```json
+{"protocolVersion": 1,
+ "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true, "auth": {"terminal": false}},
+ "clientInfo": {"name": "agentflow", "title": "agentflow", "version": "<agentflow version>"}}
+```
+
+agentflow advertises no `session`, `subagents`, `plan` or `elicitation` capability, so the agent must not send `plan_update`, `plan_removed`, subagent updates, notices or elicitations. If it does, they are recorded as unknown updates or answered `-32601`. The answer must give `protocolVersion` 1, else the session ends `protocol_version`.
+
+### Phase 7 ACP client (lane 7.1)
+
+- **Decode rules.** Every ACP message follows the phase 6 rule ("default on error", "skip invalid items", unknown fields ignored). A `session/update` whose `sessionUpdate` is unknown is kept as `Kind` and `Raw` and never an error. An unknown `ToolKind` decodes as `other`.
+- **Ordered responses.** `internal/jsonrpc` runs peer notifications on their own queue, so a response can reach `Call` before the `session/update` notifications sent before it are handled. Lane 7.1 adds `Limits.OrderedResponses` (additive, in `conn.go`): when set, the reader hands a response to its `Call` only after every notification read before it has been handled. `SessionLimits` sets it. The ACP spec requires the agent to send its updates before it answers `session/prompt`, so with this option a returned `Prompt` means the turn's output is complete.
+- **Deadlines.** `Prompt` refuses a context without a deadline. The host gives it the session's remaining `max_duration`. `initialize`, `session/new` and `session/set_mode` use 30 s.
+- **In flight.** The agent may have 16 requests waiting for agentflow (`MaxInFlight`). A held `terminal/wait_for_exit` or a permission request waiting for a person counts. One more gets jsonrpc's busy error.
+- **Frames.** 8 MiB each way. File contents are limited further ("Phase 7 limits").
+- **Denials** to `fs/*` and `terminal/*` are JSON-RPC errors `-32001` with a fixed message per verdict code and `data: {"code": "<code>"}`. A missing file is `-32002` (ACP's "resource not found"). No message echoes a path or the agent's own text.
+- **Cancellation.** On `ai cancel` or a limit, the host sends `session/cancel`, answers every pending permission request `{"outcome":"cancelled"}` at once (the spec's MUST), answers every held `fs/*` or `terminal/create` with `-32800`, waits up to 10 s for `stopReason: cancelled`, then stops the process.
+- **Never sent:** `authenticate`, `logout`, `session/load`, `session/resume`, `session/list`, `session/close`, `session/delete`, `session/set_config_option`, an `http` or `sse` MCP server, `systemPrompt`, `additionalDirectories`, `$/cancel_request`.
+
+### Phase 7 fake ACP agent (lane 7.1)
+
+- `acptest.Script` gains `Session *SessionScript`. A `SessionScript` is a list of steps the fake plays after `session/prompt`: `{"update": <SessionUpdate JSON>}`, `{"ask": {"permission" | "read" | "write" | "terminal" | "wait" | "release": ...}}` (the fake sends that client request and logs the answer or the error code), `{"tool_unasked": {...}}` (a `tool_call` that goes to `completed` with no request), `{"sleep": "100ms"}`, `{"stop": "end_turn"}`, `{"crash": true}`, `{"new_session_error": -32000}`. It logs every message it receives (`LogEntry`), including the `mcpServers` it was given, and never starts an MCP server.
+- `cmd/fake-acp` gains `--mode=session-demo`, `--mode=session-nested`, `--mode=session-hang` and `--mode=session-auth`, the scripts the demo uses (below). It is built by hand only.
+- A test covers every script with a real `jsonrpc.Launch` of the fake.
+
+### Phase 7 session lifecycle (lane 7.2)
+
+`aisession.State` and `aisession.Transitions` (GoF State):
+
+```text
+ ai run      launch ok      initialize ok    session/new ok      prompt answered
+(none) ─► starting ─► initializing ─► creating ─► running ─────────────────────► ended
+                                                    │  ▲                            ▲
+                                       ask held     │  │ every ask answered         │
+                                                    ▼  │                            │
+                                                  waiting ── ai cancel, limit ─► cancelling
+  any state ── launch, protocol, auth_required, exited, host_lost ──────────────────► ended
+```
+
+| From | Event | To | Code |
+| --- | --- | --- | --- |
+| none | `ai run` passed its gate; record written | `starting` | |
+| `starting` | harness launched | `initializing` | |
+| `starting` | launch failed | `ended` | `launch` |
+| `initializing` | `initialize` answered with version 1 | `creating` | |
+| `initializing` | other version, a protocol error, 30 s | `ended` | `protocol_version`, `protocol`, `timeout` |
+| `creating` | `session/new` answered (then `set_mode` if configured) | `running` | |
+| `creating` | `session/new` answered `-32000` | `ended` | `auth_required` (and `harness.Store.MarkAuthRequired`) |
+| `running` | an ask is held for a person | `waiting` | |
+| `waiting` | no ask is held | `running` | |
+| `running`, `waiting` | `ai cancel`, a limit, an unasked tool call outside the worktree | `cancelling` | `cancelled`, `limit_duration`, `limit_idle`, `limit_output`, `unasked` |
+| `running`, `waiting`, `cancelling` | `session/prompt` answered | `ended` | the stop reason |
+| `cancelling` | no answer within 10 s | `ended` | the cancel code |
+| any but `ended` | harness exited, connection closed | `ended` | `exited`, `protocol` |
+| any but `ended` | host heartbeat older than 30 s | `ended` | `host_lost` (written by any reader, under the lock) |
+
+- **One prompt turn per session** in phase 7 (decision 2). When the turn ends, the host stops the harness: close stdin, 2 s, kill the process group (the phase 5 rule).
+- Every transition is written to `session.json` under the store lock and publishes `ai.session.changed`.
+- `Session.Code` holds the stop reason (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`) or the failure code.
+
+### Phase 7 session host (lane 7.2)
+
+**A session always runs in the worktree of the process that starts it** (owner decision 1): the worktree root of the `ai run` process's working directory, or of the `agentflow mcp` server's directory for `agentflow_ai_run`. No input field, flag, file, configuration key or environment variable chooses another directory or project: `ai run` has no `--worktree`, `--dir` or `--repo`, the tool input has no path, and a `cd` in the prompt changes nothing. To run a session elsewhere, the person starts agentflow there. The ACP `cwd` is that worktree root, `additionalDirectories` is never sent, and every boundary check below is against that worktree.
+
+A session is hosted by the process that starts it, never by the console daemon (decision 1):
+
+| Started by | Host | Output |
+| --- | --- | --- |
+| A person: `ai run` in a terminal, without `--detach` | the `ai run` process itself (foreground) | streamed to the terminal; asks are prompted on the terminal; Ctrl-C cancels, a second Ctrl-C kills |
+| `ai run --detach`, the CLI in an agent session, or `agentflow_ai_run` | a detached `agentflow ai host --session ID` process | none; follow with `ai status --follow` or the AI panel |
+
+- **Detached host.** The starter writes the record (`starting`), then starts its own binary (`os.Executable`, links resolved) as `agentflow ai host --session ID` in a new session (Unix `Setsid`; Windows `DETACHED_PROCESS` and `CREATE_NEW_PROCESS_GROUP`), with stdin, stdout and stderr on `<session>/host.log`. Its environment is the starter's own; the host builds the harness environment from it by the rules below, as a foreground host would. `ai host` is runtime plumbing in `cli.go`'s fixed switch (like `mcp`), not a Spec, and not in the usage text. It claims the record under the store lock and exits at once when the record is not `starting` or is claimed.
+- **Heartbeat.** The host writes `host.heartbeat` every 5 s. A reader that finds it older than 30 s ends the session `host_lost` under the lock. It kills the harness's process group only when it can show the group still belongs to that harness (Linux: process start time from `/proc`; macOS: `sysctl` `kern.proc.pid` start time); otherwise it leaves it, and `ai status` says so.
+- **Launch.** `harness.Locate` (below) gives the `harness.Found` for the ID. The host launches it through `jsonrpc.Launch` with: `Path` the found file, `Root` `harness.LaunchRoot(...)`, `Dir` the worktree root, `AllowDir` the worktree root, `DataDir` the session directory, `Args` the definition's `args`, `Env` the session environment, `AllowEnv` the names that environment adds beyond `EnvAllowed`, `Stderr` `host.log`, `Limits` `acp.SessionLimits`, `Handler` `acp.NewClientHandler(host)`.
+- **`LaunchSpec.AllowDir`** (lane 7.1 declares it, lane 7.2 implements its check in `launch.go`): an absolute existing directory that `Dir` may also be inside (links resolved). Empty means the old rule. Only the session profile sets it.
+- **`harness.Locate`** (new file `internal/harness/session.go`, lane 7.2; no existing harness file changes; it builds on `develop` at `b4389ac`, which includes #126's `Harness.VersionArgs` and `NoVersion` and `harnessdef.RefusedLauncher`): `Locate(ctx, home, version string, workDirs func() []string, id string) (Found, Harness, error)` resolves one definition with the same layers, PATH rules and probe cache as `Detect`, and never probes. It returns `ErrNotReady` unless the state is `native` or `adapter_installed` with a probe result `ok` (or `cached` `ok`) for the current identity, and reports `Harness.Probe` and the fix otherwise. The same file exports `GuardPath(path string) error`, the test guard of `guard.go`.
+
+### Phase 7 package dependencies (lanes 7.2 and 7.3)
+
+`internal/command` imports `internal/app`; `internal/webui`, `internal/command/ops` and `internal/command/deliver` import `internal/app` and `internal/plugin`; `internal/plugin` imports `internal/app` (checked with `go list -deps` on `develop` at `fdf0eca`). `internal/app` (lane 7.3) and `internal/webui` (lane 7.2) will import `internal/aisession`. So `aisession` calling any of them directly would be an import cycle.
+
+- **`internal/aisession` may import only:** `internal/acp`, `internal/jsonrpc`, `internal/harness`, `internal/policy`, `internal/config`, `internal/boundary`, `internal/bus`, `internal/notifysock`, `internal/filelock`, `internal/gitx` and the standard library.
+- **It must never import:** `internal/app`, `internal/command/**`, `internal/webui`, `internal/mcpserver`, `internal/plugin`, `internal/cli`. A test in lane 7.2 (`TestAISessionImports`) fails on any of them.
+- **What it needs from those layers comes in through `aisession.Options`** (declared in lane 7.2's `types.go`):
+
+```go
+type Options struct {
+    Home    string // the agentflow home
+    Version string // agentflow's version, for clientInfo
+    // Emit delivers one event (command/deliver: the store.Exists check, the
+    // socket, the unknown_worktree retry). nil drops events.
+    Emit func(ctx context.Context, e bus.Event) error
+    // WorktreeID is webui.IdentifyWorktree's ID for dir.
+    WorktreeID func(ctx context.Context, dir string) (string, error)
+    // PluginDeny runs the registered Invoker stages (command.CheckStages)
+    // for a synthetic operation "ai.request" with the request's gate class
+    // and action and the session's branch; a non-nil error is a plugin deny.
+    PluginDeny func(ctx context.Context, class, action, branch string) error
+    // MergeBase is policy.NeverOptions.MergeBase, as the pre-bash hook wires it.
+    MergeBase func(cmd string) (string, error)
+    // Detach starts the detached host; nil means re-execute os.Executable.
+    Detach func(ctx context.Context, id ID) error
+    // MCPServer is the server entry for session/new, or nil for none.
+    MCPServer func(id ID) *acp.MCPServer
+    Now func() time.Time
+}
+```
+
+- **Lane 7.3 wires them** in `internal/command/ops/ai_sessions.go` (`ops.AISessionOptions`, which may import `command`, `command/deliver` and `webui`; `deliver` does not import `ops`) and uses the same function in `internal/cli/ai_host.go`. `app.AIRun`, `app.AIStatus`, `app.AIRespond` and `app.AICancel` take the `Options` from their caller: `internal/app` never imports `internal/command`.
+- The console's routes (lane 7.2, `internal/webui/ai.go`) answer and cancel through the `ai.respond` and `ai.cancel` Specs, by name through the daemon's Invoker, so they need no `Options` of their own. The `ai` projection reads the store with `aisession.OpenStore(home)`, which needs none.
+
+### Phase 7 session environment (lane 7.2)
+
+This is the environment the harness process gets. The owner chose the real home (owner decision 1).
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `HOME` | the OS account's home (`os/user`, not `$HOME`), with `ai.sessions.home: real` (default). With `isolated`: `<session>/home`, empty | The harness needs its own sign-in, which lives under the real home (and in the OS keychain). A different `HOME` is not a security boundary: the process runs as the person, and OpenSSH reads the account home from the password database anyway. |
+| `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `HOMEDRIVE`, `HOMEPATH` (Windows) | as `HOME`: inherited (real) or under `<session>/home` (isolated) | same |
+| `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | inherited when set (real); unset (isolated) | the harness's configuration |
+| The definition's `config_env` names (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`) | inherited when set | a moved harness configuration |
+| `USER`, `LOGNAME`, `LANG`, `LC_*`, `TZ`; the phase 5 Windows names | inherited when set | |
+| `SHELL` | inherited when it is an absolute path that passes the phase 6 file checks and is not inside a repository | harnesses run their own shell tool with it |
+| `TERM` | `dumb` | no terminal |
+| `TMPDIR`, `TEMP`, `TMP` | `<session>/tmp` (0700, removed when the session ends) | |
+| `PATH` | the harness's found directory, then each entry of the starter's `PATH` that passes the phase 6 PATH checks (`relative`, `missing`, `inside_repository` against every worktree of the session's repository and of every repository the daemon serves, `node_modules`, `unsafe_permissions`), then the fixed system PATH; duplicates removed | the harness and its tools need `go`, `npm`, `make`; a repository must never put a program in front of them |
+| The definition's `credential_env` names | inherited when set (owner decision 3: harness sign-in is pass-through; authentication is handled outside agentflow). Only these verified names, never to agentflow-run terminals | people who sign in with an API key |
+| `AGENTFLOW_ACP_SESSION` | the session ID | marks every process below the harness as inside a session (one layer, not a boundary) |
+| `GIT_TERMINAL_PROMPT` | `0` | no credential prompts |
+
+agentflow stores, prompts for and manages no credential: it passes the definition's `credential_env` variables the parent already has, and nothing more.
+
+**Nothing else passes**, in particular: `GH_TOKEN`, `GITHUB_TOKEN`, every other name the phase 6 credential rules match (the credential suffixes, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`, `CREDENTIAL`, `_KEY`), cloud keys, proxy variables (they can hold credentials; decision 11), `SSH_AUTH_SOCK`, `GPG_AGENT_INFO`, every `AGENTFLOW_*` and `DEVFLOW_*` of the parent, client session IDs (`CLAUDECODE`, `CLAUDE_CODE_*`, `CODEX_*` other than `CODEX_HOME`), and the loading and trust names of the phase 6 sign-in guidance list (`LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH` and the rest).
+
+**Refusals before launch** (`ai run` fails with the code, nothing starts):
+
+- `unsafe_environment`: the real `HOME`, a set `XDG_*_HOME` or a `config_env` directory is inside a git working tree or git directory (the phase 6 rule, `config.InsideRepository`; the only exception is a repository whose root is the account home).
+- `home_unsafe`: the agentflow home fails the phase 6 home checks.
+- `test_guard`: in a test binary, the harness file is outside the test's temporary directory.
+
+**What the person's real home means.** With `real`, the harness's own tools can use what the person's home holds: their git credential helpers, `~/.config/gh`, cloud CLI profiles, SSH keys. agentflow cannot stop that (see "what agentflow controls"); it only keeps tokens out of the environment and checks what reaches it over ACP. With it, the person's own client settings also apply to the harness, for example their Claude Code hooks (including agentflow's pre-bash never-list). The `isolated` option trades that for a harness that may not be signed in. Lane 7.2 checks, from vendor documentation or source, whether `claude-acp` and `codex-acp` can sign in with `isolated` plus their `config_env` names, and reports; it does not guess.
+
+**Terminal environment.** A process started for `terminal/create` gets the session environment **without** the `credential_env` values, plus the agent's `env` entries that pass "Phase 7 terminals".
+
+### Phase 7 permission chain (lane 7.2)
+
+Every agent request that asks agentflow to do or allow something becomes an `aisession.Request` and goes through one chain:
+
+```go
+package aisession
+
+// Kind is what the agent asked for.
+type Kind string
+
+const (
+    KindPermission Kind = "permission" // session/request_permission
+    KindRead       Kind = "fs_read"    // fs/read_text_file
+    KindWrite      Kind = "fs_write"   // fs/write_text_file
+    KindTerminal   Kind = "terminal"   // terminal/create
+)
+
+// Request is one agent request, as agentflow resolved it. Title, ToolKind,
+// ToolCallID and Options are the agent's words (sanitized, display only);
+// everything else agentflow worked out itself.
+type Request struct {
+    Session    ID
+    Kind       Kind
+    ToolCallID string
+    ToolKind   acp.ToolKind
+    Title      string
+    Options    []acp.PermissionOption
+    // Paths: fs path, or the tool call's locations, resolved by the boundary.
+    Paths   []Path
+    Command *Command // KindTerminal
+    Size    int64    // KindWrite: content bytes
+    // Set by the never-list: only a person may allow this.
+    PersonOnly bool
+    // Reason is why it would ask: control_file, secret_file, terminal,
+    // repository_program, no_locations, kind, rule, gate, ceiling.
+    Reason string
+}
+
+type Path struct {
+    Abs   string // cleaned absolute path as asked
+    Rel   string // slash path relative to the worktree root; "" when outside
+    Real  string // resolved, when it exists
+    Exists bool
+}
+
+type Command struct {
+    Program  string   // as asked
+    Resolved string   // absolute, after lookup on the session PATH
+    Args     []string
+    Cwd      Path
+    EnvNames []string // the agent's env names; values are never shown or stored
+    Line     string   // POSIX-quoted Program and Args, for the never-list and the boundary
+}
+
+type Decision string
+
+const (
+    Allow Decision = "allow"
+    Deny  Decision = "deny"
+    Ask   Decision = "ask" // hold it for a person
+)
+
+// Verdict names who decided and why.
+type Verdict struct {
+    Decision Decision
+    Handler  string // never, boundary, rule, gate, default, person, timeout, cancel
+    Code     string // e.g. outside_worktree, git_dir, never_list, rule:<name>, gate_never
+}
+
+type Next func(ctx context.Context, r *Request) Verdict
+
+// PermissionHandler is one link of the chain. It returns Deny, or sets
+// fields on r and returns next(ctx, r). Only the rule and gate links may
+// return Allow or Ask.
+type PermissionHandler interface {
+    Decide(ctx context.Context, r *Request, next Next) Verdict
+}
+```
+
+**The links, in order** (`aisession.DefaultChain`):
+
+1. **Never-list.** Denies what no one may allow, and marks what only a person may allow (`PersonOnly`). For terminals it runs `policy.ForbiddenWith` on `Command.Line` with the repository's protected branches, the current branch and `NeverOptions{CoordinatorMerge}` from configuration; then the session never-list ("Phase 7 terminals"). For files it marks control files and secret files (below).
+2. **Repository boundary.** Resolves every path and the terminal's `cwd` against the worktree ("Phase 7 file access") and denies anything outside it, into `.git` or into a nested repository. For terminals it also runs `boundary.Checker` with the session's repository as home, so a command that writes another repository is denied, as the pre-bash hook does.
+3. **Policy rule.** The first matching rule decides: the repository's rules first (they may only `ask` or `deny`), then the person's `personal:ai.permissions.rules` (`allow`, `ask` or `deny`), then the enabled plugins' `permission_rule`s (`deny` only; phase 5). No match passes on.
+4. **`policy.Gate`.** `Gate.Explain(class, action, nil, false)` for the action in the table below: `auto` gives allow, `confirm` gives ask, `suggest` and `never` give deny. For a session an agent started, every action except `ai.fs.read` is capped at `confirm` (the ceiling, `Gate.WithCeiling`).
+5. **Default.** Deny (`Handler: default`).
+
+**Combining.** Any deny wins. Otherwise `PersonOnly`, the ceiling or a rule `ask` gives ask. Otherwise a person's rule `allow` gives allow (it is the person's own standing answer, and adding one is a loosening edit). Otherwise the gate's answer. A rule can never allow what the never-list marked `PersonOnly`, and no rule from a repository or a plugin can allow anything.
+
+**Per request kind:**
+
+| Request | Paths checked | Gate action (class) | Asks a person when |
+| --- | --- | --- | --- |
+| `fs/read_text_file` | `path` | `ai.fs.read` (read) | a secret file (below); a rule says ask |
+| `fs/write_text_file` | `path` | `ai.fs.write` (local) | a control file (always); the gate says confirm; the ceiling |
+| `terminal/create` | `cwd` (default: the worktree root), the resolved program | `ai.terminal` (local, mandatory confirmation) | always, unless a person's rule allows the program; a shell, a wrapper or a program inside the worktree always (`PersonOnly`) |
+| `session/request_permission`, tool kind `read`, `search` | `toolCall.locations` | `ai.fs.read` | no locations (`no_locations`) |
+| tool kind `think` | | `ai.fs.read` | |
+| tool kind `edit`, `delete`, `move` | `toolCall.locations` (required) | `ai.fs.write` | no locations; a control file; the gate says confirm |
+| tool kind `execute` | `locations` when given | `ai.terminal` | always (`PersonOnly`): the command is in `rawInput`, whose shape is the agent's own, so no rule can match it reliably |
+| tool kind `fetch` | | `ai.fetch` (remote, mandatory confirmation) | always, unless a person's rule allows `tool` `fetch` |
+| tool kind `switch_mode`, `other`, unknown | | `ai.permission` (local, mandatory confirmation) | always (`PersonOnly`) |
+
+- A `sessionId` in a request that is not this session's ACP session ID is denied `wrong_session`.
+- An approved `session/request_permission` never authorizes a later `fs/*` or `terminal/*` call: each one runs the chain on its own. The tool call's title, content and options are the agent's words.
+- **Ask.** The host holds the request, writes the ask to the store, publishes `ai.session.asked`, and waits up to `ask_timeout` (5 min). No answer: deny (`Handler: timeout`). At most 4 asks may wait per session (`too_many_asks`), and at most 30 asks a minute (`rate`): more are denied.
+- **Answering `session/request_permission`.** agentflow chooses by `kind`, never by `name`. Allow selects the first option with kind `allow_once`; with none, it cannot allow, and the ask shows only Reject. Deny selects `reject_once`, else `reject_always`, else answers `{"outcome":"cancelled"}`. agentflow never selects `allow_always`: the agent stores remembered decisions with a scope agentflow cannot see or bound (decision 5).
+- **Answering `fs/*` and `terminal/create`.** Allow: agentflow does it and answers with the result. Deny: `-32001` with the verdict code.
+- **Audit.** Every resolved request writes one `Gate.Audit` line: session, kind, tool kind, the worktree-relative path or the program name (clamped to 256 bytes), decision, handler, code and who answered. Never file contents, arguments beyond the program name, or env values.
+
+### Phase 7 file access (lane 7.2)
+
+All file work goes through `os.Root` (standard library since Go 1.24; `go.mod` is 1.26), opened once per session at the worktree root's resolved path. Its documented behaviour: methods "can only access files and directories beneath a root directory", "will follow symbolic links, but symbolic links may not reference a location outside the root", and do not prevent crossing file system boundaries, bind mounts, `/proc` files or device files.
+
+For each path, in order (first failure decides; codes in brackets):
+
+1. Absolute and clean (`relative`). `ReadTextFileRequest.line` and `limit` are used as given.
+2. Lexically inside the worktree root, compared by path component after resolving the root itself (`outside_worktree`). On macOS and Windows the comparison ignores case.
+3. No component equal to `.git`, ignoring case (`git_dir`). The `.git` file of a linked worktree and the common git directory are never readable or writable.
+4. Windows: no component with `:` (alternate data streams), a trailing dot or space, or a reserved device name (`name`).
+5. No directory on the way below the root holds a `.git` entry (`nested_repository`): a submodule or a nested clone is another repository.
+6. The operation runs through the `os.Root`, which refuses a link that leaves the root at the moment of use (`outside_worktree`), so a link swapped in after the checks above still cannot escape.
+7. Reads: a regular file (`not_regular`), at most 4 MiB (`too_large`), valid UTF-8 (`not_text`). Writes: content at most 4 MiB (`too_large`); the final component is not a symbolic link (`link`); an existing file has one link only, on Unix (`hardlink`: a hard link could point at a file outside the worktree); parents are created inside the root (0755), the file keeps its mode or gets 0644, and the content is written to a temporary file in the same directory, then renamed through the root.
+
+**Control files** (writes always ask a person, `PersonOnly`, reason `control_file`; `aisession.ControlFiles`), matched on the worktree-relative path, ignoring case on macOS and Windows: `.agentflow/**`, `.claude/**`, `.mcp.json`, `.codex/**`, `.gemini/**`, `.cursor/**`, `.vscode/**`, `.idea/**`, `.githooks/**`, `.husky/**`, `.github/workflows/**`, `.github/actions/**`, `.envrc`, `.pre-commit-config.yaml`, `lefthook.yml`, and `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` at any depth. These are the files that control execution or approval, which the ACP file-system page says a client should ask about.
+
+**Secret files** (reads always ask, `PersonOnly`, reason `secret_file`; `aisession.SecretFiles`): `.env` and `.env.*` at any depth, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `.npmrc`, `.pypirc`, `.netrc`. Reading them would send their content to the model's provider.
+
+A personal rule can change neither list. A repository rule can add to the ask list (`repo:ai.permissions.ask`).
+
+### Phase 7 terminals (lane 7.2)
+
+- **No shell.** agentflow starts `Command.Resolved` with `Args` directly, in its own process group (Unix `Setpgid`), with the terminal environment. A bare `command` is looked up on the session PATH; a path with a separator is resolved against `cwd`. A program inside the worktree (`./gradlew`, `bin/tool`) is repository code: `PersonOnly`, reason `repository_program`.
+- **Shells and wrappers** (recognized by `harnessdef.LauncherName`, so versioned names such as `python3.12` count; `sh`, `bash`, `zsh`, `fish`, `dash`, `ksh`, `cmd`, `powershell`, `pwsh`, `env`, `xargs`, `nohup`, `timeout`, `nice`, `time`, `script`, interpreters with `-c` or `-e`): the never-list and the boundary still read the command inside them (`boundary.SimpleCommands`, which is a heuristic), and only a person may allow them (`PersonOnly`). `sudo`, `doas`, `su`, `pkexec` are denied (`privilege`).
+- **The session never-list** (`aisession.NeverList`, in addition to `policy.ForbiddenWith`): any `agentflow` invocation except the read-only commands `context`, `scope`, `ac`, `lint-msg`, `docs search`, `docs get`, `policy explain`, `version` and `ai harnesses` without `--probe` is denied (`agentflow_in_session`). This covers `ai run`, `ai respond`, `ai cancel`, `ai host`, `delegate`, `promote`, `plugin`, `config`, `policy approve`, `approval`, `mcp`, `ui`, `update`, `install`, `login` and every write. It finds `agentflow` the way `policy.changesPlugins` does (by program name, the plugin launcher, a cached build, `go run`).
+- **agentflow's own folders** (`agentflow_home`, in the session never-list, so a person's rule cannot allow it): a terminal is denied when its program, any argument, its `cwd` or any agent `env` value names a path under the agentflow home, the console registry `~/.agentflow-ui`, or the session store. The check compares each word, and each `NAME=value` and `--flag=value` part, after expanding `~`, `$HOME`, `${HOME}`, `$AGENTFLOW_HOME` and `${AGENTFLOW_HOME}` (with the parent's real values, and the account home), cleaning `..`, resolving the path relative to `cwd` when it is relative, and resolving links where the path exists; it matches by path component against both the given and the resolved forms of those three folders. It is a text heuristic like `boundary.SimpleCommands`: a path assembled at run time, a glob, a relative path through a link created later, or a script file can evade it. Shells and wrappers, the usual way to build such a path, are already person-only. `fs/*` is covered by the worktree boundary instead.
+- **Agent `env`.** At most 32 entries, each value at most 4 KiB with no NUL. A name the phase 6 rules refuse for `config_env` (loading and trust names, credential-like names, `AGENTFLOW_*`, `DEVFLOW_*`), or `PATH`, `HOME`, `SHELL`, `TMPDIR`, `GIT_CONFIG*`, `GIT_SSH*`, `GIT_EXEC_PATH`, `GIT_DIR`, `GIT_WORK_TREE`, `GIT_ASKPASS`, `SSH_ASKPASS`, denies the whole request (`env`). Rules match the full line and the env names, as the ACP terminal page asks.
+- **Output.** stdout and stderr together, kept up to the agent's `outputByteLimit` (default 256 KiB, at most 1 MiB), truncated from the start at a character boundary (the spec's rule). Terminal control sequences are removed before the output reaches the transcript, the projection or a person's terminal; the agent gets the bytes it would get from a pipe.
+- **Lifetime.** At most 4 terminals at once and 64 per session (`too_many_terminals`). `terminal/kill` and `terminal/release` kill the process group; release frees the ID. When the session ends, every terminal's group is killed. Windows kills only the child (phase 5 decision 9; open question 12).
+
+### Phase 7 tool calls the harness did not ask about (lane 7.2)
+
+The host follows every `tool_call` and `tool_call_update`. A tool call is **unasked** when it reaches `in_progress`, `completed` or `failed` with kind `edit`, `delete`, `move`, `execute` or `fetch`, no `session/request_permission` named its `toolCallId`, none of its content is a terminal agentflow started, and the chain would not have allowed the equivalent request (built from its kind and locations).
+
+- It is always recorded: an `unasked` item in the transcript, the counter, and the tool call marked on the panel.
+- When any of its locations is outside the worktree, in `.git`, or a control file, the host cancels the session (`unasked`), whatever the setting.
+- Otherwise `personal:ai.sessions.unasked` decides: `warn` (default; owner decision 6) or `cancel`.
+- A harness can also act without reporting a tool call at all. agentflow cannot see that. So when a session ends, the host records the worktree's changed paths (`git status --porcelain=v1 -z`, at most 200, worktree-relative) in `session.json` as `changed_files`, and `ai status` and the panel show them.
+
+### Phase 7 who may start a session and who may answer
+
+**The requester is set by the calling surface, never by an input field** (phase 6 rule): the console's handlers pass `person`; the CLI passes `person` only with a terminal on stdin, `app.AgentEnvironment() == ""` and no `AGENTFLOW_ACP_SESSION`; every MCP call passes `agent`; a session's own MCP server passes `session`. `aisession.WithRequester(ctx, Requester)` carries it.
+
+```go
+type Requester struct {
+    Kind    string // person, agent, session
+    Surface string // terminal, console, cli, mcp
+    Client  string // the app client: "cli", "claude", "ai-session:<id>"
+    Session ID     // the caller's own session when Kind is session, else ""
+}
+```
+
+**Starting a session:**
+
+| Who | How | Allowed | Confirmation | Then |
+| --- | --- | --- | --- | --- |
+| A person | `ai run` in a terminal | yes | always: the full summary, y/N (`--yes` accepted) | the person's own policy for the session's requests |
+| An agent | `agentflow_ai_run`, or `ai run` in an agent session | yes, unless a person turned `personal:ai.sessions.agent_start` off (default on; owner decision 4) | always `needs_confirmation`, under every autonomy level (`RequireConfirmation`), relayed by the agent that asks (below) | detached; the `confirm` ceiling: every request except reads inside the worktree asks a person |
+| A session | its MCP server, or `agentflow` in its terminal | never (`nested`): the session MCP server has no `ai_run` tool, the session never-list denies it in terminals, and `ai.run` refuses a requester of kind `session` or a process with `AGENTFLOW_ACP_SESSION` | | |
+| A plugin | | never: no `ai.*` command is in `manifest.InvocableCommands`, and no `ai.**` type is in `manifest.SubscribableFamilies` | | |
+| The console or the daemon | | never in phase 7 (owner decision 10) | | |
+
+The running-session cap ("Phase 7 limits") is counted in the store under its lock, so it holds whoever asks and whatever a process says about itself.
+
+**The confirmation of an agent's start is relayed by that agent.** `needs_confirmation` returns a summary and a confirm token to the agent that asked; its client is expected to show the summary to the person and wait. An agent that ignores this and applies the token itself starts the session without the person. What still holds then: the session runs only in that agent's own worktree, under the `confirm` ceiling (every write, terminal and non-read permission asks a person), under the answer rules below (no agent can allow), with depth 1 and the store cap. What does not hold: the harness's own tools, which agentflow cannot see, run with the person's sign-in. A person who does not want that turns `agent_start` off.
+
+**Answering an ask** (`aisession.Answer`, the one place these rules live):
+
+| Who | Allow once | Reject | Cancel the session |
+| --- | --- | --- | --- |
+| A person in the console (AI panel) | yes | yes | yes |
+| The person at the foreground `ai run` terminal | yes | yes | yes (Ctrl-C) |
+| A person: `ai respond --allow` in a terminal | yes, under the person-only rules below | yes | `ai cancel` |
+| An agent: `agentflow_ai_respond`, or `ai respond` in an agent session | **no** (`needs_person`; owner decision 5) | yes | yes |
+| The session itself (its MCP server, its terminals, `AGENTFLOW_ACP_SESSION`) | no (`self_answer`) | no (`self_answer`) | no |
+| A plugin, the daemon on its own | no | no | no |
+| Policy (rules, the gate) | yes, in the chain, before anyone is asked | yes | limits only |
+
+**Why an agent cannot allow its own session's requests**, layer by layer. No single layer is relied on:
+
+1. No MCP tool can allow. `agentflow_ai_respond` accepts only `reject`.
+2. The session's own MCP server is opened with the reserved client prefix `ai-session:` (lane 7.3, `policy.SessionClientPrefix`): `policy.NewGate` and `app.Open` refuse it, so only `app.OpenSession` makes such a client, and `aisession.Answer` refuses any requester of kind `session` and any `ai-session:` client.
+3. `ai respond --allow` follows the `plugin approve` rules (phase 5): it refuses agent environments (`app.AgentEnvironment`, which lane 7.3 extends to `AGENTFLOW_ACP_SESSION`), refuses a non-terminal stdin, ignores `--yes`, shows the whole ask and asks y/N.
+4. The pre-bash never-list (`policy.ForbiddenAlways`, lane 7.3) blocks agents from running `agentflow ai respond ... --allow` in every mode, `--convention-only` included.
+5. The session never-list denies every `agentflow ai` command in the session's terminals.
+6. An allow answer must carry `HMAC-SHA256(answer.key, fingerprint)`, where `answer.key` is a random 32-byte key in the session directory (0600) and `fingerprint` is the SHA-256 of the canonical ask. Writing an answer file is not enough.
+7. Every answer is bound to one ask's fingerprint and expiry, the first answer wins (`O_EXCL`), allow means `allow_once`, and every answer is audited and shown on the panel with who gave it.
+
+**The last layer is a same-user limit.** A process that deliberately reads `answer.key` and computes the HMAC, or drives a pseudo-terminal to pass the person check, can forge a person's allow. agentflow cannot distinguish processes of the same user. These layers stop agent use and prompt-injected attempts; they do not stop a deliberately hostile binary, which ACP itself places out of scope.
+
+### Phase 7 what a repository can influence
+
+**Through agentflow:** only tightening, in the repository layer.
+
+| Key | Effect | Loosens when |
+| --- | --- | --- |
+| `repo:ai.sessions.disabled` (toggle) | `ai run` refuses in this repository (`repo_disabled`) | turned off (`shrink`) |
+| `repo:ai.permissions.ask` (chips, worktree-relative globs) | requests on these paths always ask a person | an entry is removed (`shrink`) |
+| `repo:ai.permissions.deny` (chips, worktree-relative globs) | requests on these paths are denied | an entry is removed (`shrink`) |
+
+A repository cannot name a harness, change a harness's command or arguments, add environment variables, add MCP servers, set a prompt or a mode, allow anything, raise a limit, or start a session. PATH entries inside its worktrees are dropped from the session PATH, and a `HOME` or configuration directory inside it stops the start (`unsafe_environment`). Phase 6 accepted and ignored a repository `ai:` key; phase 7 reads exactly the three keys above from it and still ignores the rest.
+
+**Through the harness itself:** the harness starts in the worktree, so it loads that repository's own agent configuration, as it would if the person started it there: `CLAUDE.md` and `AGENTS.md`, `.claude/settings.json` (hooks and permission rules), `.mcp.json` (MCP servers), `.codex/`, `.gemini/`, `.cursor/`. A hostile repository can therefore make the harness run code when the session starts, before any request reaches agentflow. agentflow does not read, approve or pass any of it. What it does: `ai run`'s confirmation lists every control file that differs from the merge base with the repository's default branch, or is untracked (owner decision 7: warn and list them).
+
+**Through the content it holds:** repository text reaches the model through the harness's own reads. agentflow adds no repository text to the prompt in phase 7.
+
+### Phase 7 limits
+
+| Limit | Value | Key |
+| --- | --- | --- |
+| Running sessions per user | 2 (1 to 4) | `personal:ai.sessions.max_running` |
+| Running sessions per worktree | 1 | |
+| Starts per user | 10 an hour | |
+| Nesting | none: a session cannot start a session | |
+| Turn time | 30 min (1 min to 4 h) | `personal:ai.sessions.max_duration` |
+| Idle (nothing from the agent, no ask waiting) | 10 min (1 min to 1 h) | `personal:ai.sessions.idle_timeout` |
+| Ask waits for a person | 5 min (30 s to 30 min), then deny | `personal:ai.sessions.ask_timeout` |
+| Asks waiting per session | 4 | |
+| Asks per session | 30 a minute | |
+| Agent requests in flight | 16 | |
+| Frame | 8 MiB | |
+| File read, file write | 4 MiB each | |
+| Terminals | 4 at once, 64 per session | |
+| Terminal output kept | the agent's limit, default 256 KiB, at most 1 MiB | |
+| Transcript | 32 MiB per session; past it, text is dropped (`transcript_truncated`) and counting goes on | |
+| `initialize`, `session/new`, `set_mode` | 30 s each | |
+| Cancel | 10 s for the `cancelled` stop reason, then stop | |
+| Stop | close stdin, 2 s, kill the process group | |
+| Host heartbeat | every 5 s; lost after 30 s | |
+
+- **The caps are counted in the store** (`<home>/ai/sessions.lock`, `internal/filelock`): `ai run` lists the records that are not `ended` and whose heartbeat is fresh, and refuses past `max_running` (`limit_running`), past one per worktree (`limit_worktree`) or past 10 starts in the last hour (`limit_rate`). The check and the new record are written under one lock.
+- **Cost** (`usage_update.cost`) is agent-reported. agentflow shows it and never enforces on it alone (decision 10). The time limits are what bound spending. No cost cap (owner decision 8, as recommended).
+- Memory and CPU are not limited (phase 5 decision 9).
+
+### Phase 7 session store and retention (lane 7.2)
+
+```text
+<home>/ai/                          0700
+  sessions.lock                     the store lock
+  sessions/<id>/                    0700  one session; <id> is "ais_" and 32 hex characters
+    session.json                    0600  aisession.Session, replaced atomically under the lock
+    transcript.jsonl                0600  aisession.Item lines, appended by the host only
+    asks/<ask>.json                 0600  the held request, its fingerprint and expiry
+    asks/<ask>.answer.json          0600  the first answer, created with O_EXCL
+    answer.key                      0600  32 random bytes
+    host.log                        0600  the detached host's and the harness's stderr; 1 MiB, one old file
+    tmp/                            0700  TMPDIR; removed when the session ends
+    home/                           0700  only with ai.sessions.home: isolated
+```
+
+**What is stored.** The transcript holds the prompt, the agent's messages and thoughts, tool calls with their content (diffs included), plans, usage, mode changes, asks and answers, terminal command lines and the last 64 KiB of each terminal's output, and the unasked and limit records. Before anything is stored, text is sanitized (control and bidirectional characters removed, terminal sequences neutralized) and passed through a best-effort redaction of known token shapes (`gh[pousr]_…`, `github_pat_…`, `sk-…`, `sk-ant-…`, `AKIA…`, `xox[abprs]-…`, PEM private key blocks) to `[redacted]`. Redaction is a help, not a guarantee: **transcripts may hold secrets**, and the store's modes and retention are what protect them.
+
+**What is never stored:** environment values, the MCP server's env, the content of a file agentflow read for the agent (only its path and size), the content agentflow wrote (only path, size and SHA-256; the diff the agent reported is in its tool call), `answer.key` outside its file, and anything in the repository's event store or `.git`.
+
+**Retention** (pruned by every `ai run` and by the host when it ends): a session that ended more than `personal:ai.sessions.keep_days` ago (7, 1 to 90) is deleted; at most 50 ended sessions and 200 MiB are kept, oldest first; a running session is never deleted. With `personal:ai.sessions.keep_transcripts` off, the transcript, asks, `host.log` and `answer.key` are deleted when the session ends and only `session.json` stays. These are the recommended defaults (owner decision 8).
+
+```go
+// Session is session.json.
+type Session struct {
+    ID          ID         `json:"id"`
+    Harness     string     `json:"harness"`
+    HarnessName string     `json:"harness_name"`
+    Identity    string     `json:"identity"` // harness.Found.Identity at start
+    Repo        string     `json:"repo"`     // bus repository ID
+    WorktreeID  string     `json:"worktree_id"`
+    Worktree    string     `json:"worktree"` // absolute; shown with "~"
+    Branch      string     `json:"branch,omitempty"`
+    State       State      `json:"state"`
+    Code        string     `json:"code,omitempty"`
+    StartedBy   Requester  `json:"started_by"`
+    Ceiling     string     `json:"ceiling,omitempty"` // "confirm" for an agent's session
+    Home        string     `json:"home"`              // real, isolated
+    EnvNames    []string   `json:"env_names"`         // names passed to the harness, never values
+    MCP         bool       `json:"mcp"`               // agentflow's MCP server passed
+    AgentSession string    `json:"agent_session,omitempty"` // the ACP sessionId, sanitized, 128 bytes
+    Mode        string     `json:"mode,omitempty"`
+    Host        HostInfo   `json:"host"`
+    CreatedAt   time.Time  `json:"created_at"`
+    EndedAt     *time.Time `json:"ended_at,omitempty"`
+    Usage       *Usage     `json:"usage,omitempty"`
+    Counters    Counters   `json:"counters"`
+    ChangedFiles []string  `json:"changed_files,omitempty"`
+}
+
+type HostInfo struct {
+    PID       int       `json:"pid"`
+    Mode      string    `json:"mode"` // foreground, detached
+    StartedAt time.Time `json:"started_at"`
+    Heartbeat time.Time `json:"heartbeat"`
+    HarnessPID int      `json:"harness_pid,omitempty"`
+}
+
+type Usage struct {
+    Used, Size   uint64
+    CostAmount   float64 `json:"cost_amount,omitempty"`
+    CostCurrency string  `json:"cost_currency,omitempty"`
+}
+
+type Counters struct {
+    Updates, ToolCalls, Asks, Allowed, Denied, Unasked, Terminals int
+    BytesRead, BytesWritten, TranscriptBytes                        int64
+}
+
+// Item is one transcript line.
+type Item struct {
+    Seq      int64           `json:"seq"`
+    Time     time.Time       `json:"time"`
+    Kind     string          `json:"kind"` // prompt, message, thought, tool, plan, usage, mode, ask, answer, terminal, file, unasked, limit, info, unknown
+    Text     string          `json:"text,omitempty"` // sanitized, at most 64 KiB
+    ToolCall string          `json:"tool_call,omitempty"`
+    Data     json.RawMessage `json:"data,omitempty"` // the kind's view, sanitized
+}
+```
+
+The lifecycle constants (`State*`, end codes), `Transitions`, `Ask`, `Answer`, the `Store` and `Host` interfaces and `Manager` (start, status, answer, cancel, prune) are in `types.go` too. Lane 7.2 writes them from the rules in this section; their names follow the tables here.
+
+### Phase 7 events (lane 7.2)
+
+| Type | Scope | Global | Transient | Payload | Produced when |
+| --- | --- | --- | --- | --- | --- |
+| `ai.session.started` | worktree | never | no | `AISessionStarted{session, harness, started_by, client, ceiling}` | the record is written |
+| `ai.session.changed` | worktree | never | no | `AISessionChanged{session, state, previous, code}` | every transition |
+| `ai.session.output` | worktree | never | yes | `AISessionOutput{session, seq, items, kinds}` | new transcript items; at most 4 a second per session (coalesced) |
+| `ai.session.asked` | worktree | never | no | `AISessionAsked{session, ask, kind, tool_kind, reason}` | an ask is held for a person |
+| `ai.session.answered` | worktree | never | no | `AISessionAnswered{session, ask, decision, by, handler, code}` | an ask is answered, times out or is cancelled |
+| `ai.session.ended` | worktree | never | no | `AISessionEnded{session, code, duration_ms, tool_calls, asks, allowed, denied, unasked}` | the session ends |
+
+- They go to the session's repository store, tagged with its worktree, through `notifysock.Deliver` (the phase 3 rule for `op.*`: append while no daemon owns the store, send over the socket while one does, drop when no store exists). `ai.session.**` becomes a socket type (`notifysock.socketTypes`, lane 7.2). Source `cli`.
+- **Payloads carry IDs, codes, counts and kinds only**: no prompt, message, title, path, command, option name, cost or agent text. The text stays in the session store in the agentflow home (0600) and reaches the console only through the projection's frames. So no session text enters a repository's event store.
+- A socket type can be sent by any local process, so the projection never trusts a payload: it reads the session store and draws asks only from `asks/*.json` that the store's host wrote.
+- Not audited by the Wire Tap (`bus.AuditedFamilies` stays empty): the host writes its own audit lines. Not op events, so no `TestEveryWriteOperationEmitsEvents` change for them.
+
+### Phase 7 AI projection (lane 7.2)
+
+| Projection | Key | Topics | Reads | State |
+| --- | --- | --- | --- | --- |
+| `ai` | repository | `<repo>/*/ai.session.**` | the session store of the daemon's agentflow home: the sessions whose `repo` is this repository | `AIState` |
+
+`internal/webui/projection_ai_state.go`:
+
+```go
+const ProjectionAI = "ai"
+
+// AIState is the "ai" state: this repository's sessions, newest first.
+type AIState struct {
+    Sessions []AISession `json:"sessions"` // at most 20
+    Running  int         `json:"running"`  // across the user
+    MaxRunning int       `json:"max_running"`
+}
+
+type AISession struct {
+    ID          string     `json:"id"`
+    Harness     string     `json:"harness"`
+    HarnessName string     `json:"harness_name"`
+    Worktree    string     `json:"worktree"` // "~/..."
+    WorktreeID  string     `json:"worktree_id"`
+    Branch      string     `json:"branch,omitempty"`
+    State       string     `json:"state"`
+    Code        string     `json:"code,omitempty"`
+    StartedBy   string     `json:"started_by"` // person, agent
+    Client      string     `json:"client,omitempty"`
+    Ceiling     string     `json:"ceiling,omitempty"`
+    Home        string     `json:"home"`
+    CreatedAt   time.Time  `json:"created_at"`
+    EndedAt     *time.Time `json:"ended_at,omitempty"`
+    Prompt      string     `json:"prompt"` // at most 4 KiB
+    Usage       *AIUsage   `json:"usage,omitempty"`
+    Plan        []AIPlanEntry `json:"plan,omitempty"`
+    Items       []AIItem   `json:"items"`     // the last 200 items or 256 KiB, oldest first
+    Truncated   bool       `json:"truncated"` // older items exist
+    ToolCalls   []AIToolCall `json:"tool_calls"` // the last 50
+    Terminals   []AITerminal `json:"terminals,omitempty"`
+    Asks        []AIAsk    `json:"asks,omitempty"` // waiting only
+    ChangedFiles []string  `json:"changed_files,omitempty"`
+    Counters    aisession.Counters `json:"counters"`
+}
+
+type AIUsage struct {
+    Used         uint64  `json:"used"`
+    Size         uint64  `json:"size"`
+    CostAmount   float64 `json:"cost_amount,omitempty"`
+    CostCurrency string  `json:"cost_currency,omitempty"`
+    // CostReported is always the agent's own figure.
+    CostReported bool    `json:"cost_reported"`
+}
+
+type AIPlanEntry struct {
+    Content  string `json:"content"`
+    Priority string `json:"priority"`
+    Status   string `json:"status"`
+}
+
+type AIItem struct {
+    Seq      int64     `json:"seq"`
+    Time     time.Time `json:"time"`
+    Kind     string    `json:"kind"` // as aisession.Item.Kind
+    Text     string    `json:"text,omitempty"`
+    ToolCall string    `json:"tool_call,omitempty"`
+}
+
+type AIToolCall struct {
+    ID        string   `json:"id"`
+    Title     string   `json:"title"` // the agent's words
+    Kind      string   `json:"kind"`
+    Status    string   `json:"status"`
+    Locations []string `json:"locations,omitempty"` // worktree-relative, or "~/..." outside
+    Diffs     []AIDiff `json:"diffs,omitempty"`
+    Terminal  string   `json:"terminal,omitempty"`
+    Asked     bool     `json:"asked"`
+    Unasked   bool     `json:"unasked"`
+}
+
+type AIDiff struct {
+    Path    string `json:"path"`
+    OldText string `json:"old_text,omitempty"` // at most 64 KiB each
+    NewText string `json:"new_text"`
+    Cut     bool   `json:"cut,omitempty"`
+}
+
+type AITerminal struct {
+    ID      string `json:"id"`
+    Line    string `json:"line"` // POSIX-quoted command
+    Cwd     string `json:"cwd"`  // worktree-relative
+    Output  string `json:"output"` // the last 64 KiB, sequences removed
+    Exit    *int   `json:"exit,omitempty"`
+    Signal  string `json:"signal,omitempty"`
+}
+
+type AIAsk struct {
+    ID          string   `json:"id"`
+    Kind        string   `json:"kind"`
+    ToolKind    string   `json:"tool_kind,omitempty"`
+    Title       string   `json:"title,omitempty"` // the agent's words
+    Paths       []string `json:"paths,omitempty"`
+    Line        string   `json:"line,omitempty"`
+    Cwd         string   `json:"cwd,omitempty"`
+    EnvNames    []string `json:"env_names,omitempty"`
+    Options     []AIOption `json:"options,omitempty"`
+    Reason      string   `json:"reason"`
+    CanAllow    bool     `json:"can_allow"`
+    ExpiresAt   time.Time `json:"expires_at"`
+    Fingerprint string   `json:"fingerprint"`
+}
+
+type AIOption struct {
+    ID   string `json:"id"`
+    Name string `json:"name"` // the agent's words
+    Kind string `json:"kind"`
+}
+```
+
+- Registered through `projectionExtensions` from `projection_ai.go`; the daemon side starts from a `runtimeExtension` in `stream_runtime_ai.go` (the phase 5 precedent: `stream_runtime.go` is not edited). In a test binary `newAIOptions` returns no store unless a test sets one.
+- Paths under the OS home are shown as `~/...`. Every string is the store's sanitized text.
+- **Requests from the page** (`internal/webui/ai.go`, under the console's session, origin and request-header checks; route lines in `server.go`):
+
+| Route | Body | Does | Answer |
+| --- | --- | --- | --- |
+| `POST /api/ai/respond` | `{"session", "ask", "decision": "allow" \| "reject", "fingerprint"}` | invokes `ai.respond` through the daemon's Invoker with `Requester{person, console}`; at most 30 a minute per console | `202 {}` |
+| `POST /api/ai/cancel` | `{"session"}` | invokes `ai.cancel` the same way | `202 {}` |
+
+  The answers carry no session data; results arrive over the stream. The console computes the allow HMAC from the session's `answer.key`; the page never sees the key. Until lane 7.3 merges, lane 7.2's tests register fake Specs (phase 6 precedent).
+
+### Phase 7 configuration keys (lane 7.2)
+
+Lane 7.2 adds to `config.UserAI` (`internal/config/ai.go`) and adds `config.Repo.AI`. Every key is optional, so this is backwards compatible.
+
+```go
+type UserAI struct {
+    Harnesses   UserHarnesses     `yaml:"harnesses,omitempty"`
+    Sessions    UserAISessions    `yaml:"sessions,omitempty"`
+    Permissions UserAIPermissions `yaml:"permissions,omitempty"`
+}
+
+type UserAISessions struct {
+    AgentStart      *bool             `yaml:"agent_start,omitempty"`      // nil means on
+    Home            string            `yaml:"home,omitempty"`             // real (default), isolated
+    MaxRunning      *int              `yaml:"max_running,omitempty"`
+    MaxDuration     *time.Duration    `yaml:"max_duration,omitempty"`
+    IdleTimeout     *time.Duration    `yaml:"idle_timeout,omitempty"`
+    AskTimeout      *time.Duration    `yaml:"ask_timeout,omitempty"`
+    Unasked         string            `yaml:"unasked,omitempty"`          // warn (default), cancel
+    AgentflowMCP    *bool             `yaml:"agentflow_mcp,omitempty"`    // nil means on
+    KeepTranscripts *bool             `yaml:"keep_transcripts,omitempty"` // nil means on
+    KeepDays        *int              `yaml:"keep_days,omitempty"`
+    Modes           map[string]string `yaml:"modes,omitempty"`            // harness ID -> session mode ID
+}
+
+type UserAIPermissions struct {
+    Rules map[string]AIRule `yaml:"rules,omitempty"`
+}
+
+// AIRule matches one request kind. Match is a worktree-relative slash glob
+// for fs_read and fs_write, a program name glob (the resolved base name) for
+// terminal, and a tool kind for tool.
+type AIRule struct {
+    Kind     string `yaml:"kind"`     // fs_read, fs_write, terminal, tool
+    Match    string `yaml:"match"`
+    Decision string `yaml:"decision"` // allow, ask, deny
+}
+
+type RepoAI struct {
+    Sessions struct {
+        Disabled bool `yaml:"disabled,omitempty"`
+    } `yaml:"sessions,omitempty"`
+    Permissions struct {
+        Ask  []string `yaml:"ask,omitempty"`
+        Deny []string `yaml:"deny,omitempty"`
+    } `yaml:"permissions,omitempty"`
+}
+```
+
+`config.Field` metadata in group `ai` ("AI harnesses" is renamed "AI harnesses and sessions"):
+
+| ID | Widget | Default | Limits | Label | Applies | Loosens |
+| --- | --- | --- | --- | --- | --- | --- |
+| `personal:ai.sessions.agent_start` | `toggle` | true | | Let agents start sessions | `live` | `enable` (off to on or unset) |
+| `personal:ai.sessions.home` | `select` real / isolated | real | | Session home folder | `next-run` | `enable` (isolated to real) |
+| `personal:ai.sessions.max_running` | `stepper` | 2 | 1 to 4 | Sessions at once | `live` | `enable` (raised) |
+| `personal:ai.sessions.max_duration` | `duration` | 30m | 1m to 4h | Session time limit | `next-run` | `enable` (raised) |
+| `personal:ai.sessions.idle_timeout` | `duration` | 10m | 1m to 1h | Idle time limit | `next-run` | |
+| `personal:ai.sessions.ask_timeout` | `duration` | 5m | 30s to 30m | Time to answer a request | `next-run` | |
+| `personal:ai.sessions.unasked` | `select` warn / cancel | warn | | When the harness acts without asking | `next-run` | `enable` (cancel to warn) |
+| `personal:ai.sessions.agentflow_mcp` | `toggle` | true | | Give the harness agentflow's read-only tools | `next-run` | `enable` |
+| `personal:ai.sessions.keep_transcripts` | `toggle` | true | | Keep session transcripts | `live` | |
+| `personal:ai.sessions.keep_days` | `stepper` | 7 | 1 to 90 | Days to keep sessions | `live` | |
+| `personal:ai.sessions.modes` | `kv-table`, key = harness ID, one `text` column `mode` | {} | 64 | Session mode per harness | `next-run` | |
+| `personal:ai.permissions.rules` | `kv-table`, key = rule name; columns `kind` (`select`), `match` (`text`), `decision` (`select`) | {} | 64 | Session permission rules | `live` | `enable` (an `allow` added, a `deny` or `ask` removed or changed) |
+| `repo:ai.sessions.disabled` | `toggle` | false | | Turn sessions off in this repository | `live` | `shrink` |
+| `repo:ai.permissions.ask` | `chips` | [] | 64 | Always ask for these paths | `live` | `shrink` |
+| `repo:ai.permissions.deny` | `chips` | [] | 64 | Always deny these paths | `live` | `shrink` |
+
+- There is no credential setting: the definition's verified `credential_env` names pass when set (owner decision 3).
+- Every label gets a one-sentence description in the table file (lane 7.2 writes them in the phase 6 style). The loosening cases are code in `internal/settings/checks.go` (phase 6 rule), compared on effective values.
+- The save's check chain validates rules (`kind`, `decision`, a glob that compiles; an `allow` for `tool` with `execute`, `switch_mode` or `other` is an error: those are person-only) and modes.
+- New autonomy actions (lane 7.2, `internal/config/autonomy.go`): `ai.run` (local), `ai.respond` (local), `ai.cancel` (local), `ai.fs.read` (read), `ai.fs.write` (local), `ai.terminal` (local), `ai.fetch` (remote), `ai.permission` (local). `ai.run`, `ai.terminal`, `ai.fetch` and `ai.permission` join the mandatory-confirmation list there (with `plugin.install`), so `auto` resolves to `confirm` for them: only a person's rule or a person's answer allows a terminal, a fetch or an unknown tool.
+- `TestEveryConfigFieldHasControl` covers every field and column.
+
+### Phase 7 agentflow's MCP server in a session (lane 7.3)
+
+When `ai.sessions.agentflow_mcp` is on, `session/new` carries one MCP server:
+
+```json
+{"name": "agentflow", "command": "<absolute path of the agentflow binary>", "args": ["mcp", "--session", "<session ID>"], "env": []}
+```
+
+- The command is the host's own binary (`os.Executable`, links resolved). If it is inside the session's worktree (a development build there, which the agent could change), no MCP server is passed (`mcp_skipped`).
+- `env` is empty: no value, credential or token is passed. The server inherits the harness's environment.
+- `agentflow mcp --session ID` (additive to the `agentflow mcp --client NAME` contract) opens `app.OpenSession(ctx, dir, id)`: client `ai-session:<id>`, refused unless the session record exists, is not `ended`, and its worktree contains `dir`. It registers **only** these read-only tools, each also checked to be `Class: read` in the registry: `agentflow_context`, `agentflow_scope_check`, `agentflow_ac_checklist`, `agentflow_commit_validate`, `agentflow_commit_context`, `agentflow_docs_search`, `agentflow_docs_get`, `agentflow_policy_explain`. Nothing else, not `agentflow_ai_*` (owner decision 11).
+- The `ai-session:` gate refuses every operation that is not a read (`session_read_only`), as a second layer behind the allowlist.
+- This is not a boundary: the harness can start `agentflow` itself. The session never-list denies that in agentflow-run terminals; in the harness's own shell, `AGENTFLOW_ACP_SESSION` makes `app.Open` treat the process as a session client (lane 7.3), which refuses writes, `ai run` and answers. A harness that strips the variable falls back to an ordinary agent client: it still cannot allow an ask or start a session past the store cap, and its writes go through the gate as any agent's do.
+
+### Phase 7 commands (lane 7.3)
+
+Lane 7.3 adds these Specs in `internal/command/ops/ai_sessions.go`, calling `internal/app/ai_sessions.go`, which calls `aisession.Manager`. They are compatibility contracts from the release that ships them.
+
+| Spec | CLI | MCP tool | Class, action | Gate | Events | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ai.run` | `ai run --harness ID [--detach] [--yes] [--json] PROMPT` (`-` reads stdin) | `agentflow_ai_run` | `local`, `ai.run` | `GateByInvoker`, `RequireConfirmation`, `AuditByInvoker` | worktree | `{session, state, harness, worktree, detached, next}` |
+| `ai.status` | `ai status [SESSION] [--follow] [--since SEQ] [--json]` | `agentflow_ai_status` (read-only) | `read` | none | none | `{sessions}` or `{session, items, next_seq}` |
+| `ai.respond` | `ai respond SESSION ASK (--allow \| --reject) [--json]` | `agentflow_ai_respond` | `local`, `ai.respond` | in Run; `--allow` always confirmed by a person (below) | worktree | `{session, ask, decision, state}` |
+| `ai.cancel` | `ai cancel SESSION [--yes] [--json]` | `agentflow_ai_cancel` | `local`, `ai.cancel` | `GateByInvoker`, `AuditByInvoker` | worktree | `{session, state}` |
+
+- **Tool inputs.** `agentflow_ai_run`: `{harness, prompt, confirm_token?}` (always detached; always in the MCP server's own worktree, which no input can change). `agentflow_ai_status`: `{session?, since?}`. `agentflow_ai_respond`: `{session, ask, decision}`, where `decision` must be `reject`. `agentflow_ai_cancel`: `{session, confirm_token?}`. No input names a requester, a worktree outside the server's, an environment, a limit or a ceiling.
+- **`ai.run` checks, in order** (each a refusal code with fix text): requester of kind `session` or `AGENTFLOW_ACP_SESSION` set (`nested`); an agent while a person has turned `agent_start` off (`agent_start_off`, fix: the Settings toggle); `repo:ai.sessions.disabled` (`repo_disabled`); the primary checkout (`primary_checkout`, fix: `agentflow start <task> --worktree`; owner decision 9); `harness.Locate` not ready (`not_ready`, with the harness's fix); a plugin-chosen launch field and an agent requester (`plugin_launch`: phase 6 security amendment 1); the environment checks; the store caps. Then the confirmation.
+- **The confirmation summary** lists: the harness ID, name, version, command, path (`~`), args and identity; the worktree (`~`) and branch; who starts it and the ceiling; the `HOME` kind and every variable **name** passed (never a value), with the harness's `credential_env` names that are set called out; whether agentflow's MCP server is passed and its tools; the limits; the control files that differ from the merge base (warning); and the prompt (first 4 KiB, as text). `Spec.Describe` gives the subject `ai run <harness>` and the branch: never the prompt, which would reach `op.*` events that plugins can read.
+- **`ai run` output.** Foreground: the agent's messages as they arrive, thoughts dimmed, one line per tool call with its kind, status and locations, the plan when it changes, asks as prompts (`Allow once? [y/N]` with the timeout), and at the end the stop reason, counters and changed files. All agent text has terminal sequences neutralized. `--json` and detached runs print the result object only.
+- **`ai status --follow`** reads `transcript.jsonl` from the store (no daemon needed) and prints like the foreground run, without prompts.
+- **`ai respond --allow`** (CLI only) follows the person-only rules of "who may answer": agent environments and non-terminal stdin are refused, `--yes` is ignored, it shows the whole ask (kind, paths or command line, cwd, env names, the agent's title marked as the agent's words, the options) and asks y/N, then writes the answer with the HMAC. `--reject` and `agentflow_ai_respond` need no person.
+- **Text output** of `ai status`: one line per session, `ID  HARNESS  STATE  CODE  AGE  WORKTREE`, then the waiting asks indented with their `ai respond` commands.
+- `agentflow` gains no `ai host` usage line; `ai host` refuses to run without a `starting`, unclaimed record.
+- The never-list (`policy.ForbiddenAlways`, lane 7.3) adds `agentflow ai respond ... --allow` for agents in every mode, found the way `changesPlugins` finds plugin decisions.
+- `app.AgentEnvironment` also reports `AGENTFLOW_ACP_SESSION`.
+- The plugin skill `adapters/claude-code/skills/ai/SKILL.md` gains the four commands; the `agentflow` skill lists the four tools for agents, saying that an agent can reject but never allow, and must ask the person to answer in the console.
+- `TestEveryWriteOperationEmitsEvents` lists `ai.run`, `ai.respond` and `ai.cancel`. No lane edits `parity_test.go`: the registry derives the parity rows.
+- The `ai` screen joins `agentflow_ui_open`'s screen list (`internal/webui/destination.go`, lane 7.3), so the tool golden file changes in one lane only.
+
+### Phase 7 AI panel (lane 7.4)
+
+- One page, `#ai`, from `AIState` only. The page sends only `POST /api/ai/respond` and `POST /api/ai/cancel`.
+- A list of this repository's sessions (harness, state with its code, who started it, age, worktree and branch), and the selected session: the prompt; the stream of items (messages, thoughts collapsed, tool calls with kind, status, locations, diffs and terminal output); the plan; usage, with cost labelled "reported by the harness"; changed files when ended; and **Cancel** while it runs.
+- **Permission cards** for waiting asks: the kind, the paths or the command line in full, `cwd`, env names, the reason it asks, the agent's title labelled as the agent's words, the time left, and only **Allow once** and **Reject**. **Allow once** is absent when `can_allow` is false.
+- Every agent-authored string is text, never HTML, and never Markdown rendered as HTML. Links are shown as text; nothing opens without a click, and no link with a scheme other than `https` is made clickable. Terminal output arrives with sequences removed.
+- Connection and resync states as on the other pages. Accessible in light and dark. A Fable design review before merge.
+- No start button in phase 7 (owner decision 10): the empty state shows the `agentflow ai run` command to copy.
+
+### Phase 7 test guard
+
+No test may start a real harness or a real program a session asks for (plan guardrail).
+
+- **Harness launch.** The host calls `harness.GuardPath` on the found file right before `jsonrpc.Launch`: in a test binary, a path outside `os.TempDir()` fails with `harness.ErrTestGuard` (code `test_guard`).
+- **Terminals.** In a test binary, a terminal program whose resolved path is outside `os.TempDir()` is denied `test_guard`. Tests use `harnesstest.Bin` fakes.
+- **Detached hosts.** In a test binary, `aisession` never re-executes the binary: `Options.Detach` must be set by the test (`aisessiontest.InProcessDetach`), else `ai run --detach` fails `test_guard`. No test leaves a process running.
+- **The MCP server entry.** In tests its command is the test binary; the fake agent records it and never starts it.
+- **`aisessiontest.Home(tb)`** sets `AGENTFLOW_HOME`, `HOME` and `PATH` (through `harnesstest.PATH`) to temporary directories and `CONTINUOUS_INTEGRATION=1`, and writes a `config.yml` with `auto_probe`, `sign_in_check` and `ai.sessions.agent_start` set explicitly (off unless the test turns one on with fakes on its PATH), since `agent_start` now defaults on.
+- **`make e2e` (lane 7.3).** The test-binary guard does not cover `make e2e`: it runs the real binary under `claude -p`, and the MCP server inherits `claude`'s real PATH, on which real harnesses (`claude` itself, the base of `claude-acp`) are found. With `agent_start` on by default, `scripts/e2e-claude.sh` must make it impossible for any scenario to start a real harness:
+  1. Before anything starts, it builds `fake-acp` into its temporary directory and writes its temporary `AGENTFLOW_HOME/config.yml` with `auto_probe: false`, `sign_in_check: false` (phase 6), `ai.sessions.agent_start: false`, and an override `e2e-fake` whose `command` is the fake's absolute path with `--mode=session-demo`.
+  2. It lists every harness ID with `agentflow ai harnesses --all --json` (which probes nothing while `auto_probe` is off) and writes every ID except `e2e-fake` into `ai.harnesses.disabled`, so no registry, overlay or plugin harness can be listed, probed, located or started.
+  3. Only then does it turn `auto_probe` and `agent_start` on, and run `agentflow ai harnesses --probe --id e2e-fake` itself.
+  4. Claude calls `agentflow_ai_status` (expects no sessions), `agentflow_ai_run` for `claude-acp` (expects a refusal: the harness is disabled, nothing found), and `agentflow_ai_run` for `e2e-fake` with no token (expects `needs_confirmation` with the summary). The prompt tells Claude not to apply it.
+  5. Afterwards the script asserts: `$AGENTFLOW_HOME/ai/sessions/` does not exist (nothing passed the gate); the fake's log shows only `initialize` from the probe and no `session/new`; `harnesses/cache.json` holds a record for `e2e-fake` only; and the phase 6 console-registry check still passes. Any failure fails the run. If Claude applied the token despite the prompt, only the fake could start, and the assertions fail the run.
+- Tests `TestSessionGuardRefusesRealPATH`, `TestSessionEnvironment` (the parent sets `GH_TOKEN`, `GITHUB_TOKEN`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_SECRET_ACCESS_KEY`, `SSH_AUTH_SOCK`, `CLAUDE_CODE_SESSION_ID` and `AGENTFLOW_HOME`; only the listed names reach the fake agent and its terminals) and `TestChainDeniesByDefault` (lane 7.2) are part of the gate.
+
+### Phase 7 demo and gate
+
+**The daemon collision.** The console daemon's registry is the account's `~/.agentflow-ui`, whatever `AGENTFLOW_HOME` says (phase 6 security amendment 5). A live `agentflow ui` during the demo would reach the owner's running console, with the owner's real settings and harness definitions. So the demo never starts the console: sessions are hosted by the CLI and `ai host` processes, which need no daemon; `CONTINUOUS_INTEGRATION=1` suppresses the automatic console; the repository is a fresh scratch repository the owner's daemon does not serve, so a stray socket event is refused as `unknown_repo`; and the panel is shown by Go tests.
+
+Runnable with the fake agent only, on a `make build` of `develop`, from an agent session (as the coordinator runs it). `agent_start` is on by default, so the demo relies on its PATH holding only the fake and the system directories; the `--all` listing before the probe proves no real harness is found, and the demo stops if one is:
+
+```bash
+AF="$PWD/agentflow"
+T=$(mktemp -d)
+go build -o "$T/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp
+export CONTINUOUS_INTEGRATION=1 AGENTFLOW_HOME="$T/home" PATH="$T/bin:/usr/bin:/bin"
+git init -q "$T/repo" && git -C "$T/repo" commit -q --allow-empty -m init
+git -C "$T/repo" worktree add -q "$T/wt" -b demo
+printf 'hello\n' > "$T/wt/notes.txt"
+"$AF" config set --yes \
+  'ai.harnesses.overrides={"demo":{"name":"Demo","command":"fake-acp","args":["--mode=session-demo"]},
+                           "nested":{"name":"Nested","command":"fake-acp","args":["--mode=session-nested"]},
+                           "slow":{"name":"Slow","command":"fake-acp","args":["--mode=session-hang"]}}' \
+  ai.harnesses.sign_in_check=false ai.sessions.ask_timeout=30s ai.sessions.max_running=1 \
+  'ai.permissions.rules={"src":{"kind":"fs_write","match":"src/**","decision":"allow"}}'
+"$AF" ai harnesses --all --json   # stop unless the only found harnesses are demo, nested and slow
+"$AF" ai harnesses --probe --id demo --id nested --id slow
+cd "$T/wt"
+"$AF" ai run --harness demo --yes "Add a greeting"   # agent session: runs detached, prints the session ID
+"$AF" ai status --follow <ID>
+```
+
+The fake's `session-*` modes answer the probe's plain `initialize` like `--mode=ok`, so the probe step marks all three ready. The `session-demo` script plays: message chunks; a plan; `fs/read_text_file <worktree>/notes.txt` (allowed by the gate: reads inside the worktree are not capped by the ceiling, so this is the step where policy decides alone); a permission request for an `edit` of `src/hello.txt` and `fs/write_text_file src/hello.txt` (the rule would allow both, but an agent started this session, so the ceiling makes them ask: step 2); `fs/read_text_file /etc/hosts` (denied, `outside_worktree`); `fs/write_text_file .claude/settings.json` (asks, `control_file`); `terminal/create echo hi` (asks, `terminal`); an `execute` tool call with no request (`unasked`, warned); a usage update with a cost; `end_turn`.
+
+1. The session streams in `ai status --follow`. The fake logs the content of `notes.txt` (allowed, handler `gate`). `/etc/hosts` is never read: the fake logs `-32001` with `outside_worktree`.
+2. Because an agent started it, the writes to `src/hello.txt` ask instead of following the rule (the ceiling). `ai status <ID> --json` lists the asks. `ai respond <ID> <ASK> --allow` from the agent session is refused `needs_person`. `ai respond <ID> <ASK> --reject` works. The unanswered ask is denied after 30 s (`timeout`). The session ends `end_turn` with `src/hello.txt` absent, `.claude/settings.json` absent, and the counters and the unasked tool call shown.
+3. With `slow` running (`--mode=session-hang`), a second `ai run --harness demo` is refused `limit_running`; `ai cancel <slow ID> --yes` ends it `cancelled`, with its waiting ask answered `cancelled`.
+4. `ai run --harness nested` plays a terminal request for `agentflow ai run --harness demo x` and one for `agentflow ai respond ... --allow`: both are denied `agentflow_in_session`. It also asks for `cat ~/.agentflow/ai/sessions/<its ID>/answer.key` (spelled with `$AGENTFLOW_HOME` here, since the demo's home is `$T/home`), after the demo adds the rule `{"cat":{"kind":"terminal","match":"cat","decision":"allow"}}`: it is denied `agentflow_home` although the rule allows `cat`.
+5. `ai run` in `$T/repo` (the primary checkout) is refused `primary_checkout`.
+6. Last, `"$AF" config set --yes ai.sessions.agent_start=false`, then `ai run --harness demo x` in `$T/wt` is refused `agent_start_off` and nothing starts.
+7. The panel: `TestAIPanelFollowsSession` (lane 7.2: a daemon runtime with a fake store and the fake agent shows the session, its asks and its end in the `ai` projection, and an allow from the console route reaches the host) and the AI panel browser test (lane 7.4). Not a live console, for the reason above.
+8. After the demo, `~/.agentflow-ui` lists no path under `$T`, and `$T/home/ai/sessions/<ID>/` holds `session.json` and `transcript.jsonl` with mode 0600 in 0700 directories.
+
+**Person-only steps** (the owner may run them on their own machine; the coordinator does not): a foreground `ai run` in a real terminal shows `Allow once? [y/N]` for the `src/hello.txt` write and the rule allows it without asking; the console's AI panel shows the same session and its Allow once button answers an ask.
+
+**Gate:** phase 6's gate is passed (`develop-p6` at `b4389ac`); then all four lanes merged; `make check` green on `develop` (including `TestEveryMCPToolHasCLICommand`, `TestEveryConfigFieldHasControl`, `TestEveryWriteOperationEmitsEvents`, `TestSessionGuardRefusesRealPATH`, `TestSessionEnvironment`, `TestChainDeniesByDefault`, `TestAIPanelFollowsSession`); `make e2e` passes (new MCP tools); the demo works; the security review below is done; tag `develop-p7`; ledger updated.
+
+### Phase 7 amendments to earlier contracts
+
+All additive.
+
+| Contract | Change | Lane |
+| --- | --- | --- |
+| `internal/acp` | session types, methods, `ClientHandler`, `SessionLimits`, `SessionInitialize`; phase 6 names unchanged | 7.1 |
+| `internal/jsonrpc` | `Limits.OrderedResponses` (in `conn.go`); `LaunchSpec.AllowDir` (check in `launch.go`); no change for a spec or limits without them | 7.1 (declarations, `conn.go`), 7.2 (`launch.go`) |
+| `bus` registry | `ai.session.*` types; `ai` leaves `ReservedFamilies` | 7.2 |
+| `notifysock` | `ai.session.**` is a socket type | 7.2 |
+| `harness` | `Locate`, `GuardPath` in a new file; no existing harness file changes | 7.2 |
+| `config.User`, `config.Repo` | optional `ai.sessions`, `ai.permissions`; repository `ai.sessions.disabled`, `ai.permissions.ask`, `ai.permissions.deny` | 7.2 |
+| autonomy catalog | `ai.run`, `ai.respond`, `ai.cancel`, `ai.fs.read`, `ai.fs.write`, `ai.terminal`, `ai.fetch`, `ai.permission` | 7.2 |
+| settings check chain | rule and mode validation; the `ai` loosening cases | 7.2 |
+| console routes | `POST /api/ai/respond`, `POST /api/ai/cancel` | 7.2 |
+| `policy` | `SessionClientPrefix` (`ai-session:`), refused by `NewGate` like `plugin:`; `NewSessionGate`; the `ai respond --allow` never-list entry | 7.3 |
+| `app` | `OpenSession`; `AgentEnvironment` reports `AGENTFLOW_ACP_SESSION` | 7.3 |
+| CLI surface | `agentflow mcp --session ID`; the runtime command `agentflow ai host --session ID` | 7.3 |
+| `agentflow_ui_open` | screen `ai` | 7.3 |
+| `TestEveryWriteOperationEmitsEvents` | `ai.run`, `ai.respond`, `ai.cancel` | 7.3 |
+
+### File ownership for phase 7 lanes
+
+A lane changes only the files it owns. A lane that needs another lane's file, or a contract change, stops and reports.
+
+| Lane | Issue | Owns | Must not touch |
+| --- | --- | --- | --- |
+| 7.1 ACP client, fake agent | #122 | `internal/acp/session_types.go` and the phase 7 paragraph of `doc.go` (contract, first PR); `internal/acp/session.go`, `client.go`, `decode.go` and their tests; `internal/acp/acptest/**` (session scripts, the session modes of `cmd/fake-acp`); in `internal/jsonrpc`: the `OrderedResponses` and `AllowDir` declarations in `types.go` (first PR), `OrderedResponses` in `conn.go` and its test | `internal/acp/types.go`, `initialize.go`; every other `internal/jsonrpc` file; `internal/aisession/**`, `internal/harness/**`, `internal/webui/**`, `internal/command/**`, `internal/config/**`, README |
+| 7.2 Sessions, chain, store, events, projection | #123 | `internal/aisession/**` (contract `types.go`, `doc.go` first; `Options` and the import rule of "package dependencies"); `internal/bus/types_phase7.go` and its test, the `ReservedFamilies` line in `internal/bus/types.go` (first PR); `internal/webui/projection_ai_state.go` (first PR), `projection_ai.go`, `stream_runtime_ai.go`, `ai.go`, the two route lines in `server.go`, and their tests (`TestAIPanelFollowsSession` included); `internal/harness/session.go` (new) and its test; the `AllowDir` check in `internal/jsonrpc/launch.go` and its test; `ai.session.**` in `internal/notifysock/notifysock.go`; `internal/config/ai.go`, the `AI` field of `config.Repo` in `config.go`, the `ai` rows in `field_meta_table.go`, the `ai` group in `catalog.go`, the `ai.*` actions in `autonomy.go`; the `ai` checks and loosening cases in `internal/settings/checks.go` (and a new `check_ai.go`); settings and catalog golden files through `-update` only | `internal/acp/**`, every other `internal/harness/**` file, `internal/command/**`, `internal/app/**`, `internal/mcpserver/**`, `internal/cli/**`, `internal/policy/**`, `internal/plugin/**`, `internal/webui/static/**`, `internal/webui/destination.go`, README |
+| 7.3 Commands, MCP, guard, docs | #124 | `internal/command/ops/ai_sessions.go` (with `ops.AISessionOptions`, the production `aisession.Options`) and its test; the `ai` rows in `internal/command/ops/emit_test.go`; `internal/app/ai_sessions.go`, `internal/app/ai_session_client.go` (`OpenSession`) and tests; `AgentEnvironment` in `internal/app/worktree.go`; `SessionClientPrefix`, `NewSessionGate` and the refusal in `internal/policy/approvals.go`, the never-list entry in `internal/policy/policy.go`, and tests; `internal/mcpserver/session.go` and the session-mode lines in `internal/mcpserver/server.go`, with tests; `internal/cli/ai_host.go` and the `ai host` line in `cli.go`'s fixed switch; `internal/webui/destination.go` (screen `ai`); golden files (`internal/mcpserver/testdata/golden/tools.json`, `internal/cli/testdata/golden/**`, `internal/app/testdata/golden/**`) through `-update` only; the session lines in `scripts/e2e-claude.sh`; `adapters/claude-code/skills/ai/SKILL.md`, the four tools in `adapters/claude-code/skills/agentflow/SKILL.md`; `docs/ai-sessions.md`; README sections on the `ai` commands, MCP tools, sessions and their security; the blueprint capability table (`docs/artifact/`, then `scripts/build-blueprint.sh`) | `internal/acp/**`, `internal/aisession/**`, `internal/harness/**`, `internal/config/**`, `internal/settings/**`, `internal/webui/**` except `destination.go`, `parity_test.go` |
+| 7.4 AI panel | #125 | `internal/webui/static/ai-panel.*`; the AI nav entry, page section and script tag in `static/index.html`; `ai` rules in `static/style.css`; the AI wiring in `static/app.js` (screen name, page, state dispatch); `internal/webui/ai_browser_test.go`; `internal/webui/testdata/ai/**`; `docs/design/ui/ai-panel.md`; the README section on the AI panel | every Go file other than its browser test, `internal/webui/destination.go`, every other static file |
+
+**Every shared file has one owner:**
+
+| Shared file | Owner | Note |
+| --- | --- | --- |
+| `internal/webui/static/app.js`, `index.html`, `style.css` | 7.4 | lost time in phase 6 |
+| `internal/webui/destination.go` | 7.3 | its screen list is in `agentflow_ui_open`'s description, so it moves `tools.json` (lost time in phase 6) |
+| `internal/mcpserver/testdata/golden/tools.json` | 7.3 | `-update` only |
+| `internal/cli/testdata/golden/**`, `internal/app/testdata/golden/**` | 7.3 | `-update` only |
+| `internal/config/config.go`, `ai.go`, `field_meta_table.go`, `catalog.go`, `autonomy.go` | 7.2 | `config.go` lost time in phase 6 |
+| `internal/settings/checks.go` | 7.2 | |
+| `scripts/e2e-claude.sh` | 7.3 | lost time in phase 6 |
+| `internal/webui/server.go` | 7.2 | route lines only |
+| `internal/mcpserver/server.go` | 7.3 | session-mode lines only |
+| `internal/cli/cli.go` | 7.3 | the `ai host` line only |
+| `internal/command/ops/emit_test.go` | 7.3 | |
+| `internal/bus/types.go` | 7.2 | the `ReservedFamilies` line |
+| `internal/notifysock/notifysock.go` | 7.2 | `socketTypes` only |
+| `internal/jsonrpc/types.go` | 7.1 | declares both new fields in its first PR |
+| `internal/jsonrpc/conn.go` / `launch.go` | 7.1 / 7.2 | |
+| `internal/policy/approvals.go`, `policy.go` | 7.3 | |
+| `internal/app/worktree.go` | 7.3 | `AgentEnvironment` only |
+| `internal/harness/**` | phase 6 (closed) | phase 7 adds only the new file `session.go` (7.2) |
+| `README.md` | 7.3, and 7.4 for the AI panel section | by section |
+| `adapters/claude-code/skills/**` | 7.3 | |
+| `docs/knowledge/engineering/decisions/event-driven-platform.md`, `docs/plans/acp-platform/ledger.md` | the coordinator | amendments only |
+| `go.mod`, `go.sum` | nobody | no new dependency: `os.Root` is the standard library |
+
+- All four lanes can start once this PR merges. 7.1 lands its contract files first, then 7.2.
+- Lane 7.2 codes against `acptest` (with the session scripts once 7.1's first PR merges, a hand-written fake before) and fake `ai.respond` and `ai.cancel` Specs. Lane 7.3 codes against the `aisession` declarations with a fake `Manager`. Lane 7.4 codes against `AIState` with a scripted stream fixture and fake endpoints. Each wires production in its last commit, after the lanes it uses have merged.
+- Exported contract types change only through an amendment: everything in the code-form table at the top of this section.
+
+### Phase 7 security
+
+**The agent-relayed confirmation.** An agent's `ai run` is confirmed through that agent's own client (see "who may start"). An agent that ignores the confirmation can start a session; the ceiling, the answer rules, the worktree rule, depth 1 and the store cap still apply, the harness's own tools do not. That is the cost of `agent_start` being on by default.
+
+**Threat model.** A repository is hostile: its files, its agent configuration, its `.envrc`, its `node_modules`. The harness's model is steerable by what it reads, so every agent request and every agent string is untrusted. Another agent of the person (MCP or CLI) is not the person. A plugin's author may be hostile. The person, their personal layer and the harness binary they installed are trusted; a deliberately malicious harness binary and OS sandboxing are out of scope, as in ACP.
+
+**Security review (lanes 7.1, 7.2 and 7.3, before merge; the coordinator checks it at the gate).**
+
+- [ ] The harness environment is exactly the listed names; a test proves no token, key, `SSH_AUTH_SOCK`, `AGENTFLOW_*`, proxy variable or client session ID reaches the fake agent or its terminals, the definition's `credential_env` names reach the harness when set and never its terminals, and agentflow stores or prompts for no credential.
+- [ ] No repository can add a PATH entry, a harness, an argument, an env variable, an MCP server, a prompt, a mode, an allow or a limit. A `HOME` or configuration directory inside a repository stops the start.
+- [ ] Every `fs/*` and `terminal/create` runs the whole chain; nothing is allowed when no link allows; an earlier `request_permission` authorizes nothing.
+- [ ] File access is through `os.Root`; tests refuse a relative path, a path outside, `..`, a link out (also swapped in after the checks), `.git` in any case, a nested repository, a final-component link and a hard-linked file on write, and a Windows stream name.
+- [ ] Control-file writes and secret-file reads always ask a person, whatever a rule says.
+- [ ] A terminal that names the agentflow home, `~/.agentflow-ui` or the session store in its program, arguments, `cwd` or env values (in each spelling the rule lists) is denied `agentflow_home`, even with a person's rule allowing the program; `cat <home>/ai/sessions/<id>/answer.key` is the test.
+- [ ] A session runs only in the starting process's worktree; no input, flag, file or variable selects another.
+- [ ] `make e2e` cannot start a real harness: every non-fake harness is disabled before `agent_start` is turned on, and the run asserts no session was created.
+- [ ] Terminals start without a shell, in the worktree, killed by process group on release, kill and session end; the never-list, the session never-list and `boundary.Checker` see the full line; refused env names deny the request.
+- [ ] No agent, plugin, repository or session can allow an ask: `agentflow_ai_respond` cannot allow; the `ai-session:` client cannot answer; `ai respond --allow` refuses agent environments and non-terminals and ignores `--yes`; the pre-bash and session never-lists block it; an allow needs the HMAC; answers are bound to the fingerprint.
+- [ ] No session can start a session; the running cap holds under concurrent starts (a race test) and against a lying caller.
+- [ ] Every limit ends the session with its code, and cancel answers every waiting ask `cancelled` and kills every process group.
+- [ ] `allow_always` is never selected; deny picks `reject_once`, `reject_always` or `cancelled`.
+- [ ] No event payload, audit line, log line or repository store carries session text, a path beyond the worktree-relative one in audit, a command line, env values or cost; the projection draws asks only from the store.
+- [ ] The transcript and asks are 0600 in 0700 directories in the agentflow home, pruned by the retention rules, redacted best-effort; `keep_transcripts` off deletes them at the end.
+- [ ] Agent text is sanitized and shown as text everywhere (terminal, panel, CLI); terminal sequences are neutralized.
+- [ ] The session MCP server has only the read-only allowlist, and its gate refuses every non-read.
+- [ ] No test starts a real harness, a real terminal program outside its temporary directory, or a detached process; `make e2e` starts no session.
+
+### Phase 7 decisions
+
+*Decided by the architect in the contract PR. The coordinator confirms or changes them before the lanes start. Product and safety choices are in "Phase 7 owner decisions".*
+
+1. **Sessions are hosted by the starting process or a detached `ai host`, never by the console daemon.** `ai run`, `status`, `respond` and `cancel` then work without a daemon and against any `AGENTFLOW_HOME`, which the demo needs (the daemon registry ignores `AGENTFLOW_HOME`). The daemon only projects sessions and relays a person's answers.
+2. **One prompt turn per session.** Follow-up turns and resume belong to phase 10 (`session/load`, Memento). Changing this later is additive.
+3. **Asks and answers are files in the session store**, with an HMAC on allow answers. This needs no new IPC and works with or without a daemon. It is a same-user limit, stated in "who may answer".
+4. **agentflow advertises `fs` and `terminal`** and nothing else, so harnesses that can route file and command work through agentflow's checks do.
+5. **Only `allow_once` and `reject_once`** (with `reject_always` or `cancelled` as fallbacks). An `allow_always` scope lives in the agent and cannot be seen or bounded.
+6. **Denials are `-32001` with fixed text**, missing files `-32002`. No path or agent text is echoed.
+7. **Session text lives only in the agentflow home's session store.** Events carry codes and counts, and the projection reads the store, as the harnesses projection reads the daemon's report.
+8. **Control-file writes and secret-file reads always ask.** The ACP security page names the first; the second keeps secrets from reaching the model's provider without a person.
+9. **Agent-started sessions get a `confirm` ceiling.** It bounds what an agent's session can do without a person, independent of the agent-side confirmation, which is a heuristic.
+10. **Cost is shown, never enforced alone.** It is agent-reported and optional; the time limits bound spending.
+11. **Proxy variables are withheld**, as in phases 5 and 6, because they can carry credentials. Owner decision 3 (pass-through sign-in) is read narrowly: only the definition's verified `credential_env` names pass. Widening it is an amendment.
+12. **No contract Go files in the contract PR** (phase 6 decision 10). Lane 7.1 lands first, then 7.2.
+
+### Phase 7 owner decisions
+
+*Answered by the owner on PR #127, relayed by the coordinator. Questions 6, 8, 11 and 12 are taken as recommended; the owner has not confirmed them and may change them.*
+
+| # | Question | Decision | Source |
+| --- | --- | --- | --- |
+| 1 | Which `HOME` does a session get? | The real account home (`ai.sessions.home: real`). And: agentflow always works in the directory it was started from. A session runs in the worktree of the CLI or MCP server that starts it; no input, flag or file chooses another directory or project. | owner: "Your real home but agentflow should always be working in the directory that it is initialized from." |
+| 2 | Accept that the harness's own tools are not gated? | Accept, with the mitigations in "what agentflow controls". | owner: "Accept with limits" |
+| 3 | Pass a harness its own sign-in variables? | Harness sign-in is pass-through. The definition's verified `credential_env` names always pass when set; never to agentflow-run terminals; no setting. agentflow stores, prompts for and manages no credential. Everything else stays filtered. Read narrowly; the owner is told. | owner: "harness usage should be pass-through. authentication is handled outside of agentflow." |
+| 4 | May agents start sessions? | Yes, on by default (`agent_start` defaults on). Always `needs_confirmation`, the `confirm` ceiling, depth 1, the store cap. Turning it on after a person turned it off is a loosening edit. | owner: "Yes, on by default" |
+| 5 | May an agent allow a permission request? | No. Only a person allows. `agentflow_ai_respond` rejects only. | owner: "No, only you" |
+| 6 | The harness acts without asking, inside the worktree | `warn`; always cancel outside the worktree, in `.git` or a control file. | as recommended |
+| 7 | Repository agent configuration at session start | Warn in `ai run`'s confirmation and list the changed control files. | owner: "Warn and list them" |
+| 8 | Transcripts and cost | Keep 7 days, 50 sessions, 200 MiB, best-effort redaction; show cost, no cost cap. | as recommended |
+| 9 | Sessions in the primary checkout | Refuse (`primary_checkout`) and suggest `agentflow start <task> --worktree`. | owner: "Stop, suggest worktree" |
+| 10 | Start sessions from the AI panel | No: the panel watches, answers and cancels. | owner: "Watch and answer" |
+| 11 | What the harness may do through agentflow's MCP server | The read-only allowlist only. | as recommended |
+| 12 | Windows | Stopping kills only the child (no job objects); the detached host uses `DETACHED_PROCESS`. | as recommended |
+
+### Phase 7 consequences
+
+- A person can run any ready ACP harness for one prompt in a task worktree and watch it from the terminal or the console, and every file and command request that reaches agentflow is checked and either allowed by the person's policy, asked of the person, or denied.
+- No agent, plugin, repository or session can allow what only a person may allow, through any route agentflow offers; the remaining gap is a deliberately hostile same-user process, which the section names.
+- The harness's own tools stay outside agentflow's checks. The person sees when they acted without asking, and every change lands in a worktree branch to review.
+- Session text stays in the person's agentflow home, never in a repository's `.git`, and expires.
+- A session always works in the worktree agentflow was started from; nothing an agent sends can point it at another project.
+- Agents can start sessions by default. An agent that skips the relayed confirmation can start one, bounded by the ceiling, the answer rules and the caps, but not the harness's own tools.
+- Harness sign-in passes through only through the definition's verified `credential_env` names and the real home. A harness whose sign-in depends on other variables (for example cloud-provider variables such as `AWS_PROFILE` or `GOOGLE_APPLICATION_CREDENTIALS`, or proxy variables) will not authenticate in a session yet; adding them needs an amendment that names them.
+- Phase 8 builds features on `aisession.Manager`; phase 9's `delegate` reuses the host and the chain; phase 10 adds history and resume on the session store.
