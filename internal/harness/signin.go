@@ -60,20 +60,6 @@ type SignInCheck struct {
 	slot chan struct{} // one check at a time per process
 }
 
-// SignInRequest says who asks for a check and under which settings.
-type SignInRequest struct {
-	// Requester is RequesterPerson, RequesterAgent or RequesterDaemon.
-	Requester string
-	// AutoProbe and Enabled are the effective values of
-	// personal:ai.harnesses.auto_probe and sign_in_check.
-	AutoProbe bool
-	Enabled   bool
-	// Previous is the stored verdict for this identity, if any. Unless a
-	// person asks, a verdict that ran within DefaultStatusInterval is
-	// returned again instead of running the command.
-	Previous *SignInStatus
-}
-
 // NewSignInCheck returns the check for the agentflow home home.
 func NewSignInCheck(home string) *SignInCheck {
 	return &SignInCheck{Home: home}
@@ -241,17 +227,14 @@ func signInTarget(f Found) (signInExe, bool) {
 		}
 		return signInExe{path: f.Path, target: f.Target, dir: f.PathDir}, true
 	case harnessdef.StatusFromBase:
-		if f.Definition.Kind != harnessdef.KindAdapter || f.BaseFound == nil || !filepath.IsAbs(f.BaseFound.Path) {
+		// The finder's base file: found on PATH by the same checks as the
+		// harness itself, with its resolved target and PATH entry.
+		b := f.BaseFound
+		if f.Definition.Kind != harnessdef.KindAdapter || b == nil ||
+			!filepath.IsAbs(b.Path) || !filepath.IsAbs(b.Target) || !filepath.IsAbs(b.PathDir) {
 			return signInExe{}, false
 		}
-		target, err := filepath.EvalSymlinks(f.BaseFound.Path)
-		if err != nil {
-			return signInExe{}, false
-		}
-		if info, err := os.Stat(target); err != nil || !info.Mode().IsRegular() {
-			return signInExe{}, false
-		}
-		return signInExe{path: filepath.Clean(f.BaseFound.Path), target: target, dir: filepath.Dir(filepath.Clean(f.BaseFound.Path))}, true
+		return signInExe{path: filepath.Clean(b.Path), target: b.Target, dir: b.PathDir}, true
 	}
 	return signInExe{}, false
 }

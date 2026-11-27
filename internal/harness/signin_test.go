@@ -261,7 +261,11 @@ func TestSignInBase(t *testing.T) {
 
 	f := adapter
 	f.Definition = harnessdef.Definition{Kind: harnessdef.KindAdapter, StatusFrom: harnessdef.StatusFromBase, StatusArgs: []string{"login", "status"}}
-	f.BaseFound = &Base{Name: "Base", Command: "base-cli", Path: basePath}
+	baseTarget, err := filepath.EvalSymlinks(basePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.BaseFound = &Found{Path: basePath, Target: baseTarget, PathDir: baseDir}
 	if v := check.Check(context.Background(), f, person()); v.Status != SignedOut {
 		t.Fatalf("base: %+v", v)
 	}
@@ -278,7 +282,7 @@ func TestSignInBase(t *testing.T) {
 		t.Errorf("no base: %+v", v)
 	}
 	shown := f
-	shown.BaseFound = &Base{Name: "Base", Command: "base-cli", Path: "~/bin/base-cli"}
+	shown.BaseFound = &Found{Path: "~/bin/base-cli"}
 	if v := check.Check(context.Background(), shown, person()); v.Code != CodeBaseMissing {
 		t.Errorf("display path: %+v", v)
 	}
