@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -413,6 +414,16 @@ func printPluginSummary(w io.Writer, p *app.Pending) {
 			fmt.Fprintf(w, "  branch    %q\n", s.Branch)
 		}
 		fmt.Fprintf(w, "  request   %s\n  expires   %s\n", s.OperationID, s.ExpiresAt.UTC().Format(time.RFC3339))
+		if len(s.Request) > 0 {
+			// In full, never cut: the plugin chose this text. JSON escapes
+			// every control character, so nothing reaches the terminal raw.
+			var pretty bytes.Buffer
+			if json.Indent(&pretty, s.Request, "  ", "  ") != nil {
+				pretty.Reset()
+				pretty.Write(s.Request)
+			}
+			fmt.Fprintf(w, "  what the command will do, as its own confirmation shows it:\n  %s\n", pretty.String())
+		}
 		if !s.Decline {
 			fmt.Fprintln(w, "! The console runs it once, as the plugin, right after you approve.")
 		}

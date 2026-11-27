@@ -701,8 +701,10 @@ rule. A repository can turn a plugin off for itself with
 `plugins.disabled`, and can never install or turn one on.
 
 A plugin's write, such as a `notify`, always waits for you, even under `auto`.
-`agentflow plugin approve OP_ID` shows the plugin, the command, what it does and
-when the request expires, then asks. After you answer `y`, the console runs the
+`agentflow plugin approve OP_ID` shows the plugin, the command, when the request
+expires and, in full, what the command will do (for `notify` the message and where
+it goes, for `comment` the ticket and the whole body), then asks. It refuses a
+request that does not store that summary. After you answer `y`, the console runs the
 write once, by itself, and its result appears on the timeline. `--decline` cancels
 it instead. Run it in the repository the plugin acted on, before the request
 expires, while the console that held it is still running. No AI tool adds, removes

@@ -17,8 +17,9 @@ import (
 // takes the journal lock or changes a record: a record is replaced as a
 // whole by an atomic rename, so a reader sees the old or the new file.
 
-// maxJournalRecord bounds one record file. Real records are under 2 KiB.
-const maxJournalRecord = 64 << 10
+// maxJournalRecord bounds one record file. Real records are under 2 KiB;
+// a plugin's record also holds its request summary (MaxRequestSummary).
+const maxJournalRecord = 64<<10 + 2*MaxRequestSummary
 
 var journalNameRe = regexp.MustCompile(`^([0-9a-f]{32})-(op_[0-9a-f]{32})\.json$`)
 
@@ -37,7 +38,7 @@ type JournalRecord struct {
 
 // ReadJournalRecord reads the record file at path. The file must be named
 // "<ScopeKey>-<operation ID>.json", be a regular file (never a symbolic
-// link) of at most 64 KiB, and carry the operation ID of its name. A
+// link) of at most maxJournalRecord bytes, and carry the operation ID of its name. A
 // missing file returns an error wrapping fs.ErrNotExist.
 func ReadJournalRecord(path string) (JournalRecord, error) {
 	var r JournalRecord

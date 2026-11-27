@@ -236,12 +236,14 @@ var PublishableTypes = []bus.Type{bus.TypePluginAnnotationAdded}
 // InvocableCommands are the command.Spec names a plugin may invoke in
 // phase 5, with Permissions.Invoke. Writes run under a confirm ceiling, so
 // each one waits for a person. A later phase widens this by amendment.
-var InvocableCommands = []string{
-	// writes
-	"notify", "comment",
+var InvocableCommands = append(append([]string(nil), InvocableWrites...),
 	// reads
 	"ship.status", "context", "ac.checklist", "review.threads",
-}
+)
+
+// InvocableWrites are the writes in InvocableCommands: the only commands
+// agentflow plugin approve answers for a plugin.
+var InvocableWrites = []string{"notify", "comment"}
 
 // SettingType is a plugin setting's value type.
 type SettingType string

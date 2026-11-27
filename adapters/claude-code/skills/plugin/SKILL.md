@@ -28,7 +28,8 @@ when the user asks you to install it. Give the exact command and stop:
 - `agentflow config set plugins.ID.enabled=true`, or the Settings page, turns it on.
 - `agentflow plugin remove ID` deletes it, its data and its settings.
 - `agentflow plugin approve OP_ID` approves a write a plugin asked for, such as a
-  `notify`, after showing what will run; the console then runs it once. Add
+  `notify`, after showing in full what will run (the message, or the whole
+  comment and its ticket); the console then runs it once. Add
   `--decline` to cancel it. The operation ID is on the approvals panel or in the
   plugin's `awaiting_approval` result. Run it in the repository the plugin acted on.
 

@@ -119,7 +119,8 @@ func newFixture(t *testing.T, child func() *plugintest.Child) *fixture {
 			c, ok := f.commands[name]
 			return c, ok
 		},
-		OpenApp: func(_ context.Context, _ string, client string) (*app.App, error) {
+		OpenApp: func(_ context.Context, _ string, id string) (*app.App, error) {
+			client := plugin.OriginPrefix + id
 			g := *gate
 			g.Client = client
 			return &app.App{Gate: &g, Client: client}, nil

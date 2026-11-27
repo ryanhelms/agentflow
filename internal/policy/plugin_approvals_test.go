@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 func pluginGate(t *testing.T, dir string) *Gate {
 	t.Helper()
-	g, err := NewGate(dir, config.Autonomy{Local: config.Auto, Remote: config.Auto}, "plugin:ci-notify")
+	g, err := NewPluginGate(dir, config.Autonomy{Local: config.Auto, Remote: config.Auto}, "ci-notify")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +27,8 @@ func TestPersonApprovesAPluginRequestAndThePluginResumes(t *testing.T) {
 		t.Fatalf("plugin request: %+v %v", d, err)
 	}
 	id := d.Approval.OperationID
-	if err := plug.DescribePluginRequest(id, PluginRequest{Plugin: "forged", Command: "notify", Subject: "notify ci.failed\u202e\x1b[31m\nsecond", Branch: "feat"}); err != nil {
+	summary := json.RawMessage(`{"notification":{"title":"CI failed\u202e","body":"line one\nline two\u0007"},"confirm_token":"cf_x","deliveries":[{"webhook_url":"https://hooks.example/x"}]}`)
+	if err := plug.DescribePluginRequest(id, PluginRequest{Plugin: "forged", Command: "notify", Subject: "notify ci.failed\u202e\x1b[31m\nsecond", Branch: "feat", Summary: summary}); err != nil {
 		t.Fatal(err)
 	}
 	// Only the first description sticks.
@@ -41,9 +43,16 @@ func TestPersonApprovesAPluginRequestAndThePluginResumes(t *testing.T) {
 		t.Fatalf("a person's gate described a plugin request: %v", err)
 	}
 	got, err := person.PluginRequestOf(id)
-	want := PluginRequest{Plugin: "ci-notify", Command: "notify", Subject: "notify ci.failed[31m", Branch: "feat"}
-	if err != nil || got.State != pending || got.RequestedBy != "plugin:ci-notify" || got.Request != want || got.ExpiresAt.IsZero() {
+	r := got.Request
+	if err != nil || got.State != pending || got.RequestedBy != "plugin:ci-notify" || got.ExpiresAt.IsZero() ||
+		r.Plugin != "ci-notify" || r.Command != "notify" || r.Subject != "notify ci.failed[31m" || r.Branch != "feat" {
 		t.Fatalf("request: %+v %v", got, err)
+	}
+	// The full summary, cleaned: lines kept, control and bidi characters
+	// gone, secrets redacted.
+	wantSummary := `{"confirm_token":"(redacted)","deliveries":[{"webhook_url":"(redacted)"}],"notification":{"body":"line one\nline two","title":"CI failed"}}`
+	if string(r.Summary) != wantSummary {
+		t.Fatalf("summary %s", r.Summary)
 	}
 	// The plugin cannot approve its own request.
 	if _, err := plug.ApprovePluginRequest(id); !errors.Is(err, ErrNotRequester) {
@@ -91,6 +100,62 @@ func TestPluginApproveRefusesOtherRecords(t *testing.T) {
 	if _, err := cli.ApprovePluginRequest("nope"); err == nil {
 		t.Fatal("a malformed ID was accepted")
 	}
+	// No caller may name itself a plugin: only NewPluginGate makes one.
+	for _, c := range []string{"plugin:ci-notify", "plugin:"} {
+		if _, err := NewGate(dir, config.Autonomy{}, c); !errors.Is(err, ErrReservedClient) {
+			t.Fatalf("NewGate(%q): %v", c, err)
+		}
+	}
+	for _, id := range []string{"", "a:b", "a b"} {
+		if _, err := NewPluginGate(dir, config.Autonomy{}, id); err == nil {
+			t.Fatalf("NewPluginGate(%q) accepted", id)
+		}
+	}
+	// A plugin record the host never described cannot be approved, only
+	// declined: whoever asked, the person sees nothing of what would run.
+	undescribed := pluginGate(t, dir)
+	u, err := undescribed.Check(Remote, "push", map[string]any{"b": "forged"}, "", false)
+	if err != nil || u.Approval == nil {
+		t.Fatal(u, err)
+	}
+	if got, err := cli.PluginRequestOf(u.Approval.OperationID); err != nil || got.Request.Command != "" || got.Request.Plugin != "ci-notify" {
+		t.Fatalf("undescribed request: %+v %v", got, err)
+	}
+	if _, err := cli.ApprovePluginRequest(u.Approval.OperationID); !errors.Is(err, ErrNoHostRequest) {
+		t.Fatalf("approved an undescribed request: %v", err)
+	}
+	// A described request for a command no plugin may write, or whose
+	// gate action is another command, cannot be approved either.
+	for i, tc := range []struct{ action, command string }{{"push", "push"}, {"push", "notify"}, {"notify", "comment"}} {
+		w, err := undescribed.Check(Remote, tc.action, map[string]any{"i": i}, "", false)
+		if err != nil || w.Approval == nil {
+			t.Fatal(w, err)
+		}
+		if err := undescribed.DescribePluginRequest(w.Approval.OperationID, PluginRequest{Command: tc.command, Summary: json.RawMessage(`{}`)}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cli.ApprovePluginRequest(w.Approval.OperationID); !errors.Is(err, ErrNotPluginWrite) {
+			t.Fatalf("approved %s described as %s: %v", tc.action, tc.command, err)
+		}
+	}
+	if _, err := cli.DeclinePluginRequest(u.Approval.OperationID); err != nil {
+		t.Fatalf("decline an undescribed request: %v", err)
+	}
+	// A request with no summary cannot be approved, only declined.
+	bare := pluginGate(t, dir)
+	b, err := bare.Check(Remote, "notify", map[string]any{"signal": "bare"}, "", false)
+	if err != nil || b.Approval == nil {
+		t.Fatal(b, err)
+	}
+	if err := bare.DescribePluginRequest(b.Approval.OperationID, PluginRequest{Command: "notify"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.ApprovePluginRequest(b.Approval.OperationID); !errors.Is(err, ErrNoRequestSummary) {
+		t.Fatalf("approved a request without a summary: %v", err)
+	}
+	if _, err := cli.DeclinePluginRequest(b.Approval.OperationID); err != nil {
+		t.Fatalf("decline without a summary: %v", err)
+	}
 	// A declined request is cancelled: its resume fails.
 	plug := pluginGate(t, dir)
 	q, err := plug.Check(Remote, "notify", map[string]any{"signal": "declined"}, "", false)
@@ -107,6 +172,9 @@ func TestPluginApproveRefusesOtherRecords(t *testing.T) {
 	p, err := plug.Check(Remote, "notify", map[string]any{"signal": "s"}, "", false)
 	if err != nil || p.Approval == nil {
 		t.Fatal(p, err)
+	}
+	if err := plug.DescribePluginRequest(p.Approval.OperationID, PluginRequest{Command: "notify", Summary: json.RawMessage(`{}`)}); err != nil {
+		t.Fatal(err)
 	}
 	later := time.Now().Add(48 * time.Hour)
 	cli.now = func() time.Time { return later }

@@ -287,12 +287,33 @@ run for a waiting write. Run it in the repository the plugin acted on:
 agentflow plugin approve op_0123456789abcdef0123456789abcdef
 ```
 
-It shows the plugin, the command, what the command does (for `notify`, the signal)
-and when the request expires, then asks `Proceed? [y/N]`. It never shows the
-command's full input, and the approval record stores none. After `y`:
+It shows the plugin, the command, when the request expires and, in full, what the
+command will do: the same confirmation summary the command shows you when you run
+it yourself. For `notify` that is the notification (title, message, signal) and
+where it goes; for `comment` it is the ticket and the whole comment body. Then it
+asks `Proceed? [y/N]`.
+
+The plugin host stores that summary in the approval record (mode 0600) when it
+first holds the write. Before it stores it, it removes control and bidi characters
+and replaces any value under a key that names a secret (`token`, `password`,
+`webhook` and similar) with `(redacted)`. The summary prints as indented JSON, all
+of it, however long; strings keep their escapes, so `\n` marks a line break.
+
+Plugin approve refuses, and only `--decline` answers:
+
+- a request the plugin host did not describe;
+- a request for a command other than the writes a plugin may run (`notify`,
+  `comment`);
+- a request without its full summary, for example one over 256 KiB.
+
+After `y`:
 
 - The console runs the write once, by itself, as the plugin. The plugin does not
-  have to ask again, and asking again does not run it twice.
+  have to ask again. If it resumes the write anyway, only one of the two runs it,
+  and nothing more is published:
+  - the console ran it first: the plugin's call returns `failed` with code
+    `resumed_by_host`;
+  - the plugin ran it first: the console runs nothing.
 - Its `op.*` events and result appear on the timeline with the client
   `plugin:<id>`.
 
@@ -300,9 +321,15 @@ command's full input, and the approval record stores none. After `y`:
 approved before it expires is dropped. Plugin approve only answers requests that
 a plugin made: it refuses any other approval.
 
+The client name `plugin:<id>` belongs to the plugin host. `agentflow mcp --client`,
+the hooks and every other caller that names itself `plugin:...` are refused, so
+no other program can ask, or answer, as a plugin.
+
 The console keeps a waiting write in memory. If the console restarts before you
 approve, the write does not run; the plugin asks again the next time its event
-arrives. A write of a plugin you turned off in the meantime does not run either.
+arrives. A held write does not run either when, before it would, the plugin was
+turned off, replaced by another version, or lost the command from
+`permissions.invoke`.
 
 Every command a plugin runs appears on the timeline like your own, with the client
 `plugin:<id>`.

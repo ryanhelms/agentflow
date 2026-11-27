@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -25,6 +26,10 @@ type PluginApproveSummary struct {
 	Task        string    `json:"task,omitempty"`
 	Branch      string    `json:"branch,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at"`
+	// Request is the confirmation summary the command's gate showed when
+	// the plugin asked, in full: for notify the destinations and message,
+	// for comment the ticket and body.
+	Request json.RawMessage `json:"request"`
 }
 
 // PluginApproved is the result of plugin approve.
@@ -57,8 +62,13 @@ func (a *App) PluginApprove(_ context.Context, id, token string, decline bool) (
 	if decline {
 		verb = "decline"
 	}
+	if !decline {
+		if err := req.Approvable(); err != nil {
+			return nil, err
+		}
+	}
 	summary := PluginApproveSummary{OperationID: req.OperationID, Decline: decline, Plugin: req.Request.Plugin, Command: req.Request.Command,
-		Subject: req.Request.Subject, Task: req.Request.Task, Branch: req.Request.Branch, ExpiresAt: req.ExpiresAt}
+		Subject: req.Request.Subject, Task: req.Request.Task, Branch: req.Request.Branch, ExpiresAt: req.ExpiresAt, Request: req.Request.Summary}
 	cmd := "agentflow plugin approve " + shellQuote(id)
 	if decline {
 		cmd += " --decline"

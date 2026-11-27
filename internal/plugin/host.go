@@ -51,8 +51,9 @@ type Options struct {
 	Served func() []Worktree
 	// Commands looks up a command by Spec name; nil means command.Default.
 	Commands func(name string) (command.Command, bool)
-	// OpenApp opens a worktree's App; nil means app.Open.
-	OpenApp func(ctx context.Context, dir, client string) (*app.App, error)
+	// OpenApp opens plugin id's App on a worktree, client plugin:<id>; nil
+	// means app.OpenPlugin.
+	OpenApp func(ctx context.Context, dir, id string) (*app.App, error)
 	// Launch starts a process plugin (jsonrpc.Launch); Environ builds its
 	// environment from the parent's (jsonrpc.ScrubbedEnv). Without them a
 	// process plugin fails to start with code launch.
@@ -142,7 +143,7 @@ func NewHost(o Options) *Host {
 		o.Commands = command.Default.Lookup
 	}
 	if o.OpenApp == nil {
-		o.OpenApp = app.Open
+		o.OpenApp = app.OpenPlugin
 	}
 	if o.Served == nil {
 		o.Served = func() []Worktree { return nil }

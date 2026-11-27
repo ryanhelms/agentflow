@@ -102,8 +102,30 @@ const (
 	cancelled = "cancelled"
 )
 
+// ErrReservedClient: a caller named itself a plugin. The client prefix
+// PluginClientPrefix belongs to the plugin host (NewPluginGate).
+var ErrReservedClient = errors.New(`client names that start with "plugin:" are reserved for the agentflow plugin host`)
+
 // NewGate opens the same per-user secret across restarts and concurrent clients.
+// It refuses a client name with PluginClientPrefix: only NewPluginGate makes
+// a plugin's gate.
 func NewGate(dir string, a config.Autonomy, client string) (*Gate, error) {
+	if strings.HasPrefix(client, PluginClientPrefix) {
+		return nil, ErrReservedClient
+	}
+	return newGate(dir, a, client)
+}
+
+// NewPluginGate opens plugin id's gate, client PluginClientPrefix + id. Only
+// the plugin host calls it.
+func NewPluginGate(dir string, a config.Autonomy, id string) (*Gate, error) {
+	if id == "" || strings.ContainsAny(id, ": \t\r\n") {
+		return nil, fmt.Errorf("%q is not a plugin ID", id)
+	}
+	return newGate(dir, a, PluginClientPrefix+id)
+}
+
+func newGate(dir string, a config.Autonomy, client string) (*Gate, error) {
 	g := &Gate{Autonomy: a, initial: a, Client: client, auditDir: dir, now: time.Now}
 	key := filepath.Join(dir, "confirm.key")
 	secret, err := os.ReadFile(key)

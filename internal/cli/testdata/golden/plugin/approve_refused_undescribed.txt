@@ -1,0 +1,6 @@
+$ agentflow plugin approve <operation-id>
+--- stdin
+y
+--- stdout
+--- error
+the plugin host did not describe this request, so it cannot be approved: decline it with --decline, or let it expire

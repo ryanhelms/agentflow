@@ -11,8 +11,10 @@ import (
 
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/command/commandtest"
 	"github.com/ryanhelms/agentflow/internal/command/ops"
 	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/plugin"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
 	"github.com/ryanhelms/agentflow/internal/policy"
 )
@@ -698,7 +700,7 @@ func TestPluginApproveApprovesOnlyAPluginRequestAndAuditsOnce(t *testing.T) {
 		t.Fatalf("plugin request: %+v %v", d, err)
 	}
 	id := d.Approval.OperationID
-	if err := pg.DescribePluginRequest(id, policy.PluginRequest{Command: "notify", Subject: "notify ci.failed"}); err != nil {
+	if err := pg.DescribePluginRequest(id, policy.PluginRequest{Command: "notify", Subject: "notify ci.failed", Summary: json.RawMessage(`{"signal":"ci.failed"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	// An agent's own approval is refused.
@@ -729,5 +731,94 @@ func TestPluginApproveApprovesOnlyAPluginRequestAndAuditsOnce(t *testing.T) {
 	t.Setenv("CLAUDECODE", "1")
 	if _, _, err := r.cli(t, true, "plugin", "approve", id, "--json"); err == nil || !strings.Contains(err.Error(), "AI agent") {
 		t.Fatalf("agent session: %v", err)
+	}
+}
+
+// heldByPlugin runs command with input as the plugin host runs ci-notify's
+// call on the repository in dir: under plugin:ci-notify with the confirm
+// ceiling, through the real command. The write waits for a person, and the
+// host's DescribeHeld stores what it would do. It returns the approval ID.
+func heldByPlugin(t *testing.T, dir, name, input string) string {
+	t.Helper()
+	a, err := app.OpenPlugin(t.Context(), dir, "ci-notify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a = a.WithAutonomyCeiling(config.Confirm)
+	c, ok := command.Default.Lookup(name)
+	if !ok {
+		t.Fatalf("%s is not registered", name)
+	}
+	_, inv := recording()
+	res := c.(command.JSONCommand).InvokeJSON(t.Context(), inv, a, json.RawMessage(input), "",
+		command.Origin{Source: "plugin:ci-notify", Client: "plugin:ci-notify"})
+	id := res.Outcome.ApprovalID
+	if res.Err != nil || id == "" {
+		t.Fatalf("%s did not wait for a person: %+v", name, res)
+	}
+	if err := plugin.DescribeHeld(a.Gate, id, name, res); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// approvePrompt runs plugin approve ID as a person at a terminal who answers
+// no, and returns what it showed before it asked.
+func approvePrompt(t *testing.T, a *app.App, id string) string {
+	t.Helper()
+	asPerson(t)
+	quietStdout(t)
+	errOut := stderrText(t)
+	stdinText(t, "n\n")
+	_, inv := recording()
+	run, rest, ok := command.Default.Dispatch([]string{"plugin", "approve", id})
+	if !ok {
+		t.Fatal("plugin approve is not registered")
+	}
+	if err := run(t.Context(), &commandtest.Env{App: a}, inv, rest); err == nil || !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("a no: %v", err)
+	}
+	return errOut()
+}
+
+// plugin approve shows the whole comment a plugin would post, as the
+// comment's own confirmation shows it: the ticket and every line of the body.
+func TestPluginApproveShowsTheFullCommentBody(t *testing.T) {
+	f := newFixture(t)
+	body := "CI failed on this branch.\n\nFailed checks:\n- lint\n- test (race)\n" + strings.Repeat("Last line of a long body. ", 400) + "The end."
+	in, _ := json.Marshal(map[string]string{"text": body})
+	id := heldByPlugin(t, f.dir, "comment", string(in))
+	shown := approvePrompt(t, f.app, id)
+	for _, want := range []string{`"key": "PLAT-7"`, "CI failed on this branch.", "Failed checks:", "- test (race)", "The end.", "Proceed? [y/N]: "} {
+		if !strings.Contains(shown, want) {
+			t.Fatalf("the prompt does not show %q:\n%s", want, shown)
+		}
+	}
+	if strings.Count(shown, "Last line of a long body.") != 400 {
+		t.Fatalf("the body was cut:\n%.400s", shown)
+	}
+	if f.posts != 0 {
+		t.Fatalf("a no posted %d comments", f.posts)
+	}
+}
+
+// plugin approve shows the notification a plugin would send: its title,
+// its whole message and where it goes, never the webhook URL.
+func TestPluginApproveShowsTheNotifyMessage(t *testing.T) {
+	r := newOpsRepo(t, notifyConfig, confirmEverything)
+	posts := webhook(t)
+	in := `{"signal":"ci.failed","operation_id":"ci-notify-abc","title":"CI failed on feat","body":"Failed checks: lint\nSee the run for details."}`
+	id := heldByPlugin(t, r.dir, "notify", in)
+	shown := approvePrompt(t, r.app, id)
+	for _, want := range []string{"CI failed on feat", "Failed checks: lint", "See the run for details.", "audit", "Proceed? [y/N]: "} {
+		if !strings.Contains(shown, want) {
+			t.Fatalf("the prompt does not show %q:\n%s", want, shown)
+		}
+	}
+	if strings.Contains(shown, "hooks.example.invalid") {
+		t.Fatalf("the prompt shows the webhook URL:\n%s", shown)
+	}
+	if *posts != 0 {
+		t.Fatalf("a no sent %d notifications", *posts)
 	}
 }

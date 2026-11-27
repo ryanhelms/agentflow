@@ -296,6 +296,23 @@ func TestPluginCannotReadAnotherClientsApproval(t *testing.T) {
 	if refusal(err) != plugin.RefuseInvalid || out.ExpiresAt != nil || out.Outcome != "" {
 		t.Fatalf("resume of another client's approval: %+v %v", out, err)
 	}
+	// Nor another plugin's pending approval; the agent's is refused again.
+	other, err := policy.NewPluginGate(f.gateDir, config.Autonomy{Local: config.Auto, Remote: config.Auto}, "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := other.WithCeiling(config.Confirm).Check(policy.Remote, "notify", map[string]string{"signal": "s"}, "", false)
+	if err != nil || o.Approval == nil {
+		t.Fatalf("other plugin's approval: %+v %v", o, err)
+	}
+	for _, id := range []string{o.Approval.OperationID, d.Approval.OperationID} {
+		var out plugin.InvokeResult
+		err = f.launch.Last().Host.Call(context.Background(), plugin.MethodCommandInvoke,
+			plugin.InvokeRequest{Command: "notify", Cause: cause.ID, Input: json.RawMessage(`{"signal":"s"}`), Resume: id}, &out)
+		if refusal(err) != plugin.RefuseInvalid || out.Outcome != "" {
+			t.Fatalf("resume of %s: %+v %v", id, out, err)
+		}
+	}
 	time.Sleep(50 * time.Millisecond)
 	f.mu.Lock()
 	defer f.mu.Unlock()
