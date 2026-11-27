@@ -71,8 +71,17 @@ the same clone for 30 days. The initial one-time link goes straight to the
 browser. A fresh profile, expired authorization or a different origin can show
 the reconnect screen. Copy the suggested prompt into the chat for that
 worktree, or run the displayed command from its terminal. Use
-`agentflow ui --no-open` to request a fresh one-time link for a specific browser.
-Keep that link on your machine. Private browsing and clearing site data
+`agentflow ui --no-open` in your own terminal to request a fresh one-time link
+for a specific browser. Keep that link on your machine.
+
+Only a person at a terminal gets the link: standard input is a terminal, and no
+AI agent (`CLAUDECODE`, `CODEX_*` and the other agent variables) or AI session
+(`AGENTFLOW_ACP_SESSION`) is in the environment. For anyone else,
+`agentflow ui` opens the browser itself, says so and never prints, returns or
+logs the link, with any flag; if no browser opens, it says to run
+`agentflow ui` in your own terminal. `agentflow ui --no-open` refuses before it
+starts the console or makes a link. This closes the easy route only: a process
+running as you can still read agentflow's private files. Private browsing and clearing site data
 remove browser-local credentials and drafts. A console started with v0.43.0
 predates the daemon. Its first launch after upgrading opens the new address.
 

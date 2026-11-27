@@ -476,6 +476,10 @@ where you asked. From a terminal, use
 `agentflow ui --screen providers --role task_management`. The command returns
 once the local console has opened. Use `agentflow ui --status` to check the
 daemon or `agentflow ui --stop` to shut it down for all clones.
+Only a person at a terminal sees the console's one-time sign-in link: standard
+input is a terminal and no AI agent or AI session is in the environment. For
+anyone else, `agentflow ui` opens the browser itself and never prints the link,
+and `agentflow ui --no-open` refuses. `agentflow_ui_open` never returns it.
 An authorized browser can reopen bookmarks for 30 days. A reconnect screen
 offers a chat prompt and local command when authorization expires.
 

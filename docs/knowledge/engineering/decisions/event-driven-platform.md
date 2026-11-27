@@ -4521,3 +4521,9 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - Agents can start sessions by default. An agent that skips the relayed confirmation can start one, bounded by the ceiling, the answer rules and the caps, but not the harness's own tools.
 - Harness sign-in passes through only through the definition's verified `credential_env` names and the real home. A harness whose sign-in depends on other variables (for example cloud-provider variables such as `AWS_PROFILE` or `GOOGLE_APPLICATION_CREDENTIALS`, or proxy variables) will not authenticate in a session yet; adding them needs an amendment that names them.
 - Phase 8 builds features on `aisession.Manager`; phase 9's `delegate` reuses the host and the chain; phase 10 adds history and resume on the session store.
+
+### Phase 7 integration amendments
+
+*Recorded by the phase 7 integration PR (issue #121). Each amendment is dated. Where one differs from a paragraph above, the amendment holds.*
+
+**2026-11-27: the console sign-in link goes only to a person at a terminal** (owner decision, closes #117). A person at a terminal is the rule `ai respond --allow` uses: standard input is a terminal, `app.AgentEnvironment()` is empty, and `AGENTFLOW_ACP_SESSION` is unset. For anyone else, `agentflow ui` never prints, returns or logs the one-time link, with any flag: without `--no-open` it opens the browser itself and says so without the link, and a browser that does not open gives a fix without the link; with `--no-open` it refuses before it starts the console or mints a ticket ("run `agentflow ui` in your own terminal"). From a person's terminal nothing changes. `agentflow_ui_open`, `ui --status` and `ui --stop` already return no link. This stops the easy route only: a process running as the person can still read agentflow's private files (the console registry and its control socket), or run the console's internal `ui --serve-child` plumbing, and obtain a ticket that way.
