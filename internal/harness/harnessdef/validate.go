@@ -40,7 +40,7 @@ var (
 		"GIT_SSH_COMMAND": true, "GIT_SSH": true,
 	}
 	launchSafetyPrefixes = []string{"LD_", "DYLD_"}
-	credentialSuffixes   = []string{"_API_KEY", "_AUTH_TOKEN", "_ACCESS_TOKEN", "_OAUTH_TOKEN"}
+	credentialSuffixes   = []string{"_API_KEY", "_AUTH_TOKEN", "_ACCESS_TOKEN", "_OAUTH_TOKEN", "_REFRESH_TOKEN"}
 )
 
 // ValidationError is the first problem Validate found. Code is one of the
@@ -100,7 +100,7 @@ func LaunchSafetyName(name string) bool {
 }
 
 // CredentialSuffix reports whether the environment variable name ends in
-// _API_KEY, _AUTH_TOKEN, _ACCESS_TOKEN or _OAUTH_TOKEN (in any case): a
+// _API_KEY, _AUTH_TOKEN, _ACCESS_TOKEN, _OAUTH_TOKEN or _REFRESH_TOKEN (in any case): a
 // variable that could sign any harness in.
 func CredentialSuffix(name string) bool {
 	up := strings.ToUpper(name)

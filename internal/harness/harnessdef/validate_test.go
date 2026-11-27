@@ -165,7 +165,7 @@ func TestRuleHelpers(t *testing.T) {
 	if harnessdef.LaunchSafetyName("CODEX_HOME") {
 		t.Error("CODEX_HOME is not a launch-safety name")
 	}
-	for _, n := range []string{"X_API_KEY", "gh_auth_token", "A_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+	for _, n := range []string{"X_API_KEY", "gh_auth_token", "A_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "x_refresh_token"} {
 		if !harnessdef.CredentialSuffix(n) {
 			t.Errorf("CredentialSuffix(%q) = false", n)
 		}

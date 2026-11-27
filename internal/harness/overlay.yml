@@ -19,7 +19,12 @@
 # ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_FOUNDRY_API_KEY,
 # AWS_BEARER_TOKEN_BEDROCK, ANTHROPIC_AWS_API_KEY, CLAUDE_CODE_OAUTH_TOKEN,
 # CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX and CLAUDE_CONFIG_DIR are
-# each listed verbatim).
+# each listed verbatim; checked again 2026-11-27 for the phase 6 security
+# review: CLAUDE_CODE_USE_FOUNDRY, CLAUDE_CODE_USE_ANTHROPIC_AWS,
+# CLAUDE_CODE_USE_MANTLE, CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD,
+# ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID (workload identity
+# federation), ANTHROPIC_PROFILE and CLAUDE_CODE_OAUTH_REFRESH_TOKEN are each
+# listed verbatim too).
 claude-acp:
   kind: adapter
   command: claude-agent-acp
@@ -38,6 +43,14 @@ claude-acp:
     - CLAUDE_CODE_OAUTH_TOKEN
     - CLAUDE_CODE_USE_BEDROCK
     - CLAUDE_CODE_USE_VERTEX
+    - CLAUDE_CODE_USE_FOUNDRY
+    - CLAUDE_CODE_USE_ANTHROPIC_AWS
+    - CLAUDE_CODE_USE_MANTLE
+    - CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD
+    - ANTHROPIC_FEDERATION_RULE_ID
+    - ANTHROPIC_ORGANIZATION_ID
+    - ANTHROPIC_PROFILE
+    - CLAUDE_CODE_OAUTH_REFRESH_TOKEN
   config_env: [CLAUDE_CONFIG_DIR]
   status_source: https://code.claude.com/docs/en/cli-reference and https://code.claude.com/docs/en/env-vars
 
@@ -46,8 +59,12 @@ claude-acp:
 # README at 08746f8). Sign-in check and variables: openai/codex at
 # bee5dc55ac118d9136171fed55ffd89af26f8d21, codex-rs/cli/src/login.rs
 # (run_login_status), codex-rs/cli/src/main.rs (LoginSubcommand::Status) and
-# codex-rs/login/src/auth/manager.rs. Exit 1 is also used for errors, so a
-# signed-out verdict also needs the line "Not logged in".
+# codex-rs/login/src/auth/manager.rs. Workload identity sign-in:
+# codex-rs/login/src/auth/workload_identity.rs, with the names defined in
+# codex-rs/protocol/src/shell_environment.rs (OPENAI_FEDERATION_RULE_ID,
+# OPENAI_IDENTITY_TOKEN_FILE, OPENAI_IDENTITY_TOKEN_SOURCE,
+# OPENAI_SPIFFE_AUDIENCE, OPENAI_SPIFFE_ID). Exit 1 is also used for errors,
+# so a signed-out verdict also needs the line "Not logged in".
 codex-acp:
   kind: adapter
   command: codex-acp
@@ -58,9 +75,17 @@ codex-acp:
   status_signed_in: [0]
   status_signed_out: [1]
   status_signed_out_line: Not logged in
-  credential_env: [OPENAI_API_KEY, CODEX_API_KEY, CODEX_ACCESS_TOKEN]
+  credential_env:
+    - OPENAI_API_KEY
+    - CODEX_API_KEY
+    - CODEX_ACCESS_TOKEN
+    - OPENAI_FEDERATION_RULE_ID
+    - OPENAI_IDENTITY_TOKEN_FILE
+    - OPENAI_IDENTITY_TOKEN_SOURCE
+    - OPENAI_SPIFFE_AUDIENCE
+    - OPENAI_SPIFFE_ID
   config_env: [CODEX_HOME]
-  status_source: openai/codex@bee5dc55ac118d9136171fed55ffd89af26f8d21 codex-rs/cli/src/login.rs, codex-rs/cli/src/main.rs, codex-rs/login/src/auth/manager.rs
+  status_source: openai/codex@bee5dc55ac118d9136171fed55ffd89af26f8d21 codex-rs/cli/src/login.rs, codex-rs/cli/src/main.rs, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/auth/workload_identity.rs, codex-rs/protocol/src/shell_environment.rs
 
 # Adapter for Amp: "amp-acp uses the Amp CLI as its default execution
 # runtime" and "Run `amp login` before starting amp-acp"
