@@ -39,7 +39,7 @@ var marketplaceClients = []struct{ client, marketplace, manifest string }{
 	{"copilot", ".github/plugin/marketplace.json", "plugin.json"},
 }
 
-func repoFile(t *testing.T, name string) []byte {
+func repoBytes(t *testing.T, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(name)))
 	if err != nil {
@@ -79,7 +79,7 @@ func designTarball(t *testing.T, pkg string) string {
 // tarballFiles returns the regular files of a .tgz by their path in the archive.
 func tarballFiles(t *testing.T, name string) map[string][]byte {
 	t.Helper()
-	zipped, err := gzip.NewReader(bytes.NewReader(repoFile(t, name)))
+	zipped, err := gzip.NewReader(bytes.NewReader(repoBytes(t, name)))
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -130,7 +130,7 @@ func TestMarketplacesListBothPlugins(t *testing.T) {
 					Source json.RawMessage `json:"source"`
 				} `json:"plugins"`
 			}
-			if err := json.Unmarshal(repoFile(t, tc.marketplace), &marketplace); err != nil {
+			if err := json.Unmarshal(repoBytes(t, tc.marketplace), &marketplace); err != nil {
 				t.Fatalf("%s: %v", tc.marketplace, err)
 			}
 			if marketplace.Name != "agentflow" {
@@ -182,9 +182,9 @@ func TestDesignSystemPluginCarriesVendoredPackages(t *testing.T) {
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("%s/vendor has %v, want %v: %s", designPlugin, got, want, designRebuild)
 	}
-	skill := string(repoFile(t, designPlugin+"/skills/agentflow-design/SKILL.md"))
+	skill := string(repoBytes(t, designPlugin+"/skills/agentflow-design/SKILL.md"))
 	for _, name := range want {
-		if !bytes.Equal(repoFile(t, designPlugin+"/vendor/"+name), repoFile(t, designVendor+"/"+name)) {
+		if !bytes.Equal(repoBytes(t, designPlugin+"/vendor/"+name), repoBytes(t, designVendor+"/"+name)) {
 			t.Errorf("%s/vendor/%s differs from %s: %s", designPlugin, name, designVendor, designRebuild)
 		}
 		if !strings.Contains(skill, name) {
@@ -252,7 +252,7 @@ func TestDesignSystemManifestsUseComponentsVersion(t *testing.T) {
 			Name    string `json:"name"`
 			Version string `json:"version"`
 		}
-		if err := json.Unmarshal(repoFile(t, manifestPath), &manifest); err != nil {
+		if err := json.Unmarshal(repoBytes(t, manifestPath), &manifest); err != nil {
 			t.Fatalf("%s: %v", manifestPath, err)
 		}
 		if manifest.Name != "design-system" {
@@ -272,7 +272,7 @@ func TestWebsiteInstallsDesignPackagesFromTarballs(t *testing.T) {
 			Resolved string `json:"resolved"`
 		} `json:"packages"`
 	}
-	if err := json.Unmarshal(repoFile(t, "website/package-lock.json"), &lock); err != nil {
+	if err := json.Unmarshal(repoBytes(t, "website/package-lock.json"), &lock); err != nil {
 		t.Fatal(err)
 	}
 	found := 0
