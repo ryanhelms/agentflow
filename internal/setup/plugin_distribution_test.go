@@ -125,12 +125,18 @@ func TestPluginServersKeepTargetDirectoryAndClient(t *testing.T) {
 
 func pluginFixture(t *testing.T, cache string) {
 	t.Helper()
-	active := filepath.Join(cache, "agentflow", "current")
+	// The install layout: <cache>/agentflow/<version>, named by the current link, or by
+	// current.txt on Windows. The launchers refuse a pointer to any other folder.
+	root := filepath.Join(cache, "agentflow")
+	active := filepath.Join(root, "1.0.0")
 	if err := os.MkdirAll(active, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if runtime.GOOS != "windows" {
 		if err := os.WriteFile(filepath.Join(active, "agentflow"), []byte("#!/bin/sh\npwd\nprintf '%s\\n' \"$@\"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("1.0.0", filepath.Join(root, "current")); err != nil {
 			t.Fatal(err)
 		}
 		return
