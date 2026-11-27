@@ -1,5 +1,6 @@
-// Command fake-acp is a standalone fake ACP agent for the phase 6 demo
-// (ADR, "Phase 6 demo and gate"). It is built only by hand:
+// Command fake-acp is a standalone fake ACP agent for the phase 6 and 7
+// demos (ADR, "Phase 6 demo and gate", "Phase 7 demo and gate"). It is
+// built only by hand:
 //
 //	go build -o "$T/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp
 //
@@ -12,6 +13,12 @@
 //	--mode=hang          never answer
 //	--mode=exit          exit before answering
 //	--mode=garbage       write a line that is not JSON-RPC
+//	--mode=session-demo  answer initialize like ok, then play the demo session
+//	--mode=session-nested  a session whose terminals start agentflow and read answer.key
+//	--mode=session-hang  a session that asks for permission and waits for cancel
+//	--mode=session-auth  a session whose session/new fails with -32000
+//	--log=FILE           append what the fake receives (acptest.LogEntry) to FILE;
+//	                     the session modes write it to stderr without --log
 //	--status=in          a sign-in status command: exit 0 (signed in)
 //	--status=out         a sign-in status command: print "Not logged in", exit 1
 package main
@@ -33,6 +40,7 @@ func main() {
 
 func run(args []string) int {
 	mode := "ok"
+	logFile := ""
 	for _, a := range args {
 		switch {
 		case a == "--version":
@@ -47,9 +55,16 @@ func run(args []string) int {
 			return 2
 		case strings.HasPrefix(a, "--mode="):
 			mode = strings.TrimPrefix(a, "--mode=")
+		case strings.HasPrefix(a, "--log="):
+			logFile = strings.TrimPrefix(a, "--log=")
 		}
 	}
-	var s acptest.Script
+	s := acptest.Script{Log: logFile}
+	if script, ok := acptest.SessionModeScripts[mode]; ok {
+		s.Session = script()
+		s.LogStderr = true
+		mode = "ok" // the probe's plain initialize is answered like --mode=ok
+	}
 	switch mode {
 	case "ok":
 	case "auth":
