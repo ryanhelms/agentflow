@@ -61,7 +61,7 @@ type check struct {
 type link func(c *check)
 
 // chain is the order of the ADR's table.
-var chain = []link{syntaxLink, catalogLink, schemaLink, rulesLink, referencesLink, secretsLink, filesLink, harnessLink, policyLink, conflictLink, effectLink}
+var chain = []link{syntaxLink, catalogLink, schemaLink, rulesLink, referencesLink, secretsLink, filesLink, harnessLink, aiLink, policyLink, conflictLink, effectLink}
 
 func (c *check) add(sev Severity, e *edit, code, msg string) {
 	d := Diagnostic{Severity: sev, Edit: -1, Code: code, Message: msg}
@@ -539,6 +539,8 @@ type policyState struct {
 	// on); harnessesDisabled the harness IDs agentflow ignores.
 	autoProbe, signInCheck bool
 	harnessesDisabled      []string
+	// ai is the session policy (check_ai.go).
+	ai aiPolicy
 }
 
 func policyOf(files [2]string) policyState {
@@ -558,6 +560,7 @@ func policyOf(files [2]string) policyState {
 	p.autoProbe = user.AI.Harnesses.AutoProbeOn()
 	p.signInCheck = user.AI.Harnesses.SignInCheckOn()
 	p.harnessesDisabled = user.AI.Harnesses.Disabled
+	p.ai = aiPolicyOf(user, repo)
 	for _, action := range append([]string{""}, config.AutonomyActions()...) {
 		for _, class := range []string{"local", "remote"} {
 			d := config.ResolveAutonomy(user, repo, class, action, false)
@@ -654,6 +657,9 @@ func loosening(before, after [2]string, rules rulePlugins) string {
 		if !slices.Contains(b.harnessesDisabled, id) {
 			return fmt.Sprintf("Stops ignoring the harness %s, so agentflow may list and start it.", id)
 		}
+	}
+	if msg := aiLoosening(a.ai, b.ai); msg != "" {
+		return msg
 	}
 	// A plugin is code that runs with the permissions its manifest lists, so
 	// turning one on loosens, and so does letting a repository's plugins run
