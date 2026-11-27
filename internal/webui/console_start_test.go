@@ -144,7 +144,9 @@ func TestServeChildLeavesTheLinkToTheStarter(t *testing.T) {
 				t.Errorf("mode %s: the link took %s", mode, took)
 			}
 			cancel()
-			<-done
+			if err := <-done; err != nil {
+				t.Errorf("the serve-child daemon: %v", err)
+			}
 		})
 	}
 }

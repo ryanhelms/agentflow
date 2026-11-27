@@ -26,7 +26,7 @@ func TestPreBashBlocksSignInAndSessionHost(t *testing.T) {
 	for mode, conventionOnly := range preBashModes {
 		for _, command := range blocked {
 			code, out := preBashExit(t, command, conventionOnly)
-			if code != 2 || !(strings.Contains(out, "sign-in link") || strings.Contains(out, "ai host")) {
+			if code != 2 || (!strings.Contains(out, "sign-in link") && !strings.Contains(out, "ai host")) {
 				t.Errorf("%s: %q = exit %d %q, want blocked", mode, command, code, out)
 			}
 		}

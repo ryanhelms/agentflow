@@ -161,7 +161,7 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 	}
 	// Your own account's settings hold whatever AGENTFLOW_HOME says: a
 	// harness or a start you turned off there stays off.
-	if acct, _ := m.o.accountLayer(); acct != nil {
+	if acct := m.o.accountLayer(); acct != nil {
 		if slices.Contains(acct.AI.Harnesses.Disabled, r.Harness) {
 			return nil, refuse(RefuseNotReady, fmt.Sprintf("You turned off the harness %s.", harnessText(r.Harness)), "Turn it on in Settings in your own agentflow home.")
 		}

@@ -20,15 +20,14 @@ import (
 // stores.
 
 // accountLayer is the account home's configuration when it differs from
-// the session home; nil when it is the same folder, unset or unreadable as
-// absent.
-func (o Options) accountLayer() (*config.User, string) {
-	acct := o.AccountHome
-	if acct == "" || !filepath.IsAbs(acct) || sameDir(acct, o.Home) {
-		return nil, ""
+// the session home; nil when it is the same folder, unset or absent.
+func (o Options) accountLayer() *config.User {
+	acct := o.accountStoreHome()
+	if acct == "" {
+		return nil
 	}
 	if _, err := os.Stat(acct); err != nil {
-		return nil, ""
+		return nil
 	}
 	u, err := config.LoadUserAt(acct)
 	if err != nil {
@@ -39,7 +38,7 @@ func (o Options) accountLayer() (*config.User, string) {
 		u = &config.User{}
 		u.AI.Sessions.AgentStart = &off
 	}
-	return u, acct
+	return u
 }
 
 // loadUser is the person's configuration for a session: the session
@@ -52,7 +51,7 @@ func (o Options) loadUser() (user *config.User, accountRules map[string]config.A
 	if err != nil {
 		return nil, nil, err
 	}
-	acct, _ := o.accountLayer()
+	acct := o.accountLayer()
 	if acct == nil {
 		return user, nil, nil
 	}
