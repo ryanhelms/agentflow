@@ -503,7 +503,7 @@ func TestDetectListsOneProgramOnce(t *testing.T) {
 func TestDetectListsShimsApart(t *testing.T) {
 	e := newEnv(t, harnesstest.Settings{})
 	shim := filepath.Join(t.TempDir(), "shim")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\necho shim 1.0.0\n"), 0o755); err != nil { //nolint:gosec // a fake program must be executable
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\necho shim 1.0.0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"gemini", "goose"} {
