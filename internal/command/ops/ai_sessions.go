@@ -562,7 +562,7 @@ func printAIStatus(w io.Writer, list app.AIStatusList, now time.Time) {
 		}
 		fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s\n", s.ID, printable(s.Harness), s.State, printable(code), age(now.Sub(s.CreatedAt)), printable(tilde(s.Worktree)))
 		for _, ask := range s.Asks {
-			fmt.Fprintf(w, "    waiting: %s %s (%s)\n", printable(string(ask.Kind)), printable(askSubject(ask.Line, ask.Paths, ask.Title)), printable(ask.Reason))
+			fmt.Fprintf(w, "    waiting: %s %s %s (%s)\n", printable(ask.ID), printable(string(ask.Kind)), printable(askSubject(ask.Line, ask.Paths, ask.Title)), printable(ask.Reason))
 			if ask.CanAllow {
 				fmt.Fprintf(w, "      agentflow ai respond %s %s --allow\n", s.ID, ask.ID)
 			}
@@ -1027,7 +1027,7 @@ func (p *aiPrinter) item(it aisession.Item) {
 	case aisession.ItemPrompt:
 		fmt.Fprintf(p.w, "> %s\n", strings.ReplaceAll(text, "\n", "\n> "))
 	default:
-		fmt.Fprintf(p.w, "[%s] %s\n", printable(it.Kind), strings.ReplaceAll(text, "\n", " "))
+		fmt.Fprintf(p.w, "[%s] %s\n", printable(it.Kind), itemDetail(it))
 	}
 }
 
