@@ -586,7 +586,11 @@ func (r rulePlugins) may(id string) bool { return r.unread || r.ids[id] }
 func (c *check) rulePlugins() rulePlugins {
 	if c.rules == nil {
 		c.rules = &rulePlugins{ids: map[string]bool{}}
-		reg, err := manifest.ReadRegistry(c.s.Home)
+		var reg manifest.Registry
+		err := c.s.homeErr()
+		if err == nil {
+			reg, err = manifest.ReadRegistry(c.s.Home)
+		}
 		c.rules.unread = err != nil
 		for _, p := range reg.Plugins {
 			if len(p.Manifest.Extensions.PermissionRule) > 0 {

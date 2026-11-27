@@ -298,3 +298,47 @@ func TestPreBashAllowsMentionsOfPluginCommands(t *testing.T) {
 		}
 	}
 }
+
+// A repository that points AGENTFLOW_HOME inside itself must not switch off
+// the hooks: pre-bash and commit-msg enforce the never-list and the
+// repository's rules as they do with an empty personal layer.
+func TestCoreHooksIgnoreHomeInsideRepository(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	home := filepath.Join(dir, ".agentflow-home")
+	t.Setenv("AGENTFLOW_HOME", home)
+	if out, err := exec.Command("git", "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v %s", err, out)
+	}
+	if err := os.MkdirAll(filepath.Join(home, "providers"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("autonomy: {local: auto, remote: auto}\nplugins: {evil: {enabled: true}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "providers", "broken.yml"), []byte("providers: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(".agentflow", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".agentflow/config.yml", []byte("commit: {types: [docs]}\npolicy: {protected_branches: [production]}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range []string{"git push --force", "git push origin production"} {
+		if code, shown := preBashExit(t, cmd, false); code != 2 {
+			t.Errorf("%q: exit %d, want it blocked (%s)", cmd, code, shown)
+		}
+	}
+	var buf bytes.Buffer
+	for msg, valid := range map[string]bool{"feat: add quota": false, "docs: describe quota": true} {
+		if err := os.WriteFile("MSG", []byte(msg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := CommitMsgHook(t.Context(), "MSG", &buf); (err == nil) != valid {
+			t.Errorf("commit %q: %v", msg, err)
+		}
+	}
+}
