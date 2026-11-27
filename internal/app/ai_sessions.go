@@ -204,8 +204,32 @@ type AISessionItems struct {
 // MaxStatusItems caps the items one ai status call returns.
 const MaxStatusItems = 500
 
+// aiScope limits ctx to this App's repository: ai status, respond and
+// cancel see and act only on the sessions of the caller's repository (all
+// its worktrees). Outside a repository they refuse.
+func (a *App) aiScope(ctx context.Context) (context.Context, error) {
+	if a.Repo == nil || a.Repo.Dir == "" {
+		return nil, notInRepository()
+	}
+	common, err := a.commonDir(ctx)
+	if err != nil || common == "" {
+		return nil, notInRepository()
+	}
+	return aisession.WithScope(ctx, common), nil
+}
+
+func notInRepository() error {
+	return &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.RefuseNotWorktree,
+		Message: "AI sessions are listed and answered per repository, and this directory is not in one",
+		Fix:     "Run the command inside the repository (any of its worktrees) whose session you mean."}}
+}
+
 // AIStatus lists the sessions, or one session's items after since.
 func (a *App) AIStatus(ctx context.Context, o aisession.Options, id aisession.ID, since int64) (any, error) {
+	ctx, err := a.aiScope(ctx)
+	if err != nil {
+		return nil, err
+	}
 	m, err := aiManager(o)
 	if err != nil {
 		return nil, err
@@ -243,6 +267,10 @@ func (a *App) AIStatus(ctx context.Context, o aisession.Options, id aisession.ID
 
 // AISession returns one session and its waiting asks.
 func (a *App) AISession(ctx context.Context, o aisession.Options, id aisession.ID) (aisession.Session, []aisession.AskRecord, error) {
+	ctx, err := a.aiScope(ctx)
+	if err != nil {
+		return aisession.Session{}, nil, err
+	}
 	m, err := aiManager(o)
 	if err != nil {
 		return aisession.Session{}, nil, err
@@ -256,6 +284,10 @@ func (a *App) AISession(ctx context.Context, o aisession.Options, id aisession.I
 func (a *App) AIRespond(ctx context.Context, o aisession.Options, r aisession.AnswerRequest) (aisession.AnswerResult, error) {
 	if a.inSession(ctx) {
 		return aisession.AnswerResult{}, &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.AnswerSelf, Message: "an AI session cannot answer requests"}}
+	}
+	ctx, err := a.aiScope(ctx)
+	if err != nil {
+		return aisession.AnswerResult{}, err
 	}
 	m, err := aiManager(o)
 	if err != nil {
@@ -287,6 +319,10 @@ func (a *App) AICancelPlan(ctx context.Context, o aisession.Options, id aisessio
 func (a *App) AICancel(ctx context.Context, o aisession.Options, id aisession.ID) (AICancelResult, error) {
 	if a.inSession(ctx) {
 		return AICancelResult{}, &AIRefusal{Refusal: &aisession.Refusal{Code: aisession.RefuseNested, Message: "an AI session cannot cancel a session"}}
+	}
+	ctx, err := a.aiScope(ctx)
+	if err != nil {
+		return AICancelResult{}, err
 	}
 	m, err := aiManager(o)
 	if err != nil {

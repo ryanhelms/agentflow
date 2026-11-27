@@ -13,7 +13,7 @@ Request <ask-2>: fs_write, because: gate
   path:    src/hello.txt
   size:    21 bytes
   change to src/hello.txt (the harness's content, shown as text):
-  ----- old -----
-  ----- new -----
-  hello from the agent
+  ----- old (each line starts with "old| ") -----
+  ----- new (each line starts with "new| ") -----
+  new| hello from the agent
   ----- end -----

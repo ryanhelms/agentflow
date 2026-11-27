@@ -334,7 +334,7 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 	}
 	sess := Session{
 		ID: id, Harness: p.found.ID, HarnessName: SanitizeLine(p.harness.Name, 64), Identity: p.found.Identity,
-		Repo: repoIDOf(p.common), WorktreeID: wtID, Worktree: p.root, Branch: SanitizeLine(p.branch, 256),
+		Repo: repoIDOf(p.common), Common: p.common, WorktreeID: wtID, Worktree: p.root, Branch: SanitizeLine(p.branch, 256),
 		StartedBy: p.req, Ceiling: p.plan.Ceiling, Home: p.plan.Home, EnvNames: p.plan.EnvNames,
 		MCP: p.plan.MCP, Host: HostInfo{Mode: mode}, CreatedAt: m.o.Now().UTC(),
 	}
@@ -422,20 +422,47 @@ func (m *manager) Host(ctx context.Context, id ID, o HostOptions) (Session, erro
 	return h.Run(ctx)
 }
 
-func (m *manager) List(context.Context) ([]Session, error) {
+func (m *manager) List(ctx context.Context) ([]Session, error) {
 	st, err := m.store()
 	if err != nil {
 		return nil, err
 	}
-	return st.List()
+	all, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+	scope, scoped := ScopeFrom(ctx)
+	if !scoped {
+		return all, nil
+	}
+	out := []Session{}
+	for _, s := range all {
+		if inScope(ctx, s, scope) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
-func (m *manager) Get(_ context.Context, id ID) (Session, []AskRecord, error) {
+// scoped returns session id when ctx's scope (if any) holds it; a session
+// of another repository answers like an unknown ID.
+func (m *manager) scoped(ctx context.Context, st *fileStore, id ID) (Session, error) {
+	s, err := st.Get(id)
+	if err != nil {
+		return Session{}, err
+	}
+	if scope, ok := ScopeFrom(ctx); ok && !inScope(ctx, s, scope) {
+		return Session{}, ErrNoSession
+	}
+	return s, nil
+}
+
+func (m *manager) Get(ctx context.Context, id ID) (Session, []AskRecord, error) {
 	st, err := m.store()
 	if err != nil {
 		return Session{}, nil, err
 	}
-	s, err := st.Get(id)
+	s, err := m.scoped(ctx, st, id)
 	if err != nil {
 		return Session{}, nil, err
 	}
@@ -443,9 +470,12 @@ func (m *manager) Get(_ context.Context, id ID) (Session, []AskRecord, error) {
 	return s, asks, err
 }
 
-func (m *manager) Items(_ context.Context, id ID, since int64, max int) ([]Item, int64, error) {
+func (m *manager) Items(ctx context.Context, id ID, since int64, max int) ([]Item, int64, error) {
 	st, err := m.store()
 	if err != nil {
+		return nil, since, err
+	}
+	if _, err := m.scoped(ctx, st, id); err != nil {
 		return nil, since, err
 	}
 	items, err := st.Items(id, since, max)
@@ -454,6 +484,40 @@ func (m *manager) Items(_ context.Context, id ID, since int64, max int) ([]Item,
 		next = items[n-1].Seq
 	}
 	return items, next, err
+}
+
+// ---- scope: a caller sees only its own repository's sessions ----
+
+type scopeKey struct{}
+
+// WithScope limits what List, Get, Items, Answer and Cancel see to the
+// sessions of the repository whose common git directory is common (every
+// worktree of one repository shares it). A session of another repository
+// answers like an unknown ID. Without a scope (the projection, the host)
+// every session is seen.
+func WithScope(ctx context.Context, common string) context.Context {
+	return context.WithValue(ctx, scopeKey{}, resolvedPath(common))
+}
+
+// ScopeFrom returns ctx's scope.
+func ScopeFrom(ctx context.Context) (string, bool) {
+	s, ok := ctx.Value(scopeKey{}).(string)
+	return s, ok
+}
+
+// inScope reports whether s belongs to the repository at common. A record
+// written before Common existed is matched through its worktree; one whose
+// worktree is gone is in no scope.
+func inScope(ctx context.Context, s Session, common string) bool {
+	c := s.Common
+	if c == "" {
+		_, _, cd, _, err := worktreeOf(ctx, s.Worktree)
+		if err != nil {
+			return false
+		}
+		c = cd
+	}
+	return common != "" && sameDir(c, common)
 }
 
 // fingerprintMAC is the allow answer's HMAC of the fingerprint.
@@ -483,7 +547,7 @@ func (m *manager) Answer(ctx context.Context, r AnswerRequest) (AnswerResult, er
 	if err != nil {
 		return AnswerResult{}, err
 	}
-	sess, err := st.Get(r.Session)
+	sess, err := m.scoped(ctx, st, r.Session)
 	if err != nil {
 		return AnswerResult{}, refuse(AnswerNotFound, "There is no such session.", "")
 	}
@@ -535,7 +599,7 @@ func (m *manager) Cancel(ctx context.Context, id ID) (Session, error) {
 	if err != nil {
 		return Session{}, err
 	}
-	sess, err := st.Get(id)
+	sess, err := m.scoped(ctx, st, id)
 	if err != nil {
 		return Session{}, refuse(AnswerNotFound, "There is no such session.", "")
 	}

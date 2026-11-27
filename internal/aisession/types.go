@@ -453,11 +453,15 @@ const (
 
 // Session is session.json.
 type Session struct {
-	ID           ID         `json:"id"`
-	Harness      string     `json:"harness"`
-	HarnessName  string     `json:"harness_name"`
-	Identity     string     `json:"identity"` // harness.Found.Identity at start
-	Repo         string     `json:"repo"`     // bus repository ID
+	ID          ID     `json:"id"`
+	Harness     string `json:"harness"`
+	HarnessName string `json:"harness_name"`
+	Identity    string `json:"identity"` // harness.Found.Identity at start
+	Repo        string `json:"repo"`     // bus repository ID
+	// Common is the repository's common git directory, resolved: every
+	// worktree of one repository shares it. Callers see only the sessions
+	// of their own repository (WithScope).
+	Common       string     `json:"common,omitempty"`
 	WorktreeID   string     `json:"worktree_id"`
 	Worktree     string     `json:"worktree"` // absolute; shown with "~"
 	Branch       string     `json:"branch,omitempty"`
