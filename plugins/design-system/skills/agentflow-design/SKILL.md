@@ -37,7 +37,7 @@ npm install \
   ./vendor/agentflow-design-patterns-0.1.1.tgz
 ```
 
-Install all three: components depends on tokens, patterns depends on components. Commit `vendor/` so the `file:` dependencies resolve for everyone.
+Install all three: components needs tokens and patterns needs components, and a package manager does not fetch a missing one for you. The same paths work with `pnpm add`; with `yarn add`, prefix each with `file:`. Commit `vendor/` so the `file:` dependencies resolve for everyone.
 
 Import the styles once, in this order, at the app entry:
 
@@ -85,7 +85,7 @@ Use tokens for every colour, size and space. Exact values are in `reference/toke
 | Lines | `--border`, `--border-strong`, `--keyline`, `--grid` | Keylines (`--keyline` is the width), chart grid |
 | Accent | `--accent`, `--blue-wash`, `--on-blue`, `--focus`, `--primary-hover` | Links and marks, selection wash, text on blue, focus ring |
 | Status | `--ok`, `--warn`, `--bad`, `--info`, each with `-bg` | State, always beside a label |
-| Charts | `--series-1` to `--series-8` | Series colours; none repeats a status colour |
+| Charts | `--series-1` to `--series-8` | Series colours; none repeats `--ok`, `--warn` or `--bad` |
 | Brand | `--brand-midnight`, `--brand-blue`, `--brand-blue-deep`, `--brand-chalk`, `--brand-frost`, `--brand-slate`, `--brand-spearmint` | Same in both themes. Spearmint is accent only: a live signal, one highlight, primary hover |
 | On dark | `--on-dark-primary`, `--on-dark-secondary`, `--on-dark-faint` | Text on a surface that stays dark, such as the rail |
 | Space | `--s-1` to `--s-10` | 4, 8, 12, 16, 24, 32, 48, 64, 96, 128px |
@@ -175,7 +175,7 @@ Follow these so your own markup matches the components.
 - **Content sits in panels.** Use `Panel` for each block, `flush` for tables and charts that run edge to edge, and `Grid` for a keylined row of cells.
 - **One breakpoint, 1100px.** At or below it, a `Grid` of four or six columns drops to two and a grid of three drops to one, the KPI strip wraps to three columns and the `DetailTemplate` aside is hidden. Add no other breakpoints inside the templates.
 - **Motion is built in.** Page headers, the KPI strip, charts, drawers, modals and toasts animate on mount, and the CSS turns animation off under `prefers-reduced-motion`. For a staggered entrance use the `stagger` or `rise` class from `base.css`; write no new keyframes for it.
-- **Focus stays visible.** `:focus-visible` draws a 2px `--focus` outline. Do not remove it.
+- **Focus stays visible.** `:focus-visible` draws a 2px `--focus` outline; the data table, search and palette inputs show it as an inset `--focus` edge instead. Do not remove either.
 
 ## Before you finish
 

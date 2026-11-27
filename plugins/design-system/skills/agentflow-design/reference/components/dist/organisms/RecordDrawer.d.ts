@@ -1,7 +1,6 @@
 import { type ReactNode } from 'react';
 /**
  * Record inspector blade: attributes in a fixed order, raw JSON, copy, previous/next and related links.
- * Equivalent of RecordBlade.tsx, with pivots to other pages added.
  */
 export declare function RecordDrawer({ open, onClose, title, eyebrow, record, attributes, links, onPrev, onNext, children }: {
     open: boolean;

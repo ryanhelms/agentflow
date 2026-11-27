@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 /**
  * App shell layout: rail | top bar | routed page | status bar, plus a slot for overlays (palette,
- * toasts). Regions only: `src/app/Shell.tsx` fills the slots and owns the global shortcuts.
+ * toasts). Regions only: the app fills the slots and owns the global shortcuts.
  * The page region re-mounts when `routeKey` changes, so pages animate in on route change, and shows
  * a skeleton while a lazy page chunk loads.
  */

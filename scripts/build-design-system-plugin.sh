@@ -4,6 +4,7 @@
 #   skills/agentflow-design/reference/     tokens.css, base.css, the patterns stylesheet
 #                                          and every .d.ts, at their package paths
 #   the "version" of the four plugin manifests (the components package version)
+#   the tarball names in the skill's install command
 #
 # Run it after changing a tarball in website/vendor/. go test ./internal/setup/ fails
 # while the copies are stale.
@@ -43,15 +44,19 @@ copy_matching() {
   done < <(find "$from" -type f -name "$2" | LC_ALL=C sort)
 }
 
-rm -rf "$plugin/vendor" "$reference"
-mkdir -p "$plugin/vendor" "$reference"
-
+# Check and unpack every input before removing anything, so a failed run leaves
+# the plugin as it was.
+tarballs=()
 for package in tokens components patterns; do
   tarball=$(one_tarball "$package")
-  cp "$tarball" "$plugin/vendor/"
+  tarballs+=("$tarball")
   mkdir -p "$work/$package"
   tar -xzf "$tarball" -C "$work/$package"
 done
+
+rm -rf "$plugin/vendor" "$reference"
+mkdir -p "$plugin/vendor" "$reference"
+cp "${tarballs[@]}" "$plugin/vendor/"
 
 copy_matching tokens 'tokens.css'
 copy_matching components '*.d.ts'
@@ -72,6 +77,14 @@ for manifest in \
   "$plugin/plugin.json"; do
   sed -E "s/^(  \"version\": *\")[^\"]*\"/\\1$version\"/" "$manifest" > "$work/manifest.json"
   cat "$work/manifest.json" > "$manifest"
+done
+
+# The skill's install command names each tarball with its version.
+skill=$plugin/skills/agentflow-design/SKILL.md
+for tarball in "${tarballs[@]}"; do
+  name=${tarball##*/}
+  sed -E "s/${name%-*}-[0-9]+(\.[0-9]+)*\.tgz/$name/g" "$skill" > "$work/skill.md"
+  cat "$work/skill.md" > "$skill"
 done
 
 echo "✓ $plugin copies $src at design components $version"

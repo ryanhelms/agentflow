@@ -228,9 +228,14 @@ func TestDesignSystemReferenceMatchesPackages(t *testing.T) {
 			if len(copied) == 0 {
 				t.Fatalf("reference/%s is empty: %s", pkg, designRebuild)
 			}
-			// Every type declaration and the tokens are part of the reference.
+			// Every type declaration, and every file the skill names, is part of
+			// the reference.
+			named := map[string]string{"tokens": "package/tokens.css", "components": "package/dist/base.css", "patterns": "package/dist/styles.css"}
+			if !copied[named[pkg]] {
+				t.Errorf("reference/%s lacks %s: %s", pkg, named[pkg], designRebuild)
+			}
 			for name := range packed {
-				if (strings.HasSuffix(name, ".d.ts") || name == "package/tokens.css") && !copied[name] {
+				if strings.HasSuffix(name, ".d.ts") && !copied[name] {
 					t.Errorf("reference/%s lacks %s: %s", pkg, strings.TrimPrefix(name, "package/"), designRebuild)
 				}
 			}
@@ -287,5 +292,36 @@ func TestWebsiteInstallsDesignPackagesFromTarballs(t *testing.T) {
 	}
 	if found != len(designPackages) {
 		t.Errorf("website/package-lock.json has %d design packages, want %d", found, len(designPackages))
+	}
+}
+
+// A plain dependency on an unpublished package is fetched from a registry, where
+// anyone may own the name. Between design packages only optional peers are safe.
+func TestDesignPackagesNeverFetchEachOther(t *testing.T) {
+	for pkg := range designPackages {
+		var manifest struct {
+			Dependencies         map[string]string `json:"dependencies"`
+			OptionalDependencies map[string]string `json:"optionalDependencies"`
+			PeerDependencies     map[string]string `json:"peerDependencies"`
+			PeerDependenciesMeta map[string]struct {
+				Optional bool `json:"optional"`
+			} `json:"peerDependenciesMeta"`
+		}
+		packed := tarballFiles(t, designVendor+"/"+designTarball(t, pkg))
+		if err := json.Unmarshal(packed["package/package.json"], &manifest); err != nil {
+			t.Fatalf("%s: %v", pkg, err)
+		}
+		for _, deps := range []map[string]string{manifest.Dependencies, manifest.OptionalDependencies} {
+			for name := range deps {
+				if strings.HasPrefix(name, "@agentflow/") {
+					t.Errorf("%s depends on %s: make it an optional peer", pkg, name)
+				}
+			}
+		}
+		for name := range manifest.PeerDependencies {
+			if strings.HasPrefix(name, "@agentflow/") && !manifest.PeerDependenciesMeta[name].Optional {
+				t.Errorf("%s: peer %s must be optional", pkg, name)
+			}
+		}
 	}
 }
