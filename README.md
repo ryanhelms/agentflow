@@ -175,8 +175,9 @@ init:
 installed; commit it in a PR. It also replaces `.agentflow/bin/agentflow`,
 `.agentflow/bin/agentflow.ps1`, `.githooks/commit-msg` and `.githooks/pre-push` with this
 release's files, but only where a file is byte-for-byte a stock file from an older agentflow
-release. It warns about a changed file, a link or a linked folder and leaves it alone, and
-it never creates a missing file. `agentflow pin --check` exits 1 when the workflow or a
+release. It warns about a changed file (line endings that git converted count as a
+change), a link or a linked folder and leaves it alone, and it never creates a missing
+file. `agentflow pin --check` exits 1 when the workflow or a
 stock file is behind. `agentflow doctor` reports a workflow pin that is behind, and the
 Claude Code session hook offers `/agentflow:pin` when it is. No Dependabot or GitHub App
 access is needed.
@@ -916,20 +917,24 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   folder or cannot be checked (on Windows also one that goes through a link or
   junction). Agentflow then uses your OS account's own cache (`~/.cache/agentflow` from
   the account, not `$HOME`; on Windows the account's local application data folder) and
-  prints a warning on stderr. A `current` link that points into a repository is not
-  run either. The check reads only the file system, never `git`, so `GIT_DIR` and the
-  other git variables do not change it. A cache inside a repository whose root is your
-  account's home directory (a dotfiles checkout) is still used. Every other cache
-  location keeps the same layout. A repository that can set `PATH`, or that commits its
-  own `.agentflow/bin/agentflow` or `.githooks`, still runs its own code: those are
-  repository files, and the Claude Code plugin runs a repository's launcher on purpose.
-  In a repository set up before this change, `agentflow pin` replaces the old launchers
-  and hooks with the checked ones when they are unchanged stock files. It warns about
-  each one you changed: replace those by hand with the file from this release. Don't use
+  prints a warning on stderr. A cache folder reached through a link is used by its real
+  path, and a dangling link counts as impossible to check. A `current` link that points
+  into a repository is not run either; a version folder directly in the cache is, even
+  when your account's home is inside another repository. The check reads only the file
+  system, never `git`, so `GIT_DIR` and the other git variables do not change it. A cache
+  inside a repository whose root is your account's home directory (a dotfiles checkout)
+  is still used. Every other cache location keeps the same layout. A repository that can
+  set `PATH`, or that commits its own `.agentflow/bin/agentflow` or `.githooks`, still
+  runs its own code when you run those files: they are repository files. The Claude Code
+  plugin's hooks and MCP server never run a repository's launcher; like the other
+  plugins, they use the checked cache or the plugin's own launcher. In a repository set
+  up before this change, `agentflow pin` replaces the old launchers and hooks with the
+  checked ones when they are unchanged stock files. It warns about each one you changed:
+  replace those by hand with the file from this release. A file whose line endings git
+  converted (`core.autocrlf` on Windows) counts as changed. Don't use
   `agentflow init --force` for this: it also overwrites `.agentflow/config.yml` and the
-  pinned workflow. The Claude Code and Codex plugins get
-  the check when the plugin updates, but in a repository that commits a launcher the
-  Claude Code plugin runs that launcher.
+  pinned workflow. The Claude Code and Codex plugins get the check when the plugin
+  updates.
 - **Audit.** Every local and remote action is logged to `~/.agentflow/audit.log`.
 - **Change control.** `flow-map.yml` blocks need the owning team lead's approval
   ([CODEOWNERS](CODEOWNERS)); caller workflows pin agentflow to a release

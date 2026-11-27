@@ -47,6 +47,17 @@ func newCacheFixture(t *testing.T) *cacheFixture {
 	t.Cleanup(func() { config.HomeWarnings = old })
 	git(t, f.repo, "init", "-q")
 	git(t, f.account, "init", "-q") // a dotfiles repository at the account's home
+	// A link the repository owns that points outside, and a dangling link into the
+	// repository (its target could be created there later).
+	if err := os.Mkdir(filepath.Join(f.outside, "real"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(f.outside, "real"), filepath.Join(f.repo, "to-outside")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(f.repo, "gone"), filepath.Join(f.outside, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 
@@ -74,6 +85,9 @@ func (f *cacheFixture) cases() []struct {
 		{"nothing set", map[string]string{}, own},
 		{"the account's own cache", map[string]string{"HOME": f.account}, own},
 		{"inside the dotfiles repository at the account home", map[string]string{"XDG_CACHE_HOME": f.account + "/xdg"}, filepath.Join(f.account, "xdg", "agentflow")},
+		{"a repository link to a folder outside", map[string]string{"XDG_CACHE_HOME": f.repo + "/to-outside"}, filepath.Join(f.outside, "real", "agentflow")},
+		{"a dangling link into the repository", map[string]string{"XDG_CACHE_HOME": f.outside + "/dangling"}, own},
+		{"a dangling link as HOME", map[string]string{"HOME": f.outside + "/dangling"}, own},
 	}
 }
 
@@ -176,4 +190,147 @@ func launcherBlock(t *testing.T, src string) string {
 		t.Fatal("launcher has no cache-root block")
 	}
 	return src[i : j+len(end)]
+}
+
+// installFixture makes cache/<version>/agentflow and points cache/current at it.
+func installFixture(t *testing.T, cache, version string) string {
+	t.Helper()
+	dir := filepath.Join(cache, version)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "agentflow")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dir, filepath.Join(cache, "current")); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// TestActiveBinaryMatchesLauncher checks which installed binary the launchers'
+// af_installed runs, and that ActiveBinary (agentflow setup) agrees. The
+// account's home is a temporary folder: af_account_home is replaced, never `id`.
+func TestActiveBinaryMatchesLauncher(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX launcher")
+	}
+	src, err := os.ReadFile(filepath.Join("..", "..", "templates", "repo", ".agentflow", "bin", "agentflow"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := launcherBlock(t, string(src)) +
+		"\naf_account_home() { printf '%s\\n' \"$TEST_ACCOUNT\"; }\nhome=$(af_cache_root)\naf_installed \"$home\"\n"
+	type scenario struct {
+		account string
+		env     map[string]string
+		want    string // "" when the binary must not run
+	}
+	scenarios := map[string]func(t *testing.T) scenario{
+		// HOME inside a repository: the account's own cache is used, and its binary runs.
+		"fallback to the account's own cache": func(t *testing.T) scenario {
+			f := newCacheFixture(t)
+			bin := installFixture(t, filepath.Join(f.account, ".cache", "agentflow"), "1.0.0")
+			return scenario{f.account, map[string]string{"HOME": f.repo}, bin}
+		},
+		// A cache inside a repository whose root is the account's home (dotfiles).
+		"dotfiles repository at the account home": func(t *testing.T) scenario {
+			f := newCacheFixture(t)
+			bin := installFixture(t, filepath.Join(f.account, "xdg", "agentflow"), "1.0.0")
+			return scenario{f.account, map[string]string{"XDG_CACHE_HOME": f.account + "/xdg"}, bin}
+		},
+		// The account's home is inside another repository: its own cache still runs.
+		"account home inside another repository": func(t *testing.T) scenario {
+			outer := realTempDir(t)
+			git(t, outer, "init", "-q")
+			account := filepath.Join(outer, "home")
+			t.Cleanup(config.OverrideAccountHome(account))
+			bin := installFixture(t, filepath.Join(account, ".cache", "agentflow"), "1.0.0")
+			return scenario{account, map[string]string{"HOME": account}, bin}
+		},
+		// ... but a `current` that leaves the cache for a repository does not.
+		"current points into a repository": func(t *testing.T) scenario {
+			f := newCacheFixture(t)
+			v := filepath.Join(f.repo, "v")
+			if err := os.MkdirAll(v, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(v, "agentflow"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			cache := filepath.Join(f.outside, "agentflow")
+			if err := os.MkdirAll(cache, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(v, filepath.Join(cache, "current")); err != nil {
+				t.Fatal(err)
+			}
+			return scenario{f.account, map[string]string{"XDG_CACHE_HOME": f.outside}, ""}
+		},
+		// A version folder in the cache that is itself a link into a repository.
+		"version folder links into a repository": func(t *testing.T) scenario {
+			f := newCacheFixture(t)
+			installFixture(t, filepath.Join(f.repo, "planted"), "1.0.0")
+			cache := filepath.Join(f.outside, "agentflow")
+			if err := os.MkdirAll(cache, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(f.repo, "planted", "1.0.0"), filepath.Join(cache, "1.0.0")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(cache, "1.0.0"), filepath.Join(cache, "current")); err != nil {
+				t.Fatal(err)
+			}
+			return scenario{f.account, map[string]string{"XDG_CACHE_HOME": f.outside}, ""}
+		},
+		// Through a repository-owned link to an outside cache, the real path runs.
+		"cache reached through a repository link": func(t *testing.T) scenario {
+			f := newCacheFixture(t)
+			bin := installFixture(t, filepath.Join(f.outside, "real", "agentflow"), "1.0.0")
+			return scenario{f.account, map[string]string{"XDG_CACHE_HOME": f.repo + "/to-outside"}, bin}
+		},
+	}
+	shells := 0
+	for _, sh := range []string{"/bin/sh", "/bin/dash", "/bin/bash", "/usr/bin/dash"} {
+		if _, err := os.Stat(sh); err != nil {
+			continue
+		}
+		shells++
+		for name, setup := range scenarios {
+			t.Run(sh+"/"+name, func(t *testing.T) {
+				sc := setup(t)
+				cmd := exec.Command(sh, "-euc", script)
+				cmd.Dir = realTempDir(t)
+				cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "TEST_ACCOUNT=" + sc.account}
+				for k, v := range sc.env {
+					cmd.Env = append(cmd.Env, k+"="+v)
+				}
+				var stderr bytes.Buffer
+				cmd.Stderr = &stderr
+				out, err := cmd.Output()
+				got := strings.TrimSuffix(string(out), "\n")
+				if sc.want == "" {
+					if err == nil || got != "" {
+						t.Fatalf("%s would run %q (stderr %q)", sh, got, stderr.String())
+					}
+					if !strings.Contains(stderr.String(), "agentflow: not running") {
+						t.Fatalf("%s gave no reason: %q", sh, stderr.String())
+					}
+				} else if err != nil || got != sc.want {
+					t.Fatalf("%s runs %q, %v, want %s (stderr %q)", sh, got, err, sc.want, stderr.String())
+				}
+				root, err := cacheRoot("linux", func(k string) string { return sc.env[k] }, ownCacheRoot)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if bin, why := ActiveBinary(root); bin != sc.want {
+					t.Fatalf("ActiveBinary(%s) = %q (%s), the launcher runs %q", root, bin, why, sc.want)
+				}
+			})
+		}
+	}
+	if shells == 0 {
+		t.Skip("no POSIX shell")
+	}
 }

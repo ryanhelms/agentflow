@@ -35,7 +35,10 @@ var windowsRules = runtime.GOOS == "windows"
 // relative, has a "." or ".." element, or is a file. An empty dir means the
 // variable is not set: own is used without a warning.
 //
-// The result is cleaned. Nothing is created.
+// The result is the physical path that was checked, as the launchers' shell
+// check prints it: links are resolved (outside Windows). On Windows, which
+// refuses a dir through a link, it is cleaned, and the account's own folder
+// is returned in own's spelling, as agentflow.ps1 does. Nothing is created.
 func UserDir(dir, source, what string, own func() (string, error)) (string, error) {
 	why := ""
 	switch {
@@ -51,12 +54,15 @@ func UserDir(dir, source, what string, own func() (string, error)) (string, erro
 	ownDir, ownErr := own()
 	if why == "" {
 		if ownErr == nil && sameDir(dir, ownDir) {
-			return filepath.Clean(dir), nil
+			if windowsRules {
+				return filepath.Clean(ownDir), nil
+			}
+			return physicalDir(dir), nil
 		}
 		why = userDirProblem(dir)
 	}
 	if why == "" {
-		return filepath.Clean(dir), nil
+		return physicalDir(dir), nil
 	}
 	if ownErr != nil {
 		return "", fmt.Errorf("the %s %s (from %s) %s, and the account's own folder cannot be found to use instead (%w); "+
@@ -71,7 +77,18 @@ func UserDir(dir, source, what string, own func() (string, error)) (string, erro
 		warnHome(fmt.Sprintf("agentflow: ignoring the %s %s (from %s): it %s, so a repository could supply the "+
 			"agentflow binary. Using %s instead.", what, dir, source, why, ownDir))
 	}
-	return filepath.Clean(ownDir), nil
+	return physicalDir(ownDir), nil
+}
+
+// physicalDir is dir with its links resolved (cleaned on Windows, or when it
+// does not resolve).
+func physicalDir(dir string) string {
+	if !windowsRules {
+		if r, ok := resolvePath(dir); ok {
+			return r
+		}
+	}
+	return filepath.Clean(dir)
 }
 
 // userDirProblem returns why dir, an absolute path without "." or "..", is

@@ -22,8 +22,13 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
     # A repository's environment (a client's per-project settings) can set LOCALAPPDATA, so the
     # install cache is never taken from inside a git working tree or git directory, unless that
     # tree's root is the account's own profile folder. A path through a link or junction cannot
-    # be checked here and counts as inside. Only the file system is read, never git, so GIT_DIR
-    # and the other git variables cannot change the answer. Messages go to stderr.
+    # be checked here and counts as inside, and so does a dangling one. Only the file system is
+    # read, never git, so GIT_DIR and the other git variables cannot change the answer. Messages
+    # go to stderr.
+    function Test-AgentflowLink($Info) {
+      # True when the file or folder $Info (a FileSystemInfo) is a link, junction or other reparse point.
+      return ([int]($Info.Attributes -band [IO.FileAttributes]::ReparsePoint)) -ne 0
+    }
     function Get-AgentflowInsideRepository([string]$Path) {
       # Returns $null when $Path is outside every repository, otherwise why it is not used.
       if ([IO.Path]::DirectorySeparatorChar -eq '\') {
@@ -42,16 +47,20 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
         while ($d) {
           $dir = $d.FullName
           if ($d.Exists) {
-            if ($d.Attributes -band [IO.FileAttributes]::ReparsePoint) { return "cannot be checked (it goes through the link $dir)" }
+            if (Test-AgentflowLink $d) { return "cannot be checked (it goes through the link $dir)" }
             $head = New-Object IO.FileInfo (Join-Path $dir 'HEAD')
             if (@([IO.Directory]::GetFileSystemEntries($dir, '.git')).Count -gt 0 -or
-                ($head.Exists -and !($head.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                ($head.Exists -and !(Test-AgentflowLink $head) -and
                  [IO.Directory]::Exists((Join-Path $dir 'objects')) -and [IO.Directory]::Exists((Join-Path $dir 'refs')))) {
               if ($profileDir -and $dir.TrimEnd('\', '/') -eq $profileDir) { return $null }
               return "is inside the repository $dir"
             }
           } elseif ([IO.File]::Exists($dir)) {
             return "cannot be checked (the file $dir is in its path)"
+          } elseif ($d.Parent -and $d.Parent.Exists -and
+                    @([IO.Directory]::GetFileSystemEntries($d.Parent.FullName, $d.Name)).Count -gt 0) {
+            # Listed by its folder but neither a folder nor a file: a dangling link or junction.
+            return "cannot be checked (it goes through the dangling link $dir)"
           }
           $d = $d.Parent
         }
@@ -78,17 +87,32 @@ param([Parameter(Position = 0)][string]$Repo = (Get-Location).Path)
       return $own
     }
     function Get-AgentflowActive([string]$CacheRoot) {
-      # The version folder current.txt names, when it is a version folder of $CacheRoot
-      # outside every repository and holds agentflow.exe; otherwise $null.
+      # The version folder current.txt names, when it is a version folder directly in $CacheRoot
+      # and holds agentflow.exe, neither of them a link, and $CacheRoot is the account's own
+      # cache or outside every repository; otherwise $null. Links above the account's own cache
+      # (a profile folder behind a junction) and a profile inside a repository do not matter.
       $pointer = Join-Path $CacheRoot 'current.txt'
       if (!(Test-Path -LiteralPath $pointer -PathType Leaf)) { return $null }
       $active = ([string](Get-Content -LiteralPath $pointer -Raw)).Trim()
       if (!$active -or (Split-Path -Parent $active) -ne $CacheRoot -or
           (Split-Path -Leaf $active) -notmatch '^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$') {
-        [Console]::Error.WriteLine("agentflow: ignoring the cache pointer $pointer: it does not name a version folder of $CacheRoot")
+        [Console]::Error.WriteLine("agentflow: ignoring the cache pointer ${pointer}: it does not name a version folder of $CacheRoot")
         return $null
       }
-      $why = Get-AgentflowInsideRepository $active
+      $local = [Environment]::GetFolderPath('LocalApplicationData')
+      $why = $null
+      if (!$local -or $CacheRoot.TrimEnd('\', '/') -ne (Join-Path $local 'agentflow').TrimEnd('\', '/')) {
+        $why = Get-AgentflowInsideRepository $CacheRoot
+      }
+      if (!$why) {
+        foreach ($item in @($active, (Join-Path $active 'agentflow.exe'))) {
+          $info = Get-Item -LiteralPath $item -Force -ErrorAction SilentlyContinue
+          if ($info -and (Test-AgentflowLink $info)) {
+            $why = "cannot be checked (it goes through the link $item)"
+            break
+          }
+        }
+      }
       if ($why) {
         [Console]::Error.WriteLine("agentflow: not running $active\agentflow.exe: it $why")
         return $null

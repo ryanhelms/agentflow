@@ -199,7 +199,7 @@ These are used by other repos and clients. Changing them is a breaking change:
   in `templates/repo/.agentflow/bin/` depend on. A cache root inside a git working tree
   or git directory is never used (issue #129): every script that finds or installs the
   binary carries the same fenced `agentflow cache root` block, `update.CacheRoot` applies
-  the same rule through `config.UserDir`, and tests in `internal/setup` and
+  the same rule through `config.UserDir` (`update.ActiveBinary` mirrors `af_installed`), and tests in `internal/setup` and
   `internal/update` keep the copies identical and the answers equal. Change them together.
 - `bin/next-version.sh` must give the same result as `internal/release` (`agentflow release
   version`). Change both together and test both.

@@ -1409,7 +1409,7 @@ release:
         </div>
 
         <div class="panel" role="tabpanel" id="p-claude" aria-labelledby="pb-claude" hidden>
-          <p class="note">Enabling the plugin in the repo's shared settings turns it on for everyone who trusts the repo. The plugin's hooks and MCP server all go through the repo launcher, so Claude Code runs the same self-updating binary as every other client.</p>
+          <p class="note">Enabling the plugin in the repo's shared settings turns it on for everyone who trusts the repo. The plugin's hooks and MCP server run the checked, self-updating binary from the install cache, the same one every other client runs, and never a repository's own launcher.</p>
           <div class="path">.claude/settings.json (in each repo)</div>
 <pre class="code">{
   "extraKnownMarketplaces": {

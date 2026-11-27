@@ -359,8 +359,10 @@ func (p *ProviderSetupPlan) checkLauncher(ctx context.Context, client string, ha
 		check(false, err.Error())
 		return
 	}
-	if !executable(filepath.Join(cache, "current", "agentflow")) {
+	if bin, why := update.ActiveBinary(cache); bin == "" {
 		switch {
+		case why != "":
+			check(false, "the installed agentflow in "+cache+" "+why+"; the launcher will not run it. Run the existing agentflow launcher in the client environment to install a release in the cache")
 		case !probeCommand(ctx, p.Root, "gh", "attestation", "verify", "--help"):
 			check(false, "first run requires gh on PATH with gh attestation verify support")
 		case !probeCommand(ctx, p.Root, "gh", "auth", "status", "--hostname", "github.com"):

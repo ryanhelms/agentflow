@@ -23,6 +23,18 @@ func TestUserDir(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	real := filepath.Join(outside, "real")
+	if err := os.Mkdir(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A link the repository owns, pointing outside: the real path is used, never the link.
+	if err := os.Symlink(real, filepath.Join(repo, "to-outside")); err != nil {
+		t.Fatal(err)
+	}
+	// A dangling link is not a missing folder: its target could appear inside a repository.
+	if err := os.Symlink(filepath.Join(repo, "gone"), filepath.Join(outside, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
 		name, dir, want, why string
@@ -39,6 +51,9 @@ func TestUserDir(t *testing.T) {
 		{"relative", "cache/agentflow", own, "is not absolute"},
 		{"a file", file, own, "is a file"},
 		{"a file used as a folder", file + "/agentflow", own, "cannot be checked"},
+		{"a repository link to a folder outside", repo + "/to-outside/agentflow", real + "/agentflow", ""},
+		{"a dangling link", outside + "/dangling/agentflow", own, "cannot be checked (its path does not resolve)"},
+		{"a dangling link as the folder", outside + "/dangling", own, "cannot be checked (its path does not resolve)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f.warnings.Reset()
@@ -121,6 +136,27 @@ func TestUserDirWindowsRules(t *testing.T) {
 		if got, err := UserDir(dir, "LOCALAPPDATA", "install cache", own); err != nil || got != want {
 			t.Errorf("UserDir(%s) = %q, %v; want %s", dir, got, err, want)
 		}
+	}
+}
+
+// On Windows the account's own folder reached through a link is returned in
+// own's spelling, so Go and agentflow.ps1 write and accept the same current.txt.
+func TestUserDirWindowsOwnFolderThroughALink(t *testing.T) {
+	newHomeFixture(t)
+	old := windowsRules
+	windowsRules = true
+	t.Cleanup(func() { windowsRules = old })
+	base := realDir(t, t.TempDir())
+	own := filepath.Join(base, "Local", "agentflow")
+	if err := os.MkdirAll(own, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "Local"), filepath.Join(base, "junction")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := UserDir(filepath.Join(base, "junction", "agentflow"), "LOCALAPPDATA", "install cache", func() (string, error) { return own, nil })
+	if err != nil || got != own {
+		t.Fatalf("UserDir = %q, %v; want the own spelling %s", got, err, own)
 	}
 }
 

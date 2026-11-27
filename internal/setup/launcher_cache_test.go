@@ -2,9 +2,13 @@ package setup
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -336,4 +340,141 @@ func TestGitHooksNeverRunABinaryFromARepository(t *testing.T) {
 func repoPath(rel string) string {
 	p, _ := filepath.Abs(filepath.Join("..", "..", filepath.FromSlash(rel)))
 	return p
+}
+
+// The Claude Code plugin launcher never runs a repository's committed launcher, also
+// when GIT_DIR and GIT_WORK_TREE point it at another folder: like the other plugins'
+// launchers, it uses the checked cache or the plugin's own bin/agentflow.
+func TestPluginLaunchNeverRunsARepositoryLauncher(t *testing.T) {
+	launch := repoPath("adapters/claude-code/bin/launch")
+	for _, sh := range shells(t) {
+		for _, tc := range []struct {
+			name      string
+			installed bool
+			gitEnv    func(e *launcherEnv) map[string]string
+		}{
+			{"in the repository", true, func(e *launcherEnv) map[string]string {
+				return map[string]string{"GIT_DIR": filepath.Join(e.repo, ".git"), "GIT_WORK_TREE": e.repo}
+			}},
+			{"git variables point elsewhere", true, func(e *launcherEnv) map[string]string {
+				return map[string]string{"GIT_DIR": filepath.Join(e.repo, ".git"), "GIT_WORK_TREE": e.outside}
+			}},
+			{"nothing installed", false, func(e *launcherEnv) map[string]string {
+				return map[string]string{"GIT_DIR": filepath.Join(e.repo, ".git"), "GIT_WORK_TREE": e.repo}
+			}},
+		} {
+			t.Run(sh+"/"+tc.name, func(t *testing.T) {
+				e := newLauncherEnv(t)
+				// A real git, so that `git rev-parse --show-toplevel` would find the launchers.
+				realGit := filepath.Join(e.dir, "bin", "git")
+				_ = os.Remove(realGit)
+				if err := os.Symlink(gitPath(t), realGit); err != nil {
+					t.Fatal(err)
+				}
+				committed := filepath.Join(e.dir, "repository-launcher-ran")
+				for _, dir := range []string{e.repo, e.outside} {
+					writeExec(t, filepath.Join(dir, ".agentflow", "bin", "agentflow"), "#!/bin/sh\necho ran > '"+committed+"'\n")
+				}
+				home := filepath.Join(e.dir, "home")
+				if tc.installed {
+					e.plant(t, filepath.Join(home, ".cache"))
+				}
+				env := tc.gitEnv(e)
+				env["HOME"] = home
+				out, _ := e.run(t, env, "", sh, launch, "mcp", "--client", "claude")
+				if _, err := os.Stat(committed); err == nil {
+					t.Fatalf("ran a repository's committed launcher: %s", out)
+				}
+				if tc.installed && !e.ran() {
+					t.Fatalf("did not run the installed binary: %s", out)
+				}
+			})
+		}
+	}
+}
+
+// psColonVar finds "$name:" in PowerShell code and double-quoted strings. Outside the
+// scope and drive prefixes below ($env:PATH, $script:x), PowerShell reads it as a
+// drive-qualified variable: "$pointer: it" does not even parse. Write "${pointer}:".
+var psColonVar = regexp.MustCompile(`\$([A-Za-z_][A-Za-z0-9_]*):(?:[^:]|$)`)
+
+var psScopes = map[string]bool{"env": true, "script": true, "global": true, "local": true, "private": true,
+	"using": true, "variable": true, "function": true, "alias": true, "workflow": true}
+
+// psColonVars returns the lines of src with such a variable, ignoring comments and
+// single-quoted strings, where PowerShell does not expand variables.
+func psColonVars(src string) []string {
+	var bad []string
+	for n, line := range strings.Split(src, "\n") {
+		var code strings.Builder
+		single, double := false, false
+		for _, r := range line {
+			switch {
+			case single:
+				single = r != '\''
+				continue
+			case r == '\'' && !double:
+				single = true
+				continue
+			case r == '"':
+				double = !double
+			case r == '#' && !double:
+				goto done
+			}
+			code.WriteRune(r)
+		}
+	done:
+		for _, m := range psColonVar.FindAllStringSubmatch(code.String(), -1) {
+			if !psScopes[strings.ToLower(m[1])] {
+				bad = append(bad, fmt.Sprintf("line %d: %s", n+1, strings.TrimSpace(line)))
+			}
+		}
+	}
+	return bad
+}
+
+func TestPowerShellHasNoColonAfterAVariable(t *testing.T) {
+	if got := psColonVars("Write-Host \"ignoring $pointer: it\" # $fine: here\n'$literal: ok' $env:PATH \"${braced}: ok\"\n"); len(got) != 1 {
+		t.Fatalf("the check itself is broken: %v", got)
+	}
+	sources := map[string]string{}
+	root := repoPath(".")
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules") {
+			return filepath.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(p, ".ps1") {
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			sources[p] = string(b)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Windows launcher the Codex plugin embeds.
+	entry := pluginServer(t, "adapters/codex/plugin-mcp.json")
+	const prefix = "const embeddedLaunchers = "
+	if len(entry.Args) < 2 || !strings.HasPrefix(entry.Args[1], prefix) {
+		t.Fatal("the Codex plugin has no embedded launchers")
+	}
+	var embedded struct{ Windows string }
+	if err := json.NewDecoder(strings.NewReader(strings.TrimPrefix(entry.Args[1], prefix))).Decode(&embedded); err != nil || embedded.Windows == "" {
+		t.Fatalf("decode the embedded launchers: %v", err)
+	}
+	sources["adapters/codex/plugin-mcp.json (windows)"] = embedded.Windows
+	if len(sources) < 4 {
+		t.Fatalf("found only %d PowerShell sources", len(sources))
+	}
+	for name, src := range sources {
+		for _, bad := range psColonVars(src) {
+			t.Errorf("%s %s: use ${name}: before a colon", name, bad)
+		}
+	}
 }

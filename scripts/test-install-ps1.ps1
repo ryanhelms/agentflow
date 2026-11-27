@@ -230,10 +230,63 @@ exit 0
     $plantedVersion = [IO.Directory]::CreateDirectory((Join-Path $planted '1.2.3')).FullName
     [IO.File]::WriteAllText((Join-Path $plantedVersion 'agentflow.exe'), 'planted')
     [IO.File]::WriteAllText((Join-Path $planted 'current.txt'), $plantedVersion)
-    Assert ($null -eq (Get-AgentflowActive $planted 2>$null)) 'Would run a binary from inside a repository.'
+    function Get-Warning([scriptblock]$Block) {
+        # Runs $Block and returns what it wrote to [Console]::Error.
+        $old = [Console]::Error
+        $writer = [IO.StringWriter]::new()
+        [Console]::SetError($writer)
+        try { $null = & $Block } finally { [Console]::SetError($old) }
+        return $writer.ToString()
+    }
+    function New-TestLink([string]$Path, [string]$Target) {
+        $type = if ($windows) { 'Junction' } else { 'SymbolicLink' }
+        New-Item -ItemType $type -Path $Path -Target $Target | Out-Null
+    }
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $planted)) 'Would run a binary from inside a repository.' }
+    Assert ($warning -match 'is inside the repository') "No repository reason for a cache inside a repository: $warning"
     $pointedAway = [IO.Directory]::CreateDirectory((Join-Path $outside 'agentflow')).FullName
     [IO.File]::WriteAllText((Join-Path $pointedAway 'current.txt'), $plantedVersion)
-    Assert ($null -eq (Get-AgentflowActive $pointedAway 2>$null)) 'Followed current.txt into a repository.'
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $pointedAway)) 'Followed current.txt out of the cache.' }
+    Assert ($warning -match 'does not name a version folder') "No reason for a pointer out of the cache: $warning"
+    # A version folder in the cache that is a link into a repository: the link check refuses it.
+    $linkedRoot = [IO.Directory]::CreateDirectory((Join-Path $outside 'linked-cache')).FullName
+    New-TestLink (Join-Path $linkedRoot '1.2.3') $plantedVersion
+    [IO.File]::WriteAllText((Join-Path $linkedRoot 'current.txt'), (Join-Path $linkedRoot '1.2.3'))
+    $warning = Get-Warning { Assert ($null -eq (Get-AgentflowActive $linkedRoot)) 'Followed current.txt into a repository.' }
+    Assert ($warning -match 'goes through the link') "No link reason for a version folder that links into a repository: $warning"
+    # A version folder directly in a cache outside every repository runs.
+    $goodRoot = Join-Path $outside 'good-cache'
+    $goodVersion = [IO.Directory]::CreateDirectory((Join-Path $goodRoot '1.2.3')).FullName
+    [IO.File]::WriteAllText((Join-Path $goodVersion 'agentflow.exe'), 'good')
+    [IO.File]::WriteAllText((Join-Path $goodRoot 'current.txt'), $goodVersion)
+    Assert ((Get-AgentflowActive $goodRoot) -eq $goodVersion) 'Refused a version folder in a cache outside every repository.'
+    # A dangling link cannot be checked: its target could be created inside a repository.
+    $gone = [IO.Directory]::CreateDirectory((Join-Path $evil 'gone')).FullName
+    $dangling = Join-Path $outside 'dangling'
+    New-TestLink $dangling $gone
+    Remove-Item -LiteralPath $gone -Recurse -Force
+    Assert ((Get-AgentflowInsideRepository (Join-Path $dangling 'agentflow')) -match 'link') 'Accepted a cache through a dangling link.'
+    Assert ((Get-AgentflowInsideRepository $dangling) -match 'link') 'Accepted a dangling link as the cache.'
+    $env:LOCALAPPDATA = $dangling
+    Assert ((Get-AgentflowCacheRoot 2>$null) -eq $own) 'Used a LOCALAPPDATA that is a dangling link.'
+    # The account's own cache behind a link (a profile behind a junction) still runs. Off
+    # Windows, .NET takes the local application data folder from XDG_DATA_HOME.
+    if (!$windows) {
+        $realLocal = [IO.Directory]::CreateDirectory((Join-Path $temp 'real-local')).FullName
+        $linkedLocal = Join-Path $temp 'linked-local'
+        New-TestLink $linkedLocal $realLocal
+        $oldData = $env:XDG_DATA_HOME
+        $env:XDG_DATA_HOME = $linkedLocal
+        try {
+            if ([Environment]::GetFolderPath('LocalApplicationData') -eq $linkedLocal) {
+                $ownRoot = Join-Path $linkedLocal 'agentflow'
+                $ownVersion = [IO.Directory]::CreateDirectory((Join-Path $ownRoot '1.2.3')).FullName
+                [IO.File]::WriteAllText((Join-Path $ownVersion 'agentflow.exe'), 'own')
+                [IO.File]::WriteAllText((Join-Path $ownRoot 'current.txt'), $ownVersion)
+                Assert ((Get-AgentflowActive $ownRoot) -eq $ownVersion) 'Refused the account''s own cache behind a link.'
+            }
+        } finally { $env:XDG_DATA_HOME = $oldData }
+    }
     'PowerShell project installer tests passed.'
 } finally {
     Set-Location -LiteralPath $original
