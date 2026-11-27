@@ -2438,6 +2438,8 @@ No other pinned harness has a verified status command:
 
 `jsonrpc.Run` checks every variable name against `EnvAllowed`. Lane 6.1 adds `LaunchSpec.AllowEnv []string` (additive): names the call also allows. Only the status profile sets it.
 
+**Directory variables a repository could have set.** With the real home, a CLI reads its own configuration, which can name commands it runs. So before the check starts, each of `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, the `XDG_*_HOME` variables and the `config_env` names that is set is resolved. If one lies inside a worktree of a repository agentflow is working in, the check does not run: sign-in `unknown`, code `unsafe_environment`. A home directory that is itself a git repository (dotfiles) stays allowed: the worktree is then the OS account's home or above it. This is the same rule as for the personal layer (#105), applied to the harness's configuration.
+
 **People who sign in with an environment variable.** The check never passes credential variables, so a CLI that would use one says "signed out". So agentflow never reports `signed_out` when the parent environment has a variable that could sign the harness in:
 
 - the definition's `credential_env` names, verbatim from the vendor's source or documentation. Verified: for `codex-acp`, `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_ACCESS_TOKEN` (`codex-rs/login/src/auth/manager.rs` at the commit above). For `claude-acp`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_FOUNDRY_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK` and `ANTHROPIC_AWS_API_KEY` (Claude Code environment variable reference). Lane 6.1 adds `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK` and `CLAUDE_CODE_USE_VERTEX` only after it finds them verbatim on that page.
@@ -2451,7 +2453,7 @@ Only the name's presence (non-empty) is checked; the value is never read. With o
 | --- | --- | --- |
 | `signed_in` | `ok` | none |
 | `signed_out` | `signed_out` | `needs_auth` (row 6 of the state table) |
-| `unknown` | `no_check`, `env_credential`, `timeout`, `exit_code` (an unmapped exit), `launch`, `off` (`sign_in_check` is off), `needs_person`, `base_missing`, `test_guard` | none; sign-in guidance shown |
+| `unknown` | `no_check`, `env_credential`, `timeout`, `exit_code` (an unmapped exit), `launch`, `off` (`sign_in_check` is off), `needs_person`, `base_missing`, `unsafe_environment`, `test_guard` | none; sign-in guidance shown |
 
 **When it runs:** in the same pass as a probe, after `initialize`, for a found harness with a status command: when a person probes; when an agent or the daemon probes and both `auto_probe` and `sign_in_check` are on; and again when the identity of the harness or its base CLI changes, or after 24 hours (the cached verdict expires). It never runs while `sign_in_check` is off, whoever asks.
 
@@ -2995,6 +2997,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 - [ ] The sign-in check runs only an overlay or personal status command on an already found file, in the empty status directory, with only the listed variables and the parent's real `HOME`; a test shows no credential variable reaches the fake CLI.
 - [ ] No byte of a status command's output is stored, logged, published, returned or shown; only the verdict, its code and its time.
 - [ ] A `signed_out` answer with a credential variable present is reported as `unknown`/`env_credential`.
+- [ ] A `HOME`, XDG or `config_env` directory inside a repository agentflow works in stops the sign-in check (`unsafe_environment`).
 - [ ] With both toggles at their default (on), no Go test and no `make e2e` run starts a real harness or a real status command.
 - [ ] Registry and agent text is sanitized, clamped and shown as text. Fix text comes only from agentflow's templates. A sign-in command with an unsafe arg or env is not shown.
 - [ ] No event, projection or result carries stderr, tokens or agent text other than the sanitized fields. Paths appear in results and the projection, under `~`, and never in events.
