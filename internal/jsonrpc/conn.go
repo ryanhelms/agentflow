@@ -328,15 +328,30 @@ func (c *conn) notifyLoop() {
 			continue // drain without handling
 		default:
 		}
-		_, _ = c.h.Handle(c.ctx, r)
+		c.handleNote(r)
 	}
 }
 
+// handleNote runs the Handler for one notification; a panic is dropped
+// with it.
+func (c *conn) handleNote(r *Request) {
+	defer func() { _ = recover() }()
+	_, _ = c.h.Handle(c.ctx, r)
+}
+
 // handle runs the Handler and maps its error to what the peer may see.
-func (c *conn) handle(r *Request) (any, *Error) {
+//
+// A panic in the Handler is answered as an internal error and never ends
+// the process.
+func (c *conn) handle(r *Request) (result any, rerr *Error) {
 	if c.h == nil {
 		return nil, newError(CodeMethodNotFound, "method not found", "method_not_found")
 	}
+	defer func() {
+		if p := recover(); p != nil {
+			result, rerr = nil, internalError()
+		}
+	}()
 	result, err := c.h.Handle(c.ctx, r)
 	if err != nil {
 		var e *Error

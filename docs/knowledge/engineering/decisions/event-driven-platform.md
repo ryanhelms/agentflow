@@ -1722,6 +1722,8 @@ A `permission_rule` (declarative plugins only) denies matching operations. It **
 - The host turns each enabled plugin's rules into one Invoker Stage (lane 5.2), registered with `command.RegisterStage` from `internal/plugin`'s `init`. `NewInvoker` runs `command.RegisteredStages()` after `Options.Stages` on every call, so CLI, MCP and daemon Invokers all apply them without editing `cli.go` or `mcpserver/server.go`.
 - The Stage either calls `next` with the Call unchanged, or stops the chain with an error (`plugin.DeniedError{Plugin, Rule, Message}`, error code `plugin_denied`). It never returns a result of its own, never changes the Call, and never skips the gate: the gate runs after the stages (`GateByInvoker`) or inside Run (`GateInRun`).
 - A rule matches by `operation`, `class`, `action`, `origin` and `branch` globs (`manifest.RuleMatch`). Every non-empty list must match.
+- `branch` is the branch the call writes. An operation that names a branch (`Detail.Branch`) uses it. The actions `commit`, `push`, `pr_open`, `pr_ready_for_review` and `finish` use the current branch when they name none: commit commits on it, push publishes it, a PR's head is it, and finish deletes it. When one of them cannot determine its branch (detached HEAD, no repository), a `branch` condition matches, so the rule denies. Any other operation writes no branch, and a `branch` condition never matches it, not even `*`.
+- With no plugin enabled in the personal layer there are no rules and the Stage does not read the registry, so a broken `installed.json` blocks nothing. With a plugin enabled, a registry that cannot be found or read, or an unreadable personal layer, denies every non-exempt operation and names the file to fix (fail closed).
 - Rules never apply to `config.*`, `plugin.*`, `approval.*` and `policy.*` operations, so a person can always disable a plugin or answer an approval, whatever a rule says.
 - The Stage reads the registry and the personal layer once per call through a fingerprint cache (the phase 2 MCP reload fingerprint rule), so a new rule applies to the next call without a restart.
 - A repository's `plugins.disabled` turns off handlers only. A repository cannot drop a person's permission rules: that would loosen.
@@ -1778,7 +1780,7 @@ Memory and CPU are not limited in phase 5: the standard library cannot set a chi
 
 ### Phase 5 Dead Letter Channel
 
-The host's persistent Dead Letter Channel (`bus.DeadLetter`, as phase 1 promised) is `<home>/plugins/deadletter.jsonl`, mode 0600, the last 1000 letters, rewritten atomically when it passes 1 MiB.
+The host's persistent Dead Letter Channel (`bus.DeadLetter`, as phase 1 promised) is `<home>/plugins/deadletter.jsonl`, mode 0600, the last 1000 letters, rewritten atomically when it passes 1 MiB. A rewrite keeps only the newest letters that fit in 256 KiB, so rewrites stay rare. A stored letter's payload over 4 KiB becomes `{"dropped_bytes": N}` (its event ID and type still name it), and its reason is cut to 1 KiB.
 
 - A letter is `bus.Letter{event, consumer: "plugin:<id>", reason: <code>, time}`. The reason is a code (`timeout`, `crashed`, `exited`, `protocol`, `action`, `rpc_error`), never the plugin's own error text.
 - An event goes there when its delivery returns an error, times out, or is in flight when the plugin dies.
