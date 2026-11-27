@@ -552,6 +552,21 @@ console has no Approve button for it. `agentflow ui --screen plugins` opens the
 page.
 [Plugins page design](docs/design/ui/plugins.md)
 
+The **Harnesses** page lists the ACP harnesses Agentflow found on this computer,
+live: which are **Ready** (installed, and answered a probe) and which **Need
+attention**. Each card shows the harness's state and code, its version, the
+command and where it was found, the layers that define it, the probe result, its
+ACP capabilities, and the fix with a command to copy. It also says whether you
+are signed in, signed out, or whether Agentflow cannot tell, and lists the
+harness's own ways to sign in. **Probe now** asks the console to probe every
+harness found, or one card; the results arrive over the event stream. The header
+shows the pinned registry copy, whether automatic probes are on, the PATH entries
+Agentflow skipped and any definition it refused. The page installs nothing and
+changes no setting: automatic probes, the sign-in check and harness overrides
+are on the Settings page, in the AI harnesses group. `agentflow ui --screen
+harnesses` opens the page.
+[Harnesses page design](docs/design/ui/harnesses.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field

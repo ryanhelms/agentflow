@@ -19,6 +19,7 @@
   <script src="event-worker.js" defer></script>
   <script src="live-panels.js" defer></script>
   <script src="plugins.js" defer></script>
+  <script src="harnesses.js" defer></script>
   <script src="timeline.js" defer></script>
   <script src="settings-widgets.js" defer></script>
   <script src="settings.js" defer></script>
@@ -63,6 +64,7 @@
         <a href="#providers" data-page="providers" class="nav-sub"><span class="nav-icon ico-roles" aria-hidden="true"></span>Providers</a>
         <a href="#autonomy" data-page="autonomy" class="nav-sub"><span class="nav-icon ico-policy" aria-hidden="true"></span>Autonomy</a>
         <a href="#plugins" data-page="plugins"><span class="nav-icon ico-plugin" aria-hidden="true"></span>Plugins<span id="plugins-nav-count" class="nav-count" aria-hidden="true" hidden></span><span id="plugins-nav-label" class="sr-only"></span></a>
+        <a href="#harnesses" data-page="harnesses"><span class="nav-icon ico-harness" aria-hidden="true"></span>Harnesses</a>
         <a href="#configuration" data-page="configuration"><span class="nav-icon ico-file" aria-hidden="true"></span>Configuration</a>
         <a href="#handoff" data-page="handoff"><span class="nav-icon ico-handoff" aria-hidden="true"></span>Handoff</a>
       </nav>
@@ -225,6 +227,64 @@
                 <li>Installing and removing are terminal commands only. No agent and no button in this console can do either.</li>
                 <li>Agentflow never downloads a plugin. It copies the files you point it to and checks them before every start.</li>
               </ul>
+            </section>
+          </div>
+        </section>
+        <section id="page-harnesses" aria-labelledby="harnesses-title" hidden>
+          <div class="page-heading"><h1 id="harnesses-title" tabindex="-1">Harnesses</h1><p>A harness is a coding agent on this computer that speaks the Agent Client Protocol (ACP). Agentflow finds harnesses on your PATH and checks that each one answers. It never installs one, and this page starts no session.</p></div>
+          <p id="harnesses-note" class="live-note" hidden></p>
+          <p id="harnesses-wait" class="muted">Waiting for live updates…</p>
+          <div id="harnesses-body" hidden>
+            <div id="harnesses-detector" class="notice error hn-off" hidden>
+              <p><strong>This console daemon does not detect harnesses, so the page has nothing live to show.</strong></p>
+              <p>Update Agentflow, then stop the console and open it again with <code>agentflow ui</code>. Until then, list your harnesses in a terminal.</p>
+              <pre data-command>agentflow ai harnesses</pre>
+            </div>
+            <section class="panel hn-header" aria-labelledby="harnesses-detection-title">
+              <div class="hn-bar">
+                <div>
+                  <h2 id="harnesses-detection-title">Detection</h2>
+                  <p id="harnesses-summary" class="muted hn-summary" hidden></p>
+                </div>
+                <div class="hn-probe">
+                  <button id="harnesses-probe" class="button primary" type="button" aria-describedby="harnesses-probe-status harnesses-probe-hint">Probe now</button>
+                  <p id="harnesses-probe-status" class="hn-probe-status"></p>
+                </div>
+              </div>
+              <p id="harnesses-probe-hint" class="muted hn-hint">A probe starts each harness found once, asks it one question (ACP <code>initialize</code>) and stops it. It also runs the harness's own sign-in status command where Agentflow has a verified one.</p>
+              <p id="harnesses-probe-error" class="notice error" hidden></p>
+              <dl class="hn-detection">
+                <div><dt>Registry copy</dt><dd id="harnesses-registry">Not reported</dd></div>
+                <div><dt>Automatic probes</dt><dd><span id="harnesses-auto" class="fact"><span class="state-mark" aria-hidden="true"></span><span class="fact-text"></span></span> <span id="harnesses-auto-detail" class="muted"></span></dd></div>
+                <div><dt>Settings</dt><dd>Automatic probes, the sign-in check and harness overrides are changed on the Settings page. <a href="#settings?group=ai" data-settings>Open AI harnesses in Settings</a></dd></div>
+              </dl>
+              <div id="harnesses-problems" class="notice error hn-problems" hidden>
+                <p><strong id="harnesses-problems-title"></strong></p>
+                <ul id="harnesses-problem-list" aria-labelledby="harnesses-problems-title"></ul>
+                <p class="hn-hint">Agentflow ignores a definition it refuses. Fix it under Harness overrides on the <a href="#settings?group=ai" data-settings>Settings page</a>, or in the plugin that added it.</p>
+              </div>
+              <details id="harnesses-skipped" class="hn-skipped" hidden>
+                <summary id="harnesses-skipped-title"></summary>
+                <p class="muted hn-hint">Agentflow does not look for harnesses in these folders of your PATH. If you trust a harness there, name it by its full path under Harness overrides in Settings.</p>
+                <ul id="harnesses-skipped-list" aria-labelledby="harnesses-skipped-title"></ul>
+              </details>
+            </section>
+            <section id="harnesses-ready" class="hn-group" aria-labelledby="harnesses-ready-title" hidden>
+              <h2 id="harnesses-ready-title">Ready <span id="harnesses-ready-count" class="hn-count"></span></h2>
+              <p id="harnesses-ready-none" class="muted">No harness is ready yet. A harness is ready when it is installed and has answered a probe.</p>
+              <ul id="harnesses-ready-list" class="hn-list" aria-labelledby="harnesses-ready-title"></ul>
+            </section>
+            <section id="harnesses-attention" class="hn-group" aria-labelledby="harnesses-attention-title" hidden>
+              <h2 id="harnesses-attention-title" tabindex="-1">Needs attention <span id="harnesses-attention-count" class="hn-count"></span></h2>
+              <p id="harnesses-attention-none" class="muted">Nothing needs attention.</p>
+              <ul id="harnesses-attention-list" class="hn-list" aria-labelledby="harnesses-attention-title"></ul>
+            </section>
+            <section id="harnesses-empty" class="panel hn-empty" aria-labelledby="harnesses-empty-title" hidden>
+              <div class="section-heading"><h2 id="harnesses-empty-title">No ACP harnesses found on your PATH</h2></div>
+              <p>Install a harness yourself, for example Gemini CLI, or an ACP adapter for a CLI you already use. This page shows it as soon as it is on the PATH of the console daemon. To see every harness Agentflow knows and how to install each one, run this in a terminal.</p>
+              <pre data-command>agentflow ai harnesses --all</pre>
+              <p>If a harness is installed and does not show here, this lists what Agentflow checked and what it skipped.</p>
+              <pre data-command>agentflow ai doctor</pre>
             </section>
           </div>
         </section>
