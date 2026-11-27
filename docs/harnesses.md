@@ -5,7 +5,7 @@ A harness is an AI coding agent that speaks the
 CLI, or an ACP adapter for one, such as the adapter for Claude Code. Agentflow
 finds the harnesses installed on your machine and says what to do about each one.
 
-Agentflow never installs a harness, never downloads one and never starts a session.
+Agentflow never installs a harness and never downloads one. Detection never starts a session; [AI sessions](ai-sessions.md) explains `ai run`, which does.
 
 ## List them, or check why one is missing
 

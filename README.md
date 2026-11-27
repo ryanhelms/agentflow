@@ -456,6 +456,10 @@ Deployments and release lookup also support local JSON fixtures.
 | Approve or decline a write a plugin asked for (you, at a terminal) | `agentflow plugin approve OP_ID [--decline]` | – |
 | List the AI harnesses on this machine, with each one's state and fix | `agentflow ai harnesses [--probe] [--all] [--id ID]` | `agentflow_ai_harnesses` or `/agentflow:ai` |
 | Check why a harness is missing or not ready | `agentflow ai doctor [--probe]` | `agentflow_ai_doctor` or `/agentflow:ai` |
+| Run one prompt through a harness in this worktree (always confirmed first) | `agentflow ai run --harness ID [--detach] PROMPT` | `agentflow_ai_run` or `/agentflow:ai` |
+| Follow AI sessions, or one session's transcript | `agentflow ai status [SESSION] [--follow] [--since SEQ]` | `agentflow_ai_status` or `/agentflow:ai` |
+| Answer a request a session waits on (agents can only reject) | `agentflow ai respond SESSION ASK (--allow \| --reject)` | `agentflow_ai_respond` (reject only) |
+| Stop an AI session | `agentflow ai cancel SESSION` | `agentflow_ai_cancel` or `/agentflow:ai` |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -738,7 +742,7 @@ permissions and how to write your own, and `examples/plugins/` has two samples.
 
 A harness is an AI coding agent that speaks the Agent Client Protocol (ACP), or an
 ACP adapter for one. Agentflow finds the ones on your PATH and says what to do
-about each. It never installs one and never starts a session.
+about each. Detection never installs one and never starts a session; `ai run` below starts one only after you confirm.
 
 ```text
 agentflow ai harnesses            # state and fix of each harness found
@@ -760,6 +764,33 @@ show the version command and the command that probe runs. Package runners,
 interpreters and shells are never run, also with a version in the name (`python3.12`).
 [AI harnesses](docs/harnesses.md) explains the states, the checks and the
 overrides.
+
+### Run an AI session
+
+`ai run` runs one prompt through a ready harness, in the task worktree you run it
+from. No flag or tool input chooses another directory or repository, and it
+refuses in the primary checkout: start a task worktree first
+(`agentflow start <task> --worktree`).
+
+```text
+agentflow ai run --harness gemini "Add a greeting"   # asks you to confirm, then streams
+agentflow ai status                                  # sessions and waiting requests
+agentflow ai status SESSION --follow                 # a detached session's transcript
+agentflow ai respond SESSION ASK --allow             # only you, in your own terminal
+agentflow ai cancel SESSION
+```
+
+`ai run` always shows a summary first: the harness, the worktree, the names of the
+environment variables passed, agentflow's read-only MCP tools, the limits, the
+control files that changed, and the prompt. Every file and command request the
+harness sends agentflow is checked: the never-list, the worktree boundary, your
+`ai.permissions.rules`, then your autonomy policy, and denied when nothing allows
+it. Control-file writes and secret-file reads always ask you. An agent can start a
+session (turn off `ai.sessions.agent_start` to stop that), but its session asks you
+for every write and command, and an agent can only reject a request, never allow
+one. A session can never start a session. The harness's own tools stay outside
+these checks. [AI sessions](docs/ai-sessions.md) explains the checks, the limits and
+what agentflow cannot control.
 
 ## Commit convention
 
@@ -888,6 +919,18 @@ commands and capabilities. [Client installation guide](docs/client-plugins.md).
   every harness, only when you probe it by name (`--id`, or its card's **Probe now**),
   and its arguments must be plain words or flags, never a path, host or URL.
   [AI harnesses](docs/harnesses.md)
+- **AI sessions.** A session runs only in the worktree of the process that starts it,
+  never in the primary checkout. It gets a listed environment without tokens, keys,
+  `SSH_AUTH_SOCK`, proxy or `AGENTFLOW_*` variables; only the harness's own verified
+  sign-in variables pass. Every file and command request it sends agentflow goes
+  through the never-list, the worktree boundary, your rules and your policy, and is
+  denied when nothing allows it. Only a person allows a request: `agentflow_ai_respond`
+  can only reject, `ai respond --allow` refuses agents and non-terminals, and the
+  pre-bash hook blocks agents from running it in every mode. The MCP server agentflow
+  passes to a harness (`agentflow mcp --session ID`) has only read-only tools, and its
+  client can never write. A session cannot start a session. The harness's own tools
+  are not checked: agentflow reports what it ran without asking and lists the changed
+  files. [AI sessions](docs/ai-sessions.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
   provider definitions, approvals and plugins. A repository's environment (direnv, an
@@ -1022,6 +1065,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/plugins.md](docs/plugins.md) | Add, turn on and remove plugins, what a plugin may do, and how to write one |
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/harnesses.md](docs/harnesses.md) | AI harness detection: states, `ai harnesses`, `ai doctor`, what a probe runs and who may ask |
+| [docs/ai-sessions.md](docs/ai-sessions.md) | AI sessions: `ai run`, `status`, `respond` and `cancel`, the request checks, who may answer, limits and what agentflow cannot control |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
