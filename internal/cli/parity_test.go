@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -222,7 +221,7 @@ func TestParityCommandsRunLocally(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("AGENTFLOW_HOME", filepath.Join(dir, "home"))
+	t.Setenv("AGENTFLOW_HOME", t.TempDir()) // outside the test repository
 	t.Setenv("AGENTFLOW_NO_UPDATE", "1")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("LOCALAPPDATA", t.TempDir())

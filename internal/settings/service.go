@@ -64,6 +64,8 @@ func New(a *app.App) *Service {
 		s.Root, s.Repo = a.Repo.Dir, a.Repo
 	}
 	if s.Home == "" {
+		// An empty Home stays empty: read, lock and the journal then refuse,
+		// rather than resolve config.yml against the working directory.
 		s.Home, _ = config.HomeDir()
 	}
 	s.Catalog = consolecfg.RepoCatalog(s.Root)
@@ -121,9 +123,24 @@ func Revision(content string, exists bool) string {
 
 func (s *Service) personalPath() string { return filepath.Join(s.Home, "config.yml") }
 
+// errNoHome is returned instead of reading or writing the personal layer
+// relative to the working directory, which may be a repository.
+var errNoHome = errors.New("the agentflow settings directory cannot be found")
+
+// homeErr returns errNoHome when s.Home is not an absolute path.
+func (s *Service) homeErr() error {
+	if s.Home == "" || !filepath.IsAbs(s.Home) {
+		return errNoHome
+	}
+	return nil
+}
+
 func (s *Service) read() (files, error) {
 	var f files
 	var err error
+	if err := s.homeErr(); err != nil {
+		return f, err
+	}
 	f.personal, f.personalErr = readPersonal(s.personalPath())
 	if s.Root != "" {
 		f.repo, err = readLayer(config.FieldRepo, RepoFile, filepath.Join(s.Root, filepath.FromSlash(RepoFile)))

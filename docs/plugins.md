@@ -131,7 +131,9 @@ Some paths are refused and nothing is written:
 
 ### What `plugin add` writes
 
-Everything goes under your agentflow home (`~/.agentflow` by default):
+Everything goes under your agentflow home (`~/.agentflow` by default). Agentflow ignores
+an `AGENTFLOW_HOME` inside a git repository, so a repository can't supply installed or
+enabled plugins that way:
 
 ```text
 ~/.agentflow/plugins/
