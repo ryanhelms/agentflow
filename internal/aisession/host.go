@@ -145,7 +145,10 @@ func (h *host) transition(ctx context.Context, to State, code string, fn func(*S
 		return h.sess
 	}
 	h.mu.Lock()
+	// Counters counted while the store was updated are kept.
+	c, u := h.sess.Counters, h.sess.Usage
 	h.sess = s
+	h.sess.Counters, h.sess.Usage = c, u
 	h.mu.Unlock()
 	if prev != s.State {
 		h.ev.changed(ctx, s, prev)
