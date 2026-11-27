@@ -112,6 +112,38 @@ func CredentialSuffix(name string) bool {
 	return false
 }
 
+// ConfigEnvRefused reports why name may not be a config_env name, or "".
+// config_env names are passed, with their values, to a status command that
+// runs with the person's real home, so only directory variables belong
+// there: never a name that changes program lookup, loading or trust, never
+// a credential-like name (one with TOKEN, SECRET, PASSWORD, PASSWD,
+// CREDENTIAL or a _KEY ending, the credential suffixes, SSH_AUTH_SOCK, or a
+// name in credentialEnv), and never an agentflow variable.
+func ConfigEnvRefused(name string, credentialEnv []string) string {
+	up := strings.ToUpper(name)
+	switch {
+	case LaunchSafetyName(name):
+		return "names a variable that changes program lookup, loading or trust"
+	case CredentialSuffix(name) || contains(credentialEnv, name) || credentialLike(up):
+		return "names a credential variable, which is never passed to a status command"
+	case strings.HasPrefix(up, "AGENTFLOW_") || strings.HasPrefix(up, "DEVFLOW_"):
+		return "names an agentflow variable, which is never passed to a status command"
+	}
+	return ""
+}
+
+func credentialLike(up string) bool {
+	if up == "SSH_AUTH_SOCK" || strings.HasSuffix(up, "_KEY") || up == "KEY" {
+		return true
+	}
+	for _, w := range []string{"TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"} {
+		if strings.Contains(up, w) {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate checks d for the layer it comes from and returns the first
 // problem as a *ValidationError, or nil. A definition that fails is left out
 // whole by the caller, never half-applied. Rules that need the other layers
@@ -258,13 +290,8 @@ func (v *validator) status(d Definition) {
 	v.envNames("credential_env", d.CredentialEnv)
 	v.envNames("config_env", d.ConfigEnv)
 	for _, name := range d.ConfigEnv {
-		switch {
-		case LaunchSafetyName(name):
-			v.fail("config_env", CodeStatus, "names a variable that changes program lookup, loading or trust")
-		case CredentialSuffix(name) || contains(d.CredentialEnv, name):
-			v.fail("config_env", CodeStatus, "names a credential variable, which is never passed to a status command")
-		case strings.HasPrefix(name, "AGENTFLOW_"):
-			v.fail("config_env", CodeStatus, "names an agentflow variable, which is never passed to a status command")
+		if why := ConfigEnvRefused(name, d.CredentialEnv); why != "" {
+			v.fail("config_env", CodeStatus, why)
 		}
 	}
 	switch {

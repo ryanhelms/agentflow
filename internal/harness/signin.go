@@ -246,8 +246,8 @@ var signInEnvNameRule = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
 func signInConfigEnv(d harnessdef.Definition) []string {
 	var out []string
 	for _, n := range d.ConfigEnv {
-		if !signInEnvNameRule.MatchString(n) || harnessdef.LaunchSafetyName(n) || harnessdef.CredentialSuffix(n) ||
-			slices.Contains(d.CredentialEnv, n) || signInFixedName(n) || slices.Contains(out, n) {
+		if !signInEnvNameRule.MatchString(n) || harnessdef.ConfigEnvRefused(n, d.CredentialEnv) != "" ||
+			signInFixedName(n) || slices.Contains(out, n) {
 			continue
 		}
 		out = append(out, n)

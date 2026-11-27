@@ -106,6 +106,12 @@ func TestValidateRefuses(t *testing.T) {
 		{"config credential suffix", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_API_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config named credential", "x", harnessdef.Definition{CredentialEnv: []string{"CODEX_SECRET"}, ConfigEnv: []string{"CODEX_SECRET"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"config agentflow", "x", harnessdef.Definition{ConfigEnv: []string{"AGENTFLOW_HOME"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config token", "x", harnessdef.Definition{ConfigEnv: []string{"GITHUB_TOKEN"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config secret", "x", harnessdef.Definition{ConfigEnv: []string{"AWS_SECRET_ACCESS_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config password", "x", harnessdef.Definition{ConfigEnv: []string{"DB_PASSWORD"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config ssh agent", "x", harnessdef.Definition{ConfigEnv: []string{"SSH_AUTH_SOCK"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config key", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_KEY"}}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
+		{"config node options overlay", "x", harnessdef.Definition{ConfigEnv: []string{"NODE_OPTIONS"}}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
 		{"two-line source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "a\nb"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
 		{"overlay without source", "x", harnessdef.Definition{StatusFrom: "self"}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
 	}
