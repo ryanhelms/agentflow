@@ -46,5 +46,7 @@ func TestServeChildGivesNoLink(t *testing.T) {
 		t.Errorf("findRegistered = %v, %v, %v", address != "", found, err)
 	}
 	cancel()
-	<-done
+	if err := <-done; err != nil {
+		t.Error(err)
+	}
 }

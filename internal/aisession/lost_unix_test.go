@@ -69,7 +69,8 @@ func TestEndLostKillsTerminalsAndRemovesAsks(t *testing.T) {
 		t.Fatalf("list = %+v, %v", list, err)
 	}
 	select {
-	case <-done:
+	case err := <-done:
+		_ = err // killed: the wait error is expected
 	case <-time.After(10 * time.Second):
 		t.Fatal("the lost session's terminal still runs")
 	}
