@@ -142,10 +142,10 @@ func (s *PermissionStage) load(ctx context.Context) ([]compiledRule, error) {
 // found while a plugin is enabled.
 var errNoRegistry = errors.New("the agentflow home cannot be found")
 
-// branchWriters are the actions that write a branch. Each writes the
-// current branch: commit commits on it, push publishes it, and a PR's
-// head is it.
-var branchWriters = map[string]bool{"commit": true, "push": true, "pr_open": true, "pr_ready_for_review": true}
+// branchWriters are the actions that write a branch. With no branch named
+// (Detail.Branch), each writes the current branch: commit commits on it,
+// push publishes it, a PR's head is it, and finish deletes it.
+var branchWriters = map[string]bool{"commit": true, "push": true, "pr_open": true, "pr_ready_for_review": true, "finish": true}
 
 // callBranch is the branch a call writes, for a rule's branch condition.
 type callBranch struct {

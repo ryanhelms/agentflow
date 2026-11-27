@@ -151,7 +151,8 @@ func TestBranchRuleMatchesTheBranchBeingWritten(t *testing.T) {
 	a := &app.App{Repo: repo}
 	_, _, run := permissionFixture(t, manifest.RuleMatch{Branch: []string{"main"}})
 	var denied *plugin.DeniedError
-	for _, op := range [][2]string{{"commit", "commit"}, {"push", "push"}, {"pr.open", "pr_open"}} {
+	// finish with no BRANCH argument deletes the current branch.
+	for _, op := range [][2]string{{"commit", "commit"}, {"push", "push"}, {"pr.open", "pr_open"}, {"finish", "finish"}} {
 		if err := run(a, op[0], op[1]); !errors.As(err, &denied) {
 			t.Errorf("%s on main was not denied: %v", op[0], err)
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/command"
 	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/plugin/manifest"
+	"github.com/ryanhelms/agentflow/internal/policy"
 )
 
 // Invoke implements Env: command.invoke and the declarative invoke action
@@ -54,7 +55,11 @@ func (e *env) Invoke(ctx context.Context, r InvokeRequest) (InvokeResult, error)
 		// Still waiting for a person: answer without running the call, so
 		// a poll publishes nothing (no op.requested, no op.failed for a
 		// plugin to react to).
-		if ap, err := a.Gate.Status(r.Resume); err == nil && ap.State == approvalPending {
+		ap, err := a.Gate.Status(r.Resume)
+		if errors.Is(err, policy.ErrNotRequester) {
+			return InvokeResult{}, refuse(RefuseInvalid) // another client's approval
+		}
+		if err == nil && ap.State == approvalPending {
 			out := InvokeResult{OperationID: r.Resume, Outcome: string(command.OutcomeAwaitingApproval), ApprovalID: r.Resume}
 			if !ap.ExpiresAt.IsZero() {
 				t := ap.ExpiresAt.UTC()

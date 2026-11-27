@@ -78,6 +78,12 @@ func TestPluginRedeemsOnlyItsOwnApprovals(t *testing.T) {
 	if _, err := spy.Check(Remote, "notify", payload, d.Approval.OperationID, false); !errors.Is(err, ErrNotRequester) {
 		t.Fatalf("a plugin redeemed another client's approval: %v", err)
 	}
+	if ap, err := spy.Status(d.Approval.OperationID); !errors.Is(err, ErrNotRequester) || ap.State != "" {
+		t.Fatalf("a plugin read another client's approval: %+v %v", ap, err)
+	}
+	if ap, err := person.Status(d.Approval.OperationID); err != nil || ap.State == "" {
+		t.Fatalf("the requester's status: %+v %v", ap, err)
+	}
 	// The person's resume still works.
 	if ok, err := person.Check(Remote, "notify", payload, d.Approval.OperationID, false); err != nil || ok.Outcome != Proceed {
 		t.Fatalf("the requester's resume: %+v %v", ok, err)

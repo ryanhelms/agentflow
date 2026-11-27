@@ -12,6 +12,7 @@ import (
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
 	"github.com/ryanhelms/agentflow/internal/command"
+	"github.com/ryanhelms/agentflow/internal/config"
 	"github.com/ryanhelms/agentflow/internal/jsonrpc"
 	"github.com/ryanhelms/agentflow/internal/plugin"
 	"github.com/ryanhelms/agentflow/internal/plugin/plugintest"
@@ -267,4 +268,38 @@ func TestCommandPanicIsThePluginsCrash(t *testing.T) {
 	f.eventually("relaunched", func() bool { return f.launch.Count() >= 2 })
 	f.waitState("crasher", bus.PluginRunning)
 	f.checkTransitions()
+}
+
+// TestPluginCannotReadAnotherClientsApproval: resuming with an approval
+// another client requested is refused before the Invoker, so the plugin
+// learns nothing about it and nothing is published.
+func TestPluginCannotReadAnotherClientsApproval(t *testing.T) {
+	rc := &recorder{}
+	f := newFixture(t, rc.child("op.failed"))
+	f.install(processManifest("snoop"), true)
+	f.start()
+	f.waitState("snoop", bus.PluginRunning)
+	f.eventually("subscribed", func() bool { return len(f.status("snoop").Subscriptions) == 1 })
+	person, err := policy.NewGate(f.gateDir, config.Autonomy{Local: config.Confirm, Remote: config.Confirm}, "mcp:claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := person.Check(policy.Remote, "notify", map[string]string{"signal": "s"}, "", false)
+	if err != nil || d.Approval == nil {
+		t.Fatalf("person's approval: %+v %v", d, err)
+	}
+	cause := f.publish(bus.Event{Type: bus.TypeOpFailed, Source: "cli", Repo: repo, Worktree: tree, CorrelationID: "op_" + strings.Repeat("8", 32), Payload: json.RawMessage(`{}`)})
+	f.eventually("delivered", func() bool { return len(rc.events()) == 1 })
+	var out plugin.InvokeResult
+	err = f.launch.Last().Host.Call(context.Background(), plugin.MethodCommandInvoke,
+		plugin.InvokeRequest{Command: "notify", Cause: cause.ID, Input: json.RawMessage(`{"signal":"s"}`), Resume: d.Approval.OperationID}, &out)
+	if refusal(err) != plugin.RefuseInvalid || out.ExpiresAt != nil || out.Outcome != "" {
+		t.Fatalf("resume of another client's approval: %+v %v", out, err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.ops) != 1 { // only the cause
+		t.Fatalf("op events: %+v", f.ops)
+	}
 }

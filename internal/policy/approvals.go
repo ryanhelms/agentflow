@@ -497,6 +497,8 @@ func (g *Gate) consume(d *Decision, credential, digest string) error {
 	return g.change(&r, consumed)
 }
 
+// A plugin client sees only the records it requested: any other is
+// ErrNotRequester, so its state and expiry stay hidden.
 func (g *Gate) Status(id string) (Approval, error) {
 	var r approvalRecord
 	err := g.locked(func() error {
@@ -504,8 +506,14 @@ func (g *Gate) Status(id string) (Approval, error) {
 		if r, err = g.load(id); err != nil {
 			return err
 		}
+		if strings.HasPrefix(g.Client, PluginClientPrefix) && r.RequestedBy != g.Client {
+			return ErrNotRequester
+		}
 		return g.refresh(&r)
 	})
+	if errors.Is(err, ErrNotRequester) {
+		return Approval{}, err
+	}
 	return r.Approval, err
 }
 
