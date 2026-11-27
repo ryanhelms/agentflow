@@ -230,6 +230,13 @@ func (d *detector) harness(ctx context.Context, st settings, def Layered, f foun
 	if filepath.IsAbs(h.Command) {
 		h.Command = filepath.Base(h.Command)
 	}
+	switch {
+	case h.Command == "":
+	case dd.NoVersion:
+		h.NoVersion = true
+	default:
+		h.VersionArgs = append([]string(nil), versionArgs(dd)...)
+	}
 	if e := def.Entry; e != nil {
 		h.Description = e.Description
 		h.RegistryVersion = e.Version

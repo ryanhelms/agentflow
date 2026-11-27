@@ -1,0 +1,8 @@
+acme-agent   native  -  acme --acp --mode=stdio
+    A probe by name runs: acme version --short, then acme --acp --mode=stdio
+    A plugin chose the command or its arguments, so agentflow never probes it automatically, for an agent or in a probe of every harness. Probe it by name if you trust it.
+      agentflow ai harnesses --probe --id acme-agent
+quiet-agent  native  -  quiet acp
+    A probe by name runs: quiet acp (no version command)
+    A plugin chose the command or its arguments, so agentflow never probes it automatically, for an agent or in a probe of every harness. Probe it by name if you trust it.
+      agentflow ai harnesses --probe --id quiet-agent

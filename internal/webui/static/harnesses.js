@@ -124,6 +124,7 @@
         sources: list(item.sources).map(source => shown(source, 80)).filter(Boolean).slice(0, 8),
         quarantined: item.quarantined === true, quarantineReason: shown(item.quarantine_reason, 256),
         command: shown(item.command, 256), args: list(item.args).filter(arg => typeof arg === "string").slice(0, 16).map(arg => shown(arg, 256)),
+        versionArgs: list(item.version_args).filter(arg => typeof arg === "string").slice(0, 16).map(arg => shown(arg, 256)), noVersion: item.no_version === true,
         path: shown(item.path, 1024),
         base: base ? {name: shown(base.name, 64), command: shown(base.command, 256), path: shown(base.path, 1024)} : null,
         version: shown(item.version, 40), versionCode: text(item.version_code), registryVersion: shown(item.registry_version, 40),
@@ -475,6 +476,19 @@
         && (harness.probe.code === "not_probed" || harness.probe.code === "needs_person" || harness.probe.code === "plugin_launch" || harness.probe.status === "none");
     }
 
+    // A harness a plugin chose how to start: everything its probe by name
+    // runs, in order, as text with no Copy button (it is the plugin's
+    // command, not one to paste into a shell).
+    const pluginLaunch = harness => harness.notes.includes("plugin_launch") && Boolean(harness.command);
+    function launchParts(harness) {
+      const line = element("p", "", "hn-fix-launch");
+      line.dataset.part = "launch";
+      const run = element("code", [harness.command, ...harness.args].join(" "));
+      if (harness.noVersion || !harness.versionArgs.length) line.append("Probe now runs ", run, " (no version command).");
+      else line.append("Probe now runs ", element("code", [harness.command, ...harness.versionArgs].join(" ")), " for its version, then ", run, ".");
+      return line;
+    }
+
     function fixParts(harness) {
       const fix = harness.fix;
       const out = [];
@@ -490,6 +504,7 @@
         sentence.append(...prose(words.slice(0, cut)), link, ...prose(words.slice(cut + phrase.length)));
       } else sentence.append(...prose(words));
       out.push(sentence);
+      if (pluginLaunch(harness)) out.push(launchParts(harness));
       if (fix?.command && !probeIsFix(harness)) out.push(command(fix.command, "Fix command"));
       if (fix?.url) {
         const line = element("p", "", "hn-fix-link");
@@ -563,7 +578,7 @@
       const inFix = !fix.hidden && probeIsFix(harness);
       // Taken before the box is refilled: refilling it detaches the button it holds.
       const actions = card.querySelector(".hn-actions");
-      const fixed = fill(fix, isReady && !harness.fix ? "" : JSON.stringify([harness.fix, harness.fix ? "" : meaning(harness), inFix]), () => isReady && !harness.fix ? [] : fixParts(harness));
+      const fixed = fill(fix, isReady && !harness.fix ? "" : JSON.stringify([harness.fix, harness.fix ? "" : meaning(harness), inFix, pluginLaunch(harness) && [harness.command, harness.args, harness.versionArgs, harness.noVersion]]), () => isReady && !harness.fix ? [] : fixParts(harness));
       const home = inFix ? fix : card;
       if (actions.parentNode !== home || (inFix && fixed)) home.append(actions);
       if (fixed && flash && !fix.hidden) mark(fix);

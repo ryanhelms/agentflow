@@ -90,6 +90,35 @@ func sampleHarnessReport() harness.Report {
 	}
 }
 
+// A harness a plugin chose how to start shows everything its probe by
+// name runs, in order, next to the fix: the version command or "no
+// version command", then the command and its args.
+func TestAIHarnessesShowPluginLaunch(t *testing.T) {
+	fix := func(id string) *harness.Fix {
+		return &harness.Fix{Text: "A plugin chose the command or its arguments, so agentflow never probes it automatically, for an agent or in a probe of every harness. Probe it by name if you trust it.",
+			Command: "agentflow ai harnesses --probe --id " + id}
+	}
+	refused := harness.Probe{Status: harness.ProbeRefused, Code: harness.CodePluginLaunch}
+	r, _ := newHarnessRepo(t, harness.Report{
+		Harnesses: []harness.Harness{
+			{ID: "acme-agent", Name: "Acme", State: harness.StateNative, Sources: []string{"plugin:acme"}, Command: "acme", Args: []string{"--acp", "--mode=stdio"},
+				VersionArgs: []string{"version", "--short"}, Probe: refused, Notes: []string{harness.NotePluginLaunch}, Fix: fix("acme-agent")},
+			{ID: "quiet-agent", Name: "Quiet", State: harness.StateNative, Sources: []string{"plugin:acme"}, Command: "quiet", Args: []string{"acp"},
+				NoVersion: true, Probe: refused, Notes: []string{harness.NotePluginLaunch}, Fix: fix("quiet-agent")},
+		},
+		CheckedAt: time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC),
+	})
+	text, _, err := aiRun(t, r, "ai", "harnesses")
+	if err != nil {
+		t.Fatal(err)
+	}
+	goldentest.Check(t, "ai/harnesses_plugin.txt", text)
+	if _, jsonOut, err := aiRun(t, r, "ai", "harnesses", "--json"); err != nil ||
+		!strings.Contains(jsonOut, `"version_args": [`) || !strings.Contains(jsonOut, `"no_version": true`) {
+		t.Errorf("--json does not carry the version command: %s, %v", jsonOut, err)
+	}
+}
+
 // aiRun runs an ai command line and returns what it printed, the JSON the
 // Env got, and its error.
 func aiRun(t *testing.T, r *opsRepo, args ...string) (text, jsonOut string, err error) {

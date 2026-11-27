@@ -175,6 +175,43 @@ func TestRuleHelpers(t *testing.T) {
 	}
 }
 
+// A launcher is refused with a version suffix, a Windows extension or a
+// path, and the issue #120 names are on the list. Names the pinned
+// registry uses are not.
+func TestRefusedLauncherNames(t *testing.T) {
+	for _, c := range []string{
+		"python3.12", "PIP3.12.EXE", "pip-3.12", "node22", "node-v22", "python3.13t", "pypy3.10",
+		"/usr/bin/python3.12", `C:\Python312\python.exe`, "npx.cmd", "ruby3.3", "php8.3", "lua5.4",
+		"nodejs", "gem", "cargo", "corepack", "xargs", "bundle", "rustup", "perl", "java", "deno",
+		"tsx", "dash", "busybox", "nohup", "timeout", "osascript", "aria2c", "python", "python3", "pip3",
+	} {
+		if !harnessdef.RefusedLauncher(c) {
+			t.Errorf("RefusedLauncher(%q) = false", c)
+		}
+		if harnessdef.ValidCommandName(c) {
+			if err := harnessdef.Validate("x", harnessdef.Definition{Command: c}, harnessdef.LayerPlugin); code(t, err) != harnessdef.CodeLauncher {
+				t.Errorf("Validate(%q) = %v, want %s", c, err, harnessdef.CodeLauncher)
+			}
+			if err := harnessdef.Validate("x", harnessdef.Definition{Command: "claude-agent-acp", BaseCommands: []string{c}}, harnessdef.LayerAgentflow); code(t, err) != harnessdef.CodeLauncher {
+				t.Errorf("base_commands %q = %v, want %s", c, err, harnessdef.CodeLauncher)
+			}
+		}
+	}
+	for _, c := range []string{
+		"claude-agent-acp", "codex-acp", "gemini", "copilot", "goose", "cursor-agent", "cli", "pi", "amp",
+		"pool-darwin-arm64", "sigit-linux-amd64", "sigit-win-arm64", "agy_acp_server.par", "kimi", "qwen", "2.0.14",
+	} {
+		if harnessdef.RefusedLauncher(c) {
+			t.Errorf("RefusedLauncher(%q) = true", c)
+		}
+	}
+	for c, want := range map[string]string{"PIP3.12.EXE": "pip", "node-v22": "node", "pool-darwin-arm64": "pool-darwin-arm", "2.0.14": "2.0.14", "aria2c": "aria2c"} {
+		if got := harnessdef.LauncherName(c); got != want {
+			t.Errorf("LauncherName(%q) = %q, want %q", c, got, want)
+		}
+	}
+}
+
 func make17() []string {
 	out := make([]string, 17)
 	for i := range out {

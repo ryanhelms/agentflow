@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -183,6 +184,7 @@ func printHarnesses(w io.Writer, r harness.Report) {
 		if h.Quarantined {
 			fmt.Fprintf(w, "    The ACP registry has quarantined this agent: %s\n", printable(h.QuarantineReason))
 		}
+		printPluginLaunch(w, "    ", h)
 		printHarnessFix(w, "    ", h.Fix)
 		if h.State == harness.StateNeedsAuth {
 			printSignIn(w, h)
@@ -201,6 +203,22 @@ func printHarnesses(w io.Writer, r harness.Report) {
 		}
 	}
 	printProbeRefused(w, r)
+}
+
+// printPluginLaunch shows, for a harness a plugin chose how to start,
+// everything its probe by name runs, in order: the version command (or
+// that there is none), then the command and its args.
+func printPluginLaunch(w io.Writer, indent string, h harness.Harness) {
+	if h.Command == "" || !slices.Contains(h.Notes, harness.NotePluginLaunch) {
+		return
+	}
+	run := strings.Join(append([]string{h.Command}, h.Args...), " ")
+	if h.NoVersion || len(h.VersionArgs) == 0 {
+		fmt.Fprintf(w, "%sA probe by name runs: %s (no version command)\n", indent, printable(run))
+		return
+	}
+	version := strings.Join(append([]string{h.Command}, h.VersionArgs...), " ")
+	fmt.Fprintf(w, "%sA probe by name runs: %s, then %s\n", indent, printable(version), printable(run))
 }
 
 func orDash(s string) string {

@@ -401,6 +401,7 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
 .hn-fix[data-tone=bad] { border-inline-start-color: var(--bad); background: var(--bad-bg); }
 .hn-fix code, .hn-fix .hn-command pre { background: var(--surface); }
 .hn-fix-link { margin-top: var(--s-2); font-size: var(--fs-xs); }
+.hn-fix-launch { margin-top: var(--s-2); }
 
 /* Sign-in: the verdict, then the ways to sign in. */
 .hn-signin { margin-top: var(--s-4); padding-top: var(--s-3); border-top: var(--keyline) solid var(--border); }
