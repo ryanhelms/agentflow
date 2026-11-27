@@ -33,11 +33,11 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := resolveDir(s.Dir, root, s.Env)
+	dir, err := resolveDir(s.Dir, root, s.Env, len(s.AllowEnv) > 0)
 	if err != nil {
 		return nil, err
 	}
-	if err := checkEnv(s.Env); err != nil {
+	if err := checkEnv(s.Env, s.AllowEnv); err != nil {
 		return nil, err
 	}
 	limit := s.StderrLimit
@@ -146,8 +146,10 @@ func resolveExecutable(path, root string) (exe, rootReal string, err error) {
 
 // resolveDir returns the working directory: Root by default, otherwise a
 // directory inside Root or inside the child's data directory (its
-// AGENTFLOW_PLUGIN_DATA, else the parent of its HOME).
-func resolveDir(dir, root string, env []string) (string, error) {
+// AGENTFLOW_PLUGIN_DATA, else the parent of its HOME). With realHome
+// (LaunchSpec.AllowEnv is set) HOME may be the person's own home, so its
+// parent is not a data directory.
+func resolveDir(dir, root string, env []string, realHome bool) (string, error) {
 	if dir == "" {
 		return root, nil
 	}
@@ -164,7 +166,7 @@ func resolveDir(dir, root string, env []string) (string, error) {
 	if within(real, root) {
 		return real, nil
 	}
-	if data := dataDir(env); data != "" {
+	if data := dataDir(env, realHome); data != "" {
 		if dataReal, err := filepath.EvalSymlinks(data); err == nil && within(real, dataReal) {
 			return real, nil
 		}
@@ -172,14 +174,14 @@ func resolveDir(dir, root string, env []string) (string, error) {
 	return "", errors.New("jsonrpc: launch: the working directory is outside the root and the data directory")
 }
 
-func dataDir(env []string) string {
+func dataDir(env []string, realHome bool) string {
 	var home string
 	for _, kv := range env {
 		name, value, _ := strings.Cut(kv, "=")
 		switch {
 		case strings.EqualFold(name, EnvPluginData):
 			return value
-		case strings.EqualFold(name, EnvHome) && filepath.IsAbs(value):
+		case !realHome && strings.EqualFold(name, EnvHome) && filepath.IsAbs(value):
 			home = filepath.Dir(value)
 		}
 	}

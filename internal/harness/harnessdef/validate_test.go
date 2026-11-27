@@ -1,0 +1,170 @@
+package harnessdef_test
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
+)
+
+func code(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		return ""
+	}
+	var ve *harnessdef.ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("error %v is not a *ValidationError", err)
+	}
+	return ve.Code
+}
+
+func TestValidateAcceptsOverlayEntries(t *testing.T) {
+	claude := harnessdef.Definition{
+		Kind:          harnessdef.KindAdapter,
+		Command:       "claude-agent-acp",
+		BaseName:      "Claude Code",
+		BaseCommands:  []string{"claude"},
+		StatusFrom:    harnessdef.StatusFromBase,
+		StatusArgs:    []string{"auth", "status"},
+		CredentialEnv: []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"},
+		StatusSource:  "https://code.claude.com/docs/en/cli-reference",
+	}
+	if err := harnessdef.Validate("claude-acp", claude, harnessdef.LayerAgentflow); err != nil {
+		t.Fatal(err)
+	}
+	codex := harnessdef.Definition{
+		Kind:                harnessdef.KindAdapter,
+		Command:             "codex-acp",
+		BaseCommands:        []string{"codex"},
+		StatusFrom:          harnessdef.StatusFromBase,
+		StatusArgs:          []string{"login", "status"},
+		StatusSignedIn:      []int{0},
+		StatusSignedOut:     []int{1},
+		StatusSignedOutLine: "Not logged in",
+		CredentialEnv:       []string{"OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"},
+		ConfigEnv:           []string{"CODEX_HOME"},
+		StatusSource:        "openai/codex codex-rs/cli/src/login.rs",
+	}
+	if err := harnessdef.Validate("codex-acp", codex, harnessdef.LayerAgentflow); err != nil {
+		t.Fatal(err)
+	}
+	gemini := harnessdef.Definition{Command: "gemini", Args: []string{"--acp"}, MinVersion: "0.9.0"}
+	for _, l := range []harnessdef.Layer{harnessdef.LayerRegistry, harnessdef.LayerAgentflow, harnessdef.LayerPlugin, harnessdef.LayerPersonal} {
+		if err := harnessdef.Validate("gemini", gemini, l); err != nil {
+			t.Fatalf("%s: %v", l, err)
+		}
+	}
+}
+
+func TestValidateRefuses(t *testing.T) {
+	ok := harnessdef.Definition{Command: "my-agent"}
+	cases := []struct {
+		name  string
+		id    string
+		d     harnessdef.Definition
+		layer harnessdef.Layer
+		want  string
+	}{
+		{"bad id", "My_Agent", ok, harnessdef.LayerPersonal, harnessdef.CodeID},
+		{"long id", "a" + strings.Repeat("b", 64), ok, harnessdef.LayerPersonal, harnessdef.CodeID},
+		{"unknown layer", "x", ok, "repo", harnessdef.CodeRule},
+		{"two-line name", "x", harnessdef.Definition{Name: "a\nb"}, harnessdef.LayerPersonal, harnessdef.CodeName},
+		{"bidi name", "x", harnessdef.Definition{Name: "a\u202eb"}, harnessdef.LayerPersonal, harnessdef.CodeName},
+		{"long name", "x", harnessdef.Definition{Name: strings.Repeat("n", 65)}, harnessdef.LayerPersonal, harnessdef.CodeName},
+		{"bad kind", "x", harnessdef.Definition{Kind: "shell"}, harnessdef.LayerPersonal, harnessdef.CodeRule},
+		{"npx", "x", harnessdef.Definition{Command: "npx"}, harnessdef.LayerPersonal, harnessdef.CodeLauncher},
+		{"NPX.exe", "x", harnessdef.Definition{Command: "NPX.exe"}, harnessdef.LayerPersonal, harnessdef.CodeLauncher},
+		{"absolute bash", "x", harnessdef.Definition{Command: "/bin/bash"}, harnessdef.LayerPersonal, harnessdef.CodeLauncher},
+		{"absolute in plugin", "x", harnessdef.Definition{Command: "/opt/x/agent"}, harnessdef.LayerPlugin, harnessdef.CodeCommand},
+		{"absolute in overlay", "x", harnessdef.Definition{Command: "/opt/x/agent"}, harnessdef.LayerAgentflow, harnessdef.CodeCommand},
+		{"relative path", "x", harnessdef.Definition{Command: "bin/agent"}, harnessdef.LayerPersonal, harnessdef.CodeCommand},
+		{"shell arg", "x", harnessdef.Definition{Command: "a", Args: []string{"$(id)"}}, harnessdef.LayerPersonal, harnessdef.CodeArgs},
+		{"empty arg", "x", harnessdef.Definition{Command: "a", VersionArgs: []string{""}}, harnessdef.LayerPersonal, harnessdef.CodeArgs},
+		{"17 args", "x", harnessdef.Definition{Command: "a", Args: make17()}, harnessdef.LayerPersonal, harnessdef.CodeArgs},
+		{"base command path", "x", harnessdef.Definition{BaseCommands: []string{"../claude"}}, harnessdef.LayerPersonal, harnessdef.CodeCommand},
+		{"base command launcher", "x", harnessdef.Definition{BaseCommands: []string{"node"}}, harnessdef.LayerPersonal, harnessdef.CodeLauncher},
+		{"min version", "x", harnessdef.Definition{MinVersion: "1.2"}, harnessdef.LayerPersonal, harnessdef.CodeVersion},
+		{"status in plugin", "x", harnessdef.Definition{Command: "a", StatusFrom: "self"}, harnessdef.LayerPlugin, harnessdef.CodeStatusNotAllowed},
+		{"credential env in plugin", "x", harnessdef.Definition{CredentialEnv: []string{"X_KEY"}}, harnessdef.LayerPlugin, harnessdef.CodeStatusNotAllowed},
+		{"config env in plugin", "x", harnessdef.Definition{ConfigEnv: []string{"X_HOME"}}, harnessdef.LayerPlugin, harnessdef.CodeStatusNotAllowed},
+		{"status in registry", "x", harnessdef.Definition{StatusArgs: []string{"status"}}, harnessdef.LayerRegistry, harnessdef.CodeStatusNotAllowed},
+		{"status_from other", "x", harnessdef.Definition{StatusFrom: "path"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"base on native", "x", harnessdef.Definition{Kind: harnessdef.KindNative, StatusFrom: "base"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"status args alone", "x", harnessdef.Definition{StatusArgs: []string{"status"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"status arg", "x", harnessdef.Definition{StatusFrom: "self", StatusArgs: []string{"-p", "do it"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"exit code", "x", harnessdef.Definition{StatusFrom: "self", StatusSignedIn: []int{256}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"overlapping codes", "x", harnessdef.Definition{StatusFrom: "self", StatusSignedIn: []int{0, 1}, StatusSignedOut: []int{1}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"signed-out line", "x", harnessdef.Definition{StatusFrom: "self", StatusSignedOutLine: "a\nb"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"untrimmed line", "x", harnessdef.Definition{StatusFrom: "self", StatusSignedOutLine: " Not logged in"}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"lower env name", "x", harnessdef.Definition{CredentialEnv: []string{"api_key"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config PATH", "x", harnessdef.Definition{ConfigEnv: []string{"PATH"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config LD_", "x", harnessdef.Definition{ConfigEnv: []string{"LD_PRELOAD"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config DYLD_", "x", harnessdef.Definition{ConfigEnv: []string{"DYLD_INSERT_LIBRARIES"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config proxy", "x", harnessdef.Definition{ConfigEnv: []string{"HTTPS_PROXY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config credential suffix", "x", harnessdef.Definition{ConfigEnv: []string{"OPENAI_API_KEY"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config named credential", "x", harnessdef.Definition{CredentialEnv: []string{"CODEX_SECRET"}, ConfigEnv: []string{"CODEX_SECRET"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"config agentflow", "x", harnessdef.Definition{ConfigEnv: []string{"AGENTFLOW_HOME"}}, harnessdef.LayerPersonal, harnessdef.CodeStatus},
+		{"personal source", "x", harnessdef.Definition{StatusFrom: "self", StatusSource: "me"}, harnessdef.LayerPersonal, harnessdef.CodeRule},
+		{"overlay without source", "x", harnessdef.Definition{StatusFrom: "self"}, harnessdef.LayerAgentflow, harnessdef.CodeStatus},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := harnessdef.Validate(c.id, c.d, c.layer)
+			if got := code(t, err); got != c.want {
+				t.Fatalf("code = %q (%v), want %q", got, err, c.want)
+			}
+		})
+	}
+}
+
+func TestValidationErrorNamesNoValue(t *testing.T) {
+	err := harnessdef.Validate("x", harnessdef.Definition{Command: "a", Args: []string{"secret-$(value)"}}, harnessdef.LayerPersonal)
+	if err == nil || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(err.Error(), `"x"`) || !strings.Contains(err.Error(), "args") {
+		t.Fatalf("err = %v, want the ID and the field", err)
+	}
+}
+
+func TestRuleHelpers(t *testing.T) {
+	for _, s := range []string{"--acp", "acp", "a=b", "@scope/pkg@1.2.3", "x,y:z"} {
+		if !harnessdef.ValidArg(s) {
+			t.Errorf("ValidArg(%q) = false", s)
+		}
+	}
+	for _, s := range []string{"", "a b", "$x", "a;b", "`x`", strings.Repeat("a", 129)} {
+		if harnessdef.ValidArg(s) {
+			t.Errorf("ValidArg(%q) = true", s)
+		}
+	}
+	if !harnessdef.RefusedLauncher(`C:\bin\PowerShell.EXE`) || harnessdef.RefusedLauncher("gemini") {
+		t.Fatal("RefusedLauncher")
+	}
+	for _, n := range []string{"path", "Ld_Library_Path", "dyld_x", "no_proxy", "GIT_SSH"} {
+		if !harnessdef.LaunchSafetyName(n) {
+			t.Errorf("LaunchSafetyName(%q) = false", n)
+		}
+	}
+	if harnessdef.LaunchSafetyName("CODEX_HOME") {
+		t.Error("CODEX_HOME is not a launch-safety name")
+	}
+	for _, n := range []string{"X_API_KEY", "gh_auth_token", "A_ACCESS_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"} {
+		if !harnessdef.CredentialSuffix(n) {
+			t.Errorf("CredentialSuffix(%q) = false", n)
+		}
+	}
+	if harnessdef.CredentialSuffix("API_KEYS") {
+		t.Error("API_KEYS has no credential suffix")
+	}
+}
+
+func make17() []string {
+	out := make([]string, 17)
+	for i := range out {
+		out[i] = "a"
+	}
+	return out
+}

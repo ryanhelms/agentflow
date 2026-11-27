@@ -187,8 +187,14 @@ type LaunchSpec struct {
 	Args []string
 	// Env is the complete environment of the child, normally from
 	// ScrubbedEnv. Launch refuses a name that is not allowed by
-	// EnvAllowed.
+	// EnvAllowed or AllowEnv.
 	Env []string
+	// AllowEnv names variables this one call also allows in Env (phase 6:
+	// only the harness sign-in status profile sets it). On Windows names
+	// are compared without case. With AllowEnv set, Dir must be inside Root
+	// or AGENTFLOW_PLUGIN_DATA: HOME may then be the person's real home, so
+	// it no longer marks a data directory.
+	AllowEnv []string
 	// Stderr receives the child's stderr line by line as it arrives, each
 	// line cut at 4 KiB, at most StderrLimit bytes in all; then one
 	// "[stderr truncated]" line and nothing more. The newest StderrLimit
