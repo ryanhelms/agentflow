@@ -20,12 +20,13 @@ type homeFixture struct {
 func newHomeFixture(t *testing.T) *homeFixture {
 	t.Helper()
 	f := &homeFixture{account: realDir(t, t.TempDir()), warnings: &bytes.Buffer{}}
-	oldAccount, oldWarnings := accountHome, HomeWarnings
-	accountHome = func() (string, error) { return f.account, nil }
+	oldWarnings := HomeWarnings
+	restore := OverrideAccountHome(f.account)
 	HomeWarnings = f.warnings
 	resetHomeWarnings()
 	t.Cleanup(func() {
-		accountHome, HomeWarnings = oldAccount, oldWarnings
+		restore()
+		HomeWarnings = oldWarnings
 		resetHomeWarnings()
 	})
 	t.Setenv("AGENTFLOW_HOME", "")
@@ -222,7 +223,7 @@ func TestHomeWarningIsPrintedOnce(t *testing.T) {
 
 func TestHomeInsideRepositoryWithoutAccountHomeIsRefused(t *testing.T) {
 	newHomeFixture(t)
-	accountHome = func() (string, error) { return "", errors.New("no account") }
+	accountHome = func() (string, error) { return "", errors.New("no account") } // restored by the fixture
 	t.Setenv("AGENTFLOW_HOME", filepath.Join(newRepo(t), "home"))
 	_, err := HomeDir()
 	var refused *HomeInRepositoryError
@@ -348,5 +349,60 @@ func TestAccountHomeIsNotTakenFromHOME(t *testing.T) {
 	}
 	if got == os.Getenv("HOME") {
 		t.Fatalf("lookupAccountHome() = %s, the value of $HOME", got)
+	}
+}
+
+// In a test binary, HomeDir never falls back to the developer's real account
+// folder: a test that has not called OverrideAccountHome gets an error.
+func TestTestBinaryNeverFallsBackToRealAccountHome(t *testing.T) {
+	if accountOverridden {
+		t.Fatal("the account home is overridden outside a fixture")
+	}
+	t.Setenv("DEVFLOW_HOME", "")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("AGENTFLOW_HOME", filepath.Join(newRepo(t), "home"))
+	got, err := HomeDir()
+	if err == nil || !strings.Contains(err.Error(), "OverrideAccountHome") {
+		t.Fatalf("HomeDir() = %q, %v; want an error, not the real account folder", got, err)
+	}
+	if _, err := Home(); err == nil {
+		t.Fatal("Home() succeeded")
+	}
+}
+
+func TestInsideRepository(t *testing.T) {
+	f := newHomeFixture(t)
+	repo := newRepo(t)
+	worktree := filepath.Join(realDir(t, t.TempDir()), "linked")
+	gitRun(t, repo, "worktree", "add", "-q", "-b", "feature", worktree)
+	outside := realDir(t, t.TempDir())
+	if err := os.Symlink(repo, filepath.Join(outside, "link")); err != nil {
+		t.Fatal(err)
+	}
+	loop := filepath.Join(outside, "loop")
+	if err := os.Symlink(loop, loop); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, f.account, "init", "-q")
+	cases := map[string]bool{
+		filepath.Join(outside, "codex"):          false,
+		filepath.Join(repo, ".codex"):            true,
+		filepath.Join(repo, ".git", "x"):         true,
+		filepath.Join(worktree, "xdg", "config"): true,
+		filepath.Join(outside, "link", "cfg"):    true,
+		outside + "/link/../cfg":                 false,
+		filepath.Join(loop, "x"):                 true,
+		filepath.Join(f.account, ".config"):      false,
+		filepath.Join(f.account, "code", "x"):    false,
+	}
+	for dir, want := range cases {
+		inside, why := InsideRepository(dir)
+		if inside != want {
+			t.Errorf("InsideRepository(%s) = %v (%s), want %v", dir, inside, why, want)
+		}
+		if inside == (why == "") {
+			t.Errorf("InsideRepository(%s): inside %v with why %q", dir, inside, why)
+		}
 	}
 }

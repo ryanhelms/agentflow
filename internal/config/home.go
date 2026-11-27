@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 )
 
 // The agentflow home holds the personal layer: config.yml (autonomy and the
@@ -57,10 +58,15 @@ var accountHome = sync.OnceValues(lookupAccountHome)
 // restore is called. Only tests call it, so that no test falls back to the
 // developer's own ~/.agentflow.
 func OverrideAccountHome(dir string) (restore func()) {
-	old := accountHome
+	old, oldSet := accountHome, accountOverridden
 	accountHome = func() (string, error) { return dir, nil }
-	return func() { accountHome = old }
+	accountOverridden = true
+	return func() { accountHome, accountOverridden = old, oldSet }
 }
+
+// accountOverridden is true while OverrideAccountHome is in effect. In a test
+// binary, HomeDir refuses to fall back to the real account folder without it.
+var accountOverridden bool
 
 // lookupAccountHome looks the account up by its user ID. user.Current is not
 // used outside Windows: without cgo it falls back to $HOME when the user ID
@@ -140,12 +146,17 @@ func checkHome(dir, source string) (string, error) {
 	if accountErr == nil && isAccountFolder(dir, account) {
 		return dir, nil
 	}
-	reason := placement(dir, account, accountErr == nil)
-	if reason == "" {
+	inside, reason := insideRepository(dir, account, accountErr == nil)
+	if !inside {
 		return dir, nil
 	}
 	if accountErr != nil {
 		return "", &HomeInRepositoryError{Source: source, Dir: dir, Reason: reason}
+	}
+	if testing.Testing() && !accountOverridden {
+		// A test must never read or write the developer's own home.
+		return "", fmt.Errorf("the agentflow home %s (from %s) %s, and a test binary does not fall back to the "+
+			"real account folder: put the test's home outside its repository or call config.OverrideAccountHome", dir, source, reason)
 	}
 	fallback, err := defaultHome(account)
 	if err != nil {
@@ -157,22 +168,34 @@ func checkHome(dir, source string) (string, error) {
 	return fallback, nil
 }
 
-// placement returns why dir cannot be the agentflow home ("is inside the
-// repository R"), or "" when it can. A folder that cannot be checked is not
-// used: the check fails closed.
-func placement(dir, account string, haveAccount bool) string {
+// InsideRepository reports whether dir, which need not exist, is inside a
+// git working tree (a primary checkout, linked worktree or submodule) or a git
+// directory, after resolving links and "..". A repository whose root is the
+// OS account's home (from os/user, never $HOME) does not count: that is a
+// dotfiles repository. It fails closed: a dir that cannot be resolved or
+// checked counts as inside. why says which, for a message ("is inside the
+// repository R", "cannot be checked (...)"); it is "" when inside is false.
+//
+// HomeDir uses it for the agentflow home; use it for any directory a
+// repository's environment could have set (HOME, XDG_*_HOME, CODEX_HOME).
+func InsideRepository(dir string) (inside bool, why string) {
+	account, err := accountHome()
+	return insideRepository(dir, account, err == nil)
+}
+
+func insideRepository(dir, account string, haveAccount bool) (bool, string) {
 	resolved, ok := resolvePath(dir)
 	if !ok {
-		return "cannot be checked (its path does not resolve)"
+		return true, "cannot be checked (its path does not resolve)"
 	}
 	repo, inside, ok := enclosingRepository(resolved)
 	switch {
 	case !ok:
-		return "cannot be checked (a folder above it cannot be read)"
+		return true, "cannot be checked (a folder above it cannot be read)"
 	case !inside, haveAccount && sameDir(repo, account):
-		return ""
+		return false, ""
 	}
-	return "is inside the repository " + repo
+	return true, "is inside the repository " + repo
 }
 
 var (
