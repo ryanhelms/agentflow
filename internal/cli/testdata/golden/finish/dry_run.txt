@@ -8,7 +8,7 @@ $ agentflow finish PLAT-1-reach-qa --dry-run
   "detail": "merged into origin/main",
   "actions": [
     "git worktree remove <worktrees>/PLAT-1-reach-qa",
-    "git update-ref -d refs/heads/PLAT-1-reach-qa <object-1>",
+    "git branch -D PLAT-1-reach-qa",
     "git worktree prune"
   ],
   "primary": "<repo>",

@@ -99,8 +99,8 @@ writes (`finish` action, remote class).
 
 Finish deletes each branch only while it is still at the commit it checked. When the local
 branch has moved, it stops before removing the worktree. It deletes the local branch with
-`git update-ref -d refs/heads/<branch> <checked commit>` and then its `branch.<branch>`
-settings, as `git branch -D` would, and the remote branch with
+`git branch -D`, which refuses a branch that another worktree uses, also while that worktree
+rebases or bisects. It deletes the remote branch with
 `git push --force-with-lease=refs/heads/<branch>:<checked commit> origin :refs/heads/<branch>`,
 so a push made after the check, or since the last fetch when `origin` could not be read, makes
 the delete fail and the branch stays. Run `finish` again to check the new commits.

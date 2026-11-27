@@ -251,7 +251,7 @@ func (c *checker) plan(ctx context.Context, branch string, entry *Entry) (*Plan,
 	}
 	if local {
 		p.deleteLocal = true
-		p.Actions = append(p.Actions, "git update-ref -d refs/heads/"+branch+" "+localTip)
+		p.Actions = append(p.Actions, "git branch -D "+branch)
 	}
 	p.Actions = append(p.Actions, "git worktree prune")
 	if remote {
@@ -415,8 +415,15 @@ func Apply(ctx context.Context, p *Plan) (Outcome, error) {
 		}
 	}
 	if p.deleteLocal {
-		if err := deleteLocalBranch(ctx, repo, p.Branch, p.localTip); err != nil {
-			return out, err
+		// git branch -D refuses a branch another worktree uses, also while it
+		// rebases or bisects there with a detached HEAD.
+		if now, err := repo.Git(ctx, "rev-parse", "--verify", "--quiet", "refs/heads/"+p.Branch); err == nil {
+			if strings.TrimSpace(now) != p.localTip {
+				return out, fmt.Errorf("%s moved after the check; run finish again", p.Branch)
+			}
+			if _, err := repo.Git(ctx, "branch", "-D", p.Branch); err != nil {
+				return out, err
+			}
 		}
 	}
 	if _, err := repo.Git(ctx, "worktree", "prune"); err != nil {
@@ -434,27 +441,6 @@ func Apply(ctx context.Context, p *Plan) (Outcome, error) {
 	}
 	out.State = StateFinished
 	return out, nil
-}
-
-// deleteLocalBranch deletes refs/heads/branch only while it is at tip, in one
-// step (git update-ref -d with the old value), then its branch.<name> config,
-// as git branch -D does. Like git branch -D, it refuses a branch that a
-// worktree has checked out.
-func deleteLocalBranch(ctx context.Context, repo *gitx.Repo, branch, tip string) error {
-	ref := "refs/heads/" + branch
-	if _, err := repo.Git(ctx, "rev-parse", "--verify", "--quiet", ref); err != nil {
-		return nil // already gone
-	}
-	if list, err := repo.Git(ctx, "worktree", "list", "--porcelain"); err != nil {
-		return err
-	} else if slices.Contains(strings.Split(list, "\n"), "branch "+ref) {
-		return fmt.Errorf("%s is checked out in a worktree; run finish again", branch)
-	}
-	if _, err := repo.Git(ctx, "update-ref", "-d", ref, tip); err != nil {
-		return fmt.Errorf("%s moved after the check; run finish again: %w", branch, err)
-	}
-	_, _ = repo.Git(ctx, "config", "--remove-section", "branch."+branch) // absent when never configured
-	return nil
 }
 
 // SweepResult lists every worktree Sweep looked at.
