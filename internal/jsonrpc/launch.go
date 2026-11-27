@@ -18,6 +18,15 @@ import (
 // stdout open cannot hold the Process open longer than this.
 const drainDelay = 500 * time.Millisecond
 
+// orderedDrainDelay replaces drainDelay for a connection with
+// Limits.OrderedResponses: there the reader hands the last response to its
+// Call only after every notification queued before it is handled, which can
+// take longer than drainDelay when the child answers and exits at once.
+// The connection ends by itself at EOF once that queue is handled, so this
+// only bounds a child whose grandchild keeps stdout open, or a handler that
+// never returns.
+const orderedDrainDelay = 10 * time.Second
+
 // Launch starts a child that speaks JSON-RPC on stdin and stdout. It checks
 // the LaunchSpec first (see its fields) and runs the resolved executable,
 // never a PATH lookup. ctx bounds the child's whole life, as with
@@ -33,7 +42,7 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, err := resolveDir(s.Dir, root, s.Env, s.DataDir)
+	dir, err := resolveDirAllow(s.Dir, root, s.Env, s.DataDir, s.AllowDir)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +93,10 @@ func Launch(ctx context.Context, s LaunchSpec) (Process, error) {
 		stderr: stderr,
 		exited: make(chan struct{}),
 		code:   -1,
+		drain:  drainDelay,
+	}
+	if s.Limits.OrderedResponses {
+		p.drain = orderedDrainDelay
 	}
 	p.conn = NewConn(stdoutR, stdinW, s.Handler, s.Limits)
 	go p.wait()
@@ -194,6 +207,41 @@ func resolveDir(dir, root string, env []string, dataDir string) (string, error) 
 	return "", errors.New("jsonrpc: launch: the working directory is outside the root and the data directory")
 }
 
+// resolveDirAllow is resolveDir with LaunchSpec.AllowDir (phase 7: only
+// the session profile sets it): one more absolute, existing directory the
+// working directory may be inside, links resolved. Empty means resolveDir
+// alone. The data directory rules still apply when it is set.
+func resolveDirAllow(dir, root string, env []string, dataDir, allowDir string) (string, error) {
+	if allowDir == "" {
+		return resolveDir(dir, root, env, dataDir)
+	}
+	if !filepath.IsAbs(allowDir) {
+		return "", errors.New("jsonrpc: launch: the allowed directory must be absolute")
+	}
+	allow, err := filepath.EvalSymlinks(allowDir)
+	if err != nil {
+		return "", fmt.Errorf("jsonrpc: launch: resolve allowed directory: %w", err)
+	}
+	if info, err := os.Stat(allow); err != nil || !info.IsDir() {
+		return "", errors.New("jsonrpc: launch: the allowed directory is not a directory")
+	}
+	got, err := resolveDir(dir, root, env, dataDir)
+	if err == nil {
+		return got, nil
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return "", err
+	}
+	real, rerr := filepath.EvalSymlinks(dir)
+	if rerr != nil {
+		return "", err
+	}
+	if info, serr := os.Stat(real); serr != nil || !info.IsDir() || !within(real, allow) {
+		return "", err
+	}
+	return real, nil
+}
+
 func envDataDir(env []string) string {
 	var home string
 	for _, kv := range env {
@@ -222,6 +270,7 @@ type process struct {
 	conn   Conn
 	stdin  *os.File
 	grace  time.Duration
+	drain  time.Duration // how long wait lets the connection finish after the child exits
 	stderr *stderrStream
 
 	exited  chan struct{}
@@ -284,7 +333,7 @@ func (p *process) wait() {
 	if p.cmd.ProcessState != nil {
 		code = p.cmd.ProcessState.ExitCode()
 	}
-	timer := time.NewTimer(drainDelay)
+	timer := time.NewTimer(p.drain)
 	select {
 	case <-p.conn.Done():
 	case <-timer.C:

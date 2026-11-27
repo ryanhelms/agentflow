@@ -1,0 +1,37 @@
+$ agentflow ai run --harness demo "say hi"
+--- stdin
+n
+--- stdout
+{
+  "harness": "demo",
+  "harness_name": "Demo",
+  "command": "fake-agent",
+  "path": "<fake-agent>/fake-agent",
+  "args": [],
+  "identity": "sha256:<digest-1>",
+  "worktree": "<repo>",
+  "branch": "task",
+  "started_by": {
+    "kind": "agent",
+    "surface": "cli",
+    "client": "cli"
+  },
+  "ceiling": "confirm",
+  "home": "real",
+  "env_names": "<elided>",
+  "mcp": true,
+  "limits": {
+    "max_running": 2,
+    "max_duration": 1800000000000,
+    "idle_timeout": 600000000000,
+    "ask_timeout": 300000000000
+  },
+  "prompt": "say hi",
+  "detached": true
+}
+Proceed? [y/N]: 
+--- stderr
+Agentflow ai.run: confirm (autonomy.local); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.local sets ai.run (local) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+--- error
+cancelled

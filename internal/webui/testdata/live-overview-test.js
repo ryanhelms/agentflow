@@ -46,7 +46,7 @@
     check(!document.querySelector(".live-changed") && !byID("live-announcer").textContent,"the first live values were announced as changes");
     let calls = await requests();
     check(calls.length === 1 && calls[0].path === "/api/events" && !calls[0].query.includes("Bearer") && calls[0].authorization.startsWith("Bearer "),"the stream request is wrong");
-    check(new URLSearchParams(calls[0].query).getAll("topic").join() === "*/*/approval.**,*/*/commit.created,*/*/gh.**,*/*/git.head.changed,*/*/git.worktrees.changed,*/*/hook.ran,*/*/op.**,*/*/plugin.annotation.added,*/*/ui.**,*/first/config.**,*/first/git.**","the console topics are wrong");
+    check(new URLSearchParams(calls[0].query).getAll("topic").join() === "*/*/ai.session.**,*/*/approval.**,*/*/commit.created,*/*/gh.**,*/*/git.head.changed,*/*/git.worktrees.changed,*/*/hook.ran,*/*/op.**,*/*/plugin.annotation.added,*/*/ui.**,*/first/config.**,*/first/git.**","the console topics are wrong");
     check(/^[0-9a-f]{32}$/.test(new URLSearchParams(calls[0].query).get("tab")),"the stream does not list this tab");
     check(!calls[0].query.includes(sessionStorage.getItem("agentflow.session:/w/first/")),"the session reached the address");
 

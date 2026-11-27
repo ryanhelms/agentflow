@@ -17,9 +17,9 @@ let saveTimer;
 let loadSequence = 0;
 // Providers and Autonomy are groups of the Settings page. Their screen names
 // stay, so agentflow ui --screen providers and saved links keep working.
-const screenNames = {overview: "repository overview", settings: "settings", providers: "provider settings", autonomy: "autonomy settings", plugins: "plugins page", harnesses: "harnesses page", configuration: "configuration editor", handoff: "handoff screen"};
+const screenNames = {overview: "repository overview", settings: "settings", providers: "provider settings", autonomy: "autonomy settings", plugins: "plugins page", harnesses: "harnesses page", ai: "AI sessions page", configuration: "configuration editor", handoff: "handoff screen"};
 const views = Object.keys(screenNames);
-const pages = {overview: "overview", settings: "settings", providers: "settings", autonomy: "settings", plugins: "plugins", harnesses: "harnesses", configuration: "configuration", handoff: "handoff"};
+const pages = {overview: "overview", settings: "settings", providers: "settings", autonomy: "settings", plugins: "plugins", harnesses: "harnesses", ai: "ai", configuration: "configuration", handoff: "handoff"};
 const settingsStore = "agentflow.settings:" + location.pathname;
 const roleNames = {
   code_hosting: "Code hosting", task_management: "Task management", knowledge_base: "Knowledge base",
@@ -338,6 +338,7 @@ function showPage(focus = false) {
   if (pages[screen] === "settings" && state) settingsPage.open(settingsGroup(where));
   pluginsPage.tick();
   harnessesPage.tick();
+  aiPage.tick();
   if (screen === "configuration" && state) renderEditor();
   if (focus) {
     $("main").focus({preventScroll: true});
@@ -481,7 +482,9 @@ let configTimer;
 const liveTopics = ["*/" + worktreeID + "/git.**","*/" + worktreeID + "/config.**",
   "*/*/gh.**","*/*/commit.created","*/*/hook.ran","*/*/git.head.changed","*/*/git.worktrees.changed","*/*/approval.**","*/*/op.**","*/*/ui.**",
   // A plugin's note on an operation is not an op.* event (ADR, "Phase 5 timeline annotations").
-  "*/*/plugin.annotation.added"];
+  "*/*/plugin.annotation.added",
+  // The ai state follows the sessions of every worktree (ADR, "Phase 7 AI projection").
+  "*/*/ai.session.**"];
 const live = AgentflowEvents.connect({
   endpoint: new URL("api/events",location.href).href,
   credential: () => session,
@@ -503,13 +506,14 @@ const live = AgentflowEvents.connect({
     showRepository("timeline",states.find(repositoryState("timeline"))?.state ?? null);
     showRepository("plugins",states.find(repositoryState("plugins"))?.state ?? null);
     showRepository("harnesses",states.find(repositoryState("harnesses"))?.state ?? null);
+    showRepository("ai",states.find(repositoryState("ai"))?.state ?? null);
     showSettings(states.find(ownSettings)?.state ?? null,false);
     tabs.receive(states.find(ownTabs)?.state ?? null);
   },
   onDelta({states,event}) {
     const own = states.find(ownOverview);
     if (own) showLive(own.state);
-    for (const name of ["activity","approvals","timeline","plugins","harnesses"]) {
+    for (const name of ["activity","approvals","timeline","plugins","harnesses","ai"]) {
       const next = states.find(repositoryState(name));
       if (next) showRepository(name,next.state);
     }
@@ -541,7 +545,7 @@ function repositoryState(name) {
 // Activity and approvals (docs/design/ui/live-stream.md, "Live panels").
 // liveRepository holds the raw state last received; the panels keep the last
 // values on screen when the stream has none.
-const liveRepository = {activity: null, approvals: null, timeline: null, plugins: null, harnesses: null};
+const liveRepository = {activity: null, approvals: null, timeline: null, plugins: null, harnesses: null, ai: null};
 // The Plugins page (docs/design/ui/plugins.md). Its values are the
 // repository's "plugins" state; it sends no request. The plugins state has
 // no topic of its own: it rides in the repository's frames (ADR, phase 5
@@ -556,6 +560,12 @@ const pluginsPage = AgentflowPlugins.createPlugins({
 const harnessesPage = AgentflowHarnesses.createHarnesses({
   root: document, request, announce, settingsRoute: groupRoute,
   visible: () => !$("console-shell").hidden && pages[destination().screen] === "harnesses"
+});
+// The AI sessions page (docs/design/ui/ai-panel.md). Its values are the
+// repository's "ai" state; its requests are respond and cancel.
+const aiPage = AgentflowAI.createAI({
+  root: document, request, announce,
+  visible: () => !$("console-shell").hidden && pages[destination().screen] === "ai"
 });
 const panels = AgentflowPanels.createPanels({
   root: document, worktree: worktreeID, announce,
@@ -602,6 +612,7 @@ function renderRepository(name, flash = false) {
   } else if (name === "timeline") timeline.show(liveRepository.timeline,flash);
   else if (name === "plugins") pluginsPage.show(liveRepository.plugins,flash);
   else if (name === "harnesses") harnessesPage.show(liveRepository.harnesses,flash);
+  else if (name === "ai") aiPage.show(liveRepository.ai,flash);
   else {
     panels.showApprovals(liveRepository.approvals,flash);
     // A plugin's card lists the approvals its writes wait for.
@@ -691,6 +702,7 @@ function renderStream() {
   timeline.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.timeline)});
   pluginsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.plugins)});
   harnessesPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.harnesses)});
+  aiPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.ai)});
   settingsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveSettings)});
   const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
   $("handoff-note").textContent = stale;
@@ -865,6 +877,7 @@ async function loadState() {
     renderRepository("timeline");
     renderRepository("plugins");
     renderRepository("harnesses");
+    renderRepository("ai");
     settingsPage.show(liveSettings);
     $("connection").hidden = true;
     $("connection-options").hidden = true;
@@ -890,6 +903,7 @@ $("refresh").addEventListener("click", () => {
   liveRepository.timeline = null;
   liveRepository.plugins = null;
   liveRepository.harnesses = null;
+  liveRepository.ai = null;
   liveSettings = null;
   liveReady = false;
   live.resync();

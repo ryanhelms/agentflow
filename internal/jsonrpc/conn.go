@@ -30,6 +30,13 @@ var errWriteTimeout = fmt.Errorf("%w: write timed out", ErrClosed)
 // until the Handler catches up. A notification Handler must therefore not
 // Call on the same Conn.
 //
+// With Limits.OrderedResponses, a response joins the notification queue
+// instead of reaching its Call at once, so Call returns only after every
+// notification read before the response has been handled. The response's
+// ID is still checked as it is read (an unknown ID closes the connection at
+// once). At EOF the queue is handled before the connection ends, so a
+// response or notification the peer sent just before it exited is not lost.
+//
 // If r is also an io.Closer, Close and every fatal error close it, so a
 // blocked read ends.
 func NewConn(r io.Reader, w io.WriteCloser, h Handler, l Limits) Conn {
@@ -45,7 +52,7 @@ func NewConn(r io.Reader, w io.WriteCloser, h Handler, l Limits) Conn {
 		cancel:  cancel,
 		pending: map[int64]chan *Message{},
 		slots:   make(chan struct{}, l.MaxInFlight),
-		notes:   make(chan *Request, notifyQueue),
+		notes:   make(chan queued, notifyQueue),
 		done:    make(chan struct{}),
 	}
 	go c.readLoop()
@@ -86,11 +93,20 @@ type conn struct {
 	pending map[int64]chan *Message
 
 	slots chan struct{} // peer requests in flight
-	notes chan *Request // peer notifications waiting
+	notes chan queued   // peer notifications (and ordered responses) waiting
 
 	once sync.Once
 	done chan struct{}
 	err  error // set before done closes
+}
+
+// queued is one item of the notification queue: a notification, a
+// response (OrderedResponses only) or the end of input (OrderedResponses
+// only, at EOF).
+type queued struct {
+	note *Request
+	resp *Message
+	eof  bool
 }
 
 func (c *conn) Done() <-chan struct{} { return c.done }
@@ -248,6 +264,13 @@ func (c *conn) readLoop() {
 			switch {
 			case errors.Is(err, ErrFrameTooLarge):
 				c.fail(ErrFrameTooLarge)
+			case errors.Is(err, io.EOF) && c.l.OrderedResponses:
+				// Handle what is queued first; notifyLoop then ends the
+				// connection.
+				select {
+				case c.notes <- queued{eof: true}:
+				case <-c.done:
+				}
 			case errors.Is(err, io.EOF):
 				c.fail(io.EOF)
 			default:
@@ -268,6 +291,18 @@ func (c *conn) readLoop() {
 		}
 		switch kind {
 		case kindResponse:
+			if c.l.OrderedResponses {
+				if _, ok := c.knownID(m); !ok {
+					c.fail(ErrProtocol)
+					return
+				}
+				select {
+				case c.notes <- queued{resp: m}:
+				case <-c.done:
+					return
+				}
+				continue
+			}
 			if !c.deliver(m) {
 				c.fail(ErrProtocol)
 				return
@@ -275,7 +310,7 @@ func (c *conn) readLoop() {
 		case kindNotification:
 			r := &Request{Method: m.Method, Params: m.Params}
 			select {
-			case c.notes <- r:
+			case c.notes <- queued{note: r}:
 			case <-c.done:
 				return
 			}
@@ -288,20 +323,28 @@ func (c *conn) readLoop() {
 // deliver hands a response to its Call. It reports false for an ID this
 // side never sent; a late answer to an abandoned Call is dropped.
 func (c *conn) deliver(m *Message) bool {
-	id, err := strconv.ParseInt(string(bytes.TrimSpace(m.ID)), 10, 64)
-	if err != nil {
+	id, ok := c.knownID(m)
+	if !ok {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if id <= 0 || id > c.lastID {
-		return false
-	}
 	if ch, ok := c.pending[id]; ok {
 		delete(c.pending, id)
 		ch <- m
 	}
 	return true
+}
+
+// knownID parses a response's ID and reports whether this side sent it.
+func (c *conn) knownID(m *Message) (int64, bool) {
+	id, err := strconv.ParseInt(string(bytes.TrimSpace(m.ID)), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return id, id > 0 && id <= c.lastID
 }
 
 func (c *conn) dispatch(r *Request) {
@@ -319,7 +362,15 @@ func (c *conn) dispatch(r *Request) {
 }
 
 func (c *conn) notifyLoop() {
-	for r := range c.notes {
+	for q := range c.notes {
+		switch {
+		case q.eof:
+			c.fail(io.EOF)
+			continue
+		case q.resp != nil:
+			c.deliver(q.resp) // its ID was checked when it was read
+			continue
+		}
 		if c.h == nil {
 			continue
 		}
@@ -328,7 +379,7 @@ func (c *conn) notifyLoop() {
 			continue // drain without handling
 		default:
 		}
-		c.handleNote(r)
+		c.handleNote(q.note)
 	}
 }
 

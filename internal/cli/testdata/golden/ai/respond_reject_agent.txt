@@ -1,0 +1,8 @@
+$ agentflow ai respond <session-1> <ask-3> --reject --json
+--- stdout
+{
+  "session": "<session-1>",
+  "ask": "<ask-3>",
+  "decision": "deny",
+  "state": "waiting"
+}

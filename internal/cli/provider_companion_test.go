@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ryanhelms/agentflow/internal/jsonrpc/jsonrpctest"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -38,6 +40,8 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	// It is also the fake ACP agent of the AI session tests.
+	jsonrpctest.RunChild()
 	os.Exit(m.Run())
 }
 

@@ -132,7 +132,8 @@ func (f *scriptedStream) install(mux *http.ServeMux) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(f.requests)
+		// [] before the first request, never null.
+		_ = json.NewEncoder(w).Encode(append([]map[string]string{}, f.requests...))
 	})
 }
 

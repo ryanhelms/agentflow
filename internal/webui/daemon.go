@@ -323,26 +323,36 @@ func (d *daemon) activate(r registeredWorktree) *workspace {
 	return ws
 }
 
-func (d *daemon) register(ctx context.Context, op daemonRequest) (string, error) {
+// activateFor records op's worktree and makes its console live. It mints
+// no ticket and leaves the browser-tab state alone: the console's own
+// startup (`ui --serve-child`) calls only this, and its starter then asks
+// for the link over the control request, which runs register.
+func (d *daemon) activateFor(ctx context.Context, op daemonRequest) (*workspace, Destination, error) {
 	if op.Mode != "auto" && op.Mode != "link" && op.Mode != "open" {
-		return "", errors.New("unknown console launch mode")
+		return nil, Destination{}, errors.New("unknown console launch mode")
 	}
 	dest, err := op.Destination.Normalize("overview")
 	if err != nil {
-		return "", err
+		return nil, Destination{}, err
 	}
 	r, base, err := inspectWorktree(ctx, op.Dir)
 	if err != nil {
-		return "", err
+		return nil, Destination{}, err
 	}
 	d.mu.Lock()
+	defer d.mu.Unlock()
 	r, err = d.record(r, base)
 	if err != nil {
-		d.mu.Unlock()
+		return nil, Destination{}, err
+	}
+	return d.activate(r), dest, nil
+}
+
+func (d *daemon) register(ctx context.Context, op daemonRequest) (string, error) {
+	ws, dest, err := d.activateFor(ctx, op)
+	if err != nil {
 		return "", err
 	}
-	ws := d.activate(r)
-	d.mu.Unlock()
 	link := func(ticket string) string {
 		return ws.server.origin + ws.server.worktreePath + "#launch=" + ticket + "&" + dest.Fragment()
 	}
