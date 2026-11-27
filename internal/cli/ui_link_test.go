@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -183,5 +184,28 @@ func TestLinkFreeErrors(t *testing.T) {
 	}
 	if got := linkFree(err, true); !errors.Is(got, err) || got.Error() != err.Error() {
 		t.Errorf("person error changed: %v", got)
+	}
+}
+
+// ui --serve-child prints a fresh sign-in link for the agentflow process
+// that started it, so it refuses when its parent is anything else: here
+// the test runner, as a shell would be for an agent. Nothing starts and
+// nothing is printed.
+func TestUIServeChildRefusesAnotherParent(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("the parent's executable is read on Linux and macOS only")
+	}
+	stdout, stderr, errText := captureUI(t, "--serve-child", "overview", "", "link", "0")
+	if errText != errServeChildParent.Error() || stdout != "" || stderr != "" {
+		t.Fatalf("serve-child from the test runner: stdout %q, stderr %q, error %q", stdout, stderr, errText)
+	}
+	// The reader finds this process's own executable.
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := parentExecutable(os.Getpid())
+	if !ok || !sameFile(got, self) {
+		t.Errorf("parentExecutable(self) = %q, %v; want %s", got, ok, self)
 	}
 }
