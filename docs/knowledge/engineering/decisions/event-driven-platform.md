@@ -5375,7 +5375,7 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 
 ### Phase 8 decisions
 
-*Decided by the architect in the contract PR. The coordinator confirms or changes them before the lanes start. Choices that change what agents may do, what leaves the machine or what gets deleted are in "Phase 8 open owner questions".*
+*Decided by the architect in the contract PR and confirmed by the coordinator on 2026-11-27. Choices that change what agents may do, what leaves the machine or what gets deleted are in "Phase 8 owner decisions".*
 
 1. **A draft is a phase 7 session with a profile**, not a second way to run a harness: it reuses the environment, the caps, the store, cancel, the requester rules and the test guard.
 2. **The host finishes the draft** (parse and candidates) through `Options.FinishDraft`, so drafts the console starts need no waiting process; the finish step is pure, so the host needs no App.
@@ -5389,11 +5389,11 @@ A lane changes only the files it owns. A lane that needs another lane's file, or
 10. **Feature `reply`, not `review`**, to leave `features/review.go` to phase 9.
 11. **No contract Go files in the contract PR**; lane 8.1 lands them first.
 
-### Phase 8 open owner questions
+### Phase 8 owner decisions
 
-The contract is written assuming each recommendation.
+Answered by the owner on 2026-11-27: each as recommended.
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 | --- | --- | --- |
 | 1 | **What may leave the machine?** Drafting sends diffs, commit messages, task text, templates, criteria and review comments to the feature's harness and so to its model provider. | Allow it per feature, off by default: a feature sends nothing until the person sets `ai.features.<id>.harness`; every run shows the manifest (sources, sizes, exclusions, the harness); secret files are never sent and a remaining secret refuses the draft. |
 | 2 | **May agents request drafts?** | Yes, while `ai.sessions.agent_start` is on, and always `needs_confirmation` with the manifest. The draft itself can only produce candidates; using one is the agent's own call under its own autonomy. |
