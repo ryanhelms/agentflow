@@ -155,7 +155,7 @@ type Manifest struct {
 	Parts        []Part              `json:"parts"`
 	Targets      []Target            `json:"targets,omitempty"`
 	Hint         string              `json:"hint,omitempty"` // the caller's own text, in full
-	Text         string              `json:"text,omitempty"` // ticket: the first 4 KiB of the description
+	Text         string              `json:"text,omitempty"` // ticket: the description, in full, as sent
 	Bytes        int                 `json:"bytes"`          // the whole prompt
 	PromptSHA256 string              `json:"prompt_sha256"`
 	MaxDuration  time.Duration       `json:"max_duration"`

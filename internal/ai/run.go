@@ -176,11 +176,23 @@ func Prepare(ctx context.Context, a *app.App, o aisession.Options, r Request) (P
 	man := Manifest{
 		Feature: r.Feature, Harness: plan.Harness, HarnessName: plan.HarnessName, Version: plan.Version, Path: plan.Path,
 		Worktree: plan.Worktree, Branch: plan.Branch, StartedBy: plan.StartedBy, Parts: parts, Targets: targets,
-		Hint: visible(aisession.Redact(r.Hint)), Bytes: len(built.Prompt), PromptSHA256: built.SHA256, MaxDuration: plan.Limits.MaxDuration,
+		Bytes: len(built.Prompt), PromptSHA256: built.SHA256, MaxDuration: plan.Limits.MaxDuration,
 		NeverSent: append([]string{}, NeverSent...),
 	}
-	if r.Feature == FeatureTicket {
-		man.Text = visible(aisession.Redact(aisession.Clamp(r.Text, 4<<10)))
+	// The caller's own words are shown in full, exactly as they are sent:
+	// the filtered hint and text parts, so what the person confirms is
+	// everything the prompt carries of them.
+	text := false
+	for _, p := range parts {
+		switch p.Kind {
+		case PartHint:
+			man.Hint += p.Text
+		case PartText:
+			man.Text, text = man.Text+p.Text, true
+		}
+	}
+	if r.Feature == FeatureTicket && !text && r.Text != "" {
+		man.Text = visible(aisession.Redact(r.Text))
 	}
 	if man.Parts == nil {
 		man.Parts = []Part{}

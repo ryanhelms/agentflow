@@ -67,7 +67,8 @@ manifest lists:
   asked;
 - each part of the context: its kind, label, source, size, what was cut or redacted,
   and each file left out with the reason;
-- the targets (for example the criteria to check), your hint, and a ticket's text;
+- the targets (for example the criteria to check), and your hint and a ticket's text
+  in full, exactly as they are sent;
 - the prompt's total size and SHA-256, the time limit, and what is never sent.
 
 The manifest never holds the diff, a task description or a review body. Only
@@ -75,8 +76,10 @@ The manifest never holds the diff, a task description or a review body. Only
 
 Agentflow filters the context before it builds the prompt:
 
-- it leaves out generated, binary, lock and secret-looking files, and paths outside
-  the worktree;
+- it leaves out generated, binary, lock and secret-looking files (by every name a
+  diff gives them: quoted, renamed or deleted), and paths outside the worktree;
+- it leaves out a file's changes when its diff header cannot be read, for example
+  when git writes paths without the `a/` and `b/` prefixes;
 - it shows hidden and control characters as visible codes;
 - it redacts token shapes it knows;
 - it cuts each part to its size limit, and refuses a prompt larger than the limit
@@ -130,7 +133,9 @@ Agentflow reads exactly one JSON object from the answer and ignores any key it d
 know (`unknown_field` warning). Fields that agentflow fixes, such as a commit's paths,
 always come from your request, never from the answer. Each text field is cleaned and
 cut to its limit. A secret in a drafted field empties that candidate
-(`secret_in_draft`). A mention or link in text that would be posted gives a warning.
+(`secret_in_draft`), and an answer that looks like it holds a secret is never shown.
+The session transcript records only how much text the harness sent; its words are
+kept in the draft result alone. A mention or link in text that would be posted gives a warning.
 
 The text output prefixes every drafted line with `| `, so drafted text cannot look like
 agentflow's own lines. A draft that is not `ready` exits with status 1.
