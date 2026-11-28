@@ -44,6 +44,10 @@
 
   // ai.MaxText and ai.MaxHint, in bytes.
   const maxText = 16 << 10, maxHint = 2 << 10;
+  // The description and the hint arrive as they are sent, where each hidden
+  // character is written out as <U+XXXX>, so they can be longer than what was
+  // typed. This is above ai.MaxPrompt: nothing that can be sent is longer.
+  const maxSent = 200 << 10;
   // Bounds on what the page draws; the projection has its own.
   const maxDrafts = 20, maxParts = 32, maxExcluded = 500, maxTargets = 64, maxCandidates = 64, maxFields = 16, maxIssues = 64, maxWords = 64, maxCommand = 70000, maxValue = 70000;
   const confirmFor = 5 * 60000 - 5000; // the console keeps a confirmation for five minutes
@@ -149,12 +153,13 @@
         });
       }
       const targets = list(raw.targets).map(target).filter(Boolean).slice(0, maxTargets);
+      if (text(raw.hint).length > maxSent || text(raw.text).length > maxSent) complete = false;
       const harness = shown(raw.harness, 64), feature = pick(raw.feature, featureIDs);
       if (!harness || !feature || !count(raw.bytes) || (raw.targets !== undefined && raw.targets !== null && !Array.isArray(raw.targets)) || list(raw.targets).length > maxTargets) complete = false;
       return {
         feature, harness, name: shown(raw.harness_name, 64) || harness || "the harness", version: shown(raw.version, 64),
         path: exact(raw.path, 4096), worktree: exact(raw.worktree, 4096), branch: exact(raw.branch, 256),
-        parts: partList, targets, hint: text(raw.hint).slice(0, 8192), text: text(raw.text).slice(0, 16384),
+        parts: partList, targets, hint: text(raw.hint).slice(0, maxSent), text: text(raw.text).slice(0, maxSent),
         bytes: count(raw.bytes), hash: hashForm.test(text(raw.prompt_sha256)) ? raw.prompt_sha256 : "",
         limit: count(raw.max_duration) / 1e6, // a Go duration, in nanoseconds
         never: list(raw.never_sent).filter(item => typeof item === "string").slice(0, 32).map(item => shown(item, 200)).filter(Boolean),
@@ -283,8 +288,8 @@
     const exactly = value => marked(element("code", "", "ai-exact"), value);
     // Text of several lines in a box that scrolls. It takes focus so the
     // keyboard can scroll it.
-    function textBox(value, what, klass = "") {
-      const pre = marked(element("pre", "", ("ai-text " + klass).trim()), block(value, maxValue));
+    function textBox(value, what, klass = "", max = maxValue) {
+      const pre = marked(element("pre", "", ("ai-text " + klass).trim()), block(value, max));
       pre.tabIndex = 0;
       pre.setAttribute("role", "group");
       pre.setAttribute("aria-label", what);
@@ -391,8 +396,8 @@
         box.append(items);
         out.push(box);
       }
-      if (m.hint) out.push(label("Your hint, sent as you wrote it"), textBox(m.hint, "Your hint", "ai-draft-own"));
-      if (m.text) out.push(label("Your description, sent as you wrote it (the first 4 KiB are shown)"), textBox(m.text, "Your description", "ai-draft-own"));
+      if (m.hint) out.push(label("Your hint, as it is sent"), textBox(m.hint, "Your hint", "ai-draft-own", maxSent));
+      if (m.text) out.push(label("Your description, as it is sent"), textBox(m.text, "Your description", "ai-draft-own", maxSent));
       if (m.never.length) {
         const never = element("details", "", "ai-more ai-draft-never");
         never.append(element("summary", "Never sent, by any draft"));

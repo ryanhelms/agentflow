@@ -106,7 +106,7 @@ bottom:
 | What is held back | one sentence, before the table: "4 files are left out: the path is sent, the content is not. 2 values that look like tokens are replaced with [redacted]. 1 part is cut to fit." |
 | **What would be sent** | a table: each part, where it is from and its size. Under a part's name: how much was cut, how many values were replaced, and each file left out with its reason |
 | Items | when the draft has targets: their names, as text from the task, the template or reviewers |
-| Your hint, your description | your own words, as you wrote them |
+| Your hint, your description | your own words in full, as they are sent: hidden characters written out and secrets redacted |
 | **Never sent, by any draft** | the fixed list, closed |
 | **Prompt fingerprint** | the prompt's SHA-256, closed |
 | Time, buttons, status | "Send within 4 min 54 s. After that, nothing is sent.", **Discard** and **Send to Claude Agent** |

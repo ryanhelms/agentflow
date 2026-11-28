@@ -91,6 +91,10 @@
     check(whole({}) === true && whole({parts:"x"}) === false && whole({parts:[]}) === false && whole({parts:[{kind:"diff",label:"x",source:"git"}]}) === false && whole({parts:[null]}) === false && whole({parts:[{kind:"diff",label:"x",bytes:-1}]}) === false
       && whole({parts:Array(40).fill(parts[0])}) === false && whole({parts:[{...parts[0],excluded:"all"}]}) === false && whole({harness:""}) === false && whole({feature:"bogus"}) === false && whole({bytes:0}) === false && whole({targets:"x"}) === false
       && whole({targets:undefined,hint:undefined,never_sent:undefined,version:undefined}) === true && R.manifest(null) === null && R.manifest("x") === null,"a manifest the page cannot show in full can be sent");
+    // What is sent is shown whole, or the draft cannot be sent from here.
+    const long = "<U+200B>".repeat(16384);
+    const sent = R.manifest(manifest({feature:"ticket",text:long,hint:long}));
+    check(sent.complete === true && sent.text === long && sent.hint === long && whole({text:"x".repeat(300000)}) === false && whole({hint:"x".repeat(300000)}) === false,"a long description is cut, or can be sent without being shown");
     const read = R.manifest(manifest());
     check(read.parts.length === 4 && read.parts[1].cut && read.parts[1].redacted === 3 && read.parts[1].excluded.length === 4 && read.parts[1].excluded[0].reason === "looks like a secret file" && read.parts[1].excluded[3].reason === "reason code future_reason"
       && read.parts[2].kind === "other" && read.parts[2].source === "jira" && read.parts[3].source === "you" && read.limit === 180000 && read.name === "Claude Agent" && read.hash.length === 64 && read.never.length === 3,"the manifest is not read: " + JSON.stringify(read).slice(0,400));
