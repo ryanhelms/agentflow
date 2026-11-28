@@ -141,6 +141,18 @@ agentflow version
   `agentflow pin` and open a PR.
 - AI sessions that are already running must restart to use the new version.
 
+Then show the owner the console on the new version. A running console keeps the old
+version until it restarts.
+
+```bash
+agentflow ui --stop
+agentflow ui
+```
+
+- `agentflow ui` opens the console in the owner's browser. Never try to get or read its
+  sign-in link.
+- Do this after an update only, never for a test or a demo.
+
 ## Repository map
 
 ```
