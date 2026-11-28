@@ -206,7 +206,17 @@ func checkRepoCall(t *testing.T, file, fn, method string, call *ast.CallExpr) {
 		t.Errorf("%s: %s calls Repo.Git without a subcommand", file, fn)
 		return
 	}
-	lit, ok := call.Args[1].(*ast.BasicLit)
+	arg := call.Args[1]
+	// append([]string{"diff", ...}, args...)...: the subcommand is the
+	// slice literal's first element.
+	if c, isCall := arg.(*ast.CallExpr); isCall && len(c.Args) > 0 && call.Ellipsis.IsValid() {
+		if id, isIdent := c.Fun.(*ast.Ident); isIdent && id.Name == "append" {
+			if cl, isLit := c.Args[0].(*ast.CompositeLit); isLit && len(cl.Elts) > 0 {
+				arg = cl.Elts[0]
+			}
+		}
+	}
+	lit, ok := arg.(*ast.BasicLit)
 	sub, _ := strconv.Unquote(func() string {
 		if ok {
 			return lit.Value
