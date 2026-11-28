@@ -79,7 +79,8 @@ Agentflow filters the context before it builds the prompt:
 - it leaves out generated, binary, lock and secret-looking files (by every name a
   diff gives them: quoted, renamed or deleted), and paths outside the worktree;
 - it leaves out a file's changes when its diff header cannot be read, for example
-  when git writes paths without the `a/` and `b/` prefixes;
+  when git writes paths without the `a/` and `b/` prefixes, and the changes of a
+  combined diff (`diff --cc`, written for a conflict or a merge);
 - it shows hidden and control characters as visible codes;
 - it redacts token shapes it knows;
 - it cuts each part to its size limit, and refuses a prompt larger than the limit
@@ -138,7 +139,9 @@ The session transcript records only how much text the harness sent; its words ar
 kept in the draft result alone. A mention or link in text that would be posted gives a warning.
 
 The text output prefixes every drafted line with `| `, so drafted text cannot look like
-agentflow's own lines. A draft that is not `ready` exits with status 1.
+agentflow's own lines. Its "use it" line is quoted so that bash, zsh and fish read every
+word as text. On Windows no paste-ready line is printed: use the candidate's fields as
+the command's own flags, or read its `cli` words with `--json`. A draft that is not `ready` exits with status 1.
 
 ## In the console
 

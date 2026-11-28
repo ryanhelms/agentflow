@@ -219,18 +219,27 @@ func splitDiff(diff string) []diffFile {
 		}
 		b.Reset()
 	}
-	header := true // in the section's extended header, before its first hunk
+	header := true   // in the section's extended header, before its first hunk
+	started := false // a "diff " line was seen
 	for _, l := range lines {
 		line := strings.TrimSuffix(strings.TrimSuffix(l, "\n"), "\r")
 		switch {
-		case strings.HasPrefix(line, "diff --git "):
+		case strings.HasPrefix(line, "diff "):
+			// Every "diff " line starts a section: a combined diff
+			// ("diff --cc", "diff --combined", written for a conflict or a
+			// merge) is left out whole rather than joined to the file
+			// before it.
 			flush()
-			cur, header = diffFile{}, true
+			cur, header, started = diffFile{}, true, true
 			paths, ok := diffHeader(strings.TrimPrefix(line, "diff --git "))
-			if !ok {
+			if !ok || !strings.HasPrefix(line, "diff --git ") {
 				cur.bad = true
 			}
 			cur.add(paths...)
+		case !started && (strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-")):
+			// Changed lines before any header: content whose file is
+			// unknown.
+			cur.bad = true
 		case header && strings.HasPrefix(line, "@@"):
 			header = false
 		case header && (strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ")):
@@ -375,6 +384,10 @@ func leaveOut(diff string) (string, []Exclusion) {
 			continue
 		}
 		first, _, _ := strings.Cut(f.text, "\n")
+		if !strings.HasPrefix(first, "diff ") {
+			// Changed lines with no header: not even the first is kept.
+			first = "(changes before the first diff header)"
+		}
 		b.WriteString(first + "\n[content left out: " + reason + "]\n")
 		name := f.path
 		if name == "" {

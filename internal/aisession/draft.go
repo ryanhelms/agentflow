@@ -178,6 +178,40 @@ func (h *host) draftCode(code string) string {
 	return code
 }
 
+// draftItems is what a draft's transcript keeps of items: what happened,
+// never the harness's words. A tool call keeps its ID and kind (no title,
+// locations or diff text), a plan its length, a file or terminal request
+// its operation and verdict (no path or command line).
+func draftItems(items []Item) []Item {
+	out := make([]Item, len(items))
+	for i, it := range items {
+		var data map[string]any
+		_ = json.Unmarshal(it.Data, &data)
+		keep := func(keys ...string) json.RawMessage {
+			m := map[string]any{"draft": true}
+			for _, k := range keys {
+				if v, ok := data[k]; ok {
+					m[k] = v
+				}
+			}
+			return dataOf(m)
+		}
+		switch it.Kind {
+		case ItemTool:
+			it.Data = keep("kind")
+		case ItemPlan:
+			entries, _ := data["entries"].([]any)
+			it.Data = dataOf(map[string]any{"draft": true, "entries": len(entries)})
+		case ItemFile:
+			it.Data = keep("op", "decision", "code")
+		case ItemTerminal:
+			it.Data = keep("decision", "code")
+		}
+		out[i] = it
+	}
+	return out
+}
+
 // draftIssue is ai.Issue as the host writes it into draft.json (the host
 // does not import internal/ai).
 type draftIssue struct {

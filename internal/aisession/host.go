@@ -182,6 +182,9 @@ func (h *host) record(ctx context.Context, items ...Item) {
 	if len(items) == 0 {
 		return
 	}
+	if h.draft {
+		items = draftItems(items)
+	}
 	stored, err := h.st.Append(h.id, items...)
 	if err != nil {
 		return
@@ -438,12 +441,14 @@ func (h *host) setup(ctx context.Context) (string, error) {
 			}
 		}
 	}
+	// Activity is recorded before the session shows running: the idle
+	// limit counts from a time no reader of "running" can come before.
+	h.touch()
 	h.transition(ctx, StateRunning, "", func(s *Session) {
 		s.AgentSession = SanitizeLine(ns.SessionID, 128)
 		s.Mode = SanitizeLine(mode, 128)
 		s.MCP = len(servers) > 0
 	})
-	h.touch()
 	return "", nil
 }
 
@@ -827,6 +832,7 @@ func (h *host) ask(ctx context.Context, r *Request) Verdict {
 		h.mu.Unlock()
 		_ = h.st.RemoveAsk(h.id, rec.ID)
 		if none && h.state() == StateWaiting {
+			h.touch() // as at the start: before the session shows running again
 			h.transition(ctx, StateRunning, "", nil)
 		}
 	}()
