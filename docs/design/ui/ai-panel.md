@@ -1,7 +1,8 @@
 # The AI sessions page
 
 The AI sessions page (`#ai`) shows this repository's ACP sessions as they run. On it you
-answer what an agent asks and cancel a session. It starts no session. The contract is in
+answer what an agent asks and cancel a session. It starts no session, except a draft: the
+**Draft with AI** panel at its top is the [draft view](ai-draft.md). The contract is in
 the [ADR](../../knowledge/engineering/decisions/event-driven-platform.md), section
 "Phase 7": "AI projection" gives the state, "AI panel" the page, and "who may start a
 session and who may answer" the rules. The page follows
@@ -25,8 +26,8 @@ button. The page sends two requests, and neither answer carries session data:
 | `POST api/ai/respond` | **Allow once** or **Reject** on a permission card | `{"session", "ask", "decision": "allow" or "reject", "fingerprint"}` |
 | `POST api/ai/cancel` | **Cancel the session**, after the second question | `{"session"}` |
 
-The result of both arrives as a new state. The page has no form, no input and no button
-that starts a session (owner decision 10): the panel **Start a session in a terminal**
+The result of both arrives as a new state. Apart from the draft view, the page has no form,
+no input and no button that starts a session (owner decision 10): the panel **Start a session in a terminal**
 shows `agentflow ai run --harness HARNESS "PROMPT"` to copy.
 
 ## Agent text is never trusted

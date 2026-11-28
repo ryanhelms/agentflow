@@ -648,6 +648,19 @@ Markdown, and no address in it is a link. The page starts no session: it shows
 stream.
 [AI sessions page design](docs/design/ui/ai-panel.md)
 
+**Draft with AI**, at the top of the same page, requests a draft and shows the
+result. Each feature has a card: a feature without a harness is off, has no
+button and links to the AI settings. **Draft** opens the request, and **Show what
+would be sent** lists the harness, each part with its size, what is left out, cut
+or replaced, and what is never sent. Nothing is sent to get that list. You then
+choose **Send** or **Discard**; **Send** answers only after it has stood still for
+a moment, and is absent when the page cannot show the whole list. A draft shows
+as it runs and can be cancelled. A finished draft shows each candidate: the
+model's words as plain text in a box of their own, the warnings, and the command
+to copy into a terminal, quoted for bash, zsh and fish. On Windows it offers the
+text to copy and no command. The console applies nothing.
+[Draft view design](docs/design/ui/ai-draft.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field

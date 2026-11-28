@@ -201,7 +201,8 @@ async function request(path, body, retried = false) {
       }
       throw error;
     }
-    throw new Error(data.error || "Request failed (" + response.status + ").");
+    // A refused draft answers with its own code, message and fix: the draft view reads them from body.
+    throw Object.assign(new Error(data.error || "Request failed (" + response.status + ")."),{status: response.status, body: data});
   }
   return data;
 }
@@ -339,6 +340,7 @@ function showPage(focus = false) {
   pluginsPage.tick();
   harnessesPage.tick();
   aiPage.tick();
+  aiPage.drafts?.tick();
   if (screen === "configuration" && state) renderEditor();
   if (focus) {
     $("main").focus({preventScroll: true});
@@ -564,7 +566,7 @@ const harnessesPage = AgentflowHarnesses.createHarnesses({
 // The AI sessions page (docs/design/ui/ai-panel.md). Its values are the
 // repository's "ai" state; its requests are respond and cancel.
 const aiPage = AgentflowAI.createAI({
-  root: document, request, announce,
+  root: document, request, announce, settingsRoute: groupRoute,
   visible: () => !$("console-shell").hidden && pages[destination().screen] === "ai"
 });
 const panels = AgentflowPanels.createPanels({
@@ -612,7 +614,11 @@ function renderRepository(name, flash = false) {
   } else if (name === "timeline") timeline.show(liveRepository.timeline,flash);
   else if (name === "plugins") pluginsPage.show(liveRepository.plugins,flash);
   else if (name === "harnesses") harnessesPage.show(liveRepository.harnesses,flash);
-  else if (name === "ai") aiPage.show(liveRepository.ai,flash);
+  else if (name === "ai") {
+    aiPage.show(liveRepository.ai,flash);
+    // The draft view reads the features and the drafts of the same state (docs/design/ui/ai-draft.md).
+    aiPage.drafts?.show(liveRepository.ai,flash);
+  }
   else {
     panels.showApprovals(liveRepository.approvals,flash);
     // A plugin's card lists the approvals its writes wait for.
@@ -703,6 +709,7 @@ function renderStream() {
   pluginsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.plugins)});
   harnessesPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.harnesses)});
   aiPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveRepository.ai)});
+  aiPage.drafts?.status({state: name, ready: liveReady, present: Boolean(liveRepository.ai)});
   settingsPage.status({state: name, offline: name === "offline" ? offlineNotes[liveStatus.reason] || "" : "", ready: liveReady, present: Boolean(liveSettings)});
   const stale = name === "offline" && panels.activity ? "Live updates are offline. The pull requests in this brief are the last ones received." : "";
   $("handoff-note").textContent = stale;
