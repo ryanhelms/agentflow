@@ -1431,6 +1431,7 @@
 
     return {
       show, status, tick, select,
+      drafts: scope.AgentflowAIDraft ? scope.AgentflowAIDraft.createDraft({...options, kit: {text, list, record, count, time, pick, plural, number, shown, block, exact, whole, wholeBlock, bytes, parts, markName, codeName, clock, remaining, element, stateTag, setTag, put, term, plainCode, sessionForm, now, open}}) : null, // the draft view (ai-draft.js)
       get state() { return current; },
       get selected() { return selected; }
     };

@@ -651,3 +651,84 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
   .ai-row[aria-current=true] { outline: 2px solid Highlight; outline-offset: -2px; }
   .ai-state > .state-mark { color: CanvasText; }
 }
+
+/* The draft view on the AI sessions page (docs/design/ui/ai-draft.md). Tokens only: light and dark share these rules. */
+.ai-draft { margin-bottom: var(--s-5); }
+.ai-draft-lead { max-width: 78ch; }
+.ai-draft-features { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); gap: var(--s-3); margin: var(--s-4) 0 0; padding: 0; list-style: none; }
+.ai-draft-feature { display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; padding: var(--s-3); border: var(--keyline) solid var(--border-strong); border-inline-start: 3px solid var(--border-strong); background: var(--surface); }
+.ai-draft-feature:has(.ai-draft-open[aria-expanded=true]) { border-inline-start-color: var(--accent); background: var(--surface-2); }
+.ai-draft-feature > :last-child { align-self: start; margin-top: auto; }
+.ai-draft-feature-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
+.ai-draft-feature-name { font-size: var(--fs-md); letter-spacing: 0; }
+.ai-draft-feature-what, .ai-draft-feature-why { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ai-draft-feature .button, .ai-draft-settings { margin-block-start: var(--s-2); }
+.ai-draft-settings { font-size: var(--fs-sm); font-weight: 600; }
+.ai-draft-open[aria-expanded=true] { border-color: var(--accent); color: var(--accent); }
+
+/* Asking: the request, then the list of what would be sent. The list is the one place where the reader lets data leave the computer. */
+.ai-draft-compose { max-width: 46rem; margin-top: var(--s-4); padding: var(--s-4); border: var(--keyline) solid var(--border-strong); border-inline-start: 3px solid var(--accent); background: var(--surface-2); }
+.ai-draft-compose h3:focus-visible, .ai-draft-confirm h3:focus-visible, .ai-draft-item h3:focus-visible, #ai-draft-title:focus-visible { outline-offset: 2px; }
+.ai-draft-inputs { display: grid; gap: var(--s-2); margin: var(--s-3) 0; }
+.ai-draft-inputs textarea { min-height: 3.2rem; resize: vertical; }
+.ai-draft-count { color: var(--text-muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.ai-draft-count[data-state=bad], .ai-draft-status[data-state=bad] { color: var(--bad); font-weight: 600; }
+.ai-draft-actions { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); margin-top: var(--s-3); }
+.ai-draft-status { max-width: 78ch; min-height: 1.5em; margin-top: var(--s-3); font-size: var(--fs-sm); line-height: 1.5; }
+.ai-draft-confirm { margin-top: var(--s-4); padding: var(--s-4); border: 2px solid var(--warn); background: var(--warn-bg); }
+.ai-draft-confirm-lead { max-width: 78ch; margin-top: var(--s-1); font-size: var(--fs-sm); font-weight: 600; }
+.ai-draft-manifest { min-width: 0; margin-top: var(--s-3); padding: var(--s-4); border: var(--keyline) solid var(--border-strong); background: var(--surface); }
+.ai-draft-manifest .ai-ask-label, .ai-draft-sent .ai-ask-label { margin-top: var(--s-3); }
+.ai-draft-manifest .ai-ask-label:first-child { margin-top: 0; }
+.ai-draft-held { max-width: 78ch; margin-top: var(--s-3); font-size: var(--fs-sm); }
+.ai-draft-parts { width: 100%; margin-top: var(--s-3); border-collapse: collapse; font-size: var(--fs-sm); }
+.ai-draft-parts caption { padding-bottom: var(--s-1); color: var(--text); font-weight: 700; text-align: start; }
+.ai-draft-parts th, .ai-draft-parts td { padding: var(--s-2) var(--s-3); border: var(--keyline) solid var(--border-strong); font-weight: 400; text-align: start; vertical-align: top; }
+.ai-draft-parts thead th { color: var(--text-muted); background: var(--surface-2); font-size: var(--fs-xs); font-weight: 650; }
+.ai-draft-part { min-width: 0; }
+.ai-draft-part-name { font-weight: 650; }
+.ai-draft-part-note { margin-top: var(--s-1); font-size: var(--fs-xs); }
+.ai-draft-parts .ai-draft-size { white-space: nowrap; text-align: end; font-variant-numeric: tabular-nums; }
+.ai-draft-excluded { display: grid; gap: var(--s-1); max-height: 13rem; margin: var(--s-1) 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.ai-draft-excluded > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: .1rem var(--s-3); min-width: 0; }
+.ai-draft-reason { display: block; color: var(--text-muted); font-size: var(--fs-xs); }
+.ai-draft-target-list { display: grid; gap: var(--s-2); margin: var(--s-2) 0 0; padding-inline-start: 1.6rem; }
+.ai-draft-never-list { margin: var(--s-1) 0 0; padding-inline-start: 1.1rem; color: var(--text-muted); font-size: var(--fs-sm); }
+#page-ai .ai-draft-own { max-height: 10rem; margin-top: var(--s-1); font-family: var(--font); font-size: var(--fs-sm); }
+.ai-draft-excluded:focus-visible, .ai-draft-command pre:focus-visible { outline-offset: -2px; }
+
+/* The drafts. The model's words sit in a dashed box of their own, over Agentflow's findings and the command. */
+.ai-draft-results { margin-top: var(--s-5); padding-top: var(--s-4); border-top: var(--keyline) solid var(--border); }
+.ai-draft-results .ai-sessions > h3 { margin-bottom: var(--s-2); }
+.ai-draft-item { min-width: 0; }
+.ai-draft-item-body { display: grid; gap: var(--s-3); margin-top: var(--s-3); }
+.ai-draft-item-body > * { min-width: 0; margin-top: 0; }
+.ai-draft-part-title { font-size: var(--fs-md); }
+.ai-draft-candidates { display: grid; gap: var(--s-4); margin: 0; padding: 0; list-style: none; }
+.ai-draft-candidate { min-width: 0; padding: var(--s-4); border: var(--keyline) solid var(--border-strong); background: var(--surface); }
+.ai-draft-candidate-title { margin: 0; font-size: var(--fs-lg); font-weight: 650; letter-spacing: -.02em; }
+.ai-draft-candidate > .ai-ask-label { margin-top: var(--s-3); }
+.ai-draft-about { margin-top: var(--s-2); font-size: var(--fs-sm); }
+.ai-draft-about-label { display: block; margin-bottom: var(--s-1); color: var(--text-muted); font-size: var(--fs-xs); }
+.ai-draft-field-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1) var(--s-3); margin-top: var(--s-3); }
+.ai-draft-field-name { font-size: var(--fs-sm); font-weight: 650; }
+.ai-draft-field-head .ai-draft-copy { margin-inline-start: auto; }
+.ai-draft-field-gone { margin-top: var(--s-1); font-size: var(--fs-sm); }
+#page-ai .ai-draft-value { max-height: 20rem; margin-top: var(--s-1); border-style: dashed; border-color: var(--text-muted); font-size: var(--fs-sm); }
+.ai-draft-notes { display: grid; gap: var(--s-1); margin: var(--s-1) 0 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+.ai-draft-notes > li { max-width: 78ch; padding: var(--s-2) var(--s-3); border-inline-start: 3px solid var(--warn); background: var(--warn-bg); overflow-wrap: anywhere; }
+.ai-draft-issues > li { border-inline-start-color: var(--bad); background: var(--bad-bg); }
+.ai-draft-command { max-width: none; margin-top: var(--s-1); }
+.ai-draft-command pre { max-height: 14rem; overflow: auto; }
+#page-ai .ai-draft-command pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-draft-use .ai-ask-label { margin: 0; }
+.ai-draft-again { justify-self: start; }
+.ai-draft-sent > summary { margin-bottom: var(--s-2); }
+@media (max-width: 38rem) {
+  .ai-draft-compose, .ai-draft-confirm, .ai-draft-manifest, .ai-draft-candidate { padding: var(--s-3); }
+  .ai-draft-parts th, .ai-draft-parts td { padding: var(--s-1) var(--s-2); }
+  .ai-draft-excluded > li { grid-template-columns: minmax(0, 1fr); }
+}
+@media (forced-colors: active) {
+  .ai-draft-feature, .ai-draft-compose, .ai-draft-confirm, .ai-draft-manifest, .ai-draft-candidate, .ai-draft-parts th, .ai-draft-parts td { border-color: CanvasText; }
+}

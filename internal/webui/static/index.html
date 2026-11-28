@@ -21,6 +21,7 @@
   <script src="plugins.js" defer></script>
   <script src="harnesses.js" defer></script>
   <script src="ai-panel.js" defer></script>
+  <script src="ai-draft.js" defer></script>
   <script src="timeline.js" defer></script>
   <script src="settings-widgets.js" defer></script>
   <script src="settings.js" defer></script>
@@ -296,6 +297,51 @@
             <p id="ai-note" class="live-note" hidden></p>
             <p id="ai-wait" class="muted">Waiting for live updates…</p>
           </div>
+          <section id="ai-draft" class="panel ai-draft" aria-labelledby="ai-draft-title" hidden>
+            <div class="section-heading"><h2 id="ai-draft-title" tabindex="-1">Draft with AI</h2></div>
+            <p class="ai-draft-lead">A draft is text that a harness writes for one command: a commit message, a pull request, a ticket, a check of the acceptance criteria or review replies. Before anything is sent, you see the list of what would be sent and where it goes. This page applies nothing: a finished draft comes with the command to copy into a terminal.</p>
+            <p id="ai-draft-none" class="muted" hidden></p>
+            <ul id="ai-draft-features" class="ai-draft-features" aria-label="What you can draft"></ul>
+            <section id="ai-draft-compose" class="ai-draft-compose" aria-labelledby="ai-draft-compose-title" hidden>
+              <h3 id="ai-draft-compose-title" tabindex="-1">Request a draft: <span id="ai-draft-compose-name"></span></h3>
+              <div id="ai-draft-inputs" class="ai-draft-inputs"></div>
+              <p class="muted ai-hint">Agentflow first gathers the context on this computer and shows you the list. Nothing is sent until you choose Send on that list. If your autonomy settings run <code>ai.draft</code> without asking, the draft starts at once instead.</p>
+              <div class="ai-draft-actions">
+                <button id="ai-draft-prepare" class="button secondary" type="button">Show what would be sent</button>
+                <button id="ai-draft-close" class="button secondary" type="button">Close</button>
+              </div>
+            </section>
+            <section id="ai-draft-confirm" class="ai-draft-confirm" aria-labelledby="ai-draft-confirm-title" hidden>
+              <h3 id="ai-draft-confirm-title" tabindex="-1">Read what would be sent</h3>
+              <p id="ai-draft-confirm-lead" class="ai-draft-confirm-lead"></p>
+              <div class="ai-draft-manifest"><div id="ai-draft-confirm-body"></div>
+                <p id="ai-draft-confirm-blocked" class="ai-ask-fixed" hidden></p>
+                <p id="ai-draft-confirm-offline" class="ai-ask-offline" hidden>Live updates are offline. You can still send, but the draft shows here only when they return.</p>
+                <p id="ai-draft-confirm-time" class="ai-ask-time"></p>
+                <div class="ai-ask-actions">
+                  <button id="ai-draft-discard" class="button secondary" type="button" aria-describedby="ai-draft-confirm-title">Discard</button>
+                  <button id="ai-draft-send" class="button secondary" type="button" aria-describedby="ai-draft-confirm-title ai-draft-confirm-status"><span class="ai-draft-send-label">Send</span></button>
+                </div>
+                <p id="ai-draft-confirm-status" class="ai-ask-status" role="status"></p>
+              </div>
+            </section>
+            <p id="ai-draft-status" class="ai-draft-status" role="status"></p>
+            <p id="ai-draft-empty" class="muted" hidden>No draft has been requested in this repository yet.</p>
+            <div id="ai-draft-results" class="ai-layout ai-draft-results" hidden>
+              <section class="ai-sessions" aria-labelledby="ai-draft-list-title">
+                <h3 id="ai-draft-list-title">Drafts</h3>
+                <ul id="ai-draft-list" class="ai-session-list" aria-labelledby="ai-draft-list-title"></ul>
+              </section>
+              <article id="ai-draft-item" class="ai-draft-item" aria-labelledby="ai-draft-item-title" hidden>
+                <header class="ai-session-head">
+                  <h3 id="ai-draft-item-title" tabindex="-1"><span id="ai-draft-item-name"></span></h3>
+                  <span id="ai-draft-item-state" class="tag ai-state" data-tone="neutral"><span class="state-mark" aria-hidden="true"></span><span class="ai-state-text"></span></span>
+                </header>
+                <p id="ai-draft-item-detail" class="ai-session-detail"></p>
+                <div id="ai-draft-item-body" class="ai-draft-item-body"></div>
+              </article>
+            </div>
+          </section>
           <div id="ai-body" hidden>
             <p id="ai-summary" class="muted ai-summary" hidden></p>
             <div id="ai-layout" class="ai-layout" hidden>
