@@ -154,6 +154,16 @@ func TestDraftAnswers(t *testing.T) {
 		if b, _ := json.Marshal(d); strings.Contains(string(b), secret) {
 			t.Errorf("the secret is in the draft: %s", b)
 		}
+		// Written with JSON escapes: not shown as the answer, not named as
+		// an unknown field.
+		escaped := `\u0041I` + secret[2:]
+		for _, a := range []string{`{"message": "feat: x", "note": "` + escaped + `"`, `{"message":"feat: x","` + escaped + `":1}`} {
+			d := finish(t, tf, "end_turn", a)
+			b, _ := json.Marshal(d)
+			if strings.Contains(string(b), secret) || strings.Contains(string(b), secret[2:]) {
+				t.Errorf("%q: the escaped secret is in the draft: %s", a, b)
+			}
+		}
 		// Not in the answer of an unparsable or invalid draft either.
 		for _, a := range []string{"no json, but " + secret, `{"message":"Added ` + secret + `"}`} {
 			d := finish(t, tf, "end_turn", a)

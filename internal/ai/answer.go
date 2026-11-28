@@ -84,7 +84,7 @@ func finish(id aisession.ID, targets []byte, stopReason, answer string) Draft {
 	// The answer is shown only when it is invalid or failed, and never when
 	// it looks like it holds a secret (step 5 applies to it as well).
 	shown, withheld := aisession.Sanitize(aisession.Redact(answer), MaxShownAnswer), false
-	if app.ContainsSecret(answer) || app.ContainsSecret(shown) {
+	if secretInAnswer(answer, shown) {
 		shown, withheld = "", true
 		d.Issues = append(d.Issues, Issue{Code: IssueSecretInDraft, Message: "The answer looks like it holds a secret, so it is not shown."})
 	}
@@ -108,6 +108,9 @@ func finish(id aisession.ID, targets []byte, stopReason, answer string) Draft {
 	var raw any
 	_ = json.Unmarshal(obj, &raw)
 	for _, k := range unknownKeys(reflect.TypeOf(ans), raw, "") {
+		if app.ContainsSecret(k) {
+			k = "" // a key that looks like a secret is not named
+		}
 		d.Warnings = append(d.Warnings, Issue{Code: IssueUnknownField, Field: k, Message: "The answer had a field agentflow does not use; it was ignored."})
 	}
 	// 4. Clean every text field.
@@ -166,6 +169,26 @@ func finish(id aisession.ID, targets []byte, stopReason, answer string) Draft {
 		d.Answer = shown
 	}
 	return d
+}
+
+// jsonString matches a JSON string literal, escapes included.
+var jsonString = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
+
+// secretInAnswer reports whether the answer looks like it holds a secret:
+// as written, as shown, or in any JSON string in it (keys and values) once
+// its escapes are decoded, so a secret written with \u escapes is found
+// whether or not the answer parses.
+func secretInAnswer(answer, shown string) bool {
+	if app.ContainsSecret(answer) || app.ContainsSecret(shown) {
+		return true
+	}
+	for _, lit := range jsonString.FindAllString(answer, -1) {
+		var v string
+		if json.Unmarshal([]byte(lit), &v) == nil && v != lit[1:len(lit)-1] && app.ContainsSecret(v) {
+			return true
+		}
+	}
+	return false
 }
 
 // notifyingFields are the drafted fields that are posted where people
