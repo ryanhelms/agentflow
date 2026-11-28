@@ -182,6 +182,9 @@ func (h *host) record(ctx context.Context, items ...Item) {
 	if len(items) == 0 {
 		return
 	}
+	if h.draft {
+		items = draftItems(items)
+	}
 	stored, err := h.st.Append(h.id, items...)
 	if err != nil {
 		return
