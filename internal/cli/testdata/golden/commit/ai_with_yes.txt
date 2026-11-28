@@ -1,0 +1,4 @@
+$ agentflow commit --ai --yes
+--- stdout
+--- error
+commit --ai drafts the message; it takes --path and --prepare only. (usage). Run the command with --ai alone, or without --ai and with your own text.

@@ -465,14 +465,14 @@ Deployments and release lookup also support local JSON fixtures.
 | Hand work to a session in another repository | `agentflow delegate --repo NAME TASK` | `agentflow_delegate` or `/agentflow:delegate` |
 | Open the develop → main release PR (you, not an agent) | `agentflow promote` | – |
 | See the ticket context | `agentflow context` | loaded automatically at session start |
-| Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA` | `/agentflow:ac` |
+| Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA`, [`agentflow ac --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:ac` |
 | Check for scope drift | `agentflow scope` | `/agentflow:scope` |
 | Comment on the task | `agentflow comment [KEY] TEXT` | `/agentflow:comment` |
 | Check for overlapping PRs | `agentflow collisions` | `/agentflow:collisions` |
-| Commit | `agentflow commit` (or plain `git commit`) | `/agentflow:commit` |
+| Commit | `agentflow commit` (or plain `git commit`), [`agentflow commit --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:commit` |
 | Preview Jira effects | `agentflow preview` | shown before every commit |
 | Check PR readiness | `agentflow pr --check` | `agentflow_pr_ready` |
-| Open a PR | `agentflow pr` | `/agentflow:pr` |
+| Open a PR | `agentflow pr`, [`agentflow pr --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:pr` |
 | Push a feature branch | `agentflow push` | `agentflow_push` |
 | Mark an existing draft ready for review | `agentflow pr mark-ready` | `agentflow_pr_mark_ready` |
 | Explain an approval | `agentflow policy explain ACTION` | `agentflow_policy_explain` |
@@ -653,6 +653,33 @@ PR readiness requires a Jira key in the branch name by default. With
 readiness if its other checks pass. To open a PR from that branch, supply a
 conventional title with `agentflow pr --title "feat: add quota"` or the
 `agentflow_pr_open` tool's `title` input.
+
+### Draft a commit, PR or criteria check with `--ai`
+
+Once you set a harness for the feature ([Draft with AI](#draft-with-ai)), one command
+drafts the text and then uses it. It is for you, at a terminal. As with `ai draft`,
+agentflow first shows what it would send and asks, unless you set `ai.draft` to `auto`.
+
+| Command | What it sends to your harness | After the draft |
+| --- | --- | --- |
+| `agentflow commit --ai [--path P]` | the diff `commit` would record, its file list, the commit rules, the task's title and recent subjects | asks "Use this draft?", then confirms the commit as usual |
+| `agentflow pr --ai` | the branch's commit messages and diff against its base, the task, its criteria, the title rules and the default PR body | asks, then opens the PR as `pr` does |
+| `agentflow ac --ai [KEY]` | the criteria, the branch's diff, the staged diff and the commit messages | asks before each tick; never posts to the task |
+
+- `commit --ai --prepare` and `pr --ai --prepare` only prepare the commit or PR, so
+  they do not ask "Use this draft?".
+- `--ai` takes no `--yes` and no text of its own. `pr --ai` keeps `--draft`,
+  `--reviewer`, `--label` and `--run`.
+- Agents are refused (`needs_person`). They call `ai draft` or `agentflow_ai_draft`
+  and pass the candidate's fields to the usual command.
+- Secret files such as `.env` are left out of these diffs, whatever your git diff
+  settings. A change that moves one, or deletes one, also sends no content of the
+  file it moved to or the files it adds.
+- Commit authors and `...-by:` trailers are not sent.
+- `pr` also sends the default PR body, built from your PR template. A template that
+  links out of the repository or to a secret file is not read.
+- With Jira, the link to the issue is not sent. agentflow puts it back at the top
+  of the drafted body.
 
 ### Control agent approvals
 

@@ -167,8 +167,12 @@ func runCommit(ctx context.Context, env command.CLIEnv, inv command.Invoker, arg
 	split := fs.Bool("split", false, "show the proposed commit groups")
 	dry := fs.Bool("dry-run", false, "validate and preview only")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	useAI := fs.Bool("ai", false, "draft the message with your harness first")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *useAI {
+		return commitWithAI(ctx, env, inv, fs, paths, *prepare)
 	}
 	a, err := env.Open(ctx)
 	if err != nil {

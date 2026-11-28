@@ -1,0 +1,21 @@
+$ agentflow commit --ai
+--- stdin
+n
+--- stdout
+Draft <session-1>: ready
+
+Candidate 1: commit.prepare
+  Commit message (the model's words):
+  | feat: add notes
+  | 
+  | Add notes.txt with a greeting.
+  use it (bash, zsh or fish): agentflow commit --prepare -m 'feat: add notes
+
+Add notes.txt with a greeting.'
+
+AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
+Use this draft? [y/N]: 
+--- stderr
+Drafting… (Ctrl-C cancels)
+--- error
+cancelled: the draft was not used
