@@ -52,6 +52,9 @@ type Step struct {
 	Crash bool `json:"crash,omitempty"`
 	// NewSessionError, in any step, makes session/new fail with this code.
 	NewSessionError int `json:"new_session_error,omitempty"`
+	// Draft plays a draft answer for the feature named on the prompt's
+	// first line (phase 8, draft.go).
+	Draft *DraftStep `json:"draft,omitempty"`
 }
 
 // Ask is one client request. Exactly one field is set, holding the
@@ -114,6 +117,7 @@ type player struct {
 	mu        sync.Mutex
 	cwd       string
 	terminal  string
+	prompt    string // the first text block of session/prompt
 	cancelled chan struct{}
 	cancelOne sync.Once
 }
@@ -156,6 +160,19 @@ func (p *player) handle(ctx context.Context, r *jsonrpc.Request) (result any, ok
 		p.cancelOne.Do(func() { close(p.cancelled) })
 		return nil, true, nil
 	case acp.MethodSessionPrompt:
+		var req struct {
+			Prompt []acp.ContentBlock `json:"prompt"`
+		}
+		_ = json.Unmarshal(r.Params, &req)
+		p.mu.Lock()
+		p.prompt = ""
+		for _, b := range req.Prompt {
+			if b.Type == "text" {
+				p.prompt = b.Text
+				break
+			}
+		}
+		p.mu.Unlock()
 		return p.play(ctx), true, nil
 	}
 	return nil, false, nil
@@ -201,6 +218,13 @@ func (p *player) play(ctx context.Context) acp.PromptResponse {
 			case <-ctx.Done():
 			}
 			t.Stop()
+		case st.Draft != nil:
+			p.mu.Lock()
+			prompt := p.prompt
+			p.mu.Unlock()
+			for _, c := range DraftChunks(DraftAnswer(st.Draft.Answers, prompt)) {
+				p.notifyUpdate(ctx, chunk(c).Update)
+			}
 		case st.Stop != "":
 			return stop(st.Stop)
 		case st.Crash:

@@ -45,6 +45,29 @@
     "mandatory": false
   },
   {
+    "action": "ai.draft",
+    "rules": [
+      {
+        "class": "remote",
+        "action": "ai.draft",
+        "level": "confirm",
+        "source": "policy.max_autonomy.remote",
+        "user_class": "auto",
+        "user_class_default": false,
+        "repo_class": "confirm",
+        "repo_class_default": false,
+        "force_confirm": false,
+        "approval_window": "5m0s",
+        "window_source": "default"
+      }
+    ],
+    "classes": [
+      "remote"
+    ],
+    "confirmation": "Drafting sends the listed context to the feature's harness.",
+    "mandatory": false
+  },
+  {
     "action": "ai.fetch",
     "rules": [
       {

@@ -1,0 +1,4 @@
+$ agentflow task create --ai --description "Add a greeting" --yes
+--- stdout
+--- error
+--ai takes no --yes and no --summary: it drafts the summary and asks you. (usage). Remove them. --description is the text the draft starts from.

@@ -94,6 +94,8 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("POST /api/harnesses/probe", s.harnessesProbe)
 	mux.HandleFunc("POST /api/ai/respond", s.aiRespond)
 	mux.HandleFunc("POST /api/ai/cancel", s.aiCancel)
+	mux.HandleFunc("POST /api/ai/draft", s.aiDraft)
+	mux.HandleFunc("POST /api/ai/draft/confirm", s.aiDraftConfirm)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Referrer-Policy", "no-referrer")

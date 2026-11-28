@@ -16,3 +16,8 @@ and agentflow_pr_mark_ready to apply it when authorized. The CLI
 commands are `agentflow pr --check`, `agentflow pr --prepare`,
 `agentflow pr --confirm-token TOKEN` and `agentflow pr mark-ready`. Draft promotion
 also accepts `--prepare` or `--confirm-token TOKEN`.
+
+`agentflow pr --ai [--prepare]` is for a person at a terminal: it drafts the title and
+body with their harness, asks before using them, then opens the PR as `pr` does. As an
+agent, call agentflow_ai_draft with feature `pr`, read the candidate and pass its title
+and body to agentflow_pr_prepare.

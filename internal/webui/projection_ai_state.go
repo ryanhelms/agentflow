@@ -3,6 +3,7 @@ package webui
 import (
 	"time"
 
+	"github.com/ryanhelms/agentflow/internal/ai"
 	"github.com/ryanhelms/agentflow/internal/aisession"
 )
 
@@ -13,11 +14,46 @@ import (
 
 const ProjectionAI = "ai"
 
-// AIState is the "ai" state: this repository's sessions, newest first.
+// AIState is the "ai" state: this repository's sessions and drafts,
+// newest first, and the draft features (phase 8, ADR "Phase 8 AI
+// projection and console routes").
 type AIState struct {
-	Sessions   []AISession `json:"sessions"` // at most 20
-	Running    int         `json:"running"`  // across the user
+	Sessions   []AISession `json:"sessions"` // at most 20; drafts are not listed here
+	Running    int         `json:"running"`  // across the user, drafts included
 	MaxRunning int         `json:"max_running"`
+	Drafts     []AIDraft   `json:"drafts"`   // this repository's, newest first, at most 20
+	Features   []AIFeature `json:"features"` // every feature, in ai.Features() order
+}
+
+// AIFeature says whether the console can offer "Draft with AI".
+type AIFeature struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"` // agentflow's words
+	Harness     string `json:"harness,omitempty"`
+	HarnessName string `json:"harness_name,omitempty"`
+	Available   bool   `json:"available"`
+	Code        string `json:"code,omitempty"` // feature_off, not_ready, repo_disabled, ...
+	Fix         string `json:"fix,omitempty"`
+}
+
+// AIDraft is one draft session and, once finished, its result.
+type AIDraft struct {
+	Session     string       `json:"session"`
+	Feature     string       `json:"feature"`
+	Harness     string       `json:"harness"`
+	HarnessName string       `json:"harness_name"`
+	Worktree    string       `json:"worktree"` // "~/..."
+	WorktreeID  string       `json:"worktree_id"`
+	Branch      string       `json:"branch,omitempty"`
+	State       string       `json:"state"` // starting, running, cancelling, ready, invalid, failed, cancelled
+	Code        string       `json:"code,omitempty"`
+	StartedBy   string       `json:"started_by"` // person, agent
+	CreatedAt   time.Time    `json:"created_at"`
+	EndedAt     *time.Time   `json:"ended_at,omitempty"`
+	Manifest    *ai.Manifest `json:"manifest"`
+	Draft       *ai.Draft    `json:"draft,omitempty"`    // set once finished
+	Denied      int          `json:"denied"`             // requests the draft profile denied
+	Warnings    []ai.Issue   `json:"warnings,omitempty"` // worktree_changed and the draft's own
 }
 
 type AISession struct {

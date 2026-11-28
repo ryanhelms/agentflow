@@ -147,6 +147,7 @@ check "MCP server connected" jq -e '.mcp_servers[] | select(.name=="plugin:agent
 check "25 agentflow tools" jq -e '[.tools[] | select(startswith("mcp__plugin_agentflow_agentflow__"))] | length >= 25' <<<"$init"
 check "harness tools listed" jq -e '[.tools[] | select(test("__agentflow_ai_(harnesses|doctor)$"))] | length == 2' <<<"$init"
 check "AI session tools listed" jq -e '[.tools[] | select(test("__agentflow_ai_(run|status|respond|cancel)$"))] | length == 4' <<<"$init"
+check "AI draft tool listed" jq -e '[.tools[] | select(endswith("__agentflow_ai_draft"))] | length == 1' <<<"$init"
 check "21 skills" jq -e '[.slash_commands[] | select(startswith("agentflow:"))] | length >= 21' <<<"$init"
 check "manager skill available" jq -e '.slash_commands | index("agentflow:manager") != null' <<<"$init"
 check "SessionStart context" jq -e -s 'map(select(.subtype=="hook_response" and .hook_event=="SessionStart")) | any(.output | contains("agentflow · PLAT-123") and contains("Fixture GPU quota task"))' "$tmp/1.jsonl"
@@ -273,6 +274,52 @@ fake_only_initialize() {
 }
 check "fake agent saw only the probe's initialize" fake_only_initialize
 check "probe cache holds e2e-fake only" jq -e '[.records[].id] | unique == ["e2e-fake"]' "$AGENTFLOW_HOME/harnesses/cache.json"
+
+echo "7. AI drafts, with only the fake agent reachable"
+# ADR "Phase 8 test guard": the commit feature is routed to e2e-fake and every
+# other feature stays off. Claude asks for a pr draft (feature_off) and a commit
+# draft without a token on a staged change (needs_confirmation with the
+# manifest), and applies nothing.
+printf '  features:\n    commit:\n      harness: e2e-fake\n' >>"$AGENTFLOW_HOME/config.yml"
+printf 'draft me\n' >"$tmp/task/draft-e2e.txt"
+git -C "$tmp/task" add draft-e2e.txt
+run_claude "$tmp/8.jsonl" "AI draft test. Make exactly two tool calls, in order, and nothing else: (1) agentflow_ai_draft with feature \"pr\"; (2) agentflow_ai_draft with feature \"commit\". Never pass confirm_token or dry_run, never call a tool again to apply a confirmation, and do not apply or use any draft. Then reply with the word done." \
+  "mcp__plugin_agentflow_agentflow__agentflow_ai_draft"
+draft_calls=$(jq -c 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use" and (.name | endswith("__agentflow_ai_draft")))' "$tmp/8.jsonl")
+check "draft called twice" jq -e -s 'length == 2' <<<"$draft_calls"
+check "no draft confirm_token passed" jq -e -s 'all(.[]; (.input.confirm_token // "") == "")' <<<"$draft_calls"
+draft_result() { # draft_result <feature>: the reply to the agentflow_ai_draft call for that feature
+  local id
+  id=$(jq -r --arg f "$1" 'select(.input.feature == $f) | .id' <<<"$draft_calls" | head -n1)
+  [ -n "$id" ] || return 0
+  jq -r --arg id "$id" "select(.type==\"user\") | .message.content[]? | select(.type==\"tool_result\" and .tool_use_id == \$id) | $result_text" "$tmp/8.jsonl"
+}
+pr_draft=$(draft_result pr)
+commit_draft=$(draft_result commit)
+check "pr draft refused feature_off" grep -Eq 'feature_off|unknown_feature' <<<"$pr_draft"
+# Under the temporary AGENTFLOW_HOME, an account whose own ~/.agentflow
+# routes no harness for commit drafts refuses them feature_off_account (the
+# account rule holds; the script never touches the account home). Exactly
+# these two outcomes pass; the manifest checks run only when it asked.
+commit_outcome=other
+if grep -q needs_confirmation <<<"$commit_draft"; then
+  commit_outcome=needs_confirmation
+elif grep -q feature_off_account <<<"$commit_draft"; then
+  commit_outcome=feature_off_account
+fi
+echo "  commit draft outcome: $commit_outcome"
+known_outcome() { [ "$commit_outcome" != other ]; }
+check "commit draft needs confirmation or is refused feature_off_account" known_outcome
+if [ "$commit_outcome" = needs_confirmation ]; then
+  check "commit draft shows the manifest" grep -q prompt_sha256 <<<"$commit_draft"
+  no_diff_text() { ! grep -q 'draft me' <<<"$commit_draft"; }
+  check "the manifest holds no diff" no_diff_text
+fi
+check "no draft session created" no_session_record
+check "fake agent still saw only the probe's initialize" fake_only_initialize
+git -C "$tmp/task" rm -q --cached draft-e2e.txt
+rm -f "$tmp/task/draft-e2e.txt"
+
 # Turn sessions and probes off again before the last check.
 write_config false false ${disabled[@]+"${disabled[@]}"}
 

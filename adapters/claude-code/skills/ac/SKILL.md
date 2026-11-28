@@ -10,3 +10,8 @@ asked; it comments progress on the task, so show the summary and wait for my yes
 needs_confirmation.
 
 CLI equivalent: `agentflow ac [KEY]` and `agentflow ac done|undo ITEM [--key KEY] [--evidence E] [--post]`. The `agentflow` command is on your Bash PATH.
+
+`agentflow ac --ai [KEY]` is for a person at a terminal: their harness checks the
+criteria against the branch, and agentflow asks before each tick; it never posts. As an
+agent, call agentflow_ai_draft with feature `ac`. Each candidate is only a claim that a
+criterion is met: check it yourself before you pass it to agentflow_ac_update.

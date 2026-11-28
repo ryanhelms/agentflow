@@ -31,6 +31,7 @@ type AutonomyAction struct {
 var autonomyCatalog = map[string]struct{ classes, confirmation string }{
 	"adr_draft":             {"local", ""},
 	"ai.cancel":             {"local", "Cancels an ACP session."},
+	"ai.draft":              {"remote", "Drafting sends the listed context to the feature's harness."},
 	"ai.fetch":              {"remote", "A session's web fetch always asks a person unless a personal rule allows it."},
 	"ai.fs.read":            {"read", "A session reads a file in its worktree."},
 	"ai.fs.write":           {"local", "A session writes a file in its worktree."},

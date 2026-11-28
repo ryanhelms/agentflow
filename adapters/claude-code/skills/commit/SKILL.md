@@ -17,3 +17,8 @@ argument-hint: "[#verb]"
 
 CLI equivalent: `agentflow commit --prepare -m MESSAGE [--path PATH]`, then the
 same message and paths with `agentflow commit --confirm-token TOKEN`.
+
+`agentflow commit --ai [--path PATH] [--prepare]` is for a person at a terminal: it
+drafts the message with their harness, asks before using it, then runs the usual
+commit. As an agent, call agentflow_ai_draft with feature `commit` (and `paths`),
+read the candidate and pass its message to agentflow_commit_prepare.

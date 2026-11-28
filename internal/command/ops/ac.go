@@ -71,7 +71,7 @@ func init() {
 	command.Register(acUpdate)
 	command.RegisterVerb(command.Verb{
 		Path:    []string{"ac"},
-		Usage:   "  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state",
+		Usage:   "  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state\n  ac --ai [KEY]                  draft criteria checks against the branch; asks before each tick",
 		Section: command.SectionWork,
 		Order:   3000,
 		Run:     runAC,
@@ -99,6 +99,9 @@ func runAC(ctx context.Context, env command.CLIEnv, inv command.Invoker, args []
 	}
 	if sub != "list" {
 		return runACUpdate(ctx, env, inv, sub, args)
+	}
+	if wantsAI(args) {
+		return acWithAI(ctx, env, inv, args)
 	}
 	fs := flag.NewFlagSet("ac list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the checklist as JSON")

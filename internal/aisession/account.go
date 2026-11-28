@@ -137,6 +137,15 @@ func strictest(u, acct *config.User) *config.User {
 		v := min(d.mine, d.ac)
 		*d.dst = &v
 	}
+	// Drafts (phase 8): a feature keeps its harness only when both layers
+	// name the same one, and the draft time is the lower of the two.
+	for _, id := range u.AI.Features.IDs() {
+		if h := u.AI.Features.Harness(id); h != "" && h != acct.AI.Features.Harness(id) {
+			out.AI.Features.SetHarness(id, "")
+		}
+	}
+	dd := min(u.AI.Drafts.EffectiveMaxDuration(), acct.AI.Drafts.EffectiveMaxDuration())
+	out.AI.Drafts.MaxDuration = &dd
 	out.AI.Harnesses.Disabled = slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(u.AI.Harnesses.Disabled), acct.AI.Harnesses.Disabled...))))
 	// Autonomy: each class and each action at the lower level.
 	auto := config.Autonomy{
@@ -200,7 +209,7 @@ func (m *manager) accountStore() (*fileStore, error) {
 //
 // own is the session home's store: a stub of one of its own sessions is
 // skipped, as create counts that session's own record already.
-func (m *manager) withAccountCounts(own *fileStore, worktree string, create func(running, here, recent int) (Session, error)) error {
+func (m *manager) withAccountCounts(own *fileStore, worktree string, draft bool, create func(running, here, recent int) (Session, error)) error {
 	st, err := m.accountStore()
 	if err != nil {
 		// An account store that cannot be opened must not lift the caps.
@@ -222,14 +231,17 @@ func (m *manager) withAccountCounts(own *fileStore, worktree string, create func
 			if o.Elsewhere && own.has(o.ID) {
 				continue
 			}
-			if now.Sub(o.CreatedAt) < time.Hour {
+			// here and recent count the sessions of the new one's kind:
+			// drafts and ai run sessions have their own caps (phase 8).
+			same := o.IsDraft() == draft
+			if same && now.Sub(o.CreatedAt) < time.Hour {
 				recent++
 			}
 			if o.State == StateEnded {
 				continue
 			}
 			running++
-			if sameDir(o.Worktree, worktree) {
+			if same && sameDir(o.Worktree, worktree) {
 				here++
 			}
 		}

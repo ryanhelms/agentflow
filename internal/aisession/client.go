@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"unicode/utf8"
@@ -77,7 +78,17 @@ func (h *host) SessionUpdate(ctx context.Context, n acp.SessionNotification) {
 				text = "[" + SanitizeLine(u.Content.Type, 32) + "]"
 			}
 			h.countBytes(len(text))
-			add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
+			if h.draft {
+				// A draft's words are kept only in draft.json, where Finish
+				// withholds an answer that looks like it holds a secret; the
+				// transcript says how much came, never what.
+				add(Item{Kind: kind, Text: fmt.Sprintf("[%d bytes: the draft's own text is in its result]", len(text))})
+				if kind == ItemMessage && u.Content.Type == "text" {
+					h.draftAnswer(ctx, u.Content.Text)
+				}
+			} else {
+				add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
+			}
 		}
 	case acp.UpdateUserMessageChunk:
 	case acp.UpdateToolCall:
@@ -154,7 +165,7 @@ func (h *host) tool(ctx context.Context, id string, init func() *toolState) (*to
 	if !ok {
 		if len(h.tools) >= maxToolCalls {
 			h.mu.Unlock()
-			go h.cancel(context.WithoutCancel(ctx), CodeLimitOutput)
+			h.stopSoon(ctx, CodeLimitOutput)
 			return nil, false
 		}
 		ts = init()
@@ -182,8 +193,17 @@ func (h *host) toolCall(ctx context.Context, tc acp.ToolCall) *toolState {
 	}
 	h.mu.Unlock()
 	h.toolContent(ts, tc.Content, tc.Locations)
-	h.checkUnasked(ctx, ts)
+	h.checkTool(ctx, ts)
 	return ts.snapshot(&h.mu)
+}
+
+// checkTool runs the unasked check, or for a draft the draft's tool rule.
+func (h *host) checkTool(ctx context.Context, ts *toolState) {
+	if h.draft {
+		h.draftTool(ctx, ts)
+		return
+	}
+	h.checkUnasked(ctx, ts)
 }
 
 func (h *host) toolCallUpdate(ctx context.Context, u acp.ToolCallUpdate) *toolState {
@@ -204,7 +224,7 @@ func (h *host) toolCallUpdate(ctx context.Context, u acp.ToolCallUpdate) *toolSt
 	}
 	h.mu.Unlock()
 	h.toolContent(ts, u.Content, u.Locations)
-	h.checkUnasked(ctx, ts)
+	h.checkTool(ctx, ts)
 	return ts.snapshot(&h.mu)
 }
 
@@ -334,7 +354,7 @@ func (h *host) checkUnasked(ctx context.Context, ts *toolState) {
 	}
 	h.record(ctx, Item{Kind: ItemUnasked, ToolCall: ts.ID, Data: dataOf(map[string]any{"kind": kind, "outside": outside})})
 	if outside || (h.user != nil && h.user.AI.Sessions.EffectiveUnasked() == config.AIUnaskedCancel) {
-		go h.cancel(context.WithoutCancel(ctx), CodeUnasked)
+		h.stopSoon(ctx, CodeUnasked)
 	}
 }
 

@@ -16,12 +16,99 @@ import (
 
 // UserAI is the personal ai section: ACP harness detection (ADR
 // docs/knowledge/engineering/decisions/event-driven-platform.md, section
-// "Phase 6 configuration keys") and ACP sessions ("Phase 7 configuration
-// keys"). A repository has only the three tightening keys of RepoAI.
+// "Phase 6 configuration keys"), ACP sessions ("Phase 7 configuration
+// keys") and AI drafts ("Phase 8 configuration keys"). A repository has
+// only the three tightening keys of RepoAI: it can set no draft key.
 type UserAI struct {
 	Harnesses   UserHarnesses     `yaml:"harnesses,omitempty"`
 	Sessions    UserAISessions    `yaml:"sessions,omitempty"`
 	Permissions UserAIPermissions `yaml:"permissions,omitempty"`
+	Features    UserAIFeatures    `yaml:"features,omitempty"` // phase 8
+	Drafts      UserAIDrafts      `yaml:"drafts,omitempty"`   // phase 8
+}
+
+// UserAIFeatures routes each draft feature to a harness. A feature with
+// no harness is off: it sends nothing anywhere. Fixed fields, not a map, so
+// each feature has its own labelled control; a later feature adds a field.
+type UserAIFeatures struct {
+	Commit UserAIFeature `yaml:"commit,omitempty"`
+	PR     UserAIFeature `yaml:"pr,omitempty"`
+	Ticket UserAIFeature `yaml:"ticket,omitempty"`
+	AC     UserAIFeature `yaml:"ac,omitempty"`
+	Reply  UserAIFeature `yaml:"reply,omitempty"`
+}
+
+// UserAIFeature is one draft feature's setting.
+type UserAIFeature struct {
+	Harness string `yaml:"harness,omitempty"` // a harness ID
+}
+
+// UserAIDrafts configures AI drafts. Every key is optional.
+type UserAIDrafts struct {
+	MaxDuration *time.Duration `yaml:"max_duration,omitempty"`
+}
+
+// AI draft feature IDs, in their fixed order (UserAIFeatures.IDs).
+const (
+	AIFeatureCommit = "commit"
+	AIFeaturePR     = "pr"
+	AIFeatureTicket = "ticket"
+	AIFeatureAC     = "ac"
+	AIFeatureReply  = "reply"
+)
+
+// Draft limits ("Phase 8 configuration keys").
+const (
+	DefaultAIDraftDuration = 3 * time.Minute
+	MinAIDraftDuration     = 30 * time.Second
+	MaxAIDraftDuration     = 15 * time.Minute
+)
+
+// IDs lists the draft feature IDs in their fixed order.
+func (f UserAIFeatures) IDs() []string {
+	return []string{AIFeatureCommit, AIFeaturePR, AIFeatureTicket, AIFeatureAC, AIFeatureReply}
+}
+
+// field returns the setting of feature id, or nil for an unknown ID.
+func (f *UserAIFeatures) field(id string) *UserAIFeature {
+	switch id {
+	case AIFeatureCommit:
+		return &f.Commit
+	case AIFeaturePR:
+		return &f.PR
+	case AIFeatureTicket:
+		return &f.Ticket
+	case AIFeatureAC:
+		return &f.AC
+	case AIFeatureReply:
+		return &f.Reply
+	}
+	return nil
+}
+
+// Harness is the harness ID feature id is routed to, or "" when the
+// feature is off or unknown.
+func (f UserAIFeatures) Harness(id string) string {
+	if p := f.field(id); p != nil {
+		return p.Harness
+	}
+	return ""
+}
+
+// SetHarness routes feature id to harness (empty turns it off). It reports
+// false for an unknown feature ID.
+func (f *UserAIFeatures) SetHarness(id, harness string) bool {
+	p := f.field(id)
+	if p == nil {
+		return false
+	}
+	p.Harness = harness
+	return true
+}
+
+// EffectiveMaxDuration is max_duration, defaulted and clamped.
+func (d UserAIDrafts) EffectiveMaxDuration() time.Duration {
+	return clampDuration(d.MaxDuration, DefaultAIDraftDuration, MinAIDraftDuration, MaxAIDraftDuration)
 }
 
 // UserAISessions configures ACP sessions. Every key is optional.
@@ -275,6 +362,17 @@ func validateAISessions(a UserAI) error {
 	}
 	if len(a.Permissions.Rules) > MaxAIRules {
 		return fmt.Errorf("ai.permissions.rules has more than %d entries", MaxAIRules)
+	}
+	return validateAIDrafts(a)
+}
+
+// validateAIDrafts checks the draft time limit. Feature harness IDs are
+// checked by the settings check chain (the phase 6 ID rule) and by the
+// draft itself: an ID no harness has refuses the draft, it never stops
+// agentflow from loading.
+func validateAIDrafts(a UserAI) error {
+	if d := a.Drafts.MaxDuration; d != nil && (*d < MinAIDraftDuration || *d > MaxAIDraftDuration) {
+		return fmt.Errorf("ai.drafts.max_duration must be from %s to %s", MinAIDraftDuration, MaxAIDraftDuration)
 	}
 	return nil
 }

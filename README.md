@@ -371,6 +371,24 @@ noninteractive workflow. To select a catalog revision, pass
 `--template NAME --template-revision REV` or the MCP fields `template`
 and `template_revision`. Omit both to use the configured default.
 
+`agentflow task create --ai --description "..."` drafts the ticket first, with
+the harness you set in `ai.features.ticket.harness`. It sends your description
+and the task template's sections, shows you the draft, asks `Use this draft?`
+and then runs the normal create with the drafted title and description. Your
+other flags are passed on unchanged. With a template, the harness writes the
+text of each section and agentflow writes the headings.
+
+`agentflow review reply --ai [THREAD_ID]` drafts replies to the open review
+threads of your branch's PR (the first 10, or the one you name), with the
+harness in `ai.features.reply.harness`. It sends each thread's first comment
+with its file, line and author, the branch's committed changes to those files
+and the branch's commit subjects. It asks `Send this reply?` for each draft,
+then runs the normal `review reply`.
+
+Both are for you at your own terminal and take no `--yes`. An agent asks for the
+same draft with `agentflow_ai_draft` and uses the fields itself. See
+[Draft with AI](#draft-with-ai) for what is filtered and never sent.
+
 Select `asana` to list open project tasks, start a branch from a plain task GID,
 read linked knowledge documents and move a task to a configured section.
 Set the default project GID and provide `ASANA_ACCESS_TOKEN` in the calling
@@ -456,7 +474,7 @@ Deployments and release lookup also support local JSON fixtures.
 | List settings with values and sources | `agentflow config fields [--group G] [--search Q] [--modified]` | `agentflow_config_fields` |
 | Change settings in both layers as one confirmed save | `agentflow config set [--dry-run] [--unset KEY] KEY=VALUE...` | `agentflow_config_preview`, `agentflow_config_set` |
 | Undo (or redo) the last settings save | `agentflow config undo [--skip-conflicts]` | `agentflow_config_undo` |
-| Create a task | `agentflow task create` | `agentflow_ticket_create` |
+| Create a task | `agentflow task create` (`--ai --description TEXT` drafts it first) | `agentflow_ticket_create` |
 | Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
 | Work in a task worktree | `agentflow start KEY --worktree` | `agentflow_start` with `worktree: true` |
 | Regenerate the worktree's `go.work` | `agentflow worktree go-work` | `agentflow_worktree_go_work` |
@@ -465,14 +483,14 @@ Deployments and release lookup also support local JSON fixtures.
 | Hand work to a session in another repository | `agentflow delegate --repo NAME TASK` | `agentflow_delegate` or `/agentflow:delegate` |
 | Open the develop → main release PR (you, not an agent) | `agentflow promote` | – |
 | See the ticket context | `agentflow context` | loaded automatically at session start |
-| Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA` | `/agentflow:ac` |
+| Track acceptance criteria | `agentflow ac`, `agentflow ac done ITEM --evidence SHA`, [`agentflow ac --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:ac` |
 | Check for scope drift | `agentflow scope` | `/agentflow:scope` |
 | Comment on the task | `agentflow comment [KEY] TEXT` | `/agentflow:comment` |
 | Check for overlapping PRs | `agentflow collisions` | `/agentflow:collisions` |
-| Commit | `agentflow commit` (or plain `git commit`) | `/agentflow:commit` |
+| Commit | `agentflow commit` (or plain `git commit`), [`agentflow commit --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:commit` |
 | Preview Jira effects | `agentflow preview` | shown before every commit |
 | Check PR readiness | `agentflow pr --check` | `agentflow_pr_ready` |
-| Open a PR | `agentflow pr` | `/agentflow:pr` |
+| Open a PR | `agentflow pr`, [`agentflow pr --ai`](#draft-a-commit-pr-or-criteria-check-with---ai) | `/agentflow:pr` |
 | Push a feature branch | `agentflow push` | `agentflow_push` |
 | Mark an existing draft ready for review | `agentflow pr mark-ready` | `agentflow_pr_mark_ready` |
 | Explain an approval | `agentflow policy explain ACTION` | `agentflow_policy_explain` |
@@ -486,7 +504,8 @@ Deployments and release lookup also support local JSON fixtures.
 | Follow AI sessions, or one session's transcript | `agentflow ai status [SESSION] [--follow] [--since SEQ]` | `agentflow_ai_status` or `/agentflow:ai` |
 | Answer a request a session waits on (agents can only reject) | `agentflow ai respond SESSION ASK (--allow \| --reject)` | `agentflow_ai_respond` (reject only) |
 | Stop an AI session | `agentflow ai cancel SESSION` | `agentflow_ai_cancel` or `/agentflow:ai` |
-| Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
+| Draft a commit message, PR, ticket, criteria check or review reply with a harness (always confirmed first; nothing is applied) | `agentflow ai draft FEATURE [--dry-run [--show-prompt]]` | `agentflow_ai_draft` or `/agentflow:ai` |
+| Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` (`reply --ai [THREAD_ID]` drafts replies) | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
 | See or follow git and configuration events | `agentflow events [--follow] [--all-repos]` | `agentflow_events` or `/agentflow:events` |
@@ -629,6 +648,19 @@ Markdown, and no address in it is a link. The page starts no session: it shows
 stream.
 [AI sessions page design](docs/design/ui/ai-panel.md)
 
+**Draft with AI**, at the top of the same page, requests a draft and shows the
+result. Each feature has a card: a feature without a harness is off, has no
+button and links to the AI settings. **Draft** opens the request, and **Show what
+would be sent** lists the harness, each part with its size, what is left out, cut
+or replaced, and what is never sent. Nothing is sent to get that list. You then
+choose **Send** or **Discard**; **Send** answers only after it has stood still for
+a moment, and is absent when the page cannot show the whole list. A draft shows
+as it runs and can be cancelled. A finished draft shows each candidate: the
+model's words as plain text in a box of their own, the warnings, and the command
+to copy into a terminal, quoted for bash, zsh and fish. On Windows it offers the
+text to copy and no command. The console applies nothing.
+[Draft view design](docs/design/ui/ai-draft.md)
+
 The **Configuration** page edits the other registered files (provider
 definitions, release units, the flow map, task templates). Add and reorder
 list entries, edit maps by key, and choose supported values in its field
@@ -652,6 +684,33 @@ PR readiness requires a Jira key in the branch name by default. With
 readiness if its other checks pass. To open a PR from that branch, supply a
 conventional title with `agentflow pr --title "feat: add quota"` or the
 `agentflow_pr_open` tool's `title` input.
+
+### Draft a commit, PR or criteria check with `--ai`
+
+Once you set a harness for the feature ([Draft with AI](#draft-with-ai)), one command
+drafts the text and then uses it. It is for you, at a terminal. As with `ai draft`,
+agentflow first shows what it would send and asks, unless you set `ai.draft` to `auto`.
+
+| Command | What it sends to your harness | After the draft |
+| --- | --- | --- |
+| `agentflow commit --ai [--path P]` | the diff `commit` would record, its file list, the commit rules, the task's title and recent subjects | asks "Use this draft?", then confirms the commit as usual |
+| `agentflow pr --ai` | the branch's commit messages and diff against its base, the task, its criteria, the title rules and the default PR body | asks, then opens the PR as `pr` does |
+| `agentflow ac --ai [KEY]` | the criteria, the branch's diff, the staged diff and the commit messages | asks before each tick; never posts to the task |
+
+- `commit --ai --prepare` and `pr --ai --prepare` only prepare the commit or PR, so
+  they do not ask "Use this draft?".
+- `--ai` takes no `--yes` and no text of its own. `pr --ai` keeps `--draft`,
+  `--reviewer`, `--label` and `--run`.
+- Agents are refused (`needs_person`). They call `ai draft` or `agentflow_ai_draft`
+  and pass the candidate's fields to the usual command.
+- Secret files such as `.env` are left out of these diffs, whatever your git diff
+  settings. A change that moves one, or deletes one, also sends no content of the
+  file it moved to or the files it adds.
+- Commit authors and `...-by:` trailers are not sent.
+- `pr` also sends the default PR body, built from your PR template. A template that
+  links out of the repository or to a secret file is not read.
+- With Jira, the link to the issue is not sent. agentflow puts it back at the top
+  of the drafted body.
 
 ### Control agent approvals
 
@@ -856,6 +915,37 @@ never start a session. The harness's own tools stay outside
 these checks. [AI sessions](docs/ai-sessions.md) explains the checks, the limits and
 what agentflow cannot control.
 
+### Draft with AI
+
+`ai draft FEATURE` asks a harness to write text for one operation: `commit`, `pr`,
+`ticket`, `ac` or `reply`. A draft is a candidate only: agentflow never applies it, and
+you run the operation with its fields through that operation's own checks. Every
+feature is off until you set its harness in your personal settings:
+
+```yaml
+ai:
+  features:
+    commit:
+      harness: claude-acp   # off when empty; pr, ticket, ac and reply have their own
+  drafts:
+    max_duration: 3m        # 30s to 15m
+```
+
+```text
+agentflow ai draft commit --dry-run    # the manifest: what would be sent, nothing sent
+agentflow ai draft commit              # asks you to confirm, then shows the draft
+```
+
+Before anything is sent you see the manifest: the harness, each part of the context
+with its size and what was left out, cut or redacted, the prompt's size and hash, and
+what is never sent. The context is filtered first, and a draft with a secret still in
+it is refused. The harness runs in an empty folder with no agentflow tools, every file,
+terminal and permission request is denied, and any other tool call ends the draft. An
+agent's draft always needs your confirmation. `--ai` on `commit`, `pr`, `ac`,
+`task create` and `review reply` is for a person at a terminal.
+[AI drafts](docs/ai-drafts.md) explains the manifest, the filters, the limits and the
+answer rules.
+
 ## Commit convention
 
 ```
@@ -1040,6 +1130,12 @@ In each repository set up for Claude Code, delete `extraKnownMarketplaces.nscale
   client can never write. A session cannot start a session. The harness's own tools
   are not checked: agentflow reports what it ran without asking and lists the changed
   files. [AI sessions](docs/ai-sessions.md)
+- **A draft is only a candidate.** `ai draft` and `agentflow_ai_draft` never apply what
+  a harness writes. Each feature is off until you route it to a harness in your
+  personal settings, and a repository cannot turn one on. You confirm the manifest of
+  what is sent every time an agent asks; the context is filtered and a draft with a
+  secret in it is refused. The harness runs in an empty folder, gets no agentflow tools,
+  and every request it sends agentflow is denied. [AI drafts](docs/ai-drafts.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
   provider definitions, approvals and plugins. A repository's environment (direnv, an
@@ -1202,6 +1298,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/harnesses.md](docs/harnesses.md) | AI harness detection: states, `ai harnesses`, `ai doctor`, what a probe runs and who may ask |
 | [docs/ai-sessions.md](docs/ai-sessions.md) | AI sessions: `ai run`, `status`, `respond` and `cancel`, the request checks, who may answer, limits and what agentflow cannot control |
+| [docs/ai-drafts.md](docs/ai-drafts.md) | AI drafts: `ai draft`, the feature settings, the manifest, what is filtered and never sent, and the answer rules |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |

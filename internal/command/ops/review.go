@@ -16,6 +16,8 @@ type reviewReplyIn struct {
 	ThreadID     string `json:"thread_id"`
 	Body         string `json:"body"`
 	ConfirmToken string `json:"confirm_token,omitempty"`
+
+	ai, yes bool // --ai and --yes, command line only
 }
 
 const reviewUsage = "usage: agentflow review [threads] [--json] | agentflow review reply THREAD_ID BODY [--yes]"
@@ -37,8 +39,14 @@ var (
 		CLIPath: []string{"review", "reply"},
 		CLI: &command.CLI[reviewReplyIn]{
 			// Declared here to keep the legacy command's help text.
-			Flags: func(fs *flag.FlagSet, _ *reviewReplyIn) { fs.Bool("yes", false, "accept the confirmation prompt") },
+			Flags: func(fs *flag.FlagSet, in *reviewReplyIn) {
+				fs.BoolVar(&in.yes, "yes", false, "accept the confirmation prompt")
+				fs.BoolVar(&in.ai, "ai", false, "draft replies to the open threads, then ask before each one")
+			},
 			Args: func(in *reviewReplyIn, args []string) error {
+				if in.ai {
+					return tasksReplyAIArgs(in, args)
+				}
 				if len(args) != 2 {
 					return errors.New("usage: agentflow review reply THREAD_ID BODY [--yes]")
 				}
@@ -47,7 +55,8 @@ var (
 			},
 			Interspersed: true,
 			Confirm:      true,
-			Usage:        "  review reply THREAD_ID BODY [--yes]   reply on a review thread",
+			Run:          runReviewReply,
+			Usage:        "  review reply THREAD_ID BODY [--yes]   reply on a review thread\n  review reply --ai [THREAD_ID]  draft replies to open threads; asks before each one",
 			Section:      command.SectionWork,
 			Order:        4900,
 		},

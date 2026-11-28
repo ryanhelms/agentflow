@@ -19,6 +19,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/ryanhelms/agentflow/internal/acp"
+	"github.com/ryanhelms/agentflow/internal/ai"
 	"github.com/ryanhelms/agentflow/internal/aisession"
 	"github.com/ryanhelms/agentflow/internal/app"
 	"github.com/ryanhelms/agentflow/internal/bus"
@@ -80,6 +81,7 @@ func AISessionOptions(a *app.App) aisession.Options {
 	o.MCPServer = func(id aisession.ID) *acp.MCPServer { return sessionMCPServer(dir, id) }
 	o.WorkDirs = func(ctx context.Context) ([]string, error) { return aiServedRepos(ctx) }
 	o.AccountHome = aiAccountHome()
+	o.FinishDraft = ai.Finish
 	return o
 }
 
@@ -479,8 +481,37 @@ var aiStatusSpec = command.Spec[aiStatusIn, any]{
 		return nil
 	},
 	Run: func(ctx context.Context, a *app.App, in aiStatusIn) (any, error) {
-		return a.AIStatus(aiRequester(ctx, a), AIOptions(a), aisession.ID(in.Session), in.Since)
+		ctx = aiRequester(ctx, a)
+		o := AIOptions(a)
+		out, err := a.AIStatus(ctx, o, aisession.ID(in.Session), in.Since)
+		if items, ok := out.(app.AISessionItems); ok && err == nil {
+			return withDraft(ctx, o, items), nil
+		}
+		return out, err
 	},
+}
+
+// AISessionDraftItems is ai status SESSION with the session's draft (phase
+// 8): the Draft once a draft session finished, else null.
+type AISessionDraftItems struct {
+	app.AISessionItems
+	Draft *ai.Draft `json:"draft"`
+}
+
+// withDraft adds a draft session's draft.json (AIStatus has already
+// checked that the session is in the caller's repository).
+func withDraft(ctx context.Context, o aisession.Options, items app.AISessionItems) AISessionDraftItems {
+	out := AISessionDraftItems{AISessionItems: items}
+	if items.Session.Kind != aisession.KindDraft {
+		return out
+	}
+	if _, raw, err := aiManagerOf(o).Draft(ctx, items.Session.ID); err == nil && raw != nil {
+		var d ai.Draft
+		if json.Unmarshal(raw, &d) == nil {
+			out.Draft = &d
+		}
+	}
+	return out
 }
 
 // statusPoll is how often ai status --follow reads the store.
@@ -496,7 +527,7 @@ func runAIStatus(ctx context.Context, call command.CLICall[aiStatusIn], in aiSta
 	case app.AIStatusList:
 		printAIStatus(os.Stdout, v, time.Now())
 		return nil
-	case app.AISessionItems:
+	case AISessionDraftItems:
 		p := &aiPrinter{w: os.Stdout, json: in.asJSON}
 		for {
 			for _, it := range v.Items {
@@ -505,6 +536,9 @@ func runAIStatus(ctx context.Context, call command.CLICall[aiStatusIn], in aiSta
 			if !in.follow || v.Session.State == aisession.StateEnded {
 				if v.Session.State == aisession.StateEnded && !in.asJSON {
 					printEnd(os.Stdout, v.Session.Session)
+					if v.Draft != nil {
+						_ = printDraftResult(os.Stdout, *v.Draft)
+					}
 				}
 				return nil
 			}
@@ -518,7 +552,7 @@ func runAIStatus(ctx context.Context, call command.CLICall[aiStatusIn], in aiSta
 			if err != nil {
 				return err
 			}
-			if v, _ = next.(app.AISessionItems); v.Session.ID == "" {
+			if v, _ = next.(AISessionDraftItems); v.Session.ID == "" {
 				return call.Env.Print(next, nil)
 			}
 		}
@@ -537,7 +571,11 @@ func printAIStatus(w io.Writer, list app.AIStatusList, now time.Time) {
 		if code == "" {
 			code = "-"
 		}
-		fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s\n", s.ID, printable(s.Harness), s.State, printable(code), age(now.Sub(s.CreatedAt)), printable(tilde(s.Worktree)))
+		harness := printable(s.Harness)
+		if s.Kind == aisession.KindDraft {
+			harness += " draft:" + printable(s.Feature)
+		}
+		fmt.Fprintf(w, "%s  %s  %s  %s  %s  %s\n", s.ID, harness, s.State, printable(code), age(now.Sub(s.CreatedAt)), printable(tilde(s.Worktree)))
 		for _, ask := range s.Asks {
 			fmt.Fprintf(w, "    waiting: %s %s %s (%s)\n", printable(ask.ID), printable(string(ask.Kind)), printable(askSubject(ask.Line, ask.Paths, ask.Title)), printable(ask.Reason))
 			if ask.CanAllow {

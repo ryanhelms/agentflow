@@ -39,6 +39,8 @@ Work
   work                           list work from the selected task provider
   task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]
               [--template NAME --template-revision REV] [--dry-run] [--yes]
+  task create --ai --description TEXT [the flags above, except --summary and --yes]
+                                 draft the ticket from your description first
   task link KEY --url URL [--title T] [--yes]   add a web link to a Jira issue
   start KEY [--worktree]         branch or worktree for KEY; apply supported start effects.
                                  Worktrees go to <worktree.root>/<repo>/<branch> (default ~/.worktrees)
@@ -55,6 +57,7 @@ Work
                                  open the develop -> main release PR (merge commit); people only, not agents
   context [KEY]                  ticket bundle for the current branch
   ac [list] [KEY] [--json]       acceptance criteria checklist with local done state
+  ac --ai [KEY]                  draft criteria checks against the branch; asks before each tick
   ac done|undo ITEM [--key KEY] [--evidence E] [--post] [--yes]
                                  tick or untick a criterion; --post comments progress
   scope [--json]                 changes and new TODOs that look outside the ticket
@@ -85,6 +88,9 @@ Work
   ai doctor [--probe] [--json]   check harness detection; exits 1 when a check fails
   ai run --harness ID [--detach] [--yes] [--json] PROMPT
                                  run one prompt through a harness in this worktree; always asks first
+  ai draft FEATURE [--path P]... [--text TEXT | --text -] [--template NAME --template-revision REV] [--project P] [--type T]
+           [--link-to REF] [--key KEY] [--thread ID] [--hint TEXT] [--dry-run [--show-prompt]] [--yes] [--json]
+                                 draft text for commit, pr, ticket, ac or reply with your harness; shows what it sends first
   ai status [SESSION] [--follow] [--since SEQ] [--json]
                                  AI sessions and their waiting requests, or one session's transcript
   ai respond SESSION ASK (--allow | --reject) [--json]
@@ -93,14 +99,15 @@ Work
                                  stop an AI session; its waiting requests are answered cancelled
   push [--prepare | --confirm-token TOKEN] [--yes]   publish the current feature branch
   pr mark-ready [--prepare | --confirm-token TOKEN] [--yes]   mark the current draft pull request ready for review
-  commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow
+  commit [-m MSG | --ai] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow; --ai drafts the message first
   preview [MSG]                  configured task effects of a message or of unpushed commits
   transition [KEY] EVENT [--dry-run] [--yes]      e.g. pr.merged or "#qa"
   secops triage [--source REF] [--since RFC3339] [--apply] [--yes]
                                  preview or create tasks from configured security events
-  pr [--check] [--run] [--title T] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR
+  pr [--check] [--run] [--title T | --ai] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR; --ai drafts the title and body
   review [threads] [--json]      unresolved review threads on this branch's PR
   review reply THREAD_ID BODY [--yes]   reply on a review thread
+  review reply --ai [THREAD_ID]  draft replies to open threads; asks before each one
   status                         PR, checks, deployments and ticket in one view
   standup [--since 24h] [--json] activity to draft a standup
   events [--since CURSOR] [--type PATTERN] [--topic T] [--limit N] [--all-repos] [--follow] [--json]

@@ -67,6 +67,13 @@ type host struct {
 	cancelCode  string
 	cancelCh    chan struct{}
 	acct        *fileStore // the account store, for the stub; nil when the same home
+
+	// A draft (phase 8): the profile is on, the agent's message text is
+	// collected, and the worktree's state at the start is kept.
+	draft      bool
+	answer     strings.Builder
+	overflow   bool // the answer passed MaxDraftAnswer
+	draftStart map[string]string
 }
 
 // toolState is what the host follows of one tool call.
@@ -115,7 +122,7 @@ func newHost(m *manager, st *fileStore, id ID, o HostOptions) (*host, error) {
 	fmt.Fprintf(f, "%d\n", os.Getpid())
 	_ = f.Close()
 	h := &host{m: m, st: st, o: o, id: id, sess: sess, waiting: map[string]chan struct{}{}, tools: map[string]*toolState{},
-		terms: newTerminals(), cancelCh: make(chan struct{}), activity: m.o.Now()}
+		terms: newTerminals(), cancelCh: make(chan struct{}), activity: m.o.Now(), draft: sess.IsDraft()}
 	h.ev = newEvents(m.o, sess)
 	return h, nil
 }
@@ -174,6 +181,9 @@ func (h *host) state() State {
 func (h *host) record(ctx context.Context, items ...Item) {
 	if len(items) == 0 {
 		return
+	}
+	if h.draft {
+		items = draftItems(items)
 	}
 	stored, err := h.st.Append(h.id, items...)
 	if err != nil {
@@ -258,7 +268,9 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	}
 	h.repo = repo
 	root, gitDir, common, branch, err := worktreeOf(ctx, sess.Worktree)
-	if err != nil || gitDir == common || !sameDir(root, sess.Worktree) {
+	// A draft may run for the primary checkout (phase 8 owner decision 4):
+	// it starts in an empty folder and can change nothing through agentflow.
+	if err != nil || (gitDir == common && !h.draft) || !sameDir(root, sess.Worktree) {
 		return fail(CodeLaunch)
 	}
 	if h.w, err = newWorktree(root); err != nil {
@@ -269,6 +281,10 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	}
 	s := user.AI.Sessions
 	h.limits = Limits{MaxRunning: s.EffectiveMaxRunning(), MaxDuration: s.EffectiveMaxDuration(), IdleTimeout: s.EffectiveIdleTimeout(), AskTimeout: s.EffectiveAskTimeout()}
+	if h.draft {
+		h.limits = draftLimits(user, 0)
+		h.draftStart = worktreeState(ctx, root)
+	}
 
 	workDirs, err := h.m.o.workDirs(ctx, root)
 	if err != nil {
@@ -329,12 +345,31 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	for _, hd := range expand["HOME"] {
 		protect = append(protect, filepath.Join(hd, ".agentflow-ui"))
 	}
-	h.chain = DefaultChain(ChainConfig{
+	chain := DefaultChain(ChainConfig{
 		Session: h.id, Worktree: root, Ceiling: sess.Ceiling, User: user, AccountRules: accountRules, Repo: repo, Gate: gate,
 		Protected: repo.Policy.ProtectedBranches, Branch: branch, CoordinatorMerge: repo.Policy.CoordinatorMerge,
 		MergeBase: h.m.o.MergeBase, RepoHome: repoHome, Resolve: boundary.GitResolver(ctx),
 		Protect: protect, Expand: expand, PluginDeny: h.m.o.PluginDeny, InTest: testing.Testing(), Guard: harness.GuardPath,
 	})
+	// The draft link runs first: a draft's chain only ever sees think.
+	if h.draft {
+		chain = append([]PermissionHandler{draftLink{}}, chain...)
+	}
+	h.chain = chain
+	// The harness of a draft starts in <session>/work, an empty folder in
+	// the session directory: not the worktree, so it loads none of the
+	// repository's agent configuration and has no files at hand.
+	launchDir, allowDir, cwd := root, root, root
+	if h.draft {
+		launchDir, allowDir = filepath.Join(dir, draftWorkDir), ""
+		if err := mkdirPrivate(launchDir); err != nil {
+			return fail(CodeLaunch)
+		}
+		if launchDir, err = filepath.EvalSymlinks(launchDir); err != nil {
+			return fail(CodeLaunch)
+		}
+		cwd = launchDir
+	}
 
 	logf, _ := os.OpenFile(filepath.Join(dir, hostLogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	var stderr io.Writer
@@ -347,7 +382,7 @@ func (h *host) setup(ctx context.Context) (string, error) {
 		stderr = logf
 	}
 	proc, err := jsonrpc.Launch(ctx, jsonrpc.LaunchSpec{
-		Path: found.Path, Root: harness.LaunchRoot(found.PathDir, found.Target), Dir: root, AllowDir: root, DataDir: dir,
+		Path: found.Path, Root: harness.LaunchRoot(found.PathDir, found.Target), Dir: launchDir, AllowDir: allowDir, DataDir: dir,
 		Args: append([]string{}, found.Definition.Args...), Env: env.Harness, AllowEnv: env.AllowEnv,
 		Stderr: stderr, StderrLimit: 1 << 20, Limits: acp.SessionLimits, Handler: acp.NewClientHandler(h),
 	})
@@ -373,11 +408,12 @@ func (h *host) setup(ctx context.Context) (string, error) {
 	h.transition(ctx, StateCreating, "", nil)
 
 	servers := []acp.MCPServer{}
-	if mc := h.m.mcpServer(h.id, root, s.AgentflowMCPOn()); mc.ok {
+	// A draft never gets agentflow's MCP server.
+	if mc := h.m.mcpServer(h.id, root, s.AgentflowMCPOn()); mc.ok && !h.draft {
 		servers = append(servers, *h.m.o.MCPServer(h.id))
 	}
 	callCtx, cancel = context.WithTimeout(ctx, SetupTimeout)
-	ns, err := acp.NewSession(callCtx, proc.Conn(), acp.NewSessionRequest{Cwd: root, MCPServers: servers})
+	ns, err := acp.NewSession(callCtx, proc.Conn(), acp.NewSessionRequest{Cwd: cwd, MCPServers: servers})
 	cancel()
 	if err != nil {
 		var rerr *jsonrpc.Error
@@ -405,12 +441,14 @@ func (h *host) setup(ctx context.Context) (string, error) {
 			}
 		}
 	}
+	// Activity is recorded before the session shows running: the idle
+	// limit counts from a time no reader of "running" can come before.
+	h.touch()
 	h.transition(ctx, StateRunning, "", func(s *Session) {
 		s.AgentSession = SanitizeLine(ns.SessionID, 128)
 		s.Mode = SanitizeLine(mode, 128)
 		s.MCP = len(servers) > 0
 	})
-	h.touch()
 	return "", nil
 }
 
@@ -434,6 +472,16 @@ func (h *host) prompt(ctx context.Context, start time.Time) string {
 	text := ""
 	if len(items) > 0 && items[0].Kind == ItemPrompt {
 		text = items[0].Text
+	}
+	if h.draft {
+		// A draft's prompt is draft-prompt.txt, read for this one turn and
+		// removed when the turn ends; the transcript holds the manifest.
+		b, err := os.ReadFile(h.st.path(h.id, draftPromptFile))
+		if err != nil || len(b) > MaxDraftPrompt {
+			return CodeLaunch
+		}
+		text = string(b)
+		defer func() { _ = os.Remove(h.st.path(h.id, draftPromptFile)) }()
 	}
 	deadline := start.Add(h.limits.MaxDuration + CancelWait + 5*time.Second)
 	pctx, cancel := context.WithDeadline(ctx, deadline)
@@ -508,14 +556,38 @@ func (h *host) touch() {
 // cancelled at once, held requests answered -32800, then up to CancelWait
 // for the turn to end before the process is stopped.
 func (h *host) cancel(ctx context.Context, code string) {
+	if h.markCancel(code) {
+		h.stopHarness(ctx, code)
+	}
+}
+
+// stopSoon is cancel for a handler of the harness's messages: the reason is
+// recorded before the handler returns, so a turn that ends (or a harness
+// that exits) right after the message that broke a rule still ends with
+// that rule's code; the slower part (the transcript, the state, the ACP
+// cancel) runs in the background, off the connection's handler.
+func (h *host) stopSoon(ctx context.Context, code string) {
+	if h.markCancel(code) {
+		go h.stopHarness(context.WithoutCancel(ctx), code)
+	}
+}
+
+// markCancel records the first stop reason; it reports whether this call
+// recorded it.
+func (h *host) markCancel(code string) bool {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	if h.cancelling {
-		h.mu.Unlock()
-		return
+		return false
 	}
 	h.cancelling, h.cancelCode = true, code
 	close(h.cancelCh)
-	h.mu.Unlock()
+	return true
+}
+
+// stopHarness records the stop and asks the harness to cancel its turn,
+// killing it after CancelWait.
+func (h *host) stopHarness(ctx context.Context, code string) {
 	h.record(ctx, Item{Kind: ItemLimit, Text: code})
 	h.transition(ctx, StateCancelling, code, nil)
 	if h.proc != nil {
@@ -557,6 +629,19 @@ func (h *host) end(ctx context.Context, code string) Session {
 	var changed []string
 	if h.w.real != "" {
 		changed = changedFiles(ctx, h.w.real)
+	}
+	if h.draft {
+		code = h.draftCode(code)
+		var after map[string]string
+		if h.w.real != "" {
+			after = worktreeState(ctx, h.w.real)
+		}
+		before := h.draftStart
+		if before == nil {
+			before = after // setup failed before the start was recorded
+		}
+		h.finishDraft(ctx, code, before, after)
+		h.st.removeDraftTurn(h.id)
 	}
 	// No ask outlives its session (their previews and env values go with
 	// them), nor its TMPDIR or answer key.
@@ -612,6 +697,10 @@ func changedFiles(ctx context.Context, root string) []string {
 func (h *host) decide(ctx context.Context, r *Request) Verdict {
 	h.touch()
 	v := Run(ctx, h.chain, r)
+	if h.draft {
+		// No ask is ever held for a draft, and no ask file is written.
+		v = draftVerdict(v)
+	}
 	if v.Decision == Ask {
 		v = h.ask(ctx, r)
 	}
@@ -743,6 +832,7 @@ func (h *host) ask(ctx context.Context, r *Request) Verdict {
 		h.mu.Unlock()
 		_ = h.st.RemoveAsk(h.id, rec.ID)
 		if none && h.state() == StateWaiting {
+			h.touch() // as at the start: before the session shows running again
 			h.transition(ctx, StateRunning, "", nil)
 		}
 	}()

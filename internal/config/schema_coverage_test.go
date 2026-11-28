@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -52,6 +53,12 @@ var loosening = map[string]Loosening{
 	"personal:ai.sessions.unasked":          LoosensEnable,
 	"personal:ai.sessions.agentflow_mcp":    LoosensEnable,
 	"personal:ai.permissions.rules":         LoosensEnable,
+	"personal:ai.features.commit.harness":   LoosensEnable,
+	"personal:ai.features.pr.harness":       LoosensEnable,
+	"personal:ai.features.ticket.harness":   LoosensEnable,
+	"personal:ai.features.ac.harness":       LoosensEnable,
+	"personal:ai.features.reply.harness":    LoosensEnable,
+	"personal:ai.drafts.max_duration":       LoosensEnable,
 	"repo:ai.sessions.disabled":             LoosensShrink,
 	"repo:ai.permissions.ask":               LoosensShrink,
 	"repo:ai.permissions.deny":              LoosensShrink,
@@ -340,7 +347,7 @@ func fieldProblems(name string, f CatalogField, keys []string) []string {
 	} else if f.Provider != "" && m.Loosens != "" {
 		addf("a provider setting does not loosen policy")
 	}
-	if !loosensSuits(m.Loosens, m.Widget, f.Schema) {
+	if !loosensSuits(m.Loosens, m.Widget, f.Schema, f.ID) {
 		addf("loosens %q does not suit widget %q", m.Loosens, m.Widget)
 	}
 
@@ -392,7 +399,7 @@ func expectedGroup(f CatalogField, keys []string) (string, bool) {
 }
 
 // loosensSuits says whether a kind of loosening fits the control that edits it.
-func loosensSuits(l Loosening, w Widget, s Field) bool {
+func loosensSuits(l Loosening, w Widget, s Field, id string) bool {
 	switch l {
 	case LoosensNone:
 		return true
@@ -404,6 +411,11 @@ func loosensSuits(l Loosening, w Widget, s Field) bool {
 		// A toggle turned on; phase 7 also marks a select, stepper, duration
 		// or rule table whose loosening cases are code in
 		// internal/settings/checks.go (ADR "Phase 7 configuration keys").
+		// Phase 8 marks a draft feature's harness text field, and only
+		// those: setting or changing it loosens (internal/settings/check_ai.go).
+		if w == WidgetText {
+			return draftHarnessField.MatchString(id)
+		}
 		return w == WidgetToggle || w == WidgetSelect || w == WidgetStepper || w == WidgetDuration || w == WidgetKVTable
 	case LoosensShrink:
 		// A toggle under shrink is a repository restriction turned off
@@ -412,6 +424,9 @@ func loosensSuits(l Loosening, w Widget, s Field) bool {
 	}
 	return false
 }
+
+// draftHarnessField is the only text field a loosening may mark.
+var draftHarnessField = regexp.MustCompile(`^personal:ai\.features\.[a-z]+\.harness$`)
 
 // widgetSuits says whether a widget can edit a schema node: the ADR's table
 // "Widgets allowed", with one extension. The table lists a list of strings
@@ -684,5 +699,20 @@ func TestWidgetsSuitSchemaNodes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Only a draft feature's harness may be a loosening text field.
+func TestLoosensSuitsText(t *testing.T) {
+	for id, want := range map[string]bool{
+		"personal:ai.features.commit.harness": true,
+		"personal:ai.features.reply.harness":  true,
+		"personal:ai.drafts.max_duration":     false,
+		"personal:ai.sessions.note":           false,
+		"repo:ai.features.commit.harness":     false,
+	} {
+		if got := loosensSuits(LoosensEnable, WidgetText, Field{}, id); got != want {
+			t.Errorf("%s: %v, want %v", id, got, want)
+		}
 	}
 }

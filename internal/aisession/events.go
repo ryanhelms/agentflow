@@ -50,6 +50,7 @@ func (e *events) send(ctx context.Context, t bus.Type, payload any) {
 func (e *events) started(ctx context.Context, s Session) {
 	e.send(ctx, bus.TypeAISessionStarted, bus.AISessionStarted{
 		Session: string(s.ID), Harness: s.Harness, StartedBy: s.StartedBy.Kind, Client: SanitizeLine(s.StartedBy.Client, 64), Ceiling: s.Ceiling,
+		Kind: s.Kind,
 	})
 }
 

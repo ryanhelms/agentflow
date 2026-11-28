@@ -1,0 +1,21 @@
+$ agentflow commit --ai
+--- stdin
+n
+--- stdout
+Send this to Drafter? [y/N]: 
+--- stderr
+Draft:     commit
+Harness:   Drafter (drafter)   <fake-agent>/fake-draft
+Worktree:  <repo>  feature/pr
+Asked by:  person
+Sends (as data, to the harness and its model provider):
+  files     changed files, from git: 12 bytes (of 12)
+  diffstat  diff statistics, from git: 67 bytes (of 67)
+  diff      staged changes, from git: 130 bytes (of 130)
+  rules     commit message rules, from git: 773 bytes (of 773)
+  commits   recent commit subjects, from git: 76 bytes (of 76)
+Prompt:    2871 bytes, sha256 <digest-1>
+Time limit: 3m0s
+Never sent: environment values; credentials and tokens agentflow holds; the agentflow home, the console registry and the session store; .git contents other than what the diff shows; remote URLs; whole files (only diff hunks); files outside the worktree; other worktrees and repositories; approval tokens and IDs; your configuration; author e-mail addresses
+--- error
+cancelled: nothing was sent

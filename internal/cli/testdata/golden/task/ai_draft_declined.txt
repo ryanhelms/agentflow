@@ -1,0 +1,19 @@
+$ agentflow task create --ai --description "Add a greeting"
+--- stdin
+n
+--- stdout
+Send this to Drafter? [y/N]: 
+--- stderr
+Draft:     ticket
+Harness:   Drafter (drafter)   <fake-agent>/fake-draft
+Worktree:  <repo>  task
+Asked by:  person
+Sends (as data, to the harness and its model provider):
+  text      the caller's description, from caller: 14 bytes (of 14)
+Your description:
+  | Add a greeting
+Prompt:    1731 bytes, sha256 <digest-1>
+Time limit: 3m0s
+Never sent: environment values; credentials and tokens agentflow holds; the agentflow home, the console registry and the session store; .git contents other than what the diff shows; remote URLs; whole files (only diff hunks); files outside the worktree; other worktrees and repositories; approval tokens and IDs; your configuration; author e-mail addresses
+--- error
+cancelled: nothing was sent

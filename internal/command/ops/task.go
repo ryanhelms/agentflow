@@ -35,7 +35,7 @@ type taskCreateIn struct {
 	LinkTo           string `json:"link_to,omitempty" jsonschema:"related task key or supported knowledge reference; defaults to the branch task"`
 	ConfirmToken     string `json:"confirm_token,omitempty"`
 
-	yes, dryRun bool // --yes and --dry-run, command line only
+	yes, dryRun, ai bool // --yes, --dry-run and --ai, command line only
 }
 
 type taskLinkIn struct {
@@ -119,6 +119,7 @@ func init() {
 				fs.StringVar(&in.TemplateRevision, "template-revision", "", "exact catalog revision")
 				fs.BoolVar(&in.yes, "yes", false, "approve creation under the configured policy")
 				fs.BoolVar(&in.dryRun, "dry-run", false, "print the resolved create preview")
+				fs.BoolVar(&in.ai, "ai", false, "draft the summary and description from --description, then ask")
 			},
 			Args: func(_ *taskCreateIn, args []string) error {
 				if len(args) != 0 {
@@ -126,9 +127,11 @@ func init() {
 				}
 				return nil
 			},
-			Run: runTaskCreate,
+			Run: runTaskCreateWithAI,
 			Usage: "  task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]\n" +
-				"              [--template NAME --template-revision REV] [--dry-run] [--yes]",
+				"              [--template NAME --template-revision REV] [--dry-run] [--yes]\n" +
+				"  task create --ai --description TEXT [the flags above, except --summary and --yes]\n" +
+				"                                 draft the ticket from your description first",
 			Section: command.SectionWork,
 			Order:   2100,
 		},

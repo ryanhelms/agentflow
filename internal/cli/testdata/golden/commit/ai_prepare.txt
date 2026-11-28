@@ -1,0 +1,59 @@
+$ agentflow commit --ai --prepare --path notes.txt
+--- stdout
+Draft <session-1>: ready
+
+Candidate 1: commit.prepare
+  Commit message (the model's words):
+  | feat: add notes
+  | 
+  | Add notes.txt with a greeting.
+  use it (bash, zsh or fish): agentflow commit --prepare -m 'feat: add notes
+
+Add notes.txt with a greeting.' --path notes.txt
+
+AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
+{
+  "status": "needs_confirmation",
+  "confirm_token": "<confirm-token>",
+  "reason": "autonomy.local sets commit (local) to confirm. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it",
+  "summary": {
+    "branch": "feature/pr",
+    "files": [
+      "notes.txt"
+    ],
+    "git_dir": "<repo>/.git",
+    "jira_effects": null,
+    "message": "feat: add notes\n\nAdd notes.txt with a greeting.\n",
+    "parent": "<object-2>",
+    "parents": "<object-2>",
+    "ref": "refs/heads/feature/pr",
+    "repository": "<repo>",
+    "selected_paths": [
+      "notes.txt"
+    ],
+    "tree": "<object-3>"
+  },
+  "approval": {
+    "operation_id": "<operation-id>",
+    "state": "pending",
+    "prompt_owner": "cli/<owner>",
+    "action": "commit",
+    "class": "local",
+    "expires_at": "<time>"
+  },
+  "policy": {
+    "class": "local",
+    "action": "commit",
+    "level": "confirm",
+    "source": "autonomy.local",
+    "user_class": "confirm",
+    "user_class_default": false,
+    "repo_class": "auto",
+    "repo_class_default": true,
+    "force_confirm": false,
+    "approval_window": "5m0s",
+    "window_source": "default"
+  }
+}
+--- stderr
+Drafting… (Ctrl-C cancels)

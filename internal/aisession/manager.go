@@ -159,6 +159,18 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 	if err != nil {
 		return nil, refuse(RefuseHomeUnsafe, "Your config.yml does not load, so agentflow does not start sessions: "+err.Error()+".", "Fix config.yml, then try again.")
 	}
+	draft := r.Draft != nil
+	if draft {
+		if r.Draft.Feature == "" || len(r.Draft.Prompt) > MaxDraftPrompt {
+			return nil, refuse(RefuseTooLarge, "The draft's prompt is larger than agentflow sends.", "Draft with less context (fewer paths, a shorter hint).")
+		}
+		// The harness is the person's choice for this feature, in their own
+		// layer; with an account layer both must name the same harness.
+		if acct := m.o.accountLayer(); acct != nil && acct.AI.Features.Harness(r.Draft.Feature) != r.Harness {
+			return nil, refuse(RefuseFeatureOffAccount, "Your own agentflow home does not route this feature to the same harness, so agentflow does not draft with it.",
+				"Set ai.features."+SanitizeLine(r.Draft.Feature, 32)+".harness to the same harness in your own agentflow home.")
+		}
+	}
 	// Your own account's settings hold whatever AGENTFLOW_HOME says: a
 	// harness or a start you turned off there stays off.
 	if acct := m.o.accountLayer(); acct != nil {
@@ -188,7 +200,7 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 	if repo.AI.Sessions.Disabled {
 		return nil, refuse(RefuseRepoDisabled, "This repository turned sessions off (ai.sessions.disabled).", "")
 	}
-	if gitDir == common {
+	if gitDir == common && !draft {
 		return nil, refuse(RefusePrimaryCheckout, "Sessions run only in a task worktree, never in the primary checkout.", "Run agentflow start <task> --worktree and start the session in the worktree it prints.")
 	}
 	workDirs, err := m.o.workDirs(ctx, root)
@@ -236,6 +248,9 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 		MaxRunning: sess.EffectiveMaxRunning(), MaxDuration: sess.EffectiveMaxDuration(),
 		IdleTimeout: sess.EffectiveIdleTimeout(), AskTimeout: sess.EffectiveAskTimeout(),
 	}
+	if draft {
+		limits = draftLimits(user, r.Draft.MaxDuration)
+	}
 	detached := r.Detach || req.Kind != RequesterPerson
 	if detached && m.o.Detach == nil && testing.Testing() {
 		return nil, refuse(RefuseTestGuard, "In a test binary, a detached session needs Options.Detach (aisessiontest.InProcessDetach).", "")
@@ -255,16 +270,36 @@ func (m *manager) prepare(ctx context.Context, r StartRequest) (*prepared, error
 		plan.Args = []string{}
 	}
 	switch mcp := m.mcpServer("check", root, sess.AgentflowMCPOn()); {
+	case draft:
+		// A draft never gets agentflow's MCP server, starts in an empty
+		// folder (so it loads no control file) and shows its manifest, not
+		// a prompt.
+		plan.MCPSkipped, plan.Prompt = KindDraft, ""
 	case mcp.skipped != "":
 		plan.MCPSkipped = mcp.skipped
 	case mcp.ok:
 		plan.MCP = true
 	}
-	plan.ControlFiles = changedControlFiles(ctx, root)
+	if !draft {
+		plan.ControlFiles = changedControlFiles(ctx, root)
+	} else if st, err := m.store(); err == nil {
+		// The caps, counted now so a draft is refused before anything is
+		// gathered; Create counts again under the lock.
+		probe := Session{ID: "", Kind: KindDraft, Worktree: root}
+		if err := st.precheck(probe, draftCaps(limits)); err != nil {
+			return nil, err
+		}
+	}
 	return &prepared{plan: plan, req: req, user: user, repo: repo, root: root, common: common, branch: branch, found: found, harness: h, limits: limits}, nil
 }
 
 func harnessText(id string) string { return SanitizeLine(id, 64) }
+
+// draftCaps are a draft's caps: its own per-worktree and hourly ones, and
+// max_running shared with ai run sessions.
+func draftCaps(l Limits) Caps {
+	return Caps{MaxRunning: l.MaxRunning, DraftsPerWorktree: DraftsPerWorktree, DraftsPerHour: DraftsPerHour}
+}
 
 type mcpChoice struct {
 	ok      bool
@@ -350,11 +385,17 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 		StartedBy: p.req, Ceiling: p.plan.Ceiling, Home: p.plan.Home, EnvNames: p.plan.EnvNames,
 		MCP: p.plan.MCP, Host: HostInfo{Mode: mode}, CreatedAt: m.o.Now().UTC(),
 	}
+	prompt, caps := r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour}
+	if r.Draft != nil {
+		sess.Kind, sess.Feature = KindDraft, SanitizeLine(r.Draft.Feature, 32)
+		prompt, caps = r.Draft.Record, draftCaps(p.limits)
+	}
 	var created Session
-	err = m.withAccountCounts(st, p.root, func(running, here, recent int) (Session, error) {
+	err = m.withAccountCounts(st, p.root, r.Draft != nil, func(running, here, recent int) (Session, error) {
 		var err error
-		created, err = st.Create(sess, r.Prompt, Caps{MaxRunning: p.limits.MaxRunning, PerWorktree: PerWorktree, StartsPerHour: StartsPerHour,
-			Running: running, Here: here, Recent: recent})
+		c := caps
+		c.Running, c.Here, c.Recent = running, here, recent
+		created, err = st.Create(sess, prompt, c)
 		return created, err
 	})
 	if err != nil {
@@ -363,6 +404,16 @@ func (m *manager) Start(ctx context.Context, r StartRequest) (Session, error) {
 			_, _ = st.Update(id, func(s *Session) error { s.State, s.Code = StateEnded, CodeLaunch; return nil })
 		}
 		return Session{}, err
+	}
+	// A draft's prompt, targets and empty working folder, written before
+	// any host can claim the record.
+	if r.Draft != nil {
+		if err := st.writeDraftFiles(id, r.Draft); err != nil {
+			_, _ = st.Update(id, func(s *Session) error { s.State, s.Code = StateEnded, CodeLaunch; return nil })
+			st.removeDraftTurn(id)
+			m.endStub(id)
+			return Session{}, err
+		}
 	}
 	// The claim token: only the host this starter launches may claim the
 	// record, never another process that runs ai host --session first.

@@ -184,3 +184,53 @@ func TestReadActionHonoursExplicitLevel(t *testing.T) {
 		t.Errorf("ai.fs.read unset: %+v", d)
 	}
 }
+
+func TestUserAIFeaturesAndDrafts(t *testing.T) {
+	var f UserAIFeatures
+	if got := f.IDs(); strings.Join(got, ",") != "commit,pr,ticket,ac,reply" {
+		t.Fatalf("IDs = %v", got)
+	}
+	for _, id := range f.IDs() {
+		if f.Harness(id) != "" {
+			t.Fatalf("%s is on by default", id)
+		}
+		if !f.SetHarness(id, "h-"+id) || f.Harness(id) != "h-"+id {
+			t.Fatalf("%s: SetHarness", id)
+		}
+	}
+	if f.Harness("review") != "" || f.SetHarness("review", "x") {
+		t.Fatal("an unknown feature has a harness")
+	}
+	b, err := yaml.Marshal(UserAI{Features: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back UserAI
+	if err := yaml.Unmarshal(b, &back); err != nil || back.Features != f {
+		t.Fatalf("round trip: %v %+v\n%s", err, back.Features, b)
+	}
+	if !strings.Contains(string(b), "pr:\n        harness: h-pr") {
+		t.Fatalf("yaml keys:\n%s", b)
+	}
+
+	var d UserAIDrafts
+	if d.EffectiveMaxDuration() != DefaultAIDraftDuration {
+		t.Fatal("default")
+	}
+	for _, c := range []struct{ in, want time.Duration }{
+		{time.Second, MinAIDraftDuration}, {time.Hour, MaxAIDraftDuration}, {5 * time.Minute, 5 * time.Minute},
+	} {
+		v := c.in
+		d.MaxDuration = &v
+		if got := d.EffectiveMaxDuration(); got != c.want {
+			t.Errorf("%s: %s, want %s", c.in, got, c.want)
+		}
+		err := ValidateAI(UserAI{Drafts: d})
+		if (c.in == c.want) != (err == nil) {
+			t.Errorf("%s: ValidateAI = %v", c.in, err)
+		}
+	}
+	if k, ok := DescribeAutonomyAction("ai.draft"); !ok || k.Mandatory || len(k.Classes) != 1 || k.Classes[0] != "remote" {
+		t.Errorf("ai.draft autonomy = %+v, %v", k, ok)
+	}
+}
