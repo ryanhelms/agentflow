@@ -78,6 +78,9 @@ func (h *host) SessionUpdate(ctx context.Context, n acp.SessionNotification) {
 			}
 			h.countBytes(len(text))
 			add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
+			if h.draft && kind == ItemMessage && u.Content.Type == "text" {
+				h.draftAnswer(ctx, u.Content.Text)
+			}
 		}
 	case acp.UpdateUserMessageChunk:
 	case acp.UpdateToolCall:
@@ -182,8 +185,17 @@ func (h *host) toolCall(ctx context.Context, tc acp.ToolCall) *toolState {
 	}
 	h.mu.Unlock()
 	h.toolContent(ts, tc.Content, tc.Locations)
-	h.checkUnasked(ctx, ts)
+	h.checkTool(ctx, ts)
 	return ts.snapshot(&h.mu)
+}
+
+// checkTool runs the unasked check, or for a draft the draft's tool rule.
+func (h *host) checkTool(ctx context.Context, ts *toolState) {
+	if h.draft {
+		h.draftTool(ctx, ts)
+		return
+	}
+	h.checkUnasked(ctx, ts)
 }
 
 func (h *host) toolCallUpdate(ctx context.Context, u acp.ToolCallUpdate) *toolState {
@@ -204,7 +216,7 @@ func (h *host) toolCallUpdate(ctx context.Context, u acp.ToolCallUpdate) *toolSt
 	}
 	h.mu.Unlock()
 	h.toolContent(ts, u.Content, u.Locations)
-	h.checkUnasked(ctx, ts)
+	h.checkTool(ctx, ts)
 	return ts.snapshot(&h.mu)
 }
 

@@ -43,6 +43,10 @@ type Settings struct {
 	Sessions   config.UserAISessions // AgentStart here is ignored
 	Rules      map[string]config.AIRule
 	Autonomy   config.Autonomy
+	// Features and Drafts are the phase 8 keys. Empty by default: every
+	// draft feature is off unless a test routes one to a fake.
+	Features config.UserAIFeatures
+	Drafts   config.UserAIDrafts
 }
 
 // Home sets AGENTFLOW_HOME, HOME (also the account home) and PATH (dirs,
@@ -70,6 +74,7 @@ func Write(tb testing.TB, home string, s Settings) {
 	u.AI.Sessions = s.Sessions
 	u.AI.Sessions.AgentStart = &start
 	u.AI.Permissions.Rules = s.Rules
+	u.AI.Features, u.AI.Drafts = s.Features, s.Drafts
 	type file struct {
 		Autonomy config.Autonomy `yaml:"autonomy,omitempty"`
 		AI       config.UserAI   `yaml:"ai"`

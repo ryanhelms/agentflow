@@ -182,6 +182,8 @@ func (s *fileStore) removeEnded(id ID) {
 	_ = os.RemoveAll(s.path(id, asksDir))
 	_ = os.RemoveAll(s.path(id, "tmp"))
 	_ = os.Remove(s.path(id, answerKeyFile))
+	// A draft's prompt and working folder live only while it runs.
+	s.removeDraftTurn(id)
 }
 
 func (s *fileStore) listLocked() ([]Session, error) {
@@ -252,31 +254,15 @@ func (s *fileStore) Create(sess Session, prompt string, caps Caps) (Session, err
 		if err != nil {
 			return err
 		}
-		now := s.now()
-		running, here, recent := caps.Running, caps.Here, caps.Recent
 		for _, o := range all {
 			if o.ID == sess.ID {
 				return errors.New("aisession: the session exists")
 			}
-			if now.Sub(o.CreatedAt) < time.Hour {
-				recent++
-			}
-			if o.State == StateEnded {
-				continue
-			}
-			running++
-			if sameDir(o.Worktree, sess.Worktree) {
-				here++
-			}
 		}
-		switch {
-		case caps.PerWorktree > 0 && here >= caps.PerWorktree:
-			return &Refusal{Code: RefuseLimitWorktree, Message: "A session is already running in this worktree.", Fix: "Wait for it to end, or cancel it with agentflow ai cancel."}
-		case caps.MaxRunning > 0 && running >= caps.MaxRunning:
-			return &Refusal{Code: RefuseLimitRunning, Message: fmt.Sprintf("%d sessions are already running, the most ai.sessions.max_running allows.", running), Fix: "Wait for one to end, or cancel one with agentflow ai cancel."}
-		case caps.StartsPerHour > 0 && recent >= caps.StartsPerHour:
-			return &Refusal{Code: RefuseLimitRate, Message: fmt.Sprintf("%d sessions were started in the last hour, the most agentflow allows.", recent), Fix: "Try again later."}
+		if err := checkCaps(all, sess, caps, s.now()); err != nil {
+			return err
 		}
+		now := s.now()
 		dir := s.Dir(sess.ID)
 		for _, d := range []string{dir, filepath.Join(dir, asksDir), filepath.Join(dir, "tmp")} {
 			if err := mkdirPrivate(d); err != nil {
@@ -309,10 +295,68 @@ func (s *fileStore) Create(sess Session, prompt string, caps Caps) (Session, err
 	if err != nil {
 		return Session{}, err
 	}
-	if _, err := s.Append(sess.ID, Item{Kind: ItemPrompt, Text: Sanitize(prompt, MaxPrompt)}); err != nil {
+	limit := MaxPrompt
+	if sess.IsDraft() {
+		limit = MaxItemText // the manifest as text, not the prompt
+	}
+	if _, err := s.Append(sess.ID, Item{Kind: ItemPrompt, Text: Sanitize(prompt, limit)}); err != nil {
 		return Session{}, err
 	}
 	return s.Get(sess.ID)
+}
+
+// checkCaps counts the sessions of all (and caps' counts from elsewhere)
+// against the caps for sess. Drafts and ai run sessions are counted apart
+// for the per-worktree and hourly caps, and together for MaxRunning
+// (phase 8). caps.Here and caps.Recent count sessions of sess's own kind.
+func checkCaps(all []Session, sess Session, caps Caps, now time.Time) error {
+	draft := sess.IsDraft()
+	running, here, recent := caps.Running, caps.Here, caps.Recent
+	for _, o := range all {
+		if o.ID == sess.ID {
+			continue
+		}
+		same := o.IsDraft() == draft
+		if same && now.Sub(o.CreatedAt) < time.Hour {
+			recent++
+		}
+		if o.State == StateEnded {
+			continue
+		}
+		running++
+		if same && sameDir(o.Worktree, sess.Worktree) {
+			here++
+		}
+	}
+	perWorktree, perHour := caps.PerWorktree, caps.StartsPerHour
+	if draft {
+		perWorktree, perHour = caps.DraftsPerWorktree, caps.DraftsPerHour
+	}
+	switch {
+	case perWorktree > 0 && here >= perWorktree && draft:
+		return &Refusal{Code: RefuseLimitDraftWorktree, Message: "A draft is already running in this worktree.", Fix: "Wait for it to end, or cancel it with agentflow ai cancel."}
+	case perWorktree > 0 && here >= perWorktree:
+		return &Refusal{Code: RefuseLimitWorktree, Message: "A session is already running in this worktree.", Fix: "Wait for it to end, or cancel it with agentflow ai cancel."}
+	case caps.MaxRunning > 0 && running >= caps.MaxRunning:
+		return &Refusal{Code: RefuseLimitRunning, Message: fmt.Sprintf("%d sessions are already running, the most ai.sessions.max_running allows.", running), Fix: "Wait for one to end, or cancel one with agentflow ai cancel."}
+	case perHour > 0 && recent >= perHour && draft:
+		return &Refusal{Code: RefuseLimitDraftRate, Message: fmt.Sprintf("%d drafts were started in the last hour, the most agentflow allows.", recent), Fix: "Try again later."}
+	case perHour > 0 && recent >= perHour:
+		return &Refusal{Code: RefuseLimitRate, Message: fmt.Sprintf("%d sessions were started in the last hour, the most agentflow allows.", recent), Fix: "Try again later."}
+	}
+	return nil
+}
+
+// precheck counts the caps for sess without writing anything: a draft's
+// plan refuses early, and Create counts again under the lock.
+func (s *fileStore) precheck(sess Session, caps Caps) error {
+	return s.locked(func() error {
+		all, err := s.listLocked()
+		if err != nil {
+			return err
+		}
+		return checkCaps(all, sess, caps, s.now())
+	})
 }
 
 func sameDir(a, b string) bool {
@@ -693,7 +737,7 @@ func (s *fileStore) Prune(keepDays int, keepTranscripts bool) error {
 			return err
 		}
 		now := s.now()
-		var ended []Session
+		var ended, drafts []Session
 		for _, sess := range all {
 			switch {
 			case sess.Elsewhere:
@@ -701,9 +745,29 @@ func (s *fileStore) Prune(keepDays int, keepTranscripts bool) error {
 				if sess.State == StateEnded && now.Sub(sess.CreatedAt) > time.Hour {
 					_ = os.RemoveAll(s.Dir(sess.ID))
 				}
+			case sess.State == StateEnded && sess.IsDraft():
+				drafts = append(drafts, sess)
 			case sess.State == StateEnded:
 				ended = append(ended, sess)
 			}
+		}
+		// Ended drafts are kept at most DraftKeep and MaxDraftsKept, apart
+		// from the sessions, so drafts never push session history out.
+		keptDrafts := 0
+		for _, sess := range drafts {
+			end := sess.CreatedAt
+			if sess.EndedAt != nil {
+				end = *sess.EndedAt
+			}
+			if now.Sub(end) > DraftKeep || keptDrafts >= MaxDraftsKept {
+				_ = os.RemoveAll(s.Dir(sess.ID))
+				delete(s.seqs, sess.ID)
+				continue
+			}
+			if !keepTranscripts {
+				s.dropTranscript(sess.ID) // draft.json stays: it is the result
+			}
+			keptDrafts++
 		}
 		// ended is newest first.
 		var total int64
@@ -755,7 +819,7 @@ func (s *fileStore) putStub(sess Session) error {
 	if err := mkdirPrivate(s.Dir(sess.ID)); err != nil {
 		return err
 	}
-	return s.write(Session{ID: sess.ID, Worktree: sess.Worktree, State: StateStarting, Home: sess.Home,
+	return s.write(Session{ID: sess.ID, Worktree: sess.Worktree, State: StateStarting, Home: sess.Home, Kind: sess.Kind,
 		EnvNames: []string{}, CreatedAt: sess.CreatedAt, Host: HostInfo{Mode: sess.Host.Mode, Heartbeat: sess.CreatedAt}, Elsewhere: true})
 }
 

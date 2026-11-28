@@ -470,12 +470,13 @@ func TestSessionScriptStepsAndPlaceholders(t *testing.T) {
 }
 
 func TestEveryModeScriptIsCovered(t *testing.T) {
-	for _, mode := range []string{"session-demo", "session-nested", "session-hang", "session-auth"} {
+	for _, mode := range []string{"session-demo", "session-nested", "session-hang", "session-auth",
+		"draft", "draft-invalid", "draft-hostile", "draft-garbage", "draft-hang"} {
 		if f, ok := acptest.SessionModeScripts[mode]; !ok || f() == nil {
 			t.Errorf("no script for %s", mode)
 		}
 	}
-	if len(acptest.SessionModeScripts) != 4 {
+	if len(acptest.SessionModeScripts) != 9 {
 		t.Errorf("%d mode scripts", len(acptest.SessionModeScripts))
 	}
 }

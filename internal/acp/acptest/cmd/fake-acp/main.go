@@ -1,6 +1,6 @@
-// Command fake-acp is a standalone fake ACP agent for the phase 6 and 7
-// demos (ADR, "Phase 6 demo and gate", "Phase 7 demo and gate"). It is
-// built only by hand:
+// Command fake-acp is a standalone fake ACP agent for the phase 6, 7 and 8
+// demos (ADR, "Phase 6 demo and gate", "Phase 7 demo and gate", "Phase 8
+// demo and gate"). It is built only by hand:
 //
 //	go build -o "$T/bin/fake-acp" ./internal/acp/acptest/cmd/fake-acp
 //
@@ -17,6 +17,13 @@
 //	--mode=session-nested  a session whose terminals start agentflow and read answer.key
 //	--mode=session-hang  a session that asks for permission and waits for cancel
 //	--mode=session-auth  a session whose session/new fails with -32000
+//	--mode=draft         a draft: a valid answer for the prompt's feature, end_turn
+//	--mode=draft-invalid a draft answer that fails the feature's checks, with an
+//	                     unknown key, hidden characters and a token shape
+//	--mode=draft-hostile fs reads and writes, a terminal and permission requests,
+//	                     then a read tool call it ran itself, then a valid answer
+//	--mode=draft-garbage prose with two JSON objects, end_turn
+//	--mode=draft-hang    a draft that waits until session/cancel
 //	--log=FILE           append what the fake receives (acptest.LogEntry) to FILE;
 //	                     the session modes write it to stderr without --log
 //	--status=in          a sign-in status command: exit 0 (signed in)

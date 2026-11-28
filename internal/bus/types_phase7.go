@@ -47,6 +47,8 @@ type AISessionStarted struct {
 	StartedBy string `json:"started_by"` // person, agent
 	Client    string `json:"client,omitempty"`
 	Ceiling   string `json:"ceiling,omitempty"` // "confirm" for an agent's session
+	// Kind is "draft" for a draft session (phase 8), empty for ai run.
+	Kind string `json:"kind,omitempty"`
 }
 
 // AISessionChanged is the payload of ai.session.changed.

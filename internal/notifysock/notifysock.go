@@ -241,8 +241,9 @@ const (
 // sources, so no process can forge them. Phase 3 adds "op.**", which the
 // command Invoker of CLI and MCP processes publishes; phase 7 adds
 // "ai.session.**", which a session host publishes (readers never trust its
-// payload: the AI projection reads the session store).
-var socketTypes = []bus.Pattern{"hook.ran", "commit.created", "op.**", "ai.session.**"}
+// payload: the AI projection reads the session store), and phase 8
+// "ai.draft.**", which a draft's host publishes.
+var socketTypes = []bus.Pattern{"hook.ran", "commit.created", "op.**", "ai.session.**", "ai.draft.**"}
 
 // Allowed reports whether t may be sent over the socket.
 func Allowed(t bus.Type) bool {

@@ -37,6 +37,11 @@ type Options struct {
 	Detach func(ctx context.Context, id ID) error
 	// MCPServer is the server entry for session/new, or nil for none.
 	MCPServer func(id ID) *acp.MCPServer
+	// FinishDraft turns a draft's targets file, stop reason and answer
+	// text into draft.json (ADR "Phase 8 draft sessions"). It does no I/O.
+	// ops.AISessionOptions wires it to ai.Finish; nil ends every draft
+	// failed with no candidates.
+	FinishDraft func(id ID, targets []byte, stopReason, answer string) (draft []byte)
 	// WorkDirs lists the repositories the console daemon serves (their
 	// common git directories). PATH entries inside any worktree of them, or
 	// of the session's own repository, are dropped from the session PATH,
@@ -119,6 +124,19 @@ const (
 	RefuseLimitWorktree     = "limit_worktree"
 	RefuseLimitRate         = "limit_rate"
 	RefuseNotWorktree       = "not_worktree" // the directory is not in a git worktree
+	// Phase 8 draft refusals.
+	RefuseFeatureOffAccount  = "feature_off_account" // the account's own home names another harness
+	RefuseLimitDraftWorktree = "limit_draft_worktree"
+	RefuseLimitDraftRate     = "limit_draft_rate"
+)
+
+// Draft codes (ADR "Phase 8 draft sessions"): a request the draft profile
+// denied (a verdict code), a tool call that ended the draft, an answer
+// past MaxDraftAnswer (end codes).
+const (
+	CodeDraftProfile   = "draft_profile"
+	CodeDraftTool      = "draft_tool"
+	CodeAnswerTooLarge = "answer_too_large"
 )
 
 // Refusal is the error Prepare, Start, Answer and Cancel return for a rule
@@ -493,6 +511,10 @@ type Session struct {
 	Usage        *Usage     `json:"usage,omitempty"`
 	Counters     Counters   `json:"counters"`
 	ChangedFiles []string   `json:"changed_files,omitempty"`
+	// Kind is empty for an ai run session and KindDraft for a draft;
+	// Feature is the draft's feature ID (phase 8).
+	Kind    string `json:"kind,omitempty"`
+	Feature string `json:"feature,omitempty"`
 	// Elsewhere marks a stub: the account store's record of a session
 	// stored in another agentflow home. It holds only the ID, worktree,
 	// state, times and heartbeat, never content. It counts toward the caps
@@ -568,6 +590,11 @@ type Caps struct {
 	MaxRunning    int // per user
 	PerWorktree   int // 1
 	StartsPerHour int
+	// DraftsPerWorktree and DraftsPerHour are the draft caps: a draft is
+	// counted against these, an ai run session against PerWorktree and
+	// StartsPerHour, and both together against MaxRunning (phase 8).
+	DraftsPerWorktree int
+	DraftsPerHour     int
 	// Counted elsewhere (the account store, when AGENTFLOW_HOME is another
 	// folder): added to this store's own counts.
 	Running, Here, Recent int
@@ -635,7 +662,40 @@ type StartRequest struct {
 	// Detach hosts the session in a detached `ai host` process. A session
 	// an agent starts is always detached.
 	Detach bool
+	// Draft makes the session a draft (phase 8); nil for ai run.
+	Draft *DraftStart
 }
+
+// KindDraft is Session.Kind for a draft.
+const KindDraft = "draft"
+
+// DraftStart makes a session a draft (ADR "Phase 8 draft sessions").
+type DraftStart struct {
+	Feature string
+	// Prompt is the full prompt, at most 160 KiB. It is written to
+	// draft-prompt.txt, never to the transcript.
+	Prompt string
+	// Record is the manifest as text: the transcript's prompt item.
+	Record string
+	// Targets is draft-targets.json: feature, rules, targets and fixed
+	// fields, no data. FinishDraft receives it.
+	Targets     []byte
+	MaxDuration time.Duration
+}
+
+// Draft limits (ADR "Phase 8 draft sessions"), in addition to the phase 7
+// limits of every session.
+const (
+	DraftsPerWorktree = 1
+	DraftsPerHour     = 30
+	MaxDraftPrompt    = 160 << 10
+	MaxDraftAnswer    = 256 << 10
+	MaxDraftsKept     = 20
+	DraftKeep         = 24 * time.Hour
+	// DraftWait is how much longer than its max_duration ai draft waits
+	// for a draft's result.
+	DraftWait = 15 * time.Second
+)
 
 // Plan is what a start would do: the confirmation summary. It holds
 // variable names, never values.
@@ -760,4 +820,7 @@ type Manager interface {
 	Cancel(ctx context.Context, id ID) (Session, error)
 	// Prune applies the retention rules.
 	Prune(ctx context.Context) error
+	// Draft returns a draft session and its draft.json (nil until it is
+	// finished), with the scope rule of Get (phase 8).
+	Draft(ctx context.Context, id ID) (Session, []byte, error)
 }
