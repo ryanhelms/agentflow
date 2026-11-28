@@ -148,7 +148,7 @@ func OK() acp.InitializeResponse {
 // Install writes an executable name in dir that runs the fake agent with s,
 // and returns the arguments the definition must pass (none on Unix). On
 // Unix it is a /bin/sh wrapper that starts this test binary in ChildMode
-// with s encoded in the wrapper. On Windows it is a copy of the test binary,
+// with the path of a file holding s, encoded. On Windows it is a copy of the test binary,
 // name.exe, with s in name.exe.acptest.json beside it, and the arguments
 // select the child mode. dir should be inside tb.TempDir().
 func Install(tb testing.TB, dir, name string, s Script) (args []string) {
@@ -174,7 +174,14 @@ func Install(tb testing.TB, dir, name string, s Script) (args []string) {
 		}
 		return []string{jsonrpctest.ChildArg, ChildMode}
 	}
-	body := fmt.Sprintf("#!/bin/sh\nexec %s %s %s %s \"$@\"\n", shQuote(exe), shQuote(jsonrpctest.ChildArg), shQuote(ChildMode), shQuote(encPrefix+enc))
+	// The script goes in a file the wrapper names: as an argument a large
+	// script passes Linux's 128 KiB limit on one argument (MAX_ARG_STRLEN)
+	// and exec fails, so the fake would seem to exit at once.
+	script := filepath.Join(tb.TempDir(), name+sidecarSuffix)
+	if err := os.WriteFile(script, []byte(enc), 0o600); err != nil {
+		tb.Fatal(err)
+	}
+	body := fmt.Sprintf("#!/bin/sh\nexec %s %s %s %s \"$@\"\n", shQuote(exe), shQuote(jsonrpctest.ChildArg), shQuote(ChildMode), shQuote(encPrefix+"@"+script))
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		tb.Fatal(err)
@@ -213,7 +220,16 @@ func child(args []string) int {
 	var in installed
 	rest := args
 	if len(args) > 0 && strings.HasPrefix(args[0], encPrefix) {
-		b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(args[0], encPrefix))
+		enc := strings.TrimPrefix(args[0], encPrefix)
+		if file, ok := strings.CutPrefix(enc, "@"); ok {
+			b, err := os.ReadFile(file)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "acptest: no script")
+				return 2
+			}
+			enc = string(b)
+		}
+		b, err := base64.StdEncoding.DecodeString(enc)
 		if err != nil || json.Unmarshal(b, &in) != nil {
 			fmt.Fprintln(os.Stderr, "acptest: bad script")
 			return 2
