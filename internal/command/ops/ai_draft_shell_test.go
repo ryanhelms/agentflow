@@ -103,4 +103,37 @@ func TestDraftResultPasteLine(t *testing.T) {
 	if strings.Contains(b.String(), "agentflow commit") || !strings.Contains(b.String(), "no paste-ready line") {
 		t.Errorf("windows output:\n%s", b.String())
 	}
+	pasteGOOS = old
+	// A hidden character: no command, and why.
+	b.Reset()
+	d.Candidates[0].CLI = []string{"agentflow", "commit", "-m", "feat: x\u200b\x1b[31m"}
+	_ = printDraftResult(&b, d)
+	if strings.Contains(b.String(), "agentflow commit") || !strings.Contains(b.String(), "hidden or control character") {
+		t.Errorf("hidden character output:\n%s", b.String())
+	}
+}
+
+// TestPasteLineMultiLine: a multi-line commit message prints with real
+// newlines inside its quotes and reads back through bash exactly.
+func TestPasteLineMultiLine(t *testing.T) {
+	msg := "feat: add x\n\nThe body's second line\nwith a \\ and 'quotes'.\n"
+	words := []string{"agentflow", "commit", "--prepare", "-m", msg}
+	line, why := pasteLine(words)
+	if why != "" || strings.Contains(line, "<U+") || !strings.Contains(line, "\n") {
+		t.Fatalf("line %q (%s)", line, why)
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash")
+	}
+	cmd := exec.Command(bash, "-c", `printf '%s\0' `+line)
+	cmd.Dir = t.TempDir()
+	cmd.Env = []string{"HOME=" + cmd.Dir, "PATH=/usr/bin:/bin"}
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00"); !slices.Equal(got, words) {
+		t.Errorf("read back %q", got)
+	}
 }

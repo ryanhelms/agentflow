@@ -112,7 +112,12 @@ func TestDraftConsoleFlow(t *testing.T) {
 		dr.Manifest == nil || dr.Manifest.PromptSHA256 != got.Manifest.PromptSHA256 || len(dr.Draft.Candidates) != 1 {
 		t.Fatalf("state %+v / draft %+v", state, dr)
 	}
-	if len(state.Features) != 1 || !state.Features[0].Available || state.Features[0].ID != "commit" {
+	// Other lanes register more features; the one routed here is offered.
+	commitOffered := false
+	for _, f := range state.Features {
+		commitOffered = commitOffered || f.ID == "commit" && f.Available
+	}
+	if len(state.Features) == 0 || !commitOffered {
 		t.Errorf("features %+v", state.Features)
 	}
 	// A confirmation is used once.

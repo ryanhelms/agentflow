@@ -444,10 +444,10 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 			fmt.Fprintf(w, "  warning %s: %s\n", printable(wn.Code), printable(wn.Message))
 		}
 		if len(c.Issues) == 0 && len(c.CLI) > 0 {
-			if line, ok := pasteLine(c.CLI); ok {
+			if line, why := pasteLine(c.CLI); why == "" {
 				fmt.Fprintf(w, "  use it (bash, zsh or fish): %s\n", line)
 			} else {
-				fmt.Fprintln(w, "  use it: run the command with these fields as its own flags, or read the candidate's cli words with --json; no paste-ready line is printed for this shell")
+				fmt.Fprintf(w, "  use it: run the command with these fields as its own flags, or read the candidate's cli words with --json (no paste-ready line: %s)\n", why)
 			}
 		}
 	}
@@ -474,14 +474,23 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 var pasteGOOS = runtime.GOOS
 
 // pasteLine is a draft candidate's command as one line a person can paste
-// into bash, zsh or fish: every word is text, never syntax. On Windows it
-// reports false: PowerShell and cmd quoting cannot be made safe the same
-// way, so no paste-ready line is printed there.
-func pasteLine(words []string) (string, bool) {
+// into bash, zsh or fish: every word is text, never syntax, and a newline
+// inside a word stays a real newline inside its quotes. It prints nothing,
+// and says why, on Windows (PowerShell and cmd quoting cannot be made safe
+// the same way) and when a word holds any other hidden or control
+// character, which a pasted line would carry unseen.
+func pasteLine(words []string) (line, why string) {
 	if pasteGOOS == "windows" {
-		return "", false
+		return "", "this shell's quoting cannot be made safe"
 	}
-	return visible(shellLine(words)), true
+	for _, w := range words {
+		for _, r := range w {
+			if r != '\n' && visible(string(r)) != string(r) {
+				return "", "the text holds a hidden or control character"
+			}
+		}
+	}
+	return shellLine(words), ""
 }
 
 // shellLine quotes words so bash, zsh and fish all read each one back as
