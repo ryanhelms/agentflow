@@ -5408,3 +5408,21 @@ Answered by the owner on 2026-11-27: each as recommended.
 - The console can request and show drafts but applies nothing.
 - Prompts live only for the turn; drafts expire after a day and do not crowd session history.
 - The draft frame is the base for phase 9's second opinion and phase 10's reports (`internal/ai/features/`).
+
+### Phase 8 integration amendments
+
+*Recorded on 2026-11-27 while integrating lane 8.1 (issue #154). Where one differs from a paragraph above, the amendment holds.*
+
+| # | Replaces | Amendment |
+| --- | --- | --- |
+| 1 | The prompt hash | The hash is taken over the prompt with the per-run nonce replaced by `<nonce>`, so the re-plan of a token call gives the same hash instead of failing `operation_changed`. |
+| 2 | "Phase 8 feature framework", signatures | `ai.Prepare(ctx, a, options, request)` takes the session options, and `ai.Start(ctx, a, prepared, options, detach)` takes whether to detach. |
+| 3 | The gate of `ai.draft` | The operation gates in its Run function, not through `GateByInvoker`, which would also gate the dry run. |
+| 4 | `TestDraftNeverWrites` | The allow list also holds `ContainsSecret`, `NewAIManager` and `SessionEnv`. |
+| 5 | `TestEveryFeatureHasAHarnessField` | It skips until lanes 8.2 and 8.3 register their features. Whichever of them merges second makes an empty registry a failure. |
+| 6 | Per-part caps | A feature states them through an optional `ai.Caps` interface, because `Part` has no cap field. |
+| 7 | The manifest | It is stored as JSON in the transcript's prompt item. |
+| 8 | Prompt layout | Target labels are fenced as data. |
+| 9 | Refusal order | `not_worktree` is checked before `feature_off`. |
+| 10 | "File ownership for phase 8 lanes" | Lane 8.1 also changed, and owns: `internal/aisession/account.go`, `client.go`, `events.go` and `limits_test.go`; `internal/bus/types_phase7.go` (the `kind` field); `internal/config/schema_coverage_test.go` beyond its new rows (`loosensSuits` accepts a text control); and the `policy_explain/all.json` golden file. |
+
