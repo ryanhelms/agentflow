@@ -1,0 +1,48 @@
+$ agentflow ai draft commit
+--- stdin
+n
+--- stdout
+{
+  "feature": "commit",
+  "harness": "drafter",
+  "harness_name": "Drafter",
+  "path": "<fake-agent>/fake-draft",
+  "worktree": "<repo>",
+  "branch": "task",
+  "started_by": {
+    "kind": "agent",
+    "surface": "cli",
+    "client": "cli"
+  },
+  "parts": [
+    {
+      "kind": "diff",
+      "label": "staged changes",
+      "source": "git",
+      "bytes": 130,
+      "original_bytes": 130
+    }
+  ],
+  "bytes": 1048,
+  "prompt_sha256": "<digest-1>",
+  "max_duration": 180000000000,
+  "never_sent": [
+    "environment values",
+    "credentials and tokens agentflow holds",
+    "the agentflow home, the console registry and the session store",
+    ".git contents other than what the diff shows",
+    "remote URLs",
+    "whole files (only diff hunks)",
+    "files outside the worktree",
+    "other worktrees and repositories",
+    "approval tokens and IDs",
+    "your configuration",
+    "author e-mail addresses"
+  ]
+}
+Proceed? [y/N]: 
+--- stderr
+Agentflow ai.draft: confirm (autonomy.remote); request <operation-id>, owner cli/<owner>, expires <time>
+autonomy.remote sets ai.draft (remote) to confirm. This operation requires confirmation. cli/<owner> owns this prompt until <time>. Show the summary and wait for approval before applying it
+--- error
+cancelled

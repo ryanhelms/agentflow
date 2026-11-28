@@ -1,0 +1,4 @@
+$ agentflow ai draft pr --json
+--- stdout
+--- error
+PR title and body drafts are off: no harness is set for them. (feature_off). Choose a harness for this feature in Settings (ai.features.pr.harness), or carry on without AI.

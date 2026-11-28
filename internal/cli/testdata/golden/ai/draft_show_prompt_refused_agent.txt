@@ -1,0 +1,4 @@
+$ agentflow ai draft commit --dry-run --show-prompt
+--- stdout
+--- error
+--show-prompt prints the prompt only in your own terminal
