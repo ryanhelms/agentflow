@@ -371,6 +371,24 @@ noninteractive workflow. To select a catalog revision, pass
 `--template NAME --template-revision REV` or the MCP fields `template`
 and `template_revision`. Omit both to use the configured default.
 
+`agentflow task create --ai --description "..."` drafts the ticket first, with
+the harness you set in `ai.features.ticket.harness`. It sends your description
+and the task template's sections, shows you the draft, asks `Use this draft?`
+and then runs the normal create with the drafted title and description. Your
+other flags are passed on unchanged. With a template, the harness writes the
+text of each section and agentflow writes the headings.
+
+`agentflow review reply --ai [THREAD_ID]` drafts replies to the open review
+threads of your branch's PR (the first 10, or the one you name), with the
+harness in `ai.features.reply.harness`. It sends each thread's first comment
+with its file, line and author, the branch's committed changes to those files
+and the branch's commit subjects. It asks `Send this reply?` for each draft,
+then runs the normal `review reply`.
+
+Both are for you at your own terminal and take no `--yes`. An agent asks for the
+same draft with `agentflow_ai_draft` and uses the fields itself. See
+[Draft with AI](#draft-with-ai) for what is filtered and never sent.
+
 Select `asana` to list open project tasks, start a branch from a plain task GID,
 read linked knowledge documents and move a task to a configured section.
 Set the default project GID and provide `ASANA_ACCESS_TOKEN` in the calling
@@ -456,7 +474,7 @@ Deployments and release lookup also support local JSON fixtures.
 | List settings with values and sources | `agentflow config fields [--group G] [--search Q] [--modified]` | `agentflow_config_fields` |
 | Change settings in both layers as one confirmed save | `agentflow config set [--dry-run] [--unset KEY] KEY=VALUE...` | `agentflow_config_preview`, `agentflow_config_set` |
 | Undo (or redo) the last settings save | `agentflow config undo [--skip-conflicts]` | `agentflow_config_undo` |
-| Create a task | `agentflow task create` | `agentflow_ticket_create` |
+| Create a task | `agentflow task create` (`--ai --description TEXT` drafts it first) | `agentflow_ticket_create` |
 | Pick up a ticket | `agentflow start` | `/agentflow:start` or "start PLAT-123" |
 | Work in a task worktree | `agentflow start KEY --worktree` | `agentflow_start` with `worktree: true` |
 | Regenerate the worktree's `go.work` | `agentflow worktree go-work` | `agentflow_worktree_go_work` |
@@ -487,7 +505,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Answer a request a session waits on (agents can only reject) | `agentflow ai respond SESSION ASK (--allow \| --reject)` | `agentflow_ai_respond` (reject only) |
 | Stop an AI session | `agentflow ai cancel SESSION` | `agentflow_ai_cancel` or `/agentflow:ai` |
 | Draft a commit message, PR, ticket, criteria check or review reply with a harness (always confirmed first; nothing is applied) | `agentflow ai draft FEATURE [--dry-run [--show-prompt]]` | `agentflow_ai_draft` or `/agentflow:ai` |
-| Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
+| Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` (`reply --ai [THREAD_ID]` drafts replies) | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
 | See or follow git and configuration events | `agentflow events [--follow] [--all-repos]` | `agentflow_events` or `/agentflow:events` |
