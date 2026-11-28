@@ -676,8 +676,10 @@ agentflow first shows what it would send and asks, unless you set `ai.draft` to 
   settings. A change that moves one, or deletes one, also sends no content of the
   file it moved to or the files it adds.
 - Commit authors and `...-by:` trailers are not sent.
-- The default PR body is your PR template plus, with Jira, a link to the issue. A
-  template that links out of the repository or to a secret file is not read.
+- `pr` also sends the default PR body, built from your PR template. A template that
+  links out of the repository or to a secret file is not read.
+- With Jira, the link to the issue is not sent. agentflow puts it back at the top
+  of the drafted body.
 
 ### Control agent approvals
 

@@ -73,7 +73,11 @@ type PRDraft struct {
 	Rules    string
 	Commit   config.Commit
 	KeyHint  string
-	Template string // the default PR body
+	Template string // the default PR body, without IssueLink
+	// IssueLink is agentflow's own "Jira: [KEY](url)" line of that body, or
+	// "". It holds a remote URL, so it is never sent: the candidate gets it
+	// back.
+	IssueLink string
 }
 
 // ACDraft is the material of an acceptance-criteria check.
@@ -150,7 +154,11 @@ func (a *App) PRDraftContext(ctx context.Context, git DraftGit) (*PRDraft, error
 	}
 	key := a.CurrentKey(ctx)
 	d := &PRDraft{DraftDiff: changes, Commits: commits, Task: a.draftTask(ctx), Source: a.draftTaskSource(),
-		Commit: a.Cfg.Commit, KeyHint: key, Rules: a.draftPRRules(key), Template: a.draftPRTemplate(ctx, key)}
+		Commit: a.Cfg.Commit, KeyHint: key, Rules: a.draftPRRules(key), Template: a.draftPRTemplate(ctx, key),
+		IssueLink: a.draftIssueLink(key)}
+	if d.IssueLink != "" {
+		d.Template = strings.TrimLeft(strings.TrimPrefix(d.Template, d.IssueLink), "\n")
+	}
 	if key != "" {
 		// The criteria are context here: a task that cannot be read has none.
 		if _, items, err := a.draftCriteria(ctx, key); err == nil {
@@ -534,6 +542,18 @@ func (a *App) draftPRRules(key string) string {
 		s += "\nThe branch's task key is " + key + "."
 	}
 	return s
+}
+
+// draftIssueLink is the line prBody starts a Jira task's body with.
+func (a *App) draftIssueLink(key string) string {
+	if key == "" || a.UsesTaskRefs() {
+		return ""
+	}
+	site, err := a.jiraSite()
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("Jira: [%s](%s/browse/%s)", key, strings.TrimRight(site, "/"), key)
 }
 
 // prTemplatePaths are the templates prBody reads, in its order.

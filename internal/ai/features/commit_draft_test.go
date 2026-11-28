@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -528,5 +530,62 @@ func TestDraftsKeepAMovedSecretFile(t *testing.T) {
 			check(ai.FeaturePR)
 			check(ai.FeatureAC)
 		})
+	}
+}
+
+// deliveryJira answers every Jira read with one issue, in this process.
+type deliveryJira struct{}
+
+func (deliveryJira) RoundTrip(r *http.Request) (*http.Response, error) {
+	body := `{"key":"PLAT-1","fields":{"summary":"Add notes","status":{"name":"Open","statusCategory":{"key":"new"}},"issuetype":{"name":"Story"}}}`
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+// agentflow's Jira link is a remote URL, which a draft never sends. The
+// candidate gets the line back, so the opened PR keeps the link.
+func TestPRDraftKeepsTheJiraLinkLocal(t *testing.T) {
+	r := newRig(t)
+	t.Setenv("JIRA_USER", "dev@example.invalid")
+	t.Setenv("JIRA_TOKEN", "fixture")
+	transport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = transport })
+	http.DefaultTransport = deliveryJira{}
+	write(t, r.wt, ".agentflow/config.yml", "commit: {require_key: false}\ntask_management: {provider: jira, settings: {site: 'https://tracker.invalid', projects: [PLAT]}}\n")
+	git(t, r.wt, "checkout", "-q", "-b", "PLAT-1-notes")
+	write(t, r.wt, "notes.txt", "hello\n")
+	write(t, r.wt, ".github/pull_request_template.md", "## Why this template\n")
+	git(t, r.wt, "add", "notes.txt", ".github")
+	git(t, r.wt, "commit", "-q", "-m", "feat(PLAT-1): add notes")
+
+	p := r.mustPrepare(t, ai.Request{Feature: ai.FeaturePR})
+	if prompt := p.Prompt(); strings.Contains(prompt, "tracker.invalid") || !strings.Contains(prompt, "## Why this template") {
+		t.Errorf("the prompt holds the site, or lost the template:\n%s", prompt)
+	}
+	r.sameManifest(t, p, ai.Request{Feature: ai.FeaturePR})
+	d := r.draft(t, p)
+	if d.State != ai.DraftReady || len(d.Candidates) != 1 {
+		t.Fatalf("draft %+v", d)
+	}
+	const body = "Jira: [PLAT-1](https://tracker.invalid/browse/PLAT-1)\n\nAdds notes.txt."
+	c := d.Candidates[0]
+	var in app.PROpenInput
+	if err := json.Unmarshal(c.Input, &in); err != nil {
+		t.Fatal(err)
+	}
+	if in.Body != body || c.CLI[len(c.CLI)-1] != body {
+		t.Errorf("input body %q, cli %q", in.Body, c.CLI)
+	}
+	// The field is the model's words only, and its label says what is added.
+	if f := c.Fields[1]; f.Value != "Adds notes.txt." || !strings.Contains(f.Label, "Jira link") || len(c.Warnings) != 0 {
+		t.Errorf("field %+v, warnings %+v", f, c.Warnings)
+	}
+}
+
+// Without a drafted body, pr writes its own default, which has the link.
+func TestPRDraftWithoutABodyLeavesTheDefault(t *testing.T) {
+	c := ai.Context{Rules: rules(false, ""), Fixed: json.RawMessage(`{"issue_link":"Jira: [PLAT-1](https://tracker.invalid/browse/PLAT-1)"}`)}
+	cands, _ := candidates(t, ai.FeaturePR, c, `{"title": "feat: add notes"}`)
+	if len(cands) != 1 || string(cands[0].Input) != `{"title":"feat: add notes"}` || slices.Contains(cands[0].CLI, "--body") {
+		t.Errorf("%+v %s", cands, cands[0].Input)
 	}
 }

@@ -2,6 +2,7 @@ package features
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ryanhelms/agentflow/internal/ai"
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -18,6 +19,11 @@ type prFeature struct{}
 type prAnswer struct {
 	Title string `json:"title" draft:"max=256,line"`
 	Body  string `json:"body" draft:"max=32768"`
+}
+
+// prFixed is what agentflow, not the model, puts in the candidate.
+type prFixed struct {
+	IssueLink string `json:"issue_link,omitempty"`
 }
 
 func (prFeature) ID() ai.FeatureID { return ai.FeaturePR }
@@ -42,7 +48,11 @@ func (prFeature) Gather(ctx context.Context, a *app.App, _ ai.Request) (ai.Conte
 	if d.Template != "" {
 		parts = append(parts, ai.Part{Kind: ai.PartTemplate, Label: "default pull request body", Source: "git", Text: d.Template})
 	}
-	return ai.Context{Parts: parts, Rules: ai.Rules{Commit: d.Commit, KeyHint: d.KeyHint}}, nil
+	b, err := json.Marshal(prFixed{IssueLink: d.IssueLink})
+	if err != nil {
+		return ai.Context{}, err
+	}
+	return ai.Context{Parts: parts, Rules: ai.Rules{Commit: d.Commit, KeyHint: d.KeyHint}, Fixed: b}, nil
 }
 
 // PartCap is the feature table's: 16 KiB of commits, 96 KiB of diff and
@@ -77,15 +87,24 @@ func (prFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.Issu
 	if !ok {
 		return nil, nil
 	}
+	var fixed prFixed
+	_ = json.Unmarshal(c.Fixed, &fixed)
 	input := map[string]any{"title": ans.Title}
 	cli := []string{"agentflow", "pr", "--prepare", "--title", ans.Title}
-	if ans.Body != "" {
-		input["body"] = ans.Body
-		cli = append(cli, "--body", ans.Body)
+	label := "Body"
+	// With no drafted body, pr writes its default, which has the link.
+	if body := ans.Body; body != "" {
+		if fixed.IssueLink != "" {
+			// agentflow's line, not the model's: the field stays the model's.
+			body = fixed.IssueLink + "\n\n" + body
+			label = "Body (agentflow puts its Jira link above it)"
+		}
+		input["body"] = body
+		cli = append(cli, "--body", body)
 	}
 	return []ai.Candidate{{
 		Operation: "pr.prepare", Tool: "agentflow_pr_prepare", Input: inputJSON(input), CLI: cli,
-		Fields: []ai.Field{{Name: "title", Label: "Title", Value: ans.Title}, {Name: "body", Label: "Body", Value: ans.Body}},
+		Fields: []ai.Field{{Name: "title", Label: "Title", Value: ans.Title}, {Name: "body", Label: label, Value: ans.Body}},
 		Issues: ruleIssues(commit.ValidatePRTitle(ans.Title, c.Rules.Commit, c.Rules.KeyHint), "title"),
 	}}, nil
 }
