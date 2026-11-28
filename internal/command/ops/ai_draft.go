@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"time"
 
@@ -443,7 +444,11 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 			fmt.Fprintf(w, "  warning %s: %s\n", printable(wn.Code), printable(wn.Message))
 		}
 		if len(c.Issues) == 0 && len(c.CLI) > 0 {
-			fmt.Fprintf(w, "  use it: %s\n", visible(shellLine(c.CLI)))
+			if line, why := pasteLine(c.CLI); why == "" {
+				fmt.Fprintf(w, "  use it (bash, zsh or fish): %s\n", line)
+			} else {
+				fmt.Fprintf(w, "  use it: run the command with these fields as its own flags, or read the candidate's cli words with --json (no paste-ready line: %s)\n", why)
+			}
 		}
 	}
 	for _, is := range d.Issues {
@@ -465,17 +470,76 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 	return nil
 }
 
-// shellLine quotes words for a POSIX shell.
+// pasteGOOS is the platform pasteLine prints for; a variable for tests.
+var pasteGOOS = runtime.GOOS
+
+// pasteLine is a draft candidate's command as one line a person can paste
+// into bash, zsh or fish: every word is text, never syntax, and a newline
+// inside a word stays a real newline inside its quotes. It prints nothing,
+// and says why, on Windows (PowerShell and cmd quoting cannot be made safe
+// the same way) and when a word holds any other hidden or control
+// character, which a pasted line would carry unseen.
+func pasteLine(words []string) (line, why string) {
+	if pasteGOOS == "windows" {
+		return "", "this shell's quoting cannot be made safe"
+	}
+	for _, w := range words {
+		for _, r := range w {
+			if r != '\n' && visible(string(r)) != string(r) {
+				return "", "the text holds a hidden or control character"
+			}
+		}
+	}
+	return shellLine(words), ""
+}
+
+// shellLine quotes words so bash, zsh and fish all read each one back as
+// the same single word. A plain word (letters, digits and -_./=:@, not
+// starting with = or %, which zsh and fish expand) stays as it is.
+// Anything else goes in single quotes, and a quote or backslash never
+// appears inside them: fish reads \' and \\ there as escapes, so ' is
+// written "'" and \ is written "\\" between the quoted runs.
 func shellLine(words []string) string {
 	out := make([]string, len(words))
 	for i, w := range words {
-		if w != "" && strings.Trim(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@") == "" {
-			out[i] = w
-			continue
-		}
-		out[i] = "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
+		out[i] = shellWord(w)
 	}
 	return strings.Join(out, " ")
+}
+
+func shellWord(w string) string {
+	if w != "" && w[0] != '=' && w[0] != '%' && strings.Trim(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@") == "" {
+		return w
+	}
+	if w == "" {
+		return "''"
+	}
+	var b strings.Builder
+	open := false
+	for _, r := range w {
+		switch r {
+		case '\'', '\\':
+			if open {
+				b.WriteByte('\'')
+				open = false
+			}
+			if r == '\'' {
+				b.WriteString(`"'"`)
+			} else {
+				b.WriteString(`"\\"`)
+			}
+		default:
+			if !open {
+				b.WriteByte('\'')
+				open = true
+			}
+			b.WriteRune(r)
+		}
+	}
+	if open {
+		b.WriteByte('\'')
+	}
+	return b.String()
 }
 
 func init() {

@@ -93,3 +93,55 @@ func TestGitDiffPrefixes(t *testing.T) {
 		t.Errorf("filtered: %+v", parts[0])
 	}
 }
+
+// TestFilterCombinedDiff: during a conflict git writes "diff --cc" for an
+// unmerged path; its content is left out, not joined to the file before
+// it. Changed lines before any header are left out too.
+func TestFilterCombinedDiff(t *testing.T) {
+	dir := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.invalid"}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		_, _ = cmd.CombinedOutput() // the merge fails on purpose
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git("init", "-q", "-b", "main")
+	write("a.go", "package a\n")
+	write("config.ini", "x=1\n")
+	git("add", ".")
+	git("commit", "-q", "-m", "base")
+	git("checkout", "-q", "-b", "other")
+	write("config.ini", "DB_PASSWORD=MARKER_never_sent_other\n")
+	git("commit", "-q", "-am", "other")
+	git("checkout", "-q", "main")
+	write("config.ini", "DB_PASSWORD=MARKER_never_sent_main\n")
+	git("commit", "-q", "-am", "main")
+	git("merge", "other")
+	write("a.go", "package a\n\n// changed\n")
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+	out, err := GitDiff(context.Background(), &app.App{Repo: &gitx.Repo{Dir: dir}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "diff --cc config.ini") || !strings.Contains(out, "MARKER_never_sent") {
+		t.Fatalf("no combined diff to test:\n%s", out)
+	}
+	for _, diff := range []string{out, "+MARKER_never_sent before any header\n" + out} {
+		parts, err := Filter([]Part{{Kind: PartDiff, Text: diff}}, FilterOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(parts[0].Text, "MARKER_never_sent") {
+			t.Errorf("combined content sent:\n%s", parts[0].Text)
+		}
+		if !strings.Contains(parts[0].Text, "+// changed") {
+			t.Errorf("the ordinary file was left out:\n%s", parts[0].Text)
+		}
+	}
+}

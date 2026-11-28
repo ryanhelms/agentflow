@@ -376,6 +376,35 @@ func TestDraftAnswerTooLarge(t *testing.T) {
 	}
 }
 
+// TestDraftTranscriptKeepsNoHarnessText: a draft's transcript records what
+// the harness asked for and ran (IDs, kinds, verdicts), never its titles,
+// paths, command lines or diff text.
+func TestDraftTranscriptKeepsNoHarnessText(t *testing.T) {
+	r := newDraftRig(t, acptest.DraftHostile(), aisessiontest.Settings{AgentStart: true})
+	writeFile(t, filepath.Join(r.wt, "notes.txt"), "hello\n")
+	s := r.startDraft(t, person(context.Background()))
+	r.d.Wait(t, s.ID, 60*time.Second)
+	items, _, err := r.m.Items(context.Background(), s.ID, 0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := 0
+	for _, it := range items {
+		if it.Kind == aisession.ItemTool {
+			tools++
+		}
+		b, _ := json.Marshal(it)
+		for _, bad := range []string{"notes.txt", "/etc/hosts", "x.txt", "pwned", `"echo`, "Read a file", "Run a command", r.wt} {
+			if strings.Contains(string(b), bad) {
+				t.Errorf("the transcript holds %q: %s", bad, b)
+			}
+		}
+	}
+	if tools == 0 {
+		t.Error("no tool items recorded")
+	}
+}
+
 // TestDraftStopReasonWins: the harness ends its turn, or exits, right after
 // the message that broke a draft rule. The rule's code is recorded while
 // that message is handled, so it always wins over the turn's own end; a

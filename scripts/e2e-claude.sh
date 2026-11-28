@@ -297,10 +297,24 @@ draft_result() { # draft_result <feature>: the reply to the agentflow_ai_draft c
 pr_draft=$(draft_result pr)
 commit_draft=$(draft_result commit)
 check "pr draft refused feature_off" grep -Eq 'feature_off|unknown_feature' <<<"$pr_draft"
-check "commit draft needs confirmation" grep -q needs_confirmation <<<"$commit_draft"
-check "commit draft shows the manifest" grep -q prompt_sha256 <<<"$commit_draft"
-no_diff_text() { ! grep -q 'draft me' <<<"$commit_draft"; }
-check "the manifest holds no diff" no_diff_text
+# Under the temporary AGENTFLOW_HOME, an account whose own ~/.agentflow
+# routes no harness for commit drafts refuses them feature_off_account (the
+# account rule holds; the script never touches the account home). Exactly
+# these two outcomes pass; the manifest checks run only when it asked.
+commit_outcome=other
+if grep -q needs_confirmation <<<"$commit_draft"; then
+  commit_outcome=needs_confirmation
+elif grep -q feature_off_account <<<"$commit_draft"; then
+  commit_outcome=feature_off_account
+fi
+echo "  commit draft outcome: $commit_outcome"
+known_outcome() { [ "$commit_outcome" != other ]; }
+check "commit draft needs confirmation or is refused feature_off_account" known_outcome
+if [ "$commit_outcome" = needs_confirmation ]; then
+  check "commit draft shows the manifest" grep -q prompt_sha256 <<<"$commit_draft"
+  no_diff_text() { ! grep -q 'draft me' <<<"$commit_draft"; }
+  check "the manifest holds no diff" no_diff_text
+fi
 check "no draft session created" no_session_record
 check "fake agent still saw only the probe's initialize" fake_only_initialize
 git -C "$tmp/task" rm -q --cached draft-e2e.txt
