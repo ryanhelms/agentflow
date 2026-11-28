@@ -1,0 +1,19 @@
+$ agentflow pr --ai
+--- stdin
+n
+--- stdout
+Draft <session-1>: ready
+
+Candidate 1: pr.prepare
+  Title (the model's words):
+  | feat: add notes
+  Body (the model's words):
+  | Adds notes.txt.
+  use it: agentflow pr --prepare --title 'feat: add notes' --body 'Adds notes.txt.'
+
+AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
+Use this draft? [y/N]: 
+--- stderr
+Drafting… (Ctrl-C cancels)
+--- error
+cancelled: the draft was not used

@@ -100,6 +100,9 @@ func runAC(ctx context.Context, env command.CLIEnv, inv command.Invoker, args []
 	if sub != "list" {
 		return runACUpdate(ctx, env, inv, sub, args)
 	}
+	if wantsAI(args) {
+		return acWithAI(ctx, env, inv, args)
+	}
 	fs := flag.NewFlagSet("ac list", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print the checklist as JSON")
 	pos, err := taskParseInterleaved(fs, args)

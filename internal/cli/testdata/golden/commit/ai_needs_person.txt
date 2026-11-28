@@ -1,0 +1,4 @@
+$ agentflow commit --ai
+--- stdout
+--- error
+--ai is for a person at a terminal. (needs_person). Run agentflow ai draft commit (or agentflow_ai_draft) and pass the candidate's fields to the command.

@@ -1,0 +1,33 @@
+$ agentflow ac --ai filesystem/default/<digest-1>
+--- stdin
+y
+--- stdout
+Draft <session-2>: ready
+
+Candidate 1: ac.update
+  for criterion 1: Notes hold a greeting
+  Evidence (the model's words):
+  | notes.txt is added
+  use it: agentflow ac done 'Notes hold a greeting' --key filesystem/default/<digest-1> --evidence 'notes.txt is added'
+
+AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
+
+Criterion 1: Notes hold a greeting
+Evidence (the model's words): notes.txt is added
+Tick this criterion? [y/N]: {
+  "key": "filesystem/default/<digest-1>",
+  "items": [
+    {
+      "text": "Notes hold a greeting",
+      "done": true,
+      "evidence": "notes.txt is added"
+    },
+    {
+      "text": "The greeting is translated",
+      "done": false
+    }
+  ],
+  "updated": "<time>"
+}
+--- stderr
+Drafting… (Ctrl-C cancels)

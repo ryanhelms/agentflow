@@ -140,8 +140,12 @@ func runPR(ctx context.Context, env command.CLIEnv, inv command.Invoker, args []
 	title := fs.String("title", "", "PR title")
 	draft := fs.Bool("draft", false, "open as draft")
 	yes := fs.Bool("yes", false, "skip the confirmation prompt")
+	useAI := fs.Bool("ai", false, "draft the title and body with your harness first")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *useAI {
+		return prWithAI(ctx, env, inv, fs, reviewers, labels)
 	}
 	a, err := env.Open(ctx)
 	if err != nil {
