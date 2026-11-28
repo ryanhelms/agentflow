@@ -4,10 +4,11 @@ package app
 // They return raw material and refusals. They never stage, post or start
 // anything; the features turn the material into prompt parts.
 //
-// Every diff here is gathered with --no-ext-diff and --no-textconv, and no
-// repository or user git config may decide what the draft filter reads in a
-// file header: the diffs this file runs fix the prefixes, and draftDiff
-// rewrites the headers of all of them, gitx.Repo.PreviewCommit's included.
+// A branch or staged diff is made by the DraftGit the caller passes
+// (ai.GitDiff, which fixes git's flags). The commit diff is the one
+// gitx.Repo.PreviewCommit makes, the exact diff `commit` would record: its
+// private objects are gone afterwards, so it cannot be made again. draftDiff
+// gives both the same headers.
 
 import (
 	"context"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -28,6 +30,10 @@ import (
 	"github.com/ryanhelms/agentflow/internal/provider"
 )
 
+// DraftGit runs git diff in the worktree with args after the flags that fix
+// its form: ai.GitDiff, which this package cannot import.
+type DraftGit func(ctx context.Context, args ...string) (string, error)
+
 // DraftDiff is one change a draft may send.
 type DraftDiff struct {
 	Files string // "M path" lines
@@ -36,7 +42,8 @@ type DraftDiff struct {
 	// "diff --git a/OLD b/NEW", "--- a/OLD" and "+++ b/NEW".
 	Diff string
 	// Withheld are files whose content was already taken out of Diff
-	// because the filter could not tell what they are from the header.
+	// because the filter could not tell from the header that they are, or
+	// may hold, a secret file.
 	Withheld []string
 }
 
@@ -125,12 +132,12 @@ func (a *App) CommitDraftContext(ctx context.Context, paths []string) (*CommitDr
 }
 
 // PRDraftContext reads what the branch would publish against its base.
-func (a *App) PRDraftContext(ctx context.Context) (*PRDraft, error) {
+func (a *App) PRDraftContext(ctx context.Context, git DraftGit) (*PRDraft, error) {
 	base, from, err := a.draftBase(ctx)
 	if err != nil {
 		return nil, err
 	}
-	changes, err := a.draftRange(ctx, from, "HEAD")
+	changes, err := draftRange(ctx, git, from, "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +162,7 @@ func (a *App) PRDraftContext(ctx context.Context) (*PRDraft, error) {
 
 // ACDraftContext reads the task's criteria, the branch's changes against its
 // base and the staged changes. It does not write the local checklist.
-func (a *App) ACDraftContext(ctx context.Context, key string) (*ACDraft, error) {
+func (a *App) ACDraftContext(ctx context.Context, git DraftGit, key string) (*ACDraft, error) {
 	if key == "" {
 		key = a.CurrentKey(ctx)
 	}
@@ -173,11 +180,11 @@ func (a *App) ACDraftContext(ctx context.Context, key string) (*ACDraft, error) 
 	if err != nil {
 		return nil, err
 	}
-	branch, err := a.draftRange(ctx, from, "HEAD")
+	branch, err := draftRange(ctx, git, from, "HEAD")
 	if err != nil {
 		return nil, err
 	}
-	staged, err := a.draftRange(ctx, "--cached", "HEAD")
+	staged, err := draftRange(ctx, git, "--cached", "HEAD")
 	if err != nil {
 		return nil, err
 	}
@@ -212,20 +219,18 @@ func (a *App) draftBase(ctx context.Context) (base, from string, err error) {
 }
 
 // draftRange is the diff from one side to the other; from may be "--cached".
-// The flags keep repository and user config from running a program or
-// changing the headers.
-func (a *App) draftRange(ctx context.Context, from, to string) (DraftDiff, error) {
+// Moves are looked for whatever diff.renames says, so a moved secret file is
+// seen as one.
+func draftRange(ctx context.Context, git DraftGit, from, to string) (DraftDiff, error) {
 	diff := func(more ...string) (string, error) {
-		args := []string{"-c", "core.quotepath=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv",
-			"--no-renames", "--submodule=short", "--src-prefix=a/", "--dst-prefix=b/"}
-		args = append(append(args, more...), from, to, "--")
-		return a.Repo.Git(ctx, args...)
+		return git(ctx, append(more, "--submodule=short", from, to, "--")...)
 	}
-	names, err := diff("--name-only", "-z")
+	// Both names of a moved file: headerPaths knows only listed ones.
+	names, err := diff("--name-only", "--no-renames", "-z")
 	if err != nil {
 		return DraftDiff{}, err
 	}
-	text, err := diff()
+	text, err := diff("--find-renames")
 	if err != nil {
 		return DraftDiff{}, err
 	}
@@ -301,10 +306,29 @@ func fileLines(section []string, from, to string) string {
 	return b.String()
 }
 
+// removesSecretFile reports whether a section deletes a secret file.
+func removesSecretFile(section []string, files map[string]bool) bool {
+	from, _, ok := headerPaths(section[0], files)
+	if !ok || !aisession.IsSecretFile(from) {
+		return false
+	}
+	for _, line := range section[1:] {
+		if strings.HasPrefix(line, "@@") {
+			break
+		}
+		if strings.HasPrefix(line, "deleted file mode ") {
+			return true
+		}
+	}
+	return false
+}
+
 // draftDiff rewrites every file header of a git diff to the one form the
 // draft filter reads, and takes out the content of a file the header would
-// not identify: one renamed or copied from a secret file, one whose name
-// cannot stand in a header, and one in a section that cannot be read.
+// not identify as secret: one renamed or copied from a secret file, one
+// added by a change that also deletes a secret file (a move git did not
+// report), one whose name cannot stand in a header, and one in a section
+// that cannot be read.
 func draftDiff(diff string, changed []string) DraftDiff {
 	files := make(map[string]bool, len(changed))
 	for _, f := range changed {
@@ -319,6 +343,7 @@ func draftDiff(diff string, changed []string) DraftDiff {
 			sections[len(sections)-1] = append(sections[len(sections)-1], line)
 		}
 	}
+	lostSecret := slices.ContainsFunc(sections, func(s []string) bool { return removesSecretFile(s, files) })
 	var out DraftDiff
 	var text, names, stat strings.Builder
 	added, removed := 0, 0
@@ -374,6 +399,9 @@ func draftDiff(diff string, changed []string) DraftDiff {
 		case secretFrom && !secretTo:
 			out.Withheld = append(out.Withheld, from)
 			fmt.Fprintf(&text, "diff --git a/%s b/%s\n[content left out: it comes from a secret file]\n", from, to)
+		case lostSecret && status == "A" && !secretTo:
+			out.Withheld = append(out.Withheld, to)
+			fmt.Fprintf(&text, "diff --git a/%s b/%s\n[content left out: this change also removes a secret file]\n", from, to)
 		default:
 			fmt.Fprintf(&text, "diff --git a/%s b/%s\n", from, to)
 			text.WriteString(fileLines(s[1:], from, to))

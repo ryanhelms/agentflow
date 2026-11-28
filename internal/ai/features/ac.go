@@ -38,7 +38,7 @@ const (
 func (acFeature) ID() ai.FeatureID { return ai.FeatureAC }
 
 func (acFeature) Gather(ctx context.Context, a *app.App, r ai.Request) (ai.Context, error) {
-	d, err := a.ACDraftContext(ctx, r.Key)
+	d, err := a.ACDraftContext(ctx, gitDiff(a), r.Key)
 	if err != nil {
 		return ai.Context{}, err
 	}
@@ -98,6 +98,8 @@ func (acFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.Issu
 	_ = json.Unmarshal(c.Fixed, &fixed)
 	var out []ai.Candidate
 	var issues []ai.Issue
+	// A message is agentflow's own words: it may hold a target's number, and
+	// nothing else the answer or the task says.
 	issue := func(code, message string, args ...any) {
 		issues = append(issues, ai.Issue{Code: code, Message: fmt.Sprintf(message, args...)})
 	}
@@ -108,7 +110,7 @@ func (acFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.Issu
 	for _, check := range ans.Checks {
 		n := check.Criterion
 		if n < 1 || n > len(c.Targets) {
-			issue("unknown_target", "The answer named criterion %d, which agentflow did not give.", n)
+			issue("unknown_target", "The answer named a criterion agentflow did not give.")
 			continue
 		}
 		if times := named[n]; times != 1 {
@@ -137,20 +139,16 @@ func (acFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.Issu
 			continue
 		}
 		input := map[string]any{"item": target.ID, "done": true}
-		flags := []string{"--key", fixed.Key}
+		cli := []string{"agentflow", "ac", "done", "--key", fixed.Key}
 		if fixed.Key != "" {
 			input["key"] = fixed.Key
 		}
 		if check.Evidence != "" {
 			input["evidence"] = check.Evidence
-			flags = append(flags, "--evidence", check.Evidence)
+			cli = append(cli, "--evidence", check.Evidence)
 		}
-		cli := []string{"agentflow", "ac", "done"}
-		if strings.HasPrefix(target.ID, "-") {
-			cli = append(append(cli, flags...), "--", target.ID)
-		} else {
-			cli = append(append(cli, target.ID), flags...)
-		}
+		// The CLI reads flags anywhere before "--".
+		cli = append(cli, "--", target.ID)
 		out = append(out, ai.Candidate{
 			Operation: "ac.update", Tool: "agentflow_ac_update", Input: inputJSON(input), CLI: cli, Target: &target,
 			Fields: []ai.Field{{Name: "evidence", Label: "Evidence", Value: check.Evidence}},

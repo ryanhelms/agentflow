@@ -70,10 +70,32 @@ func TestDeliveryDraftDiffFileLines(t *testing.T) {
 	}
 }
 
+// A change that deletes a secret file may have moved it somewhere git did
+// not report, so the files it adds keep no content. Others are sent.
+func TestDeliveryDraftDiffAddedBesideADeletedSecret(t *testing.T) {
+	d := draftDiff("diff --git a/.env b/.env\ndeleted file mode 100644\n--- a/.env\n+++ /dev/null\n@@ -1 +0,0 @@\n-V=planted\n"+
+		"diff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+V=moved\n"+
+		"diff --git a/old.txt b/old.txt\n--- a/old.txt\n+++ b/old.txt\n@@ -1 +1 @@\n-before\n+after\n",
+		[]string{".env", "new.txt", "old.txt"})
+	if strings.Contains(d.Diff, "V=moved") || !strings.Contains(d.Diff, "+after") || !slices.Equal(d.Withheld, []string{"new.txt"}) {
+		t.Fatalf("diff %q, withheld %q", d.Diff, d.Withheld)
+	}
+	if d.Files != "D .env\nA new.txt\nM old.txt\n" {
+		t.Errorf("files %q", d.Files)
+	}
+}
+
 func TestDeliveryWithoutAddresses(t *testing.T) {
 	got := withoutAddresses("fix: a thing\n\nAsked for by <ann@example.com>.\n\nSigned-off-by: Ann <ann@example.com>\nReviewed-by: Bo\nRefs: PLAT-1")
 	if got != "fix: a thing\n\nAsked for by <address>.\n\nRefs: PLAT-1" {
 		t.Fatalf("%q", got)
+	}
+}
+
+// deliveryGit stands for ai.GitDiff, which this package cannot import.
+func deliveryGit(a *App) DraftGit {
+	return func(ctx context.Context, args ...string) (string, error) {
+		return a.Repo.Git(ctx, append([]string{"diff", "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/"}, args...)...)
 	}
 }
 
@@ -106,13 +128,13 @@ func deliveryCode(t *testing.T, err error, code string) {
 func TestDeliveryDraftBase(t *testing.T) {
 	a := deliveryRepo(t)
 	mustGit(t, a.Repo, "checkout", "-qb", "feature", "main")
-	_, err := a.PRDraftContext(t.Context())
+	_, err := a.PRDraftContext(t.Context(), deliveryGit(a))
 	deliveryCode(t, err, "nothing_to_draft")
 
 	deliveryWrite(t, a, "greeting.txt", "hello\n")
 	mustGit(t, a.Repo, "add", "greeting.txt")
 	mustGit(t, a.Repo, "commit", "-qm", "feat: greet", "-m", "Signed-off-by: Dev <dev@example.com>")
-	d, err := a.PRDraftContext(t.Context())
+	d, err := a.PRDraftContext(t.Context(), deliveryGit(a))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +143,7 @@ func TestDeliveryDraftBase(t *testing.T) {
 	}
 
 	mustGit(t, a.Repo, "branch", "-m", "main", "trunk")
-	_, err = a.PRDraftContext(t.Context())
+	_, err = a.PRDraftContext(t.Context(), deliveryGit(a))
 	deliveryCode(t, err, "no_base")
 }
 
@@ -181,7 +203,7 @@ func TestDeliveryACDraftWritesNoChecklist(t *testing.T) {
 	deliveryWrite(t, a, "greeting.txt", "hello\n")
 	mustGit(t, a.Repo, "add", "greeting.txt")
 
-	d, err := a.ACDraftContext(ctx, key)
+	d, err := a.ACDraftContext(ctx, deliveryGit(a), key)
 	if err != nil {
 		t.Fatal(err)
 	}

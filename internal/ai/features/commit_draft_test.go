@@ -437,7 +437,7 @@ func TestACDraft(t *testing.T) {
 	if c.Tool != "agentflow_ac_update" || in["key"] != key || in["item"] != "Notes hold a greeting" || in["done"] != true || in["evidence"] != "notes.txt is added" || len(in) != 4 {
 		t.Errorf("candidate %s %v", c.Tool, in)
 	}
-	if want := []string{"agentflow", "ac", "done", "Notes hold a greeting", "--key", key, "--evidence", "notes.txt is added"}; !slices.Equal(c.CLI, want) {
+	if want := []string{"agentflow", "ac", "done", "--key", key, "--evidence", "notes.txt is added", "--", "Notes hold a greeting"}; !slices.Equal(c.CLI, want) {
 		t.Errorf("cli %q", c.CLI)
 	}
 	// An explicit key reads the same task.
@@ -489,4 +489,44 @@ func TestDraftsIgnoreNoPrefixConfig(t *testing.T) {
 	write(t, r.wt, ".env", "V=never-sent-two\n")
 	git(t, r.wt, "add", "-f", ".env")
 	check(ai.FeatureAC) // both
+}
+
+// A secret file that moves keeps its content at home, whether or not git is
+// set to report moves and however much the content changed on the way.
+func TestDraftsKeepAMovedSecretFile(t *testing.T) {
+	const secret = "V=never-sent\nW=2\nX=3\n"
+	for name, c := range map[string]struct{ renames, content string }{
+		"moved":                {"true", secret},
+		"moved, renames off":   {"false", secret},
+		"rewritten on the way": {"true", "a\nb\nc\nd\ne\nf\ng\nh\nV=never-sent\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRig(t)
+			r.ticket(t, "Acceptance criteria\n[ ] Notes hold a greeting\n")
+			write(t, r.wt, ".env", secret)
+			git(t, r.wt, "add", "-f", ".env")
+			git(t, r.wt, "commit", "-q", "-m", "chore: add settings")
+			git(t, r.wt, "update-ref", "refs/heads/main", "HEAD")
+			git(t, r.wt, "config", "diff.renames", c.renames)
+			git(t, r.wt, "rm", "-q", ".env")
+			write(t, r.wt, "settings.txt", c.content)
+			git(t, r.wt, "add", "settings.txt")
+
+			check := func(feature ai.FeatureID) {
+				t.Helper()
+				p := r.mustPrepare(t, ai.Request{Feature: feature})
+				if strings.Contains(p.Prompt(), "never-sent") {
+					t.Errorf("%s: the prompt holds the secret file's content:\n%s", feature, p.Prompt())
+				}
+				if !strings.Contains(p.Prompt(), "settings.txt") {
+					t.Errorf("%s: the new file is not named:\n%s", feature, p.Prompt())
+				}
+			}
+			check(ai.FeatureCommit)
+			check(ai.FeatureAC)
+			git(t, r.wt, "commit", "-q", "-m", "chore: move settings")
+			check(ai.FeaturePR)
+			check(ai.FeatureAC)
+		})
+	}
 }

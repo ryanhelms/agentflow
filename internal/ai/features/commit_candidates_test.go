@@ -146,3 +146,74 @@ func TestACCandidates(t *testing.T) {
 		t.Errorf("no checks: %v", codes(issues))
 	}
 }
+
+// An issue message is shown as agentflow's own words, so nothing the model
+// or the repository wrote is in one.
+func TestDeliveryIssueMessagesHoldNoDraftedText(t *testing.T) {
+	c := ai.Context{Rules: rules(true, "ZZKEY-1"), Fixed: json.RawMessage(`{"key":"ZZKEY-1"}`), Targets: []ai.Target{
+		{Index: 1, Kind: "criterion", ID: "zzcriterion one", Label: "zzcriterion one"},
+		{Index: 2, Kind: "criterion", ID: "zzcriterion two", Label: "zzcriterion two", Done: true},
+		{Index: 3, Kind: "criterion", ID: "zzcriterion three"},
+		{Index: 4, Kind: "criterion", ID: "zzcriterion four"},
+	}}
+	c.Rules.Commit.Types = []string{"feat", "zzrepotype"}
+	for _, draft := range []struct {
+		id  ai.FeatureID
+		raw string
+	}{
+		{ai.FeatureCommit, `{"message": "zzmodel(PLAT-1): add quota"}`},
+		{ai.FeatureCommit, `{"message": "feat(PLAT-1): Zzadded the quota."}`},
+		{ai.FeatureCommit, `{"message": "zzmodel words only"}`},
+		{ai.FeatureCommit, `{"message": "feat(PLAT-1): add ` + strings.Repeat("zz", 40) + `"}`},
+		{ai.FeaturePR, `{"title": "zzmodel(PLAT-1): add quota", "body": "zzbody"}`},
+		{ai.FeaturePR, `{"title": "feat(PLAT-1): add ` + strings.Repeat("zz", 40) + `"}`},
+		{ai.FeatureAC, `{"checks": [
+			{"criterion": 1, "status": "not_met", "evidence": "zzevidence"},
+			{"criterion": 2, "status": "met", "evidence": "zzevidence"},
+			{"criterion": 3, "status": "zzstatus", "evidence": "zzevidence"},
+			{"criterion": 4, "status": "unclear", "evidence": "zzevidence"},
+			{"criterion": 987, "status": "met", "evidence": "zzevidence"}]}`},
+	} {
+		cands, issues := candidates(t, draft.id, c, draft.raw)
+		for _, cand := range cands {
+			issues = append(issues, cand.Issues...)
+		}
+		if len(issues) == 0 {
+			t.Errorf("%s %s: no issue to check", draft.id, draft.raw)
+		}
+		for _, is := range issues {
+			if m := strings.ToLower(is.Message); m == "" || strings.Contains(m, "zz") || strings.Contains(m, "987") {
+				t.Errorf("%s %s: message %q", draft.id, is.Code, is.Message)
+			}
+		}
+	}
+}
+
+// The CLI reads flags anywhere, so drafted text is only ever a flag's value
+// or comes after "--".
+func TestDeliveryCLIWordsCannotBecomeFlags(t *testing.T) {
+	c := ai.Context{Rules: rules(false, ""), Fixed: json.RawMessage(`{"key":"PLAT-1"}`), Targets: []ai.Target{
+		{Index: 1, Kind: "criterion", ID: "--post"},
+		{Index: 2, Kind: "criterion", ID: "ordinary words"},
+	}}
+	cands, _ := candidates(t, ai.FeatureAC, c, `{"checks": [{"criterion": 1, "status": "met", "evidence": "--yes"}, {"criterion": 2, "status": "met", "evidence": "-x"}]}`)
+	if len(cands) != 2 {
+		t.Fatalf("%+v", cands)
+	}
+	for i, want := range [][]string{
+		{"agentflow", "ac", "done", "--key", "PLAT-1", "--evidence", "--yes", "--", "--post"},
+		{"agentflow", "ac", "done", "--key", "PLAT-1", "--evidence", "-x", "--", "ordinary words"},
+	} {
+		if !slices.Equal(cands[i].CLI, want) {
+			t.Errorf("cli %q, want %q", cands[i].CLI, want)
+		}
+	}
+	cands, _ = candidates(t, ai.FeatureCommit, c, `{"message": "--yes"}`)
+	if want := []string{"agentflow", "commit", "--prepare", "-m", "--yes"}; !slices.Equal(cands[0].CLI, want) {
+		t.Errorf("commit cli %q", cands[0].CLI)
+	}
+	cands, _ = candidates(t, ai.FeaturePR, c, `{"title": "--yes", "body": "--run"}`)
+	if want := []string{"agentflow", "pr", "--prepare", "--title", "--yes", "--body", "--run"}; !slices.Equal(cands[0].CLI, want) {
+		t.Errorf("pr cli %q", cands[0].CLI)
+	}
+}

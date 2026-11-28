@@ -673,7 +673,9 @@ agentflow first shows what it would send and asks, unless you set `ai.draft` to 
 - Agents are refused (`needs_person`). They call `ai draft` or `agentflow_ai_draft`
   and pass the candidate's fields to the usual command.
 - Secret files such as `.env` are left out of these diffs, whatever your git diff
-  settings. Commit authors and `...-by:` trailers are not sent.
+  settings. A change that moves one, or deletes one, also sends no content of the
+  file it moved to or the files it adds.
+- Commit authors and `...-by:` trailers are not sent.
 - The default PR body is your PR template plus, with Jira, a link to the issue. A
   template that links out of the repository or to a secret file is not read.
 

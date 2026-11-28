@@ -23,7 +23,7 @@ type prAnswer struct {
 func (prFeature) ID() ai.FeatureID { return ai.FeaturePR }
 
 func (prFeature) Gather(ctx context.Context, a *app.App, _ ai.Request) (ai.Context, error) {
-	d, err := a.PRDraftContext(ctx)
+	d, err := a.PRDraftContext(ctx, gitDiff(a))
 	if err != nil {
 		return ai.Context{}, err
 	}
