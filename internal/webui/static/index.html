@@ -292,7 +292,7 @@
           </div>
         </section>
         <section id="page-ai" aria-labelledby="ai-title" hidden>
-          <div class="page-heading"><h1 id="ai-title" tabindex="-1">AI sessions</h1><p>A session runs a coding agent for one prompt in a task worktree of this repository. This page shows each session as it runs. Here you answer what an agent asks and cancel a session. You start a session in a terminal, not on this page.</p></div>
+          <div class="page-heading"><h1 id="ai-title" tabindex="-1">AI sessions</h1><p>A session runs a coding agent for one prompt in a task worktree of this repository. This page shows each session as it runs. Here you answer what an agent asks and cancel a session. You start a session in a terminal, not on this page, except a draft.</p></div>
           <div class="ai-note-slot">
             <p id="ai-note" class="live-note" hidden></p>
             <p id="ai-wait" class="muted">Waiting for live updates…</p>
@@ -412,7 +412,7 @@
               <p id="ai-start-lead" hidden>No session has run in this repository yet.</p>
               <p>Run this in a task worktree, not in the main checkout. Put the ID of a ready harness in place of HARNESS and your task in place of PROMPT. Agentflow shows what it will start and asks you before it does.</p>
               <pre data-command>agentflow ai run --harness HARNESS "PROMPT"</pre>
-              <p class="muted ai-hint">The <a href="#harnesses">Harnesses page</a> lists the harnesses that are ready. This page starts no session.</p>
+              <p class="muted ai-hint">The <a href="#harnesses">Harnesses page</a> lists the harnesses that are ready. This page starts no session, except a draft.</p>
             </section>
           </div>
         </section>

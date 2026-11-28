@@ -64,9 +64,20 @@
   try {
     // A command line is quoted for a POSIX shell: nothing in a word is read by the shell.
     const D = AgentflowAIDraft;
-    check(D.shellWord("") === "''" && D.shellWord("a b") === "'a b'" && D.shellWord("--prepare") === "--prepare" && D.shellWord("$HOME") === "'$HOME'" && D.shellWord("a;b") === "'a;b'" && D.shellWord("it's") === "'it'\\''s'"
-      && D.shellWord("-m") === "-m" && D.shellWord("a\nb") === "'a\nb'" && D.shellWord("~") === "'~'" && D.shellWord("*") === "'*'","a word is not quoted for a shell");
-    check(D.commandLine(["agentflow","commit","-m","it's `x` $(y)"]) === "agentflow commit -m 'it'\\''s `x` $(y)'","a command line is not quoted for a shell");
+    check(D.shellWord("") === "''" && D.shellWord("a b") === "'a b'" && D.shellWord("--prepare") === "--prepare" && D.shellWord("$HOME") === "'$HOME'" && D.shellWord("a;b") === "'a;b'" && D.shellWord("it's") === "'it'\"'\"'s'"
+      && D.shellWord("-m") === "-m" && D.shellWord("a\nb") === "'a\nb'" && D.shellWord("~") === "'~'" && D.shellWord("*") === "'*'" && D.shellWord("=ls") === "'=ls'" && D.shellWord("%1") === "'%1'" && D.shellWord("a=b%") === "a=b%"
+      && D.shellWord("a\\b") === "'a'\"\\\\\"'b'" && D.shellWord("\\") === "\"\\\\\"" && D.shellWord("'") === "\"'\"" && D.shellWord("x\\'; touch p; echo '") === "'x'\"\\\\'\"'; touch p; echo '\"'\"","a word is not quoted for bash, zsh and fish: " + D.shellWord("x\\'; touch p; echo '"));
+    check(D.commandLine(["agentflow","commit","-m","it's `x` $(y)"]) === "agentflow commit -m 'it'\"'\"'s `x` $(y)'","a command line is not quoted for a shell");
+    // No quote and no backslash is ever left inside single quotes: fish reads \' and \\ there as escapes.
+    for (const word of ["x\\'; touch p; echo '","\\\\''\\","a'b\\c","'","\\"]) check(!/'[^']*[\\][^']*'/.test(D.shellWord(word).replace(/"[^"]*"/g,"")),"a backslash is left inside single quotes: " + D.shellWord(word));
+    // A real bash, zsh and fish read each line back as the arguments of printf, word for word, and run nothing.
+    const words = ["agentflow","commit","-m","it's","x\\'; touch p; echo '","=ls","%1","a\\\\b\\","$(touch q) `touch r` $HOME ~ * ? ! # & | ; < > {a,b} \"dq\"","line\nbreak\ttab","","''","\\","-n","%s\\n","café “curly” ‘quotes’"];
+    for (const shell of ["bash","zsh","fish"]) {
+      const back = await (await fetch("/fixture/draft/shell?shell=" + shell,{method:"POST",body:D.commandLine(words)})).json();
+      check(!back.available || (!back.failed && back.files === 0 && back.out === words.map(word => word + "\u0000").join("")),shell + " does not read the command line back word for word: " + JSON.stringify(back).slice(0,600));
+    }
+    check(D.onWindows({platform:"Win32"}) && D.onWindows({userAgentData:{platform:"Windows"},platform:""}) && D.onWindows({userAgent:"Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}) && !D.onWindows({platform:"MacIntel",userAgent:"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
+      && !D.onWindows({userAgentData:{platform:"Linux"},userAgent:"X11; Linux x86_64"}) && !D.onWindows(undefined),"Windows is not told apart");
     check(D.stateView({state:"ready"}).label === "Ready to read" && D.stateView({state:"invalid"}).tone === "warn" && D.stateView({state:"failed",code:"auth_required"}).detail.includes("sign-in") && D.stateView({state:"failed",code:"new_code"}).detail.includes("Reason code new_code.")
       && D.stateView({state:"running"}).live && D.stateView({state:"unknown",code:""}).label === "Unknown state" && D.stateView({state:"cancelled"}).tone === "neutral","the draft states are not told apart");
 
@@ -199,6 +210,11 @@
     await answer("confirm",202,{});
     byID("ai-draft-prepare").click();
     await until(armed,"Send did not become ready again");
+    // The button moves: it waits again, and once it has stood still a click answers at the first try.
+    byID("ai-draft-confirm-lead").style.paddingBottom = "40px";
+    await until(() => send.getAttribute("aria-disabled") === "true","a button that moved does not wait again");
+    await until(armed,"a button that moved long ago still waits");
+    check(byID("ai-draft-confirm-status").textContent === "","the button's move was reported before a click");
     send.click();
     await until(async () => (await drafted("confirm")).length === 2 && list.hidden,"Send was not sent");
     request = (await drafted("confirm"))[1];
@@ -246,8 +262,16 @@
     const value = cards[0].querySelector(".ai-draft-value"), command = cards[0].querySelector(".ai-draft-command code");
     check(cards[0].querySelector("h5").textContent === "1. Commit message" && value.textContent === message && value.tabIndex === 0 && value.closest(".ai-said") && value.children.length === 0
       && cards[0].querySelector(".ai-said-label").textContent.startsWith("Written by the model.") && cards[0].querySelector(".ai-draft-warnings").textContent.includes("has a link"),"the model's words are not shown as its own text: " + cards[0].textContent.slice(0,300));
-    check(command.textContent === "agentflow commit --prepare -m '" + message.replaceAll("'","'\\''") + "'" && command.children.length === 0 && !command.closest(".ai-said")
-      && [...cards[0].querySelectorAll("button")].map(node => node.textContent).join() === "Copy text,Copy command" && cards[0].textContent.includes("This page runs nothing."),"the command to copy is wrong: " + command.textContent);
+    check(command.textContent === "agentflow commit --prepare -m " + message.split("'").map(piece => "'" + piece + "'").join("\"'\"") && command.children.length === 0 && !command.closest(".ai-said")
+      && [...cards[0].querySelectorAll("button")].map(node => node.textContent).join() === "Copy text,Copy command" && cards[0].textContent.includes("run it in bash, zsh or fish")
+      && cards[0].textContent.includes("This command only prepares: it shows what it would do and changes nothing. This page runs nothing.") && !cards[0].textContent.includes("as it always does"),"the command to copy is wrong: " + command.textContent);
+    // On Windows no line is safe to paste: the text can be copied, the command cannot.
+    aiPage.drafts.windows = true;
+    const win = body().querySelector(".ai-draft-candidate");
+    check(!win.querySelector(".ai-draft-command") && [...win.querySelectorAll("button")].map(node => node.textContent).join() === "Copy text" && win.querySelector(".ai-draft-windows").textContent.includes("runs on Windows")
+      && win.querySelector(".ai-draft-windows code").textContent === "agentflow commit --prepare -m MESSAGE" && win.textContent.includes("This page runs nothing.") && !body().textContent.includes("'feat:"),"a command is offered to copy on Windows: " + win.textContent.slice(-400));
+    aiPage.drafts.windows = false;
+    check(body().querySelector(".ai-draft-command"),"the command did not come back");
     check(cards[1].querySelector(".ai-draft-about code").textContent.startsWith("b.go:3, bob") && cards[1].querySelector(".ai-draft-about .ai-mark").textContent === "<U+200B>" && cards[1].textContent.includes("Agentflow took this text out.") && cards[1].querySelector(".ai-draft-issues").textContent.includes("looks like it holds a secret")
       && !cards[1].querySelector(".ai-draft-command") && cards[1].querySelectorAll("button").length === 0,"a candidate with an issue is offered: " + cards[1].textContent.slice(0,300));
     check(cards[2].querySelector("h5").textContent === "3. Candidate" && !cards[2].querySelector(".ai-draft-command") && cards[2].querySelectorAll("button").length === 0 && cards[2].querySelector(".ai-draft-value").textContent === "hidden � text"
@@ -313,7 +337,15 @@
     await post("emit",snapshot(20,[entry(state([record(7,"reply","running",{created_at:at(0)}),invalid,failed,signin,future,ready(2)]))]));
     await until(() => label() === "Live" && byID("ai-draft-confirm-offline").hidden,"the stream did not come back");
     check(!body().querySelector(".ai-ask-offline"),"the draft still says that it is offline");
+    // The time to send runs out: said once, Send goes away, and focus stays on a control.
+    await until(armed,"Send did not become ready for the ticket");
+    send.focus();
+    aiPage.drafts.asking.until = 0;
+    await until(() => send.hidden,"Send stayed after the time ran out");
+    check(document.activeElement === discard && discard.textContent === "Back to the request" && byID("ai-draft-confirm-time").textContent.startsWith("The time to send ran out."),"the end of the time dropped focus: " + document.activeElement.tagName);
+    await until(() => said().includes("The time to send ran out. Nothing was sent."),"the end of the time was not announced: " + said());
     discard.click();
+    check(note() === "The time to send ran out. Nothing was sent." && !byID("ai-draft-compose").hidden && byID("ai-draft-text").value.startsWith("The page needs"),"Back to the request lost the request: " + note());
     byID("ai-draft-close").click();
     check(byID("ai-draft-compose").hidden && document.activeElement === open("ticket") && open("ticket").getAttribute("aria-expanded") === "false","Close did not return to the feature");
 
@@ -323,6 +355,10 @@
     const done = record(7,"reply","ready",{created_at:at(0),ended_at:at(0),draft:{session:id(7),feature:"reply",state:"ready",candidates:[{operation:"review.reply",cli:["agentflow","review","reply","T1","ok"],fields:[{name:"reply",label:"Reply",value:"ok"}]}],finished:at(0)}});
     await post("emit",delta(21,"ai.session.ended",[entry(state([done,invalid,failed,signin,future,ready(2)]))]));
     await until(() => said().includes("Review replies draft: ready to read, 1 candidate. Read it on the AI sessions page."),"a finished draft was not announced on another page: " + said());
+
+    row(7).click();
+    check(body().textContent.includes("This command runs under your autonomy settings, and may act without asking you first. This page runs nothing.") && !body().textContent.includes("only prepares"),"a reply's command is said to ask first");
+    check(byID("ai-title").parentElement.textContent.includes("not on this page, except a draft.") && page.querySelector(".ai-start").textContent.includes("This page starts no session, except a draft."),"the page says that it starts nothing");
 
     // The page sent only the three requests, and nothing made the model's or the repository's text an element.
     check((await drafted()).every(item => item.route === "draft" || item.route === "confirm") && (await drafted("confirm")).length === 2 && (await others()).length === 1 && (await others())[0].route === "cancel","the page sent another request");

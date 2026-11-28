@@ -115,7 +115,10 @@ bottom:
   they stack, **Discard** first.
 - **Send answers only when it has stood still for 1.2 s.** A click on a button that just
   appeared or moved does nothing and reads "The button just appeared. Read the list, then
-  choose again."
+  choose again." The view looks where the button is once a second, so a move that is over
+  refuses nothing.
+- When the five minutes run out, the view says so once, **Send** goes away, **Discard**
+  reads **Back to the request**, and focus moves there if it was on **Send**.
 - **Send** is absent, and the box says why, when the page cannot show every part (a part
   without a size or a name, more than 32 parts, no harness, no confirmation), and when the
   five minutes ran out.
@@ -167,11 +170,23 @@ gets none, so Agentflow refused."
 | For | the thread, criterion or section it is for | the repository's or a reviewer's |
 | **Written by the model. …** | each drafted field: its name, its size, **Copy text** and the text in a box that scrolls and takes focus | the model's |
 | **Look at this before you use it** | the warnings: a mention, a link | Agentflow's |
-| **To use it, copy this command and run it in a terminal** | the command, **Copy command**, and "The command asks you before it changes anything, as it always does. This page runs nothing." | Agentflow's |
+| **To use it, copy this command and run it in bash, zsh or fish** | the command, **Copy command**, and what running it does (below) | Agentflow's |
 
-- **The command** is the candidate's `cli` with each word quoted for a POSIX shell: a word
-  of plain characters as it is, any other in single quotes. Inside single quotes a shell
-  reads nothing, so `$(…)`, backticks and line breaks in the drafted text stay text.
+- **The command** is the candidate's `cli`, quoted for bash, zsh and fish. A word of plain
+  characters is written as it is, unless it starts with `=` or `%`, which zsh and fish
+  expand. Any other word is written in pieces: text in single quotes, and each run of
+  single quotes and backslashes in double quotes with the backslash doubled (`'` becomes
+  `"'"`, `\` becomes `"\\"`). No quote or backslash is left inside single quotes, because
+  fish reads `\'` and `\\` there as escapes. So `$(…)`, backticks, line breaks and
+  `x\'; touch p; echo '` in the drafted text stay text in all three shells.
+- **On Windows no command is offered.** PowerShell and cmd read quotes in other ways, and
+  PowerShell takes curly quotes as quote marks, so no line is safe to paste. The card says
+  so and shows the command's form, for example `agentflow commit --prepare -m MESSAGE`.
+  **Copy text** stays on each field.
+- **What running it does** is worded for the operation. `commit.prepare` and `pr.prepare`:
+  "This command only prepares: it shows what it would do and changes nothing." Every other
+  operation: "This command runs under your autonomy settings, and may act without asking
+  you first." Both end with "This page runs nothing."
 - The command is not offered when the candidate has issues: **Agentflow does not offer this
   candidate** lists them. A text Agentflow took out reads "Agentflow took this text out."
 - The command is also not offered when the page cannot show all of it as it is: a first
@@ -222,7 +237,8 @@ state that follows `ai.session.ended` holds it.
 
 `go test ./internal/webui -run TestAIDraftBrowser` runs `testdata/ai-draft/ai-draft-test.js`
 in a browser (set `AGENTFLOW_TEST_CHROME`) against a scripted stream and fake endpoints. It
-covers the readers, the shell quoting, each feature state, the request and its limits,
+covers the readers, the shell quoting (each line is read back by a real bash, zsh and fish
+when they are installed, as arguments of `printf`), Windows, the end of the time to send, each feature state, the request and its limits,
 refusals, the list and what can be sent, a button that just appeared, Discard, a manifest
 that changed, a draft that starts at once, Cancel, the candidates with hostile text, every
 draft state, a lost connection, and that the page sends nothing but the three requests. No

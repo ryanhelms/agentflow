@@ -55,12 +55,34 @@
   const startWithin = 10000;           // how long "Sent" waits for the stream to show the draft
   const forgetAfter = 120000;          // when the page stops waiting for a draft it sent
 
-  // A command line for a POSIX shell: a word of plain characters as it is,
-  // any other in single quotes, where the shell reads every character as
-  // itself. A single quote ends the quotes, is written escaped, and opens
-  // them again.
-  const shellWord = word => plainWord.test(word) ? word : "'" + word.replaceAll("'", "'\\''") + "'";
+  // A command line for bash, zsh and fish. A word of plain characters is
+  // written as it is, unless it starts with = or %, which zsh and fish
+  // expand. Any other word is written in pieces: text in single quotes,
+  // where all three shells read every character as itself, and each run of
+  // single quotes and backslashes in double quotes, with the backslash
+  // doubled. A quote or a backslash is never left inside single quotes:
+  // fish reads \' and \\ there as escapes, so it would end the quotes early.
+  // Two single-quoted pieces never touch, so zsh's RC_QUOTES changes nothing.
+  function shellWord(word) {
+    if (plainWord.test(word) && !/^[=%]/.test(word)) return word;
+    if (word === "") return "''";
+    return word.split(/([\\']+)/).filter(Boolean).map(piece => /^[\\']/.test(piece) ? '"' + piece.replaceAll("\\", "\\\\") + '"' : "'" + piece + "'").join("");
+  }
   const commandLine = words => words.map(shellWord).join(" ");
+  // PowerShell and cmd read quotes in other ways (PowerShell also takes curly
+  // quotes as quote marks), so no line is safe to paste there.
+  const onWindows = nav => /win/i.test(nav?.userAgentData?.platform || nav?.platform || "") || /Windows/.test(nav?.userAgent || "");
+  // What running a candidate's command does, and the command's form for a
+  // reader who passes the text in themselves.
+  const prepares = ["commit.prepare", "pr.prepare"];
+  const usage = {
+    "commit.prepare": "agentflow commit --prepare -m MESSAGE", "pr.prepare": "agentflow pr --prepare --title TITLE --body BODY",
+    "task.create": "agentflow task create --summary SUMMARY --description DESCRIPTION", "ac.update": "agentflow ac done ITEM --evidence EVIDENCE",
+    "review.reply": "agentflow review reply THREAD_ID BODY"
+  };
+  const effect = operation => (prepares.includes(operation)
+    ? "This command only prepares: it shows what it would do and changes nothing."
+    : "This command runs under your autonomy settings, and may act without asking you first.") + " This page runs nothing.";
 
   const size = n => n < 1024 ? n + (n === 1 ? " byte" : " bytes") : (n / 1024).toFixed(1) + " KiB";
   function duration(ms) {
@@ -264,6 +286,7 @@
     let confirm = null; // {id, manifest, until, armedAt, place, said}
     let pending = null; // a draft this page sent that the stream has not shown: {feature, at, known}
     let selected = "", cancel = {session: "", state: "", message: ""};
+    let windows = onWindows(globalThis.navigator);
 
     // Replace a part only when what it shows changed. It says whether focus
     // was inside, so the caller can put it somewhere that still exists.
@@ -397,7 +420,7 @@
         out.push(box);
       }
       if (m.hint) out.push(label("Your hint, as it is sent"), textBox(m.hint, "Your hint", "ai-draft-own", maxSent));
-      if (m.text) out.push(label("Your description, as it is sent"), textBox(m.text, "Your description", "ai-draft-own", maxSent));
+      if (m.text) out.push(label("Your description, as it is sent"), textBox(m.text, "Your description", "ai-draft-own ai-draft-own-long", maxSent));
       if (m.never.length) {
         const never = element("details", "", "ai-more ai-draft-never");
         never.append(element("summary", "Never sent, by any draft"));
@@ -612,11 +635,25 @@
       clock_.dataset.state = over ? "over" : left <= 60000 ? "soon" : "";
       const send = find("ai-draft-send"), discard = find("ai-draft-discard");
       put(send.querySelector(".ai-draft-send-label"), "Send to " + (m?.name || "the harness"));
+      if (over && !confirm.over) {
+        // Said once; focus stays on a control that is still there.
+        confirm.over = true;
+        options.announce("The time to send ran out. Nothing was sent.");
+        if (document.activeElement === send) discard.focus({preventScroll: true});
+      }
+      put(discard, over ? "Back to the request" : "Discard");
       send.hidden = !whole || over;
       const busy = step === "sending";
       send.disabled = busy;
       discard.disabled = busy;
-      if (!send.hidden && !confirm.place) confirm.place = where(send);
+      if (!send.hidden) {
+        // A button that moved waits again from now, so only a recent move refuses a click.
+        const place = where(send);
+        if (place !== confirm.place) {
+          if (confirm.place) confirm.armedAt = Math.max(confirm.armedAt, t + armFor);
+          confirm.place = place;
+        }
+      }
       const waits = !busy && t < confirm.armedAt;
       if (waits) send.setAttribute("aria-disabled", "true");
       else send.removeAttribute("aria-disabled");
@@ -628,9 +665,10 @@
     function discard() {
       if (step !== "confirm") return;
       sequence++;
+      const late = Boolean(confirm?.over);
       confirm = null;
       step = "compose";
-      note = {text: "Discarded. Nothing was sent.", bad: false};
+      note = {text: late ? "The time to send ran out. Nothing was sent." : "Discarded. Nothing was sent.", bad: false};
       render();
       find("ai-draft-compose-title").focus();
     }
@@ -759,9 +797,14 @@
       if (item.warnings.length) card.append(label("Look at this before you use it"), notes(item.warnings, "ai-draft-warnings"));
       if (item.issues.length) {
         card.append(label("Agentflow does not offer this candidate"), notes(item.issues, "ai-draft-issues"));
+      } else if (item.command && windows) {
+        // No line is safe to paste into PowerShell or cmd, so none is offered.
+        const why = element("p", "This browser runs on Windows, where a pasted command could run drafted text, so Agentflow offers none to copy. To use the draft, copy each text above and pass it to the command yourself" + (usage[item.operation] ? ": " : ". To read the draft in a terminal: "), "ai-ask-fixed ai-draft-windows");
+        why.append(element("code", usage[item.operation] || "agentflow ai status " + session));
+        card.append(why, element("p", effect(item.operation), "muted ai-hint"));
       } else if (item.command) {
         const head = element("div", "", "ai-draft-field-head ai-draft-use");
-        head.append(label("To use it, copy this command and run it in a terminal"), copyButton("Copy command", item.command, "Command for " + what));
+        head.append(label("To use it, copy this command and run it in bash, zsh or fish"), copyButton("Copy command", item.command, "Command for " + what));
         const line = element("div", "", "ai-command ai-draft-command");
         const pre = element("pre");
         pre.tabIndex = 0;
@@ -769,7 +812,7 @@
         pre.setAttribute("aria-label", "Command for " + what);
         pre.append(marked(element("code"), item.command));
         line.append(pre);
-        card.append(head, line, element("p", "The command asks you before it changes anything, as it always does. This page runs nothing.", "muted ai-hint"));
+        card.append(head, line, element("p", effect(item.operation), "muted ai-hint"));
       } else {
         const why = element("p", "This console cannot show the whole command as it is, so it does not offer it. Read the draft in a terminal: ", "ai-ask-fixed");
         why.append(element("code", "agentflow ai status " + session));
@@ -844,7 +887,7 @@
       put(find("ai-draft-item-name"), item.label);
       setTag(find("ai-draft-item-state"), view.label, view.tone);
       put(find("ai-draft-item-detail"), view.detail);
-      const signature = JSON.stringify([item, cancel.session === item.id ? cancel : null, view.live && offline(), Boolean(offered(item.feature))]);
+      const signature = JSON.stringify([item, cancel.session === item.id ? cancel : null, view.live && offline(), Boolean(offered(item.feature)), windows]);
       if (refill(find("ai-draft-item-body"), signature, () => buildItem(item, view))) find("ai-draft-item-title").focus({preventScroll: true});
     }
 
@@ -957,9 +1000,13 @@
       show, status, tick, select, read,
       get state() { return current; },
       get selected() { return selected; },
-      get step() { return step; }
+      get step() { return step; },
+      // For the browser test and the fixture: the list the reader decides on, and the platform.
+      get asking() { return confirm; },
+      get windows() { return windows; },
+      set windows(value) { windows = value === true; if (current) renderItem(); }
     };
   }
 
-  scope.AgentflowAIDraft = {createDraft, reader, stateView, commandLine, shellWord};
+  scope.AgentflowAIDraft = {createDraft, reader, stateView, commandLine, shellWord, onWindows};
 })(globalThis);

@@ -695,6 +695,7 @@ span.ico-plugin { width: .8rem; margin-inline: 0 .12rem; }
 .ai-draft-target-list { display: grid; gap: var(--s-2); margin: var(--s-2) 0 0; padding-inline-start: 1.6rem; }
 .ai-draft-never-list { margin: var(--s-1) 0 0; padding-inline-start: 1.1rem; color: var(--text-muted); font-size: var(--fs-sm); }
 #page-ai .ai-draft-own { max-height: 10rem; margin-top: var(--s-1); font-family: var(--font); font-size: var(--fs-sm); }
+#page-ai .ai-draft-own-long { max-height: 24rem; }
 .ai-draft-excluded:focus-visible, .ai-draft-command pre:focus-visible { outline-offset: -2px; }
 
 /* The drafts. The model's words sit in a dashed box of their own, over Agentflow's findings and the command. */

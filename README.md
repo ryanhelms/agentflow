@@ -639,7 +639,8 @@ choose **Send** or **Discard**; **Send** answers only after it has stood still f
 a moment, and is absent when the page cannot show the whole list. A draft shows
 as it runs and can be cancelled. A finished draft shows each candidate: the
 model's words as plain text in a box of their own, the warnings, and the command
-to copy into a terminal, quoted for a shell. The console applies nothing.
+to copy into a terminal, quoted for bash, zsh and fish. On Windows it offers the
+text to copy and no command. The console applies nothing.
 [Draft view design](docs/design/ui/ai-draft.md)
 
 The **Configuration** page edits the other registered files (provider

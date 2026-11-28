@@ -1,11 +1,13 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,12 +91,42 @@ func (f *aiDraftEndpoints) serve(route string) http.HandlerFunc {
 	}
 }
 
+// shellWords has a real shell read a line the page quoted, as the arguments
+// of printf: each word comes back followed by a NUL. The line is never a
+// command of its own. The shell starts without its startup files, with an
+// empty environment, in dir. available is false when the shell is not
+// installed.
+func shellWords(ctx context.Context, shell, dir, line string) (out string, available bool, err error) {
+	flags := map[string][]string{"bash": {"--norc", "--noprofile"}, "zsh": {"-f"}, "fish": {"--no-config"}}[shell]
+	path, lookErr := exec.LookPath(shell)
+	if flags == nil || lookErr != nil {
+		return "", false, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, append(flags, "-c", `printf '%s\0' `+line)...)
+	cmd.Dir = dir
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + dir}
+	b, err := cmd.Output()
+	return string(b), true, err
+}
+
 // install adds the two routes under the console's worktree path and the
 // routes the checks file reads and scripts them with:
 //
 //	GET  /fixture/draft/requests the draft and confirm requests seen so far
 //	POST /fixture/draft/answer   answer ?route= (draft or confirm) with ?status= and the body
-func (f *aiDraftEndpoints) install(mux *http.ServeMux) {
+//	POST /fixture/draft/shell    read the body, a quoted line, back through ?shell= (bash, zsh or fish)
+func (f *aiDraftEndpoints) install(t *testing.T, mux *http.ServeMux) {
+	dir := t.TempDir()
+	mux.HandleFunc("POST /fixture/draft/shell", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<16))
+		out, available, err := shellWords(r.Context(), r.URL.Query().Get("shell"), dir, string(body))
+		// A word that ran as a command would leave a file behind.
+		left, _ := os.ReadDir(dir)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"available": available, "out": out, "failed": err != nil, "files": len(left)})
+	})
 	mux.HandleFunc("POST /w/first/api/ai/draft", f.serve("draft"))
 	mux.HandleFunc("POST /w/first/api/ai/draft/confirm", f.serve("confirm"))
 	mux.HandleFunc("GET /fixture/draft/requests", func(w http.ResponseWriter, _ *http.Request) {
@@ -124,5 +156,5 @@ func aiDraftConsoleFixture(t *testing.T, mux *http.ServeMux, origin, checksFile 
 	t.Helper()
 	aiConsoleFixture(t, mux, origin, checksFile)
 	endpoints := &aiDraftEndpoints{requests: []map[string]string{}, answers: map[string]aiDraftAnswer{}}
-	endpoints.install(mux)
+	endpoints.install(t, mux)
 }
