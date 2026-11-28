@@ -26,6 +26,9 @@ const (
 	// and b/ prefixes, or a quoted name that does not unquote), so its
 	// content is left out rather than checked against the wrong path.
 	ExcludedUnparsed = "unparsed_header"
+	// ExcludedSecretMoved: the draft's diffs delete or rename away a secret
+	// file, so a file they add may be that secret under a new name.
+	ExcludedSecretMoved = "secret_moved"
 )
 
 // generatedFiles are left out of a diff by base name; generatedSuffixes
@@ -72,6 +75,7 @@ type FilterOptions struct {
 // secret_in_context, naming the part, never the match.
 func Filter(parts []Part, o FilterOptions) ([]Part, error) {
 	out := make([]Part, 0, len(parts))
+	moved := secretRemoved(parts)
 	for _, p := range parts {
 		p.Original = len(p.Text)
 		p.Label = labelText(p.Label)
@@ -85,7 +89,7 @@ func Filter(parts []Part, o FilterOptions) ([]Part, error) {
 		// 2. Diffs: secret, binary and generated files lose their content.
 		if p.Kind == PartDiff {
 			var ex []Exclusion
-			t, ex = leaveOut(t)
+			t, ex = leaveOut(t, moved)
 			p.Excluded = append(p.Excluded, ex...)
 		}
 		// 3. Hidden characters made visible.
@@ -202,6 +206,8 @@ type diffFile struct {
 	path  string   // the new path (b/), or the old one for a deletion
 	paths []string // every path the section names: a/, b/, ---, +++, rename and copy lines
 	bad   bool     // a "diff --git" section whose header did not parse
+	added bool     // a new file (new file mode, or --- /dev/null)
+	gone  bool     // a deleted file (deleted file mode, or +++ /dev/null)
 	text  string
 }
 
@@ -242,6 +248,13 @@ func splitDiff(diff string) []diffFile {
 			cur.bad = true
 		case header && strings.HasPrefix(line, "@@"):
 			header = false
+		case header && strings.HasPrefix(line, "new file mode"):
+			cur.added = true
+		case header && strings.HasPrefix(line, "deleted file mode"):
+			cur.gone = true
+		case header && (line == "--- /dev/null" || line == "+++ /dev/null"):
+			cur.added = cur.added || line == "--- /dev/null"
+			cur.gone = cur.gone || line == "+++ /dev/null"
 		case header && (strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ")):
 			p, ok := diffName(line[4:], true)
 			if !ok {
@@ -356,9 +369,35 @@ func cQuoted(s string) (string, string, bool) {
 	return "", "", false
 }
 
+// secretRemoved reports whether any diff part deletes a secret file or
+// renames one away. Git shows a moved file as a delete and an add when
+// rename detection is off or the move came with large edits, so then no
+// added file of any diff part is sent: one of them may be the secret under
+// a new name. The rule spans every diff part of the draft (a branch diff
+// and a staged diff, say), since a file can leave in one and arrive in the
+// other.
+func secretRemoved(parts []Part) bool {
+	for _, p := range parts {
+		if p.Kind != PartDiff {
+			continue
+		}
+		for _, f := range splitDiff(p.Text) {
+			secret := false
+			for _, q := range f.paths {
+				secret = secret || aisession.IsSecretFile(q)
+			}
+			renamedAway := secret && !aisession.IsSecretFile(f.path)
+			if secret && (f.gone || renamedAway) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // leaveOut removes the content of secret, binary and generated files from
 // a diff; each file's first line stays, with a line saying why.
-func leaveOut(diff string) (string, []Exclusion) {
+func leaveOut(diff string, moved bool) (string, []Exclusion) {
 	var b strings.Builder
 	var ex []Exclusion
 	for _, f := range splitDiff(diff) {
@@ -371,6 +410,8 @@ func leaveOut(diff string) (string, []Exclusion) {
 		switch {
 		case f.bad:
 			reason = ExcludedUnparsed
+		case moved && f.added:
+			reason = ExcludedSecretMoved
 		case f.path == "":
 		case secret:
 			reason = ExcludedSecretFile

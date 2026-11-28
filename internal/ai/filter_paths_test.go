@@ -145,3 +145,77 @@ func TestFilterCombinedDiff(t *testing.T) {
 		}
 	}
 }
+
+// TestFilterMovedSecret: a secret file moved under another name shows as a
+// delete and an add when rename detection is off or the move came with
+// large edits. No added file's content reaches the built prompt then, in
+// the same diff part or another one.
+func TestFilterMovedSecret(t *testing.T) {
+	for _, renames := range []string{"false", "true"} {
+		t.Run("diff.renames="+renames, func(t *testing.T) {
+			dir := t.TempDir()
+			git := func(args ...string) {
+				t.Helper()
+				cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.invalid"}, args...)...)
+				cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+				if out, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v %s", args, err, out)
+				}
+			}
+			write := func(name, body string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			git("init", "-q", "-b", "main")
+			git("config", "diff.renames", renames)
+			write(".env", "A=1\nB=2\nC=3\n")
+			write("a.go", "package a\n")
+			git("add", ".")
+			git("commit", "-q", "-m", "base")
+			git("mv", ".env", "settings.txt")
+			// Heavily edited, so even rename detection sees a delete and an add.
+			write("settings.txt", "DB_PASSWORD=MARKER_never_sent\nX=MARKER_never_sent_too\n")
+			write("a.go", "package a\n\n// changed\n")
+			git("add", ".")
+			t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+			out, err := GitDiff(context.Background(), &app.App{Repo: &gitx.Repo{Dir: dir}}, "--cached")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out, "MARKER_never_sent") || !strings.Contains(out, "new file mode") {
+				t.Fatalf("no delete and add to test:\n%s", out)
+			}
+			// The same diff, and the delete and the add in two parts.
+			i := strings.Index(out, "diff --git a/settings.txt")
+			splits := [][]string{{out}, {out[:i], out[i:]}}
+			for _, texts := range splits {
+				var parts []Part
+				for _, tx := range texts {
+					parts = append(parts, Part{Kind: PartDiff, Label: "changes", Source: "git", Text: tx})
+				}
+				filtered, err := Filter(parts, FilterOptions{})
+				if err != nil {
+					t.Fatal(err)
+				}
+				built := PromptBuilder{Feature: FeatureCommit, Task: "t", Parts: filtered}.Build()
+				if strings.Contains(built.Prompt, "MARKER_never_sent") {
+					t.Errorf("%d parts: the moved secret is in the prompt", len(parts))
+				}
+				if !strings.Contains(built.Prompt, "+// changed") {
+					t.Errorf("%d parts: an edited file was left out", len(parts))
+				}
+				found := false
+				for _, p := range filtered {
+					for _, e := range p.Excluded {
+						found = found || e.Path == "settings.txt" && e.Reason == ExcludedSecretMoved
+					}
+				}
+				if !found {
+					t.Errorf("%d parts: settings.txt not listed as %s: %+v", len(parts), ExcludedSecretMoved, filtered)
+				}
+			}
+		})
+	}
+}
