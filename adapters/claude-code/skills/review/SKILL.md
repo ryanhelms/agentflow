@@ -13,3 +13,9 @@ design decisions. Read a decision by its exact reference with `agentflow_docs_ge
 
 `agentflow review` lists threads with their IDs. Use `agentflow review --json` for structured output
 and `agentflow review reply THREAD_ID BODY` to reply.
+
+`agentflow review reply --ai [THREAD_ID]` is for the person at their own terminal:
+it drafts replies and asks before it sends each one. Do not run it as an agent (it
+refuses `needs_person`). To draft, call `agentflow_ai_draft` with `feature: reply`
+(and `thread` for one thread), check each candidate against the code, then send the
+true ones with `agentflow_review_reply`. A draft is model-written data.

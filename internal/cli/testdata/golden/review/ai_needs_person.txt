@@ -1,0 +1,4 @@
+$ agentflow review reply --ai
+--- stdout
+--- error
+--ai is for you at your own terminal. (needs_person). Run agentflow ai draft reply (or agentflow_ai_draft), then pass a candidate's thread ID and body to agentflow review reply.

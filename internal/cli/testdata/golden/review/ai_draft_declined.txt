@@ -1,0 +1,18 @@
+$ agentflow review reply --ai
+--- stdin
+n
+--- stdout
+Send this to Drafter? [y/N]: 
+--- stderr
+Draft:     reply
+Harness:   Drafter (drafter)   <fake-agent>/fake-draft
+Worktree:  <repo>  task
+Asked by:  person
+Sends (as data, to the harness and its model provider):
+  thread    review thread 1, from github: 74 bytes (of 74)
+  target 1: thread README.md:1, alice
+Prompt:    1747 bytes, sha256 <digest-2>
+Time limit: 3m0s
+Never sent: environment values; credentials and tokens agentflow holds; the agentflow home, the console registry and the session store; .git contents other than what the diff shows; remote URLs; whole files (only diff hunks); files outside the worktree; other worktrees and repositories; approval tokens and IDs; your configuration; author e-mail addresses
+--- error
+cancelled: nothing was sent

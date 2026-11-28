@@ -1,0 +1,4 @@
+$ agentflow task create --ai --description "Add a greeting"
+--- stdout
+--- error
+--ai is for you at your own terminal. (needs_person). Run agentflow ai draft ticket --text TEXT (or agentflow_ai_draft), then pass the candidate's summary and description to agentflow task create.
