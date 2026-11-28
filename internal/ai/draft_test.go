@@ -352,3 +352,26 @@ func TestEveryFeatureHasAHarnessField(t *testing.T) {
 		t.Skipf("not registered yet (lanes 8.2 and 8.3): %v", missing)
 	}
 }
+
+// TestManifestShowsAllSent: the manifest shows the caller's hint and a
+// ticket's description in full, exactly as the prompt carries them, at
+// every size the request allows.
+func TestManifestShowsAllSent(t *testing.T) {
+	r := newRig(t, acptest.Draft(), config.UserAIFeatures{Ticket: config.UserAIFeature{Harness: "drafter"}})
+	aitest.Use(t, &aitest.Feature{FeatureID: ai.FeatureTicket, GatherFn: func(_ context.Context, _ *app.App, req ai.Request) ([]ai.Part, error) {
+		return []ai.Part{{Kind: ai.PartText, Label: "your description", Source: "caller", Text: req.Text}}, nil
+	}})
+	text := strings.Repeat("words of the description ", (ai.MaxText-64)/25) + "TAIL_OF_TEXT"
+	hint := strings.Repeat("h", ai.MaxHint-16) + "TAIL_OF_HINT"
+	p, err := ai.Prepare(person(), r.a, r.o, ai.Request{Feature: ai.FeatureTicket, Text: text, Hint: hint})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := p.Manifest
+	if !strings.HasSuffix(m.Text, "TAIL_OF_TEXT") || !strings.Contains(p.Prompt(), m.Text) {
+		t.Errorf("manifest text %d bytes of %d sent; tail shown: %v", len(m.Text), len(text), strings.HasSuffix(m.Text, "TAIL_OF_TEXT"))
+	}
+	if !strings.HasSuffix(m.Hint, "TAIL_OF_HINT") || !strings.Contains(p.Prompt(), m.Hint) {
+		t.Errorf("manifest hint %d bytes of %d", len(m.Hint), len(hint))
+	}
+}

@@ -157,6 +157,10 @@ func (s *server) aiDraft(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !allowDraft(s, aiNow()) {
+		problem(w, http.StatusTooManyRequests, "too many draft requests: wait a minute")
+		return
+	}
 	s.aiDraftInvoke(w, r, input, "")
 }
 
@@ -173,6 +177,12 @@ func (s *server) aiDraftConfirm(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	// The rate limit is checked before the confirmation is used, so a
+	// refused request leaves it for the next try.
+	if !allowDraft(s, aiNow()) {
+		problem(w, http.StatusTooManyRequests, "too many draft requests: wait a minute")
+		return
+	}
 	k, ok := takeConfirm(s, in.Confirm)
 	if !ok {
 		reply(w, http.StatusConflict, aiDraftRefusal{Code: "expired", Message: "This confirmation is no longer valid.", Fix: "Request the draft again."})
@@ -186,10 +196,6 @@ func (s *server) aiDraftInvoke(w http.ResponseWriter, r *http.Request, input jso
 	jc, isJSON := cmd.(command.JSONCommand)
 	if !ok || !isJSON {
 		problem(w, http.StatusServiceUnavailable, "AI drafts are not available in this build")
-		return
-	}
-	if !allowDraft(s, aiNow()) {
-		problem(w, http.StatusTooManyRequests, "too many draft requests: wait a minute")
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), aiDraftTimeout)
