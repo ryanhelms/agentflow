@@ -81,6 +81,9 @@ Agentflow filters the context before it builds the prompt:
 - it leaves out a file's changes when its diff header cannot be read, for example
   when git writes paths without the `a/` and `b/` prefixes, and the changes of a
   combined diff (`diff --cc`, written for a conflict or a merge);
+- when the draft's diffs delete or rename away a secret-looking file, it leaves out
+  every file those diffs add, because git can show a moved file as a delete and an
+  add;
 - it shows hidden and control characters as visible codes;
 - it redacts token shapes it knows;
 - it cuts each part to its size limit, and refuses a prompt larger than the limit
