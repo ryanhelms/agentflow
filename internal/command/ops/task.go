@@ -128,7 +128,9 @@ func init() {
 			},
 			Run: runTaskCreate,
 			Usage: "  task create [--summary S] [--project P] [--type T] [--description D] [--link-to REF]\n" +
-				"              [--template NAME --template-revision REV] [--dry-run] [--yes]",
+				"              [--template NAME --template-revision REV] [--dry-run] [--yes]\n" +
+				"  task create --ai --description TEXT [the flags above, except --summary and --yes]\n" +
+				"                                 draft the ticket from your description first",
 			Section: command.SectionWork,
 			Order:   2100,
 		},

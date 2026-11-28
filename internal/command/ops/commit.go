@@ -132,7 +132,7 @@ func init() {
 	command.Register(commitSpec)
 	command.RegisterVerb(command.Verb{
 		Path:    []string{"commit"},
-		Usage:   "  commit [-m MSG] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow",
+		Usage:   "  commit [-m MSG | --ai] [--path PATH] [--prepare | --confirm-token TOKEN] [--split] [--dry-run] [--yes]   guided commit using the configured workflow; --ai drafts the message first",
 		Section: command.SectionWork,
 		Order:   4300,
 		Run:     runCommit,

@@ -99,7 +99,7 @@ func init() {
 		prMarkReadyPrepareSpec, prMarkReadySpec))
 	command.RegisterVerb(command.Verb{
 		Path:    []string{"pr"},
-		Usage:   "  pr [--check] [--run] [--title T] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR",
+		Usage:   "  pr [--check] [--run] [--title T | --ai] [--draft] [--prepare | --confirm-token TOKEN] [--yes]   readiness check, then open the PR; --ai drafts the title and body",
 		Section: command.SectionWork,
 		Order:   4700,
 		Run:     runPR,

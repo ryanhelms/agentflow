@@ -71,7 +71,7 @@ func init() {
 	command.Register(acUpdate)
 	command.RegisterVerb(command.Verb{
 		Path:    []string{"ac"},
-		Usage:   "  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state",
+		Usage:   "  ac [list] [KEY] [--json]       acceptance criteria checklist with local done state\n  ac --ai [KEY]                  draft criteria checks against the branch; asks before each tick",
 		Section: command.SectionWork,
 		Order:   3000,
 		Run:     runAC,

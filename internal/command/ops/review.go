@@ -47,7 +47,7 @@ var (
 			},
 			Interspersed: true,
 			Confirm:      true,
-			Usage:        "  review reply THREAD_ID BODY [--yes]   reply on a review thread",
+			Usage:        "  review reply THREAD_ID BODY [--yes]   reply on a review thread\n  review reply --ai [THREAD_ID]  draft replies to open threads; asks before each one",
 			Section:      command.SectionWork,
 			Order:        4900,
 		},
