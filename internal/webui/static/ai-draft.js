@@ -33,7 +33,7 @@
   const draftStates = ["starting", "running", "cancelling", "ready", "invalid", "failed", "cancelled"];
   const partNames = {diff: "Diff", diffstat: "Summary of the changes", files: "Changed files", commits: "Commits", rules: "Rules", task: "Task", criteria: "Acceptance criteria", template: "Template", thread: "Review thread", text: "Your description", hint: "Your hint"};
   const sourceNames = {git: "git", caller: "you", github: "GitHub"};
-  const exclusions = {secret_file: "looks like a secret file", binary: "binary file", generated: "generated file", too_large: "too large"};
+  const exclusions = {secret_file: "looks like a secret file", binary: "binary file", generated: "generated file", too_large: "too large", secret_moved: "added while a secret file was removed", unparsed_header: "its diff header could not be read"};
   const targetNames = {criterion: "acceptance criterion", thread: "review thread", section: "template section"};
   const operations = {"commit.prepare": "Commit message", "pr.prepare": "Pull request title and body", "task.create": "Ticket", "ac.update": "Acceptance criterion to tick", "review.reply": "Review reply"};
 
