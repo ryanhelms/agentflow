@@ -180,8 +180,17 @@ func TestDurationLimitsAreTheOnesTheCodeChecks(t *testing.T) {
 			return err
 		}
 	}
+	draftDuration := func(t *testing.T, value string) error {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(home, "config.yml"), []byte("ai:\n  drafts:\n    max_duration: "+value+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := config.LoadUser()
+		return err
+	}
 	load := map[string]func(*testing.T, string) error{
-		"personal:approval_window": user, "repo:policy.max_approval_window": repo,
+		"personal:ai.drafts.max_duration": draftDuration,
+		"personal:approval_window":        user, "repo:policy.max_approval_window": repo,
 		"personal:ai.harnesses.poll_interval": userKey("poll_interval"),
 		"personal:ai.harnesses.probe_timeout": userKey("probe_timeout"),
 		"personal:ai.sessions.max_duration":   sessionDuration("max_duration"),

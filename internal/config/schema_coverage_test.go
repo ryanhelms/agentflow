@@ -52,6 +52,12 @@ var loosening = map[string]Loosening{
 	"personal:ai.sessions.unasked":          LoosensEnable,
 	"personal:ai.sessions.agentflow_mcp":    LoosensEnable,
 	"personal:ai.permissions.rules":         LoosensEnable,
+	"personal:ai.features.commit.harness":   LoosensEnable,
+	"personal:ai.features.pr.harness":       LoosensEnable,
+	"personal:ai.features.ticket.harness":   LoosensEnable,
+	"personal:ai.features.ac.harness":       LoosensEnable,
+	"personal:ai.features.reply.harness":    LoosensEnable,
+	"personal:ai.drafts.max_duration":       LoosensEnable,
 	"repo:ai.sessions.disabled":             LoosensShrink,
 	"repo:ai.permissions.ask":               LoosensShrink,
 	"repo:ai.permissions.deny":              LoosensShrink,
@@ -404,7 +410,9 @@ func loosensSuits(l Loosening, w Widget, s Field) bool {
 		// A toggle turned on; phase 7 also marks a select, stepper, duration
 		// or rule table whose loosening cases are code in
 		// internal/settings/checks.go (ADR "Phase 7 configuration keys").
-		return w == WidgetToggle || w == WidgetSelect || w == WidgetStepper || w == WidgetDuration || w == WidgetKVTable
+		// Phase 8 marks a draft feature's harness text field: setting or
+		// changing it loosens (internal/settings/check_ai.go).
+		return w == WidgetToggle || w == WidgetSelect || w == WidgetStepper || w == WidgetDuration || w == WidgetKVTable || w == WidgetText
 	case LoosensShrink:
 		// A toggle under shrink is a repository restriction turned off
 		// (repo:ai.sessions.disabled).

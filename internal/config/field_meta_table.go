@@ -270,6 +270,7 @@ func (b *tableBuilder) personal() {
 
 	b.aiHarnesses()
 	b.aiSessions()
+	b.aiDrafts()
 }
 
 // aiHarnesses lists the personal ai.harnesses fields (ADR "Phase 6
@@ -321,6 +322,27 @@ func (b *tableBuilder) aiHarnesses() {
 			"status_source": withAdvancedCol(col(WidgetText, "Sign-in check source",
 				"Where the meaning of the sign-in status command is documented. For your own notes.")),
 		}))
+}
+
+// aiDrafts lists the personal ai.features and ai.drafts fields (ADR
+// "Phase 8 configuration keys"). A repository can set none of them.
+// Setting or changing a feature's harness loosens: it turns on, or
+// redirects, sending repository and task text to a model provider.
+func (b *tableBuilder) aiDrafts() {
+	const l = FieldPersonal
+	for _, f := range []struct{ id, label, description string }{
+		{AIFeatureCommit, "Harness for commit message drafts", "The harness that drafts commit messages from your staged changes. Empty turns commit drafts off, so nothing is sent."},
+		{AIFeaturePR, "Harness for PR drafts", "The harness that drafts a pull request title and body from your branch. Empty turns PR drafts off, so nothing is sent."},
+		{AIFeatureTicket, "Harness for ticket drafts", "The harness that drafts a ticket from your description and the task template. Empty turns ticket drafts off, so nothing is sent."},
+		{AIFeatureAC, "Harness for acceptance-criteria checks", "The harness that checks the task's acceptance criteria against your branch and proposes which to tick. Empty turns these checks off, so nothing is sent."},
+		{AIFeatureReply, "Harness for review reply drafts", "The harness that drafts replies to open review threads. Empty turns reply drafts off, so nothing is sent."},
+	} {
+		b.add(l, "ai.features."+f.id+".harness", "", ctl(groupAI, WidgetText, f.label, f.description, withLoosens(LoosensEnable)))
+	}
+	b.add(l, "ai.drafts.max_duration", "", ctl(groupAI, WidgetDuration, "Draft time limit",
+		"How long one draft may run before agentflow cancels it.",
+		withApplies(AppliesNextRun), withLoosens(LoosensEnable),
+		withDurationLimits(MinAIDraftDuration.String(), MaxAIDraftDuration.String()), withPlaceholder("3m")))
 }
 
 // aiSessions lists the personal ai.sessions and ai.permissions fields (ADR

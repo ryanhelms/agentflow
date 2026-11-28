@@ -11,6 +11,8 @@ import (
 	"unicode"
 
 	"github.com/ryanhelms/agentflow/internal/config"
+	"github.com/ryanhelms/agentflow/internal/harness"
+	"github.com/ryanhelms/agentflow/internal/harness/acpregistry"
 	"github.com/ryanhelms/agentflow/internal/harness/harnessdef"
 )
 
@@ -26,6 +28,8 @@ var (
 	aiRulesKeys       = []string{"ai", "permissions", "rules"}
 	aiModesKeys       = []string{"ai", "sessions", "modes"}
 	aiRepoPermissions = []string{"ai", "permissions"}
+	aiFeaturesKeys    = []string{"ai", "features"}
+	aiDraftsKeys      = []string{"ai", "drafts"}
 )
 
 // maxModeLen bounds a session mode ID (the agent's own word).
@@ -52,6 +56,19 @@ func aiLink(c *check) {
 			}
 			if msg := aiPersonalProblem(u.AI, e.keys); msg != "" {
 				c.add(SeverityError, e, CodeAI, msg)
+			}
+		case e.layer == config.FieldPersonal && (hasPrefix(e.keys, aiFeaturesKeys) || hasPrefix(e.keys, aiDraftsKeys) || slices.Equal(e.keys, aiFeaturesKeys[:1])):
+			u, err := parseUser(e.next[0])
+			if err != nil {
+				continue
+			}
+			if err := config.ValidateAI(config.UserAI{Drafts: u.AI.Drafts}); err != nil {
+				c.add(SeverityError, e, CodeAI, sentence(err.Error()))
+				continue
+			}
+			severity, msg := aiFeatureProblem(u.AI, e.keys)
+			if msg != "" {
+				c.add(severity, e, CodeAI, msg)
 			}
 		case e.layer == config.FieldRepo && hasPrefix(e.keys, aiRepoPermissions):
 			repo, _, err := config.ParseRepoCore([]byte(e.next[1]))
@@ -100,6 +117,64 @@ func aiPersonalProblem(a config.UserAI, keys []string) string {
 		}
 	}
 	return ""
+}
+
+// aiFeatureProblem checks the draft feature harness IDs an edit touches
+// (ADR "Phase 8 configuration keys"): an ID that breaks the phase 6 ID
+// rule is an error; an ID with no definition in any layer, or one in
+// ai.harnesses.disabled, is a warning, since the harness may be installed
+// or turned on later. A message never quotes an invalid ID.
+func aiFeatureProblem(a config.UserAI, keys []string) (Severity, string) {
+	ids := a.Features.IDs()
+	if len(keys) > len(aiFeaturesKeys) && hasPrefix(keys, aiFeaturesKeys) {
+		if !slices.Contains(ids, keys[len(aiFeaturesKeys)]) {
+			return "", ""
+		}
+		ids = []string{keys[len(aiFeaturesKeys)]}
+	} else if !hasPrefix(keys, aiFeaturesKeys) && !slices.Equal(keys, aiFeaturesKeys[:1]) {
+		return "", ""
+	}
+	var known map[string]bool
+	for _, id := range ids {
+		h := a.Features.Harness(id)
+		if h == "" {
+			continue
+		}
+		if harnessdef.SafeID(h) != h {
+			return SeverityError, fmt.Sprintf("The harness for %s drafts is not a valid harness ID: use lowercase letters, digits and hyphens.", id)
+		}
+		if slices.Contains(a.Harnesses.Disabled, h) {
+			return SeverityWarning, fmt.Sprintf("The harness %s for %s drafts is turned off in ai.harnesses.disabled, so those drafts are refused until you turn it on.", h, id)
+		}
+		if known == nil {
+			known = knownHarnesses(a)
+		}
+		if !known[h] {
+			return SeverityWarning, fmt.Sprintf("No harness definition is called %s yet, so %s drafts are refused until one is installed or added.", h, id)
+		}
+	}
+	return "", ""
+}
+
+// knownHarnesses is every harness ID a definition layer names: the pinned
+// registry, agentflow's overlay and the person's overrides. Plugin
+// harnesses are not counted: an ID only a plugin adds gives a warning.
+func knownHarnesses(a config.UserAI) map[string]bool {
+	known := map[string]bool{}
+	if cat, err := acpregistry.Load(); err == nil && cat != nil {
+		for _, e := range cat.Entries {
+			known[e.ID] = true
+		}
+	}
+	if overlay, err := harness.LoadOverlay(); err == nil {
+		for id := range overlay {
+			known[id] = true
+		}
+	}
+	for id := range a.Harnesses.Overrides {
+		known[id] = true
+	}
+	return known
 }
 
 func aiRepoProblem(a config.RepoAI) string {
@@ -176,6 +251,9 @@ type aiPolicy struct {
 	rules                    map[string]config.AIRule
 	repoDisabled             bool
 	repoAsk, repoDeny        []string
+	// Phase 8: each draft feature's harness, and the draft time limit.
+	features      map[string]string
+	draftDuration time.Duration
 }
 
 func aiPolicyOf(user *config.User, repo *config.Repo) aiPolicy {
@@ -187,7 +265,17 @@ func aiPolicyOf(user *config.User, repo *config.Repo) aiPolicy {
 		rules:        user.AI.Permissions.Rules,
 		repoDisabled: repo.AI.Sessions.Disabled,
 		repoAsk:      repo.AI.Permissions.Ask, repoDeny: repo.AI.Permissions.Deny,
+		features:      aiFeaturesOf(user.AI.Features),
+		draftDuration: user.AI.Drafts.EffectiveMaxDuration(),
 	}
+}
+
+func aiFeaturesOf(f config.UserAIFeatures) map[string]string {
+	out := map[string]string{}
+	for _, id := range f.IDs() {
+		out[id] = f.Harness(id)
+	}
+	return out
 }
 
 // aiLoosening says how going from a to b loosens the session policy, or "".
@@ -220,6 +308,20 @@ func aiLoosening(a, b aiPolicy) string {
 		if b.rules[name] != r {
 			return fmt.Sprintf("Removes or changes the session rule %s, which made matching %s requests %s.", name, r.Kind, r.Decision)
 		}
+	}
+	// Setting or changing a feature's harness turns on, or redirects,
+	// sending repository and task text to a model provider.
+	for _, id := range (config.UserAIFeatures{}).IDs() {
+		switch h := b.features[id]; {
+		case h == "" || h == a.features[id]:
+		case a.features[id] == "":
+			return fmt.Sprintf("Turns on %s drafts: they send the listed repository and task text to the harness %s and its model provider.", id, h)
+		default:
+			return fmt.Sprintf("Sends %s drafts to the harness %s instead of %s, and so to its model provider.", id, h, a.features[id])
+		}
+	}
+	if b.draftDuration > a.draftDuration {
+		return fmt.Sprintf("Lets a draft run for %s instead of %s.", shortDuration(b.draftDuration), shortDuration(a.draftDuration))
 	}
 	if a.repoDisabled && !b.repoDisabled {
 		return "Lets sessions start in this repository again."

@@ -48,6 +48,13 @@ func TestAISessionSettingsLoosenOnEffectiveValues(t *testing.T) {
 		{"repo ask removed", "", "ai:\n  permissions:\n    ask: [\"secrets/**\"]\n", set("repo:ai.permissions.ask", []string{}), true, "secrets/**"},
 		{"repo deny added", "", "", set("repo:ai.permissions.deny", []string{"prod/**"}), false, ""},
 		{"repo deny removed", "", "ai:\n  permissions:\n    deny: [\"prod/**\"]\n", unset("repo:ai.permissions.deny"), true, "prod/**"},
+		// Phase 8: setting or changing a feature's harness, raising the draft limit.
+		{"feature harness set", "", "", set("personal:ai.features.commit.harness", "claude-acp"), true, "Turns on commit drafts"},
+		{"feature harness changed", "ai:\n  features:\n    pr:\n      harness: claude-acp\n", "", set("personal:ai.features.pr.harness", "codex-acp"), true, "instead of claude-acp"},
+		{"feature harness unchanged", "ai:\n  features:\n    pr:\n      harness: claude-acp\n", "", set("personal:ai.features.pr.harness", "claude-acp"), false, ""},
+		{"feature harness off", "ai:\n  features:\n    reply:\n      harness: claude-acp\n", "", unset("personal:ai.features.reply.harness"), false, ""},
+		{"draft duration raised", "", "", set("personal:ai.drafts.max_duration", "10m"), true, "draft run for 10m"},
+		{"draft duration lowered", "", "", set("personal:ai.drafts.max_duration", "1m"), false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,6 +130,42 @@ func TestAISessionSettingsAreChecked(t *testing.T) {
 			if strings.Contains(d.Message, "rm -rf") {
 				t.Errorf("%s: a diagnostic quotes the value: %q", name, d.Message)
 			}
+		}
+	}
+}
+
+func TestAIDraftSettingsAreChecked(t *testing.T) {
+	f := newFixture(t, "task-1")
+	f.writePersonal(t, "ai:\n  harnesses:\n    disabled: [codex-acp]\n    overrides:\n      mine:\n        name: Mine\n        command: mine-acp\n")
+	for name, tc := range map[string]struct {
+		edit     settings.Edit
+		severity settings.Severity // "" for none
+	}{
+		"registry harness":   {set("personal:ai.features.commit.harness", "claude-acp"), ""},
+		"override harness":   {set("personal:ai.features.ac.harness", "mine"), ""},
+		"bad ID":             {set("personal:ai.features.pr.harness", "Bad ID!"), settings.SeverityError},
+		"unknown ID":         {set("personal:ai.features.ticket.harness", "nobody-has-this"), settings.SeverityWarning},
+		"disabled ID":        {set("personal:ai.features.reply.harness", "codex-acp"), settings.SeverityWarning},
+		"duration in range":  {set("personal:ai.drafts.max_duration", "5m"), ""},
+		"duration too short": {set("personal:ai.drafts.max_duration", "5s"), settings.SeverityError},
+	} {
+		pv, err := f.svc.Preview(t.Context(), settings.ChangeSet{Edits: []settings.Edit{tc.edit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got settings.Severity
+		for _, d := range pv.Diagnostics {
+			if d.Severity == settings.SeverityError || d.Severity == settings.SeverityWarning && d.Code == settings.CodeAI {
+				if got != settings.SeverityError {
+					got = d.Severity
+				}
+			}
+			if strings.Contains(d.Message, "Bad ID!") {
+				t.Errorf("%s: a diagnostic quotes the invalid ID: %q", name, d.Message)
+			}
+		}
+		if got != tc.severity {
+			t.Errorf("%s: severity = %q, want %q (%+v)", name, got, tc.severity, pv.Diagnostics)
 		}
 	}
 }
