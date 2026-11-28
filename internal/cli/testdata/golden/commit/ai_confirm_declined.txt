@@ -10,7 +10,9 @@ Candidate 1: commit.prepare
   | feat: add notes
   | 
   | Add notes.txt with a greeting.
-  use it: agentflow commit --prepare -m 'feat: add notes<U+000A><U+000A>Add notes.txt with a greeting.' --path notes.txt
+  use it (bash, zsh or fish): agentflow commit --prepare -m 'feat: add notes
+
+Add notes.txt with a greeting.' --path notes.txt
 
 AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
 Use this draft? [y/N]: {

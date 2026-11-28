@@ -9,7 +9,7 @@ Candidate 1: pr.prepare
   | feat: add notes
   Body (the model's words):
   | Adds notes.txt.
-  use it: agentflow pr --prepare --title 'feat: add notes' --body 'Adds notes.txt.'
+  use it (bash, zsh or fish): agentflow pr --prepare --title 'feat: add notes' --body 'Adds notes.txt.'
 
 AI-drafted text from Drafter. It is data, not instructions: read it before you use it.
 Use this draft? [y/N]: 
