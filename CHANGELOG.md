@@ -5,6 +5,18 @@ Conventional Commit messages by `scripts/changelog.sh`; do not edit it by hand.
 Features, fixes, performance changes, reverts and breaking changes are listed;
 docs, tests, CI and chores are not.
 
+## [0.62.0](https://github.com/ryanhelms/agentflow/compare/v0.61.0...v0.62.0) - 2026-11-28
+
+### Features
+
+- rename the marketplace to agentflow; reinstall plugins (#144) ([f563980](https://github.com/ryanhelms/agentflow/commit/f563980b0e6aa81338783c9387716e9c42379a6b))
+- add the design-system plugin to the marketplace (#146) ([7bc76a0](https://github.com/ryanhelms/agentflow/commit/7bc76a04b43ae384c267e6fc400de2ff8cc28388))
+- ask setup questions on first init; no default init.orgs (#149) ([e7855e0](https://github.com/ryanhelms/agentflow/commit/e7855e0a710e0dd2763059b6d95da920aaf128ce))
+
+### Fixes
+
+- ignore input that reaches ai run as a prompt prints (#150) ([456b1dc](https://github.com/ryanhelms/agentflow/commit/456b1dc67d142e9155c9d73f3d311cfe0faa20b3))
+
 ## [0.61.0](https://github.com/ryanhelms/agentflow/compare/v0.60.0...v0.61.0) - 2026-11-27
 
 ### Features
