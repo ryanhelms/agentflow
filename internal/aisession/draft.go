@@ -135,9 +135,10 @@ func (m *manager) Draft(ctx context.Context, id ID) (Session, []byte, error) {
 // MaxDraftAnswer; past it the draft is cancelled answer_too_large.
 func (h *host) draftAnswer(ctx context.Context, text string) {
 	h.mu.Lock()
-	if h.answer.Len()+len(text) > MaxDraftAnswer {
+	if h.overflow || h.answer.Len()+len(text) > MaxDraftAnswer {
+		h.overflow = true
 		h.mu.Unlock()
-		go h.cancel(context.WithoutCancel(ctx), CodeAnswerTooLarge)
+		h.stopSoon(ctx, CodeAnswerTooLarge)
 		return
 	}
 	h.answer.WriteString(text)
@@ -159,7 +160,22 @@ func (h *host) draftTool(ctx context.Context, ts *toolState) {
 		return
 	}
 	h.record(ctx, Item{Kind: ItemUnasked, ToolCall: ts.ID, Data: dataOf(map[string]any{"kind": kind, "draft": true})})
-	go h.cancel(context.WithoutCancel(ctx), CodeDraftTool)
+	h.stopSoon(ctx, CodeDraftTool)
+}
+
+// draftCode is the end code of a draft: a tool call the harness ran or an
+// answer past its cap ends it draft_tool or answer_too_large whatever the
+// turn's own end said, so such a draft never yields candidates.
+func (h *host) draftCode(code string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	switch {
+	case h.sess.Counters.Unasked > 0:
+		return CodeDraftTool
+	case h.overflow:
+		return CodeAnswerTooLarge
+	}
+	return code
 }
 
 // draftIssue is ai.Issue as the host writes it into draft.json (the host

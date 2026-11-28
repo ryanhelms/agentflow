@@ -129,17 +129,33 @@ func TestDraftConsoleFlow(t *testing.T) {
 	if list, _ := st.List(); len(list) != 1 {
 		t.Errorf("sessions %d, want the one draft", len(list))
 	}
-	// Six draft requests a minute per console.
+	// Six draft requests a minute per console; a confirmation refused by
+	// the limit is not used up.
+	webui.ResetAIDraftRateForTest()
+	rec = console.Post(t, "/api/ai/draft", `{"feature":"commit","input":{}}`, nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got.Confirm == "" {
+		t.Fatalf("draft: %d %s", rec.Code, rec.Body)
+	}
+	limited := false
 	for i := range 10 {
-		rec := console.Post(t, "/api/ai/draft", `{"feature":"commit","input":{}}`, nil)
-		if rec.Code == 429 {
+		if rec := console.Post(t, "/api/ai/draft", `{"feature":"commit","input":{}}`, nil); rec.Code == 429 {
 			if i == 0 {
 				t.Error("limited at once")
 			}
-			return
+			limited = true
+			break
 		}
 	}
-	t.Error("no rate limit")
+	if !limited {
+		t.Fatal("no rate limit")
+	}
+	if rec := console.Post(t, "/api/ai/draft/confirm", `{"confirm":"`+got.Confirm+`"}`, nil); rec.Code != 429 {
+		t.Fatalf("confirm past the limit: %d %s", rec.Code, rec.Body)
+	}
+	webui.ResetAIDraftRateForTest()
+	if rec := console.Post(t, "/api/ai/draft/confirm", `{"confirm":"`+got.Confirm+`"}`, nil); rec.Code != 202 {
+		t.Errorf("the limit used up the confirmation: %d %s", rec.Code, rec.Body)
+	}
 }
 
 func stageFile(t *testing.T, wt, name, content string) {

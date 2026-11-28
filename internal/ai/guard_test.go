@@ -121,10 +121,66 @@ func TestDraftNeverWrites(t *testing.T) {
 				}
 			case *ast.FuncDecl:
 				checkFunc(t, name, appName, x)
+				checkManager(t, name, x)
 			}
 			return true
 		})
 	}
+}
+
+// managerReads are the session Manager methods a draft may call: Prepare
+// and Start run the draft itself, the rest only read. Answer, Cancel, Host
+// and Prune act on sessions and are never called from internal/ai.
+var managerReads = []string{"Prepare", "Start", "List", "Get", "Items", "Draft"}
+
+// checkManager fails on a call of a Manager method outside managerReads, on
+// a Manager made in fn (manager(o), aisession.NewManager(o),
+// app.NewAIManager(o)) or a variable holding one.
+func checkManager(t *testing.T, file string, fn *ast.FuncDecl) {
+	if fn.Body == nil {
+		return
+	}
+	isMaker := func(e ast.Expr) bool {
+		call, ok := e.(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		switch f := call.Fun.(type) {
+		case *ast.Ident:
+			return f.Name == "manager"
+		case *ast.SelectorExpr:
+			return f.Sel.Name == "NewManager" || f.Sel.Name == "NewAIManager"
+		}
+		return false
+	}
+	held := map[string]bool{}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if as, ok := n.(*ast.AssignStmt); ok {
+			for i, rhs := range as.Rhs {
+				if i < len(as.Lhs) && isMaker(rhs) {
+					if id, ok := as.Lhs[i].(*ast.Ident); ok {
+						held[id.Name] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		id, isIdent := sel.X.(*ast.Ident)
+		if (isMaker(sel.X) || isIdent && held[id.Name]) && !slices.Contains(managerReads, sel.Sel.Name) {
+			t.Errorf("%s: %s calls the session Manager's %s, which a draft never does", file, fn.Name.Name, sel.Sel.Name)
+		}
+		return true
+	})
 }
 
 // isFuncLike: the app package's exported types are allowed; anything else
@@ -206,7 +262,17 @@ func checkRepoCall(t *testing.T, file, fn, method string, call *ast.CallExpr) {
 		t.Errorf("%s: %s calls Repo.Git without a subcommand", file, fn)
 		return
 	}
-	lit, ok := call.Args[1].(*ast.BasicLit)
+	arg := call.Args[1]
+	// append([]string{"diff", ...}, args...)...: the subcommand is the
+	// slice literal's first element.
+	if c, isCall := arg.(*ast.CallExpr); isCall && len(c.Args) > 0 && call.Ellipsis.IsValid() {
+		if id, isIdent := c.Fun.(*ast.Ident); isIdent && id.Name == "append" {
+			if cl, isLit := c.Args[0].(*ast.CompositeLit); isLit && len(cl.Elts) > 0 {
+				arg = cl.Elts[0]
+			}
+		}
+	}
+	lit, ok := arg.(*ast.BasicLit)
 	sub, _ := strconv.Unquote(func() string {
 		if ok {
 			return lit.Value

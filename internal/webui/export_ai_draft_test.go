@@ -18,3 +18,10 @@ func SetAIFeatureStateForTest(t *testing.T, user *config.User, published map[str
 	aiDrafts.mu.Unlock()
 	t.Cleanup(func() { aiFeatureState = old })
 }
+
+// ResetAIDraftRateForTest forgets the draft routes' recent requests.
+func ResetAIDraftRateForTest() {
+	aiDrafts.mu.Lock()
+	aiDrafts.seen = nil
+	aiDrafts.mu.Unlock()
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"unicode/utf8"
@@ -77,9 +78,16 @@ func (h *host) SessionUpdate(ctx context.Context, n acp.SessionNotification) {
 				text = "[" + SanitizeLine(u.Content.Type, 32) + "]"
 			}
 			h.countBytes(len(text))
-			add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
-			if h.draft && kind == ItemMessage && u.Content.Type == "text" {
-				h.draftAnswer(ctx, u.Content.Text)
+			if h.draft {
+				// A draft's words are kept only in draft.json, where Finish
+				// withholds an answer that looks like it holds a secret; the
+				// transcript says how much came, never what.
+				add(Item{Kind: kind, Text: fmt.Sprintf("[%d bytes: the draft's own text is in its result]", len(text))})
+				if kind == ItemMessage && u.Content.Type == "text" {
+					h.draftAnswer(ctx, u.Content.Text)
+				}
+			} else {
+				add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
 			}
 		}
 	case acp.UpdateUserMessageChunk:
@@ -157,7 +165,7 @@ func (h *host) tool(ctx context.Context, id string, init func() *toolState) (*to
 	if !ok {
 		if len(h.tools) >= maxToolCalls {
 			h.mu.Unlock()
-			go h.cancel(context.WithoutCancel(ctx), CodeLimitOutput)
+			h.stopSoon(ctx, CodeLimitOutput)
 			return nil, false
 		}
 		ts = init()
@@ -346,7 +354,7 @@ func (h *host) checkUnasked(ctx context.Context, ts *toolState) {
 	}
 	h.record(ctx, Item{Kind: ItemUnasked, ToolCall: ts.ID, Data: dataOf(map[string]any{"kind": kind, "outside": outside})})
 	if outside || (h.user != nil && h.user.AI.Sessions.EffectiveUnasked() == config.AIUnaskedCancel) {
-		go h.cancel(context.WithoutCancel(ctx), CodeUnasked)
+		h.stopSoon(ctx, CodeUnasked)
 	}
 }
 
