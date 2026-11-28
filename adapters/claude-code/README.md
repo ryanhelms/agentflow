@@ -1,6 +1,6 @@
 # agentflow for Claude Code
 
-A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
+A Claude Code plugin in the `agentflow` marketplace (this repository). It provides:
 
 - MCP server `agentflow` (all `agentflow_*` tools)
 - Skill `agentflow` with the commit, PR, confirmation and untrusted-content rules
@@ -11,7 +11,8 @@ A Claude Code plugin in the `nscale` marketplace (this repository). It provides:
 - `bin/agentflow`, on Claude's Bash PATH: runs the installed agentflow or installs the latest
   verified release, so the skills work before a repo is set up
 - Hooks: `SessionStart` (ticket context; in an unset repo owned by an org in `init.orgs`,
-  runs `agentflow init` automatically, see the main README), `PreToolUse` on Bash (blocks raw `git commit`
+  runs `agentflow init` automatically, see the main README; `init.orgs` has no default, and
+  the hook never asks or changes your personal settings), `PreToolUse` on Bash (blocks raw `git commit`
   with an invalid message, force-push, pushes to protected branches and `gh pr merge`), `Stop` (reminds about uncommitted work and open criteria)
 
 To install it for yourself (Claude Code 2.1.275 or later):
@@ -25,9 +26,9 @@ Repos turn it on for everyone in `.claude/settings.json` (written by `agentflow 
 ```json
 {
   "extraKnownMarketplaces": {
-    "nscale": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
+    "agentflow": { "source": { "source": "github", "repo": "ryanhelms/agentflow" } }
   },
-  "enabledPlugins": { "agentflow@nscale": true },
+  "enabledPlugins": { "agentflow@agentflow": true },
   "includeCoAuthoredBy": false
 }
 ```

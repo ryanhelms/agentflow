@@ -47,7 +47,7 @@ Rules:
   what leaves my machine, or what gets deleted.
 - Report each phase gate in a few lines.
 
-Ask me in one round, before the clean-up: renaming the agentflow@nscale
+Ask me in one round, before the clean-up: renaming the
 plugin marketplace, changing the default init.orgs, deleting old remote
 branches, downloading a secret scanner.
 

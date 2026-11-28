@@ -336,8 +336,8 @@ provider for the role and removes its previous inline settings. Return to
 **Providers** to configure the staged selection in the same proposal. Preview the
 resulting defaults, definitions and source diff before publishing. A switch
 routes future operations once the new configuration is in use. Existing provider
-records stay at their source. Automatic data migration and a per-repository
-scope selector are tracked in [issue #96](https://github.com/nscaledev/agentflow/issues/96).
+records stay at their source. The console does not migrate data automatically and
+has no per-repository scope selector.
 See [provider definitions and precedence](providers.md#provider-definitions).
 
 ## Set approval preferences and ceilings
@@ -454,22 +454,15 @@ Agent Commander disconnected.
 
 ## Update the console design tokens
 
-The Go binary embeds the published `package/tokens.css` from
-`@nscaledev/design-tokens@0.1.0` as `internal/webui/static/nscale-tokens.css`.
-This keeps both themes available offline. The Nscale Design System MCP's
-`list_design_packages` tool reports the package version and archive SHA-256.
+The Go binary embeds `package/tokens.css` from
+`website/vendor/agentflow-design-tokens-0.1.0.tgz` as
+`internal/webui/static/agentflow-tokens.css`. This keeps both themes available offline.
 
-To reproduce the checked-in asset, run these commands from the repository root
-with GitHub Packages read access. You can also use the same archive from the
-design-system plugin's `vendor/` directory.
+To reproduce the checked-in asset, run this from the repository root:
 
 ```bash
-token_dir=$(mktemp -d)
-npm pack @nscaledev/design-tokens@0.1.0 --registry=https://npm.pkg.github.com --pack-destination="$token_dir"
-token_archive="$token_dir/nscaledev-design-tokens-0.1.0.tgz"
-printf '%s  %s\n' cf7592b43e4a0fe0f2fdee54213b7b23b5267203e9866733cd6abcc1f4435362 "$token_archive" | shasum -a 256 -c - &&
-  tar -xOzf "$token_archive" package/tokens.css > internal/webui/static/nscale-tokens.css
+tar -xOzf website/vendor/agentflow-design-tokens-0.1.0.tgz package/tokens.css > internal/webui/static/agentflow-tokens.css
 ```
 
-For a package upgrade, update the version and archive checksum together,
-replace the stylesheet, and check the console in light and dark mode.
+For a package upgrade, update the archive name here, replace the stylesheet, and check the
+console in light and dark mode.

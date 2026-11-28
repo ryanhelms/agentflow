@@ -3,10 +3,6 @@
 Phases are gated by outcomes, not dates. Start a phase only when the previous one has
 passed its exit check. The full plan is in [blueprint.html](blueprint.html#rollout).
 
-## Architecture approval
-
-Kyle Redelinghuys and Vishal Srini approved [the architecture and rollout plan](blueprint.html). Each rollout phase still has its own exit check.
-
 Foundations and verification:
 - [x] `ryanhelms/agentflow` repo with CLI, MCP server, hooks, workflows, adapters and templates
 - [x] CI green (tests with race detector, golangci-lint, shellcheck, actionlint, GoReleaser check)
@@ -39,13 +35,12 @@ and revision when comparing legacy and provider previews.
    counts and release plan. Reconcile already-applied effects with the service
    owners before considering any compensating write.
 
-The existing [agentflow repository pilot](https://github.com/nscaledev/agentflow/issues/25)
-provides issue and ADR replay evidence. The [consumer rehearsal report](consumer-canary.md#recorded-consumer-rehearsal)
-links the hosted canary, rollback, and release verification.
+The agentflow repository pilot provides issue and ADR replay evidence. The
+[consumer canary](consumer-canary.md) covers the rehearsal and rollback steps.
 
 ## P0 · Foundations
 - [ ] Engineering leadership nominates the pilot team and two pilot repos
-- [ ] Install the GitHub for Jira app on the `nscaledev` org (all repos)
+- [ ] Install the GitHub for Jira app on your GitHub org (all repos)
 - [ ] Create the `svc-agentflow` Atlassian account and scoped API token ([operations](operations.md#atlassian-service-account))
 - [ ] Org secrets/variables, or repo-level ones in pilot repos ([operations](operations.md)); the agentflow GitHub App is optional ([operations](operations.md#github-app-optional))
 - [ ] Pilot developers run `agentflow login` with their own Atlassian API token ([operations](operations.md#developer-atlassian-login))
@@ -56,10 +51,10 @@ links the hosted canary, rollback, and release verification.
 - **Exit:** pilot named; dev panel shows commits on a pilot ticket; pilot flow-map row reviewed
 
 ## P1 · Commit convention
-- [x] Run `agentflow init` in the first pilot repo (`nscaledev/mcp-gateway`)
+- [x] Run `agentflow init` in the first pilot repo
 - [ ] Run `agentflow init` in pilot repos; commit `.agentflow/`, `.githooks/`, client configs
 - [ ] Pilot engineers run `git config core.hooksPath .githooks` and `agentflow login`
-- [ ] `git config user.email` set to @nscale.com addresses (Smart Commits)
+- [ ] `git config user.email` set to the address on each Jira account (Smart Commits)
 - [ ] agentflow session context, commit generate/validate/split, breaking-change detection in use
 - **Exit:** every pilot engineer has the hook; Smart Commits resolve to their Jira user
 
@@ -113,7 +108,7 @@ links the hosted canary, rollback, and release verification.
 - **Exit:** all in-scope teams on the flow map and meeting the success measures
 
 ## P9 · AI assist
-- [ ] Covered by Nscale's existing Anthropic approval; set `ANTHROPIC_API_KEY` org secret
+- [ ] Confirm your organisation approves the model provider; set `ANTHROPIC_API_KEY` org secret
 - [ ] Pilot repos add the `agentflow-ai` topic
 - [ ] Measure how much engineers edit the drafts
 - **Exit:** pilot engineers keep it on; approval to widen

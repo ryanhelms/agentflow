@@ -37,13 +37,13 @@ func TestTransitionsAndRetry(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		if u, p, _ := r.BasicAuth(); u != "dev@nscale.com" || p != "tok" {
+		if u, p, _ := r.BasicAuth(); u != "dev@example.com" || p != "tok" {
 			t.Errorf("auth = %q %q", u, p)
 		}
 		_, _ = w.Write([]byte(`{"transitions":[{"id":"31","name":"Start review","to":{"name":"In Review","statusCategory":{"key":"indeterminate"}}}]}`))
 	}))
 	defer srv.Close()
-	c := New(auth.Atlassian{Site: srv.URL, Email: "dev@nscale.com", Token: "tok"})
+	c := New(auth.Atlassian{Site: srv.URL, Email: "dev@example.com", Token: "tok"})
 	ts, err := c.Transitions(t.Context(), "PLAT-1")
 	if err != nil || len(ts) != 1 || ts[0].To.Name != "In Review" || calls != 2 {
 		t.Fatalf("ts=%+v err=%v calls=%d", ts, err, calls)

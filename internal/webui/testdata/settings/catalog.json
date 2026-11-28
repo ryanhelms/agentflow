@@ -386,7 +386,7 @@
     "order": 30,
     "widget": "text",
     "applies": "live",
-    "placeholder": "https://nscale.atlassian.net"
+    "placeholder": "https://example.atlassian.net"
    }
   },
   {
@@ -763,7 +763,7 @@
     "order": 10,
     "widget": "text",
     "applies": "live",
-    "placeholder": "https://nscale.atlassian.net"
+    "placeholder": "https://example.atlassian.net"
    }
   },
   {
@@ -2081,7 +2081,7 @@
     "order": 20,
     "widget": "text",
     "applies": "live",
-    "placeholder": "https://nscale.atlassian.net"
+    "placeholder": "https://example.atlassian.net"
    }
   },
   {
@@ -2118,7 +2118,7 @@
     "order": 40,
     "widget": "text",
     "applies": "live",
-    "placeholder": "https://nscale.atlassian.net"
+    "placeholder": "https://example.atlassian.net"
    }
   },
   {
@@ -2265,7 +2265,7 @@
    },
    "meta": {
     "label": "Organisations",
-    "description": "GitHub owners whose repositories the plugins may set up automatically.",
+    "description": "GitHub owners whose repositories the plugins may set up automatically. Empty by default: with none listed, the plugins set nothing up and suggest nothing. agentflow init asks once in a terminal.",
     "group": "init",
     "order": 20,
     "widget": "chips",

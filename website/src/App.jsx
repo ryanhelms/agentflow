@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Link, Logo, Row, Text } from "@nscaledev/design-components/atoms";
-import "@nscaledev/design-tokens/tokens.css";
-import "@nscaledev/design-components/styles.css";
-import "@nscaledev/design-patterns/styles.css";
+import { Button, Link, Logo, Row } from "@agentflow/design-components/atoms";
+import "@agentflow/design-tokens/tokens.css";
+import "@agentflow/design-components/styles.css";
+import "@agentflow/design-patterns/styles.css";
 import "./style.css";
 import Docs from "./Docs.jsx";
 import Overview from "./Overview.jsx";
@@ -54,12 +54,11 @@ export default function App() {
 
   const themeLabel = activeTheme === "dark" ? "Use light theme" : "Use dark theme";
   return (
-    <div className="nscale-ui agentflow-site" data-theme={activeTheme}>
+    <div className="agentflow-ui agentflow-site" data-theme={activeTheme}>
       <header className="site-header">
         <Row className="site-header-inner" wrap justify="between" gap={4}>
           <Link href="#overview" className="site-brand" aria-label="Agentflow overview">
-            <Logo variant="full" height={14} />
-            <Text className="site-product" weight="bold">Agentflow</Text>
+            <Logo variant="full" height={24} />
           </Link>
           <Row as="nav" aria-label="Agentflow" className="site-nav" wrap gap={2}>
             <Link href="#overview" aria-current={page === "overview" ? "page" : undefined}>Overview</Link>

@@ -31,5 +31,24 @@ Set this repository up for agentflow. The `agentflow` command is on your Bash PA
 7. Offer to commit the setup on a branch and open a PR using the configured commit
    convention. Ask for a task key only when that convention requires one.
 
-Repos owned by the orgs in `init.orgs` (default `nscaledev` and `ryanhelms`) are set up automatically when
-a session starts; set `init.auto: ask` or `off` in `~/.agentflow/config.yml` to change that.
+Personal setup questions: when the agentflow home has no `config.yml` yet, `agentflow init`
+run from here (no terminal) saves no personal settings and prints two questions with the
+command that answers them. Never answer them yourself and never pick owners for the person.
+Ask the person, in the conversation:
+
+- Which GitHub owners' repositories may agentflow set up automatically when a session
+  starts there? Empty means none; suggest no names.
+- Only if they named owners: `auto` (set the repository up), `ask` (only suggest
+  `/agentflow:init`) or `off`?
+
+Then save their answers with `agentflow_config_set` (edits `personal:init.orgs` and, if
+they named owners, `personal:init.auto`; an empty list for none). It returns
+`needs_confirmation` first: show the summary, wait for the person's approval, and call
+again with `confirm_token`. The CLI equivalent is the printed command, for example
+`agentflow config set init.orgs=acme init.auto=ask`, or `agentflow config set init.orgs=`
+for none; run it without `--yes`, and add `--yes` only after the person approves in the
+conversation. The answers go to the home, an empty list included, so init does not ask again.
+
+Repos owned by the owners in `init.orgs` are set up automatically when a session starts.
+`init.orgs` has no default, so with none listed nothing is set up or suggested. Set
+`init.auto: ask` or `off` in `~/.agentflow/config.yml` to change what happens for listed owners.

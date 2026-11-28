@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ryanhelms/agentflow/internal/config"
@@ -134,8 +135,9 @@ func TestLayeredConfluenceSpaceScopeBeforeDispatch(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			// Only the list is repository-supplied. Its keys still pin the pre-user site.
-			body := "knowledge_base: {provider: confluence, settings: {publish_spaces: " + tc.repo + "}}"
+			// Only the list is a repository-supplied setting. Its keys still pin the pre-user site.
+			body := "confluence: {site: https://repo.example}\n" +
+				"knowledge_base: {provider: confluence, settings: {publish_spaces: " + tc.repo + "}}"
 			if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(body), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -227,4 +229,74 @@ func TestRepositoryRemoteBoundsResolvedIssueTarget(t *testing.T) {
 	if err := a.taskWriteScope(t.Context(), "org/project"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// No site is built in, so a repository that lists spaces must also name the site.
+// A personal setting cannot supply one for those space keys.
+func TestAtlassianNeedsAConfiguredSite(t *testing.T) {
+	open := func(t *testing.T, repo, user string) *App {
+		t.Helper()
+		dir := newRepo(t)
+		if err := os.Mkdir(filepath.Join(dir, ".agentflow"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, ".agentflow/config.yml"), []byte(repo), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if user != "" {
+			writeUserDefinition(t, user)
+		}
+		a, err := Open(t.Context(), dir, "test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	t.Run("jira", func(t *testing.T) {
+		a := open(t, "task_management: {provider: jira}", "")
+		if site, err := a.jiraSite(); err == nil || !strings.Contains(err.Error(), "no Jira site is configured") {
+			t.Fatalf("site %q, err %v", site, err)
+		}
+	})
+	t.Run("a commit verb still commits", func(t *testing.T) {
+		a := open(t, "task_management: {provider: jira, settings: {projects: [PLAT]}}\nflow_map: flow.yml\n", "")
+		flow := "version: 1\ndefaults: {verbs: {review: In Review}}\nprojects: {PLAT: {}}\n"
+		if err := os.WriteFile(filepath.Join(a.Repo.Dir, "flow.yml"), []byte(flow), 0600); err != nil {
+			t.Fatal(err)
+		}
+		effects, _, err := a.Preview(t.Context(), "fix(PLAT-1): add quota #review")
+		if err != nil || len(effects) != 1 || !strings.Contains(effects[0].Note, "no Jira site is configured") {
+			t.Fatalf("effects %+v, err %v", effects, err)
+		}
+		if _, _, err := a.LoginCheck(t.Context()); !errors.Is(err, errNoJiraSite) {
+			t.Fatalf("login check: %v", err)
+		}
+	})
+	t.Run("confluence", func(t *testing.T) {
+		a := open(t, "knowledge_base: {provider: confluence}", "")
+		if site, err := a.confluenceSite(); err == nil || !strings.Contains(err.Error(), "no Confluence site is configured") {
+			t.Fatalf("site %q, err %v", site, err)
+		}
+	})
+	t.Run("repository projects without a site", func(t *testing.T) {
+		a := open(t, "task_management: {provider: jira, settings: {projects: [ENG]}}",
+			"jira: {task_management: {settings: {site: https://other.example}}}")
+		if _, err := a.jiraSite(); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.jiraWriteScope("ENG"); !errors.Is(err, native.ErrDenied) {
+			t.Fatalf("write was not denied: %v", err)
+		}
+	})
+	t.Run("repository spaces without a site", func(t *testing.T) {
+		a := open(t, "knowledge_base: {provider: confluence, settings: {publish_spaces: [ENG]}}",
+			"confluence: {knowledge_base: {settings: {site: https://other.example}}}")
+		site, err := a.confluenceSite()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.confluenceWriteScope(site, "ENG"); !errors.Is(err, native.ErrDenied) {
+			t.Fatalf("write to %s was not denied: %v", site, err)
+		}
+	})
 }

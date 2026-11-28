@@ -48,7 +48,7 @@ func TestProjectLifecyclePreservesSharedOwnership(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			dir := gitRepo(t)
 			const rel = ".claude/settings.json"
-			const original = `{"includeCoAuthoredBy":true,"enabledPlugins":{"agentflow@nscale":true},"team":"project-private-value"}`
+			const original = `{"includeCoAuthoredBy":true,"enabledPlugins":{"` + legacyPlugin + `":true},"team":"project-private-value"}`
 			setupFile(t, dir, rel, original, 0o600)
 			const codex = "# team-owned table\n[mcp_servers.agentflow]\ncommand = \"custom\"\n"
 			setupFile(t, dir, ".codex/config.toml", codex, 0o600)
@@ -116,7 +116,7 @@ func TestProjectLifecyclePreservesSharedOwnership(t *testing.T) {
 			if err := json.Unmarshal(read, &result); err != nil {
 				t.Fatal(err)
 			}
-			if result["includeCoAuthoredBy"] != true || result["extraKnownMarketplaces"] != nil || result["later"] != "another-private-value" || result["team"] != "project-private-value" || result["enabledPlugins"].(map[string]any)["agentflow@nscale"] != true {
+			if result["includeCoAuthoredBy"] != true || result["extraKnownMarketplaces"] != nil || result["later"] != "another-private-value" || result["team"] != "project-private-value" || result["enabledPlugins"].(map[string]any)[legacyPlugin] != true {
 				t.Fatalf("unexpected cleanup: %s", read)
 			}
 			data, err = os.ReadFile(filepath.Join(dir, ".codex/config.toml"))

@@ -18,7 +18,7 @@ repo=${GITHUB_REPOSITORY:-ryanhelms/agentflow}
 date=$(date -u +%Y-%m-%d)
 notes=""
 update=""
-jira=${JIRA_SITE:-https://nscale.atlassian.net}
+jira=${JIRA_SITE:-} # without a site, ticket keys are listed unlinked
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) version=$2; shift 2 ;;
@@ -62,7 +62,9 @@ while IFS=$'\x1f' read -r -d $'\x1e' sha subject body; do
       IFS=', ' read -r -a keys <<<"$scope"
       for k in "${keys[@]}"; do
         [ -n "$k" ] || continue
-        links+="${links:+, }[$k]($jira/browse/$k)"
+        link=$k
+        [ -z "$jira" ] || link="[$k]($jira/browse/$k)"
+        links+="${links:+, }$link"
       done
       prefix="**$links:** "
     else

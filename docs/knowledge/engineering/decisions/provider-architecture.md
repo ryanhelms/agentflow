@@ -6,10 +6,6 @@ tags: [architecture, providers]
 x-agentflow-ref:
   scope: engineering
   id: provider-architecture
-x-agentflow-links:
-    - title: Agentflow provider pilot
-      url: https://github.com/nscaledev/agentflow/issues/25
-      ref: null
 x-agentflow-operations:
     provider-pilot-adr-issue-25: a85433bd0efdb7cf295801ae753690c153534a18a99fd9ffa7f4422a2c5d9f39
     provider-pilot-adr-issue-25-verified-checkout: 7eb56be3fddae81068c3768e4ec28d793adce4136fddd38fd0da3787d3750e4d

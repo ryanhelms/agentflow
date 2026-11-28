@@ -3,7 +3,7 @@
   "version": "0.61.0",
   "description": "Manage Agentflow in a project and use its delivery workflow tools.",
   "author": {
-    "name": "Nscale Engineering Enablement"
+    "name": "Ryan Helms"
   },
   "mcpServers": "./adapters/cursor/plugin-mcp.json"
 }

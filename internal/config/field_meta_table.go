@@ -52,6 +52,9 @@ func roleGroup(role string) string { return groupProviders + "." + role }
 // TestStepperMinimumsAreAcceptedByTheCode checks it against both.
 const minSubjectMax = 13
 
+// sitePlaceholder shows the form of an Atlassian site address.
+const sitePlaceholder = "https://example.atlassian.net"
+
 // levelChoices are the autonomy levels, loosest last. The compiled Level type
 // has no `allowed` tag, so the catalog adds them to the schema.
 var levelChoices = []string{string(Suggest), string(Confirm), string(Auto)}
@@ -263,7 +266,7 @@ func (b *tableBuilder) personal() {
 		"What the AI-client plugins do in a repository that has no agentflow configuration: set it up, only suggest setup, or do nothing. Applies to the listed organisations only.",
 		withApplies(AppliesNextRun)), optEnum("auto", "ask", "off"))
 	b.add(l, "init.orgs", "", ctl(groupInit, WidgetChips, "Organisations",
-		"GitHub owners whose repositories the plugins may set up automatically.", withApplies(AppliesNextRun)))
+		"GitHub owners whose repositories the plugins may set up automatically. Empty by default: with none listed, the plugins set nothing up and suggest nothing. agentflow init asks once in a terminal.", withApplies(AppliesNextRun)))
 
 	b.aiHarnesses()
 	b.aiSessions()
@@ -451,11 +454,11 @@ func (b *tableBuilder) repository() {
 		}))
 
 	b.add(l, "jira.site", "", ctl(groupIntegrations, WidgetText, "Jira site",
-		"Web address of the Jira site. The task provider's own site setting takes precedence.", withPlaceholder(DefaultSite)))
+		"Web address of the Jira site. The task provider's own site setting takes precedence.", withPlaceholder(sitePlaceholder)))
 	b.add(l, "jira.projects", "", ctl(groupIntegrations, WidgetChips, "Jira projects",
 		"Jira project keys the task provider searches. The task provider's own projects setting takes precedence."))
 	b.add(l, "confluence.site", "", ctl(groupIntegrations, WidgetText, "Confluence site",
-		"Web address of the Confluence site. Without one, agentflow uses the Jira site.", withPlaceholder(DefaultSite)))
+		"Web address of the Confluence site. Without one, agentflow uses the Jira site.", withPlaceholder(sitePlaceholder)))
 	b.add(l, "flow_map", "", ctl(groupIntegrations, WidgetText, "Flow map",
 		"Where the file is that maps events and commit verbs to Jira statuses: a path in the repository, or owner/repository@ref:path.",
 		withAdvanced(), withPlaceholder(DefaultFlowMap)))
@@ -516,7 +519,7 @@ func (b *tableBuilder) taskManagement() {
 	b.add(FieldRepo, s("transitions"), "asana", ctl(g, WidgetKVTable, "Section transitions",
 		"Maps each Asana project GID to its events and the section GID, completed, or none that each event moves a task to."))
 
-	b.add(FieldRepo, s("site"), "jira", ctl(g, WidgetText, "Site", "Web address of the Jira site.", withPlaceholder(DefaultSite)))
+	b.add(FieldRepo, s("site"), "jira", ctl(g, WidgetText, "Site", "Web address of the Jira site.", withPlaceholder(sitePlaceholder)))
 	b.add(FieldRepo, s("projects"), "jira", ctl(g, WidgetChips, "Projects", "Jira project keys that My Work and task search look in."))
 
 	b.add(FieldRepo, s("repository"), "github-issues", ctl(g, WidgetText, "Repository",
@@ -560,7 +563,7 @@ func (b *tableBuilder) knowledgeBase() {
 		"Encoding of newly published documents: the open knowledge format, or the legacy format.")
 
 	b.add(FieldRepo, s("site"), "confluence", ctl(g, WidgetText, "Site",
-		"Web address of the Confluence site.", withPlaceholder(DefaultSite)))
+		"Web address of the Confluence site.", withPlaceholder(sitePlaceholder)))
 	b.add(FieldRepo, s("publish_spaces"), "confluence", ctl(g, WidgetChips, "Publish spaces",
 		"Confluence space keys that documents may be published to."))
 

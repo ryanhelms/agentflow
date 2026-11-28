@@ -48,7 +48,6 @@ body { margin: 0; }
 }
 
 .site-brand:hover { text-decoration: none; }
-.site-product { padding-inline-start: var(--s-4); border-inline-start: var(--keyline) solid var(--border-strong); }
 
 .site-nav > a {
   color: var(--text-muted);
@@ -116,7 +115,7 @@ body { margin: 0; }
   gap: var(--s-4);
 }
 .overview-panels > * { min-width: 0; }
-.workflow-step { animation: nscale-rise var(--t-med) var(--ease-out) both; }
+.workflow-step { animation: agentflow-rise var(--t-med) var(--ease-out) both; }
 
 @media (max-width: 52rem) {
   .overview-panels { grid-template-columns: minmax(0, 1fr); }

@@ -123,6 +123,7 @@ type User struct {
 	} `yaml:"atlassian"`
 	// Init controls automatic `agentflow init` by the AI-client plugins in repos without
 	// .agentflow/config.yml: auto (default), ask or off, for repos owned by Orgs.
+	// Orgs has no default: with none listed, the plugins set nothing up.
 	Init struct {
 		Auto string   `yaml:"auto"`
 		Orgs []string `yaml:"orgs"`
@@ -170,10 +171,11 @@ type UserWorktree struct {
 
 // Defaults applied when fields are missing.
 var (
-	DefaultTypes      = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
-	DefaultSite       = "https://nscale.atlassian.net"
-	DefaultFlowMap    = "ryanhelms/agentflow@v0:flow-map.yml"
-	DefaultInitOrgs   = []string{"nscaledev", "ryanhelms"}
+	DefaultTypes   = []string{"feat", "fix", "perf", "refactor", "docs", "test", "build", "ci", "chore", "revert"}
+	DefaultFlowMap = "ryanhelms/agentflow@v0:flow-map.yml"
+	// DefaultInitOrgs is empty: no GitHub owner is set up automatically until
+	// the person lists it in init.orgs.
+	DefaultInitOrgs   = []string{}
 	DefaultProtected  = []string{"main", "master", "develop", "release/*"}
 	DefaultCheckEvery = 6 * time.Hour
 )
@@ -221,6 +223,29 @@ func resolveRepo(c *Repo, extra map[string]yaml.Node, found bool, project defini
 	}
 	c.Providers = providers
 	return c, found, nil
+}
+
+// AtlassianSite is the site that login and logout act on when none is given: the
+// Jira task provider's, then jira.site, then the Confluence one. It is empty when
+// the repository at root names none.
+func AtlassianSite(root string) string {
+	c, _, err := LoadRepo(root)
+	if err != nil {
+		// A provider definition that cannot be loaded must not stop a sign-in.
+		if c, _, err = LoadRepoCore(root); err != nil {
+			return ""
+		}
+	}
+	if s, ok := c.Providers.TaskManagement.Settings.(*JiraSettings); ok && s.Site != "" {
+		return s.Site
+	}
+	if c.Jira.Site != "" {
+		return c.Jira.Site
+	}
+	if s, ok := c.Providers.KnowledgeBase.Settings.(*ConfluenceSettings); ok && s.Site != "" {
+		return s.Site
+	}
+	return c.Confluence.Site
 }
 
 // LoadRepoCore reads repository policy, update and commit settings independently
@@ -294,9 +319,6 @@ func (c *Repo) applyDefaults() {
 	}
 	if c.Commit.SubjectMax == 0 {
 		c.Commit.SubjectMax = 72
-	}
-	if c.Jira.Site == "" {
-		c.Jira.Site = DefaultSite
 	}
 	if c.Confluence.Site == "" {
 		c.Confluence.Site = c.Jira.Site

@@ -17,7 +17,7 @@ func layers(t *testing.T, release string) (root, home string) {
 	t.Cleanup(func() { releaseDefinitions = old })
 	releaseDefinitions = fstest.MapFS{}
 	if release != "" {
-		releaseDefinitions = fstest.MapFS{"nscale.yml": {Data: []byte(release)}}
+		releaseDefinitions = fstest.MapFS{"acme.yml": {Data: []byte(release)}}
 	}
 	home = t.TempDir()
 	t.Setenv("AGENTFLOW_HOME", home)
@@ -51,7 +51,7 @@ providers:
   jira:
     task_management:
       contract: tasks/v1
-      settings: {site: nscale.atlassian.net, projects: [PLAT]}
+      settings: {site: acme.atlassian.net, projects: [PLAT]}
 `
 
 func TestDefinitionLayerOrder(t *testing.T) {
@@ -79,7 +79,7 @@ func TestDefinitionLayerOrder(t *testing.T) {
 		t.Errorf("contract = %q", sel.Contract)
 	}
 	files := []Source{
-		{LayerRelease, "release/nscale.yml"},
+		{LayerRelease, "release/acme.yml"},
 		{LayerProject, ".agentflow/providers/jira.yml"},
 		{LayerUser, "~/.agentflow/providers/jira.yaml"},
 	}
@@ -137,7 +137,7 @@ const constrained = `version: 1
 providers:
   jira:
     task_management:
-      settings: {site: nscale.atlassian.net, projects: [PLAT]}
+      settings: {site: acme.atlassian.net, projects: [PLAT]}
       constraints:
         site: {lock: true}
         projects: {allow: [PLAT, INFRA]}
@@ -146,16 +146,16 @@ providers:
       settings: {labels: [triage]}
       constraints:
         labels: {lock: append}
-        repository: {pattern: '^nscaledev/'}
+        repository: {pattern: '^acme/'}
 `
 
 func TestDefinitionConstraints(t *testing.T) {
 	for _, tc := range []struct {
 		name, project, config, user, want string
 	}{
-		{name: "lock allows same value", config: "provider: jira\n  settings: {site: nscale.atlassian.net}"},
+		{name: "lock allows same value", config: "provider: jira\n  settings: {site: acme.atlassian.net}"},
 		{name: "lock", user: "jira:\n    task_management:\n      settings: {site: other.atlassian.net}",
-			want: "~/.agentflow/providers/u.yml: task_management.settings.site is locked by release:release/nscale.yml"},
+			want: "~/.agentflow/providers/u.yml: task_management.settings.site is locked by release:release/acme.yml"},
 		{name: "allow", config: "provider: jira\n  settings: {projects: [PLAT, OPS]}",
 			want: ".agentflow/config.yml: task_management.settings.projects value OPS is not allowed"},
 		{name: "allow passes", config: "provider: jira\n  settings: {projects: [INFRA]}"},
@@ -163,9 +163,9 @@ func TestDefinitionConstraints(t *testing.T) {
 			want: ".agentflow/providers/p.yml: task_management.settings.labels must keep triage"},
 		{name: "append passes", project: "github-issues:\n    task_management:\n      settings: {labels: [triage, bug]}", config: "provider: github-issues"},
 		{name: "pattern", config: "provider: github-issues\n  settings: {repository: other/repo}",
-			want: "repository value other/repo must match ^nscaledev/"},
+			want: "repository value other/repo must match ^acme/"},
 		{name: "pattern rejects explicit reset", config: "provider: github-issues\n  settings: {repository: null}", want: "repository value <nil> must match"},
-		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: nscaledev/agentflow}"},
+		{name: "pattern passes", config: "provider: github-issues\n  settings: {repository: acme/agentflow}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, home := layers(t, constrained)

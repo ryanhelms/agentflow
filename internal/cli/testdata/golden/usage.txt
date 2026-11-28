@@ -30,8 +30,9 @@ Setup
   setup logout --provider NAME --client agentflow
                                  disconnect the selected local Agentflow enrollment
   doctor --providers [--client NAME]   verify provider and client readiness
-  login [--email E] [--token-stdin]   store your Atlassian API token in the OS keychain
-  logout                         remove the legacy Atlassian API-token login
+  login [--site URL] [--email E] [--token-stdin]
+                                 store your Atlassian API token in the OS keychain
+  logout [--site URL]            remove the legacy Atlassian API-token login
   doctor [--fix]                 check binary, hooks, auth, client config and API access
 
 Work

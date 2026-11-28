@@ -4,20 +4,19 @@ Agentflow will use GitHub Issues for its work and a Git-backed Open Knowledge
 Format (OKF) bundle for its knowledge. FileSystem and Repository knowledge
 providers will share OKF v0.3 document handling. The Repository provider will
 continue to publish Agentflow changes through pull requests. This builds on
-[the issue-to-ADR pilot](https://github.com/nscaledev/agentflow/issues/25).
+the issue-to-ADR pilot.
 
-The [rollout issue](https://github.com/nscaledev/agentflow/issues/83) tracks the
-work. Each implementation task uses `engineering-task@1` and records its
+Each implementation task uses `engineering-task@1` and records its
 objective, scope, dependencies, acceptance criteria, and verification.
 
 | Task | Depends on |
 | --- | --- |
-| [Compatible reader and signed release](https://github.com/nscaledev/agentflow/issues/84) | Rollout scope |
-| [Default OKF writer](https://github.com/nscaledev/agentflow/issues/85) | Verified signed compatible reader release |
-| [Exact task-to-knowledge links](https://github.com/nscaledev/agentflow/issues/86) | Compatible reader |
-| [Bundle migration and seed docs](https://github.com/nscaledev/agentflow/issues/87) | Signed compatible reader and OKF writer |
-| [Reviewed merge handling](https://github.com/nscaledev/agentflow/issues/88) | Exact links and migrated bundle |
-| [Repository dogfood and rollback](https://github.com/nscaledev/agentflow/issues/89) | Writer, links, migration, and merge handling |
+| Compatible reader and signed release | Rollout scope |
+| Default OKF writer | Verified signed compatible reader release |
+| Exact task-to-knowledge links | Compatible reader |
+| Bundle migration and seed docs | Signed compatible reader and OKF writer |
+| Reviewed merge handling | Exact links and migrated bundle |
+| Repository dogfood and rollback | Writer, links, migration, and merge handling |
 
 ## Release order
 
@@ -64,8 +63,7 @@ compatibility requirements.
 
 The attested [v0.38.0 reader](https://github.com/ryanhelms/agentflow/releases/tag/v0.38.0)
 was installed and verified against mixed FileSystem and Git-backed Repository
-fixtures and the live legacy ADR. [Issue #84](https://github.com/nscaledev/agentflow/issues/84)
-records the original reference and revision.
+fixtures and the live legacy ADR.
 The attested [v0.39.0 writer](https://github.com/ryanhelms/agentflow/releases/tag/v0.39.0)
 passed OKF publication, legacy override, exact lookup, and replay checks before
 the Agentflow bundle moved.

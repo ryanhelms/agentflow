@@ -27,7 +27,7 @@ func gitRepo(t *testing.T) string {
 		}
 	}
 	run("init", "-q", "-b", "main")
-	run("config", "user.email", "dev@nscale.com")
+	run("config", "user.email", "dev@example.com")
 	run("config", "user.name", "Dev")
 	run("commit", "-q", "--allow-empty", "-m", "chore(PLAT-1): init")
 	run("switch", "-q", "-c", "PLAT-123-gpu-quota")

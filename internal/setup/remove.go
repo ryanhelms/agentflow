@@ -344,6 +344,9 @@ func removeClientEntries(res *Result, dir *os.Root, rel, name, group string, cle
 			changed = true
 		}
 	}
+	if cleanup && removeAdapterEntries(doc, legacyOverlay(rel), protected) {
+		changed = true
+	}
 	if changed {
 		if err := saveClientRemoval(res, dir, rel, name, doc, keepFile, dryRun); err != nil {
 			return err

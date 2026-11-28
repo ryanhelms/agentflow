@@ -1,17 +1,23 @@
 {
-  "name": "nscale",
+  "name": "agentflow",
   "owner": {
-    "name": "Nscale Engineering Enablement"
+    "name": "Ryan Helms"
   },
   "metadata": {
-    "description": "Nscale engineering plugins"
+    "description": "Agentflow plugins"
   },
   "plugins": [
     {
       "name": "agentflow",
       "source": "./adapters/claude-code",
-      "description": "Jira-aware commits, ticket context, PRs and Confluence for the Nscale delivery loop",
+      "description": "Jira-aware commits, ticket context, PRs and Confluence for the agentflow delivery loop",
       "category": "development"
+    },
+    {
+      "name": "design-system",
+      "source": "./plugins/design-system",
+      "description": "Agentflow design system: tokens, React components and page templates, with a skill for building interfaces that use them",
+      "category": "design"
     }
   ]
 }

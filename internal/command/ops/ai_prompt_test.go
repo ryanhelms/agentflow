@@ -230,3 +230,67 @@ func TestPromptEndsWithSession(t *testing.T) {
 	}
 	h.noAnswer(t, "after the session ended")
 }
+
+// heldReader returns its first line only once a prompt is on screen, as
+// when input entered earlier reaches the reader just as the prompt prints.
+type heldReader struct {
+	first   []byte
+	release <-chan struct{}
+	rest    io.Reader
+}
+
+func (r *heldReader) Read(b []byte) (int, error) {
+	if r.first != nil {
+		<-r.release
+		n := copy(b, r.first)
+		r.first = nil
+		return n, nil
+	}
+	return r.rest.Read(b)
+}
+
+// Input that reaches the reader as the prompt prints was entered before
+// it, so it does not answer.
+func TestPromptIgnoresLineArrivingAsPromptPrints(t *testing.T) {
+	pr, pw := io.Pipe()
+	release := make(chan struct{})
+	answers := make(chan answered, 4)
+	shown := make(chan string, 4)
+	p := newForegroundPrompt(&heldReader{first: []byte("y\n"), release: release, rest: pr}, &syncBuffer{}, io.Discard, func(a aisession.AskRecord, d aisession.Decision) error {
+		answers <- answered{a.ID, d}
+		return nil
+	})
+	var once sync.Once
+	p.printed = func(string) { once.Do(func() { close(release) }) }
+	p.shown = func(id string) { shown <- id }
+	done, exited := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(exited)
+		p.run(done)
+	}()
+	defer func() {
+		_ = pw.Close()
+		close(done)
+		<-exited
+	}()
+	p.onAsk(testAsk("ask_0000000000000001", time.Minute))
+	select {
+	case <-shown:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no prompt")
+	}
+	select {
+	case a := <-answers:
+		t.Fatalf("input from before the prompt answered %s with %s", a.ask, a.decision)
+	case <-time.After(100 * time.Millisecond):
+	}
+	go func() { _, _ = pw.Write([]byte("y\n")) }()
+	select {
+	case a := <-answers:
+		if a.decision != aisession.Allow {
+			t.Fatalf("answered %s, want allow", a.decision)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a line typed after the prompt did not answer it")
+	}
+}

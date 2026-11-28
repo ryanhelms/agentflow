@@ -77,7 +77,7 @@ func TestDetectMonorepo(t *testing.T) {
 	write(t, root, "charts/platform/Chart.yaml", "name: platform\n")
 	write(t, root, "modules/network/versions.tf", "terraform {}\n")
 
-	units := Detect(root, "nscaledev")
+	units := Detect(root, "acme")
 	got := map[string]Unit{}
 	for _, u := range units {
 		got[u.Name] = u
@@ -86,7 +86,7 @@ func TestDetectMonorepo(t *testing.T) {
 		t.Fatalf("units = %+v", units)
 	}
 	api := got["api"]
-	if api.Path != "services/api" || api.ReleaseType != "go" || api.Chart != "chart" || api.Image != "ghcr.io/nscaledev/api" ||
+	if api.Path != "services/api" || api.ReleaseType != "go" || api.Chart != "chart" || api.Image != "ghcr.io/acme/api" ||
 		!containsStr(api.Builds, Helm) || !containsStr(api.Builds, Image) || containsStr(api.Builds, Library) {
 		t.Errorf("api = %+v", api)
 	}
