@@ -59,10 +59,11 @@ Lanes:
 | 7.2 | Background sessions (Process Manager), session store, permission chain, worktree-only file and terminal access | O | #123 | #132 (contract), #137 (in #138) | done |
 | 7.3 | `ai run/status/respond/cancel` commands; agentflow's own MCP server passed to the harness, with a guard against starting sessions without limit | S | #124 | #136 (in #138) | done |
 | 7.4 | AI panel: streaming output, tool calls, plan view, permission prompts | F | #125 | #134 (in #138) | done |
-| 8.1 | Feature framework, routing settings (`ai.features.<name>.harness`), prompt context as data | O | | | pending |
-| 8.2 | Commit and PR drafting; acceptance-criteria check (after 8.1) | S | | | pending |
-| 8.3 | Ticket from text; review-thread replies (after 8.1) | S | | | pending |
-| 8.4 | "Draft with AI" controls and draft review UI | F | | | pending |
+| 8.0 | Phase 8 contract ADR: feature framework (Template Method), prompt context and filtering, draft session profile, answer parsing, candidates, who may request, `ai.draft` command and tool, `--ai`, events, AI projection and console routes, draft review UI data and states, config keys, fake agent modes, test guard, demo and gate, ownership, security, owner questions, plan corrections | O | #151 | | in progress |
+| 8.1 | Feature framework (`internal/ai`), routing settings (`ai.features.<id>.harness`), prompt context as data; draft profile in `internal/aisession`; `ai draft` and `agentflow_ai_draft`; `ai.draft.finished`; drafts in the `ai` projection and console routes; fake agent draft modes | O | | | pending |
+| 8.2 | Commit and PR drafting; acceptance-criteria check; `--ai` on `commit`, `pr` and `ac` (after 8.1) | S | | | pending |
+| 8.3 | Ticket from text; review-thread replies (feature `reply`); `--ai` on `task create` and `review reply` (after 8.1) | S | | | pending |
+| 8.4 | "Draft with AI" request and draft review view on the AI page (no apply in phase 8) | F | | | pending |
 | 9.1 | ACP transport for `delegate`; agents come from the harness registry | O | | | pending |
 | 9.2 | Second opinion | O | | | pending |
 | 9.3 | Fan-out comparison | O | | | pending |
@@ -115,3 +116,4 @@ Outside the backlog:
 - Phase 7 demo differences from the ADR are recorded as amendment 45. The demo and `make e2e` also read the account's real agentflow home through the account layer, and each demo session left a stub record there, by design; every stub was ended and stubs are pruned after an hour.
 - The first `develop-p7` attempt would have failed: a README Status row edit sits next to the version line each release rewrites on `main`. `main` was synced into `develop` with a merge commit (#147), and is synced again after v0.61.0.
 - Releases up to v0.60.0 were built while the repository was private and have no build attestation, so a first install of them needs `AGENTFLOW_INSECURE_SKIP_ATTESTATION=1`; v0.61.0 on are attested.
+- Phase 8 owner decisions on 2026-11-27 (all as recommended): drafting sends context only for a feature the person gave a harness (off by default), with a list of what is sent and secret files left out; agents may request drafts only while agent-started sessions are on, and always need confirmation; the console may start drafts and applies nothing; a draft's harness starts in an empty folder and drafts are allowed in the primary checkout.
