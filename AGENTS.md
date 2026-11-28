@@ -123,6 +123,24 @@ scripts/build-blueprint.sh   # rebuild docs/blueprint.html from docs/artifact/
 Run `make check` before opening a PR. Run `make e2e` when you change the MCP server,
 hooks, the Claude Code adapter or `agentflow init`.
 
+## Keep this repository's agentflow current
+
+When a new agentflow release is available, including one you just made, update the
+installed binary before you go on:
+
+```bash
+agentflow update
+agentflow version
+```
+
+- `.agentflow/bin/agentflow` and `~/.local/bin/agentflow` run that install, which every
+  repository on the machine shares.
+- Install published releases only. Never skip the build attestation, and never put an
+  unreleased build in its place.
+- If `agentflow pin --check` reports a stale launcher in an up-to-date checkout, run
+  `agentflow pin` and open a PR.
+- AI sessions that are already running must restart to use the new version.
+
 ## Repository map
 
 ```
