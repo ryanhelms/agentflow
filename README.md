@@ -942,9 +942,9 @@ what is never sent. The context is filtered first, and a draft with a secret sti
 it is refused. The harness runs in an empty folder with no agentflow tools, every file,
 terminal and permission request is denied, and any other tool call ends the draft. An
 agent's draft always needs your confirmation. `--ai` on `commit`, `pr`, `ac`,
-`task create` and `review reply` is for a person at a terminal, and its feature
-drafts arrive in later releases. [AI drafts](docs/ai-drafts.md) explains the manifest,
-the filters, the limits and the answer rules.
+`task create` and `review reply` is for a person at a terminal.
+[AI drafts](docs/ai-drafts.md) explains the manifest, the filters, the limits and the
+answer rules.
 
 ## Commit convention
 

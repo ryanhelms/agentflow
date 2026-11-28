@@ -32,8 +32,7 @@ agentflow ai draft pr --json                  # the draft as JSON
 
 `--ai` on `commit`, `pr`, `ac`, `task create` and `review reply` makes a draft and
 then runs that command's normal flow after you accept it. It is for a person at a
-terminal only. The feature drafts arrive in later releases; until a feature is in the
-build, `ai draft FEATURE` refuses `unknown_feature`.
+terminal only.
 
 ## Turn a feature on
 

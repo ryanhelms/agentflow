@@ -314,9 +314,8 @@ func TestManifestStable(t *testing.T) {
 }
 
 // Every registered feature has its ai.features.<id>.harness field, and
-// every FeatureID constant has one. Lanes 8.2 and 8.3 register the
-// features themselves, so a constant without a registered feature is
-// reported here until they land (see the lane 8.1 report).
+// every FeatureID constant has one. That every constant is registered is
+// checked in the features package, which registers them.
 func TestEveryFeatureHasAHarnessField(t *testing.T) {
 	var cfg config.UserAIFeatures
 	ids := cfg.IDs()
@@ -337,19 +336,10 @@ func TestEveryFeatureHasAHarnessField(t *testing.T) {
 	if len(ids) != len(ai.IDs()) {
 		t.Errorf("config features %v, ai features %v", ids, ai.IDs())
 	}
-	var missing []string
-	for _, id := range ai.IDs() {
-		if _, ok := ai.Lookup(id); !ok {
-			missing = append(missing, string(id))
-		}
-	}
 	for _, f := range ai.Features() {
 		if !ai.Known(f.ID()) {
 			t.Errorf("registered feature %s is not a FeatureID constant", f.ID())
 		}
-	}
-	if len(missing) > 0 {
-		t.Skipf("not registered yet (lanes 8.2 and 8.3): %v", missing)
 	}
 }
 
