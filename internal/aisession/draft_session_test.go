@@ -371,6 +371,45 @@ func TestDraftAnswerTooLarge(t *testing.T) {
 	}
 }
 
+// TestDraftStopReasonWins: the harness ends its turn, or exits, right after
+// the message that broke a draft rule. The rule's code is recorded while
+// that message is handled, so it always wins over the turn's own end; a
+// stop reason taken in the background would lose that race and end the
+// draft end_turn or exited.
+func TestDraftStopReasonWins(t *testing.T) {
+	big := strings.Repeat("x", 64<<10)
+	chunks := func() []acptest.Step {
+		var steps []acptest.Step
+		for range 5 {
+			steps = append(steps, acptest.Step{Update: acptest.JSON(map[string]any{
+				"sessionUpdate": acp.UpdateAgentMessageChunk, "content": map[string]any{"type": "text", "text": big},
+			})})
+		}
+		return steps
+	}
+	tool := []acptest.Step{{ToolUnasked: acptest.JSON(map[string]any{"toolCallId": "own-read", "title": "Read", "kind": acp.ToolRead})}}
+	for _, c := range []struct {
+		name  string
+		steps []acptest.Step
+		want  string
+	}{
+		{"too large, then end_turn", append(chunks(), acptest.Step{Stop: acp.StopEndTurn}), aisession.CodeAnswerTooLarge},
+		{"too large, then exit", append(chunks(), acptest.Step{Crash: true}), aisession.CodeAnswerTooLarge},
+		{"tool, then end_turn", append(tool, acptest.Step{Stop: acp.StopEndTurn}), aisession.CodeDraftTool},
+		{"tool, then exit", append(tool, acptest.Step{Crash: true}), aisession.CodeDraftTool},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := newDraftRig(t, &acptest.SessionScript{Steps: c.steps}, aisessiontest.Settings{AgentStart: true})
+			for range 3 {
+				s := r.startDraft(t, person(context.Background()))
+				if end := r.d.Wait(t, s.ID, 60*time.Second); end.Code != c.want {
+					t.Fatalf("ended %q, want %s", end.Code, c.want)
+				}
+			}
+		})
+	}
+}
+
 // With an account layer (AGENTFLOW_HOME is another folder), a feature runs
 // only when both layers name the same harness; the draft time is the lower.
 func TestDraftAccountLayer(t *testing.T) {

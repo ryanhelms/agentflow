@@ -72,6 +72,7 @@ type host struct {
 	// collected, and the worktree's state at the start is kept.
 	draft      bool
 	answer     strings.Builder
+	overflow   bool // the answer passed MaxDraftAnswer
 	draftStart map[string]string
 }
 
@@ -550,14 +551,38 @@ func (h *host) touch() {
 // cancelled at once, held requests answered -32800, then up to CancelWait
 // for the turn to end before the process is stopped.
 func (h *host) cancel(ctx context.Context, code string) {
+	if h.markCancel(code) {
+		h.stopHarness(ctx, code)
+	}
+}
+
+// stopSoon is cancel for a handler of the harness's messages: the reason is
+// recorded before the handler returns, so a turn that ends (or a harness
+// that exits) right after the message that broke a rule still ends with
+// that rule's code; the slower part (the transcript, the state, the ACP
+// cancel) runs in the background, off the connection's handler.
+func (h *host) stopSoon(ctx context.Context, code string) {
+	if h.markCancel(code) {
+		go h.stopHarness(context.WithoutCancel(ctx), code)
+	}
+}
+
+// markCancel records the first stop reason; it reports whether this call
+// recorded it.
+func (h *host) markCancel(code string) bool {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	if h.cancelling {
-		h.mu.Unlock()
-		return
+		return false
 	}
 	h.cancelling, h.cancelCode = true, code
 	close(h.cancelCh)
-	h.mu.Unlock()
+	return true
+}
+
+// stopHarness records the stop and asks the harness to cancel its turn,
+// killing it after CancelWait.
+func (h *host) stopHarness(ctx context.Context, code string) {
 	h.record(ctx, Item{Kind: ItemLimit, Text: code})
 	h.transition(ctx, StateCancelling, code, nil)
 	if h.proc != nil {
@@ -601,6 +626,7 @@ func (h *host) end(ctx context.Context, code string) Session {
 		changed = changedFiles(ctx, h.w.real)
 	}
 	if h.draft {
+		code = h.draftCode(code)
 		var after map[string]string
 		if h.w.real != "" {
 			after = worktreeState(ctx, h.w.real)
