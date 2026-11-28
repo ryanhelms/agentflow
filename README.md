@@ -486,6 +486,7 @@ Deployments and release lookup also support local JSON fixtures.
 | Follow AI sessions, or one session's transcript | `agentflow ai status [SESSION] [--follow] [--since SEQ]` | `agentflow_ai_status` or `/agentflow:ai` |
 | Answer a request a session waits on (agents can only reject) | `agentflow ai respond SESSION ASK (--allow \| --reject)` | `agentflow_ai_respond` (reject only) |
 | Stop an AI session | `agentflow ai cancel SESSION` | `agentflow_ai_cancel` or `/agentflow:ai` |
+| Draft a commit message, PR, ticket, criteria check or review reply with a harness (always confirmed first; nothing is applied) | `agentflow ai draft FEATURE [--dry-run [--show-prompt]]` | `agentflow_ai_draft` or `/agentflow:ai` |
 | Address review comments | `agentflow review`, `agentflow review reply THREAD_ID BODY` | `/agentflow:review` |
 | Check CI, deploys, ticket | `agentflow status` | `/agentflow:status` |
 | Standup | `agentflow standup` | `/agentflow:standup` |
@@ -856,6 +857,37 @@ never start a session. The harness's own tools stay outside
 these checks. [AI sessions](docs/ai-sessions.md) explains the checks, the limits and
 what agentflow cannot control.
 
+### Draft with AI
+
+`ai draft FEATURE` asks a harness to write text for one operation: `commit`, `pr`,
+`ticket`, `ac` or `reply`. A draft is a candidate only: agentflow never applies it, and
+you run the operation with its fields through that operation's own checks. Every
+feature is off until you set its harness in your personal settings:
+
+```yaml
+ai:
+  features:
+    commit:
+      harness: claude-acp   # off when empty; pr, ticket, ac and reply have their own
+  drafts:
+    max_duration: 3m        # 30s to 15m
+```
+
+```text
+agentflow ai draft commit --dry-run    # the manifest: what would be sent, nothing sent
+agentflow ai draft commit              # asks you to confirm, then shows the draft
+```
+
+Before anything is sent you see the manifest: the harness, each part of the context
+with its size and what was left out, cut or redacted, the prompt's size and hash, and
+what is never sent. The context is filtered first, and a draft with a secret still in
+it is refused. The harness runs in an empty folder with no agentflow tools, every file,
+terminal and permission request is denied, and any other tool call ends the draft. An
+agent's draft always needs your confirmation. `--ai` on `commit`, `pr`, `ac`,
+`task create` and `review reply` is for a person at a terminal, and its feature
+drafts arrive in later releases. [AI drafts](docs/ai-drafts.md) explains the manifest,
+the filters, the limits and the answer rules.
+
 ## Commit convention
 
 ```
@@ -1040,6 +1072,12 @@ In each repository set up for Claude Code, delete `extraKnownMarketplaces.nscale
   client can never write. A session cannot start a session. The harness's own tools
   are not checked: agentflow reports what it ran without asking and lists the changed
   files. [AI sessions](docs/ai-sessions.md)
+- **A draft is only a candidate.** `ai draft` and `agentflow_ai_draft` never apply what
+  a harness writes. Each feature is off until you route it to a harness in your
+  personal settings, and a repository cannot turn one on. You confirm the manifest of
+  what is sent every time an agent asks; the context is filtered and a draft with a
+  secret in it is refused. The harness runs in an empty folder, gets no agentflow tools,
+  and every request it sends agentflow is denied. [AI drafts](docs/ai-drafts.md)
 - **Personal settings stay outside repositories.** The agentflow home (`AGENTFLOW_HOME`,
   `DEVFLOW_HOME`, or `~/.agentflow` under `$HOME`) holds your personal settings,
   provider definitions, approvals and plugins. A repository's environment (direnv, an
@@ -1202,6 +1240,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI agents working on this repo fo
 | [docs/events.md](docs/events.md) | Live events: `agentflow events`, `agentflow_events` and the console's event stream |
 | [docs/harnesses.md](docs/harnesses.md) | AI harness detection: states, `ai harnesses`, `ai doctor`, what a probe runs and who may ask |
 | [docs/ai-sessions.md](docs/ai-sessions.md) | AI sessions: `ai run`, `status`, `respond` and `cancel`, the request checks, who may answer, limits and what agentflow cannot control |
+| [docs/ai-drafts.md](docs/ai-drafts.md) | AI drafts: `ai draft`, the feature settings, the manifest, what is filtered and never sent, and the answer rules |
 | [docs/repo-boundary.md](docs/repo-boundary.md) | One session, one repository: what is refused, and `agentflow delegate` |
 | [docs/rollout.md](docs/rollout.md) | Phase-by-phase rollout checklist |
 | [docs/operations.md](docs/operations.md) | Secrets, apps, accounts, token rotation, blocking releases |
