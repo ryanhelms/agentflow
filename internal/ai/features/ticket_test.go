@@ -185,6 +185,17 @@ func TestTicketCandidateIssues(t *testing.T) {
 }
 
 // A summary the finish step did not clean still has to be one line.
+// Issue messages are agentflow's own words: not even a section number the
+// model made up.
+func TestTicketIssueWords(t *testing.T) {
+	d := ticketFinish(t, ai.FeatureTicket, ticketContext(`{}`, tasktemplate.Section{Heading: "Why"}),
+		`{"summary":"s","sections":[{"section":1,"body":"a"},{"section":987654321,"body":"b"}]}`)
+	if len(d.Candidates) != 1 || !slices.Equal(ticketCodes(d.Candidates[0].Issues), []string{"unknown_target"}) ||
+		strings.Contains(d.Candidates[0].Issues[0].Message, "987654321") {
+		t.Errorf("draft %+v", d)
+	}
+}
+
 func TestTicketSummaryOneLine(t *testing.T) {
 	f := ticketFeature(t, ai.FeatureTicket)
 	a := f.Answer()

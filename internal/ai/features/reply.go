@@ -67,14 +67,63 @@ func (replyFeature) Gather(ctx context.Context, a *app.App, r ai.Request) (ai.Co
 		c.Parts = append(c.Parts, ai.Part{Kind: ai.PartThread, Label: fmt.Sprintf("review thread %d", n), Source: "github", Text: replyThreadText(n, t)})
 		onPath[t.Path] = append(onPath[t.Path], strconv.Itoa(n))
 	}
-	for _, h := range raw.Hunks {
-		c.Parts = append(c.Parts, ai.Part{Kind: ai.PartDiff, Label: "branch changes to the file of thread " + strings.Join(onPath[h.Path], ", "), Source: "git", Text: h.Diff})
+	// The branch's changes to the threads' files, picked from one diff of
+	// the whole branch: a reviewer's path never reaches git. A wide
+	// diff.context would send whole files, so the person's settings do not
+	// decide it.
+	if raw.Base != "" {
+		diff, err := ai.GitDiff(ctx, a, "--no-renames", "--submodule=short", "--unified=3", "--inter-hunk-context=0", raw.Base, "HEAD", "--")
+		if err != nil {
+			return ai.Context{}, err
+		}
+		sections := replySections(diff)
+		for _, t := range raw.Threads {
+			if text, ok := sections[t.Path]; ok {
+				c.Parts = append(c.Parts, ai.Part{Kind: ai.PartDiff, Label: "branch changes to the file of thread " + strings.Join(onPath[t.Path], ", "), Source: "git", Text: text})
+				delete(sections, t.Path) // one part per file
+			}
+		}
 	}
 	if commits := strings.TrimSpace(raw.Commits); commits != "" {
 		c.Parts = append(c.Parts, ai.Part{Kind: ai.PartCommits, Label: "commits on the branch", Source: "git", Text: commits})
 	}
 	c.Fixed, err = json.Marshal(replyFixed{Thread: r.Thread})
 	return c, err
+}
+
+// replySections splits a git diff into the section of each file, by path.
+func replySections(diff string) map[string]string {
+	out := map[string]string{}
+	for _, s := range strings.Split("\n"+diff, "\ndiff --git ")[1:] {
+		header, _, _ := strings.Cut(s, "\n")
+		if path, ok := replyDiffPath(header); ok {
+			out[path] = "diff --git " + strings.TrimSuffix(s, "\n") + "\n"
+		}
+	}
+	return out
+}
+
+// replyDiffPath is the file a "diff --git" header names: "a/P b/P", each
+// name C-quoted when git quotes it (a non-ASCII path, by default). Renames
+// are off, so both names are the same file.
+func replyDiffPath(header string) (string, bool) {
+	if strings.HasPrefix(header, `"`) {
+		first, err := strconv.QuotedPrefix(header)
+		if err != nil {
+			return "", false
+		}
+		from, errFrom := strconv.Unquote(first)
+		to, errTo := strconv.Unquote(strings.TrimPrefix(header[len(first):], " "))
+		path, ok := strings.CutPrefix(from, "a/")
+		return path, ok && errFrom == nil && errTo == nil && to == "b/"+path
+	}
+	// "a/P b/P" is twice the path and five bytes, spaces in P or not.
+	n := (len(header) - 5) / 2
+	if n < 1 {
+		return "", false
+	}
+	path := header[2 : 2+n]
+	return path, header == "a/"+path+" b/"+path
 }
 
 // replyLabel names a thread for the person: "src/a.go:12, alice".
@@ -120,7 +169,8 @@ func (replyFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.I
 	for _, r := range answer.(*replyAnswer).Replies {
 		switch {
 		case r.Thread < 1 || r.Thread > len(c.Targets):
-			issues = append(issues, ai.Issue{Code: "unknown_target", Field: "thread", Message: fmt.Sprintf("The answer replies to thread %d, which agentflow did not give.", r.Thread)})
+			// Issues hold agentflow's words and numbers, never the model's.
+			issues = append(issues, ai.Issue{Code: "unknown_target", Field: "thread", Message: "The answer replies to a thread number agentflow did not give."})
 			continue
 		case seen[r.Thread]:
 			issues = append(issues, ai.Issue{Code: "duplicate_target", Field: "thread", Message: fmt.Sprintf("The answer replies to thread %d twice; only the first reply is offered.", r.Thread)})
@@ -130,11 +180,10 @@ func (replyFeature) Candidates(c ai.Context, answer any) ([]ai.Candidate, []ai.I
 		target := c.Targets[r.Thread-1]
 		body := strings.TrimSpace(r.Body)
 		in, _ := json.Marshal(replyInput{ThreadID: target.ID, Body: body})
-		cli := []string{"agentflow", "review", "reply"}
-		if strings.HasPrefix(target.ID, "-") || strings.HasPrefix(body, "-") {
-			cli = append(cli, "--") // not a flag
-		}
-		cand := ai.Candidate{Operation: "review.reply", Tool: "agentflow_review_reply", Input: in, CLI: append(cli, target.ID, body),
+		// "--" first: the command line reads flags anywhere, and a drafted
+		// body may start with "-".
+		cand := ai.Candidate{Operation: "review.reply", Tool: "agentflow_review_reply", Input: in,
+			CLI:    []string{"agentflow", "review", "reply", "--", target.ID, body},
 			Target: &target, Fields: []ai.Field{{Name: "reply", Label: "Reply", Value: body}}}
 		if body == "" {
 			cand.Issues = []ai.Issue{{Code: "missing_field", Field: "reply", Message: "The reply is empty."}}

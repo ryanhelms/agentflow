@@ -155,7 +155,8 @@ func ticketDescription(t tasktemplate.Template, ans *ticketAnswer, cand *ai.Cand
 	for _, s := range ans.Sections {
 		switch i := s.Section - 1; {
 		case i < 0 || i >= len(t.Sections):
-			issue("unknown_target", fmt.Sprintf("The answer names section %d, which the template does not have.", s.Section))
+			// Issues hold agentflow's words and numbers, never the model's.
+			issue("unknown_target", "The answer names a section number the template does not have.")
 		case given[i]:
 			issue("duplicate_target", fmt.Sprintf("The answer gives section %d twice.", s.Section))
 		default:

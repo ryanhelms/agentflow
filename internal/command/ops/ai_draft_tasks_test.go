@@ -1,6 +1,7 @@
 package ops_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ryanhelms/agentflow/internal/acp/acptest"
+	"github.com/ryanhelms/agentflow/internal/ai"
 	"github.com/ryanhelms/agentflow/internal/aisession"
 	"github.com/ryanhelms/agentflow/internal/aisession/aisessiontest"
 	"github.com/ryanhelms/agentflow/internal/app"
@@ -230,7 +232,9 @@ func TestTaskCreateAIInvalidDraft(t *testing.T) {
 	if err == nil || len(r.asked) != 0 || len(r.created) != 0 {
 		t.Fatalf("%v, asked %v, created %v", err, r.asked, r.created)
 	}
-	if !strings.Contains(out, "invalid") || !strings.Contains(out, "issue missing_field") || !strings.Contains(out, "The answer as it came back") {
+	// The fake's invalid answer holds a token shape, so it is not shown.
+	if !strings.Contains(out, "invalid") || !strings.Contains(out, "issue missing_field") ||
+		!strings.Contains(out, "issue secret_in_draft") || strings.Contains(out, "The answer as it came back") {
 		t.Errorf("output:\n%s", out)
 	}
 }
@@ -305,5 +309,44 @@ func TestReviewReplyWithoutAI(t *testing.T) {
 	}
 	if len(r.asked) != 0 || r.sessions() != 0 {
 		t.Errorf("asked %v, sessions %d", r.asked, r.sessions())
+	}
+}
+
+// The command a candidate shows must parse as written, whatever the drafted
+// text starts with: it is never read as a flag.
+func TestDraftCandidateCommandsParse(t *testing.T) {
+	r := newTasksAIRig(t, acptest.Draft(), config.Auto)
+	candidate := func(feature ai.FeatureID, c ai.Context, answer string) []string {
+		t.Helper()
+		targets, err := json.Marshal(map[string]any{"feature": feature, "rules": c.Rules, "targets": c.Targets, "fixed": c.Fixed})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var d ai.Draft
+		if err := json.Unmarshal(ai.Finish("ais_test", targets, "end_turn", answer), &d); err != nil {
+			t.Fatal(err)
+		}
+		if d.State != ai.DraftReady || len(d.Candidates) != 1 || len(d.Candidates[0].CLI) < 3 || d.Candidates[0].CLI[0] != "agentflow" {
+			t.Fatalf("draft %+v", d)
+		}
+		return d.Candidates[0].CLI[1:]
+	}
+
+	thread := ai.Context{Feature: ai.FeatureReply, Fixed: json.RawMessage(`{}`),
+		Targets: []ai.Target{{Index: 1, Kind: "thread", ID: "PRRT_one", Label: "a.go:3, alice"}}}
+	for i, body := range []string{"- fixed", "--yes", "-h"} {
+		answer, _ := json.Marshal(map[string]any{"replies": []any{map[string]any{"thread": 1, "body": body}}})
+		out, err := r.run(t, candidate(ai.FeatureReply, thread, string(answer))...)
+		if err != nil || len(r.posted) != i+1 || !strings.Contains(r.posted[i], `"body":"`+body+`"`) {
+			t.Fatalf("%q: %v, posted %v\n%s", body, err, r.posted, out)
+		}
+	}
+
+	ticket := ai.Context{Feature: ai.FeatureTicket, Fixed: json.RawMessage(`{}`)}
+	args := candidate(ai.FeatureTicket, ticket, `{"summary": "- a summary", "description": "--yes"}`)
+	r.env.Out.Reset()
+	_, err := r.run(t, append(args, "--dry-run")...)
+	if preview := r.env.Out.String(); err != nil || !strings.Contains(preview, `- a summary`) || !strings.Contains(preview, `--yes`) {
+		t.Fatalf("%v: %v\n%s", args, err, preview)
 	}
 }
