@@ -138,7 +138,9 @@ The session transcript records only how much text the harness sent; its words ar
 kept in the draft result alone. A mention or link in text that would be posted gives a warning.
 
 The text output prefixes every drafted line with `| `, so drafted text cannot look like
-agentflow's own lines. A draft that is not `ready` exits with status 1.
+agentflow's own lines. Its "use it" line is quoted so that bash, zsh and fish read every
+word as text. On Windows no paste-ready line is printed: use the candidate's fields as
+the command's own flags, or read its `cli` words with `--json`. A draft that is not `ready` exits with status 1.
 
 ## In the console
 

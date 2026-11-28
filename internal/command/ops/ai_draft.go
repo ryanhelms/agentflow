@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"time"
 
@@ -443,7 +444,11 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 			fmt.Fprintf(w, "  warning %s: %s\n", printable(wn.Code), printable(wn.Message))
 		}
 		if len(c.Issues) == 0 && len(c.CLI) > 0 {
-			fmt.Fprintf(w, "  use it: %s\n", visible(shellLine(c.CLI)))
+			if line, ok := pasteLine(c.CLI); ok {
+				fmt.Fprintf(w, "  use it (bash, zsh or fish): %s\n", line)
+			} else {
+				fmt.Fprintln(w, "  use it: run the command with these fields as its own flags, or read the candidate's cli words with --json; no paste-ready line is printed for this shell")
+			}
 		}
 	}
 	for _, is := range d.Issues {
@@ -465,17 +470,67 @@ func printDraftResult(w io.Writer, d ai.Draft) error {
 	return nil
 }
 
-// shellLine quotes words for a POSIX shell.
+// pasteGOOS is the platform pasteLine prints for; a variable for tests.
+var pasteGOOS = runtime.GOOS
+
+// pasteLine is a draft candidate's command as one line a person can paste
+// into bash, zsh or fish: every word is text, never syntax. On Windows it
+// reports false: PowerShell and cmd quoting cannot be made safe the same
+// way, so no paste-ready line is printed there.
+func pasteLine(words []string) (string, bool) {
+	if pasteGOOS == "windows" {
+		return "", false
+	}
+	return visible(shellLine(words)), true
+}
+
+// shellLine quotes words so bash, zsh and fish all read each one back as
+// the same single word. A plain word (letters, digits and -_./=:@, not
+// starting with = or %, which zsh and fish expand) stays as it is.
+// Anything else goes in single quotes, and a quote or backslash never
+// appears inside them: fish reads \' and \\ there as escapes, so ' is
+// written "'" and \ is written "\\" between the quoted runs.
 func shellLine(words []string) string {
 	out := make([]string, len(words))
 	for i, w := range words {
-		if w != "" && strings.Trim(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@") == "" {
-			out[i] = w
-			continue
-		}
-		out[i] = "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
+		out[i] = shellWord(w)
 	}
 	return strings.Join(out, " ")
+}
+
+func shellWord(w string) string {
+	if w != "" && w[0] != '=' && w[0] != '%' && strings.Trim(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@") == "" {
+		return w
+	}
+	if w == "" {
+		return "''"
+	}
+	var b strings.Builder
+	open := false
+	for _, r := range w {
+		switch r {
+		case '\'', '\\':
+			if open {
+				b.WriteByte('\'')
+				open = false
+			}
+			if r == '\'' {
+				b.WriteString(`"'"`)
+			} else {
+				b.WriteString(`"\\"`)
+			}
+		default:
+			if !open {
+				b.WriteByte('\'')
+				open = true
+			}
+			b.WriteRune(r)
+		}
+	}
+	if open {
+		b.WriteByte('\'')
+	}
+	return b.String()
 }
 
 func init() {
