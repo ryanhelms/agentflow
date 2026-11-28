@@ -229,6 +229,11 @@ func TestDraftPromptAndFinish(t *testing.T) {
 		if strings.Contains(it.Text, "secret-free diff") || strings.Contains(string(it.Data), "secret-free diff") {
 			t.Errorf("the prompt reached the transcript: %+v", it)
 		}
+		// The draft's words stay out of the transcript: only draft.json
+		// holds them, where Finish withholds a secret.
+		if (it.Kind == aisession.ItemMessage || it.Kind == aisession.ItemThought) && !strings.HasSuffix(it.Text, "bytes: the draft's own text is in its result]") {
+			t.Errorf("the draft's text reached the transcript: %+v", it)
+		}
 	}
 	if items[0].Kind != aisession.ItemPrompt || items[0].Text != "manifest: feature commit, 1 part" {
 		t.Errorf("prompt item: %+v", items[0])

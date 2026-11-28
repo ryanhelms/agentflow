@@ -81,7 +81,13 @@ func finish(id aisession.ID, targets []byte, stopReason, answer string) Draft {
 		d.State, d.Code = DraftFailed, CodeNoFeature
 		return d
 	}
-	shown := aisession.Sanitize(answer, MaxShownAnswer)
+	// The answer is shown only when it is invalid or failed, and never when
+	// it looks like it holds a secret (step 5 applies to it as well).
+	shown, withheld := aisession.Sanitize(aisession.Redact(answer), MaxShownAnswer), false
+	if app.ContainsSecret(answer) || app.ContainsSecret(shown) {
+		shown, withheld = "", true
+		d.Issues = append(d.Issues, Issue{Code: IssueSecretInDraft, Message: "The answer looks like it holds a secret, so it is not shown."})
+	}
 	if len(answer) > MaxAnswer {
 		d.State, d.Code, d.Answer = DraftFailed, aisession.CodeAnswerTooLarge, shown
 		return d
@@ -150,7 +156,13 @@ func finish(id aisession.ID, targets []byte, stopReason, answer string) Draft {
 			d.State = DraftReady
 		}
 	}
-	if d.State == DraftInvalid {
+	secret := withheld
+	for _, cand := range d.Candidates {
+		for _, is := range cand.Issues {
+			secret = secret || is.Code == IssueSecretInDraft
+		}
+	}
+	if d.State == DraftInvalid && !secret {
 		d.Answer = shown
 	}
 	return d

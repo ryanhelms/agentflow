@@ -1,6 +1,7 @@
 package aisession
 
 import (
+	"fmt"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -77,9 +78,16 @@ func (h *host) SessionUpdate(ctx context.Context, n acp.SessionNotification) {
 				text = "[" + SanitizeLine(u.Content.Type, 32) + "]"
 			}
 			h.countBytes(len(text))
-			add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
-			if h.draft && kind == ItemMessage && u.Content.Type == "text" {
-				h.draftAnswer(ctx, u.Content.Text)
+			if h.draft {
+				// A draft's words are kept only in draft.json, where Finish
+				// withholds an answer that looks like it holds a secret; the
+				// transcript says how much came, never what.
+				add(Item{Kind: kind, Text: fmt.Sprintf("[%d bytes: the draft's own text is in its result]", len(text))})
+				if kind == ItemMessage && u.Content.Type == "text" {
+					h.draftAnswer(ctx, u.Content.Text)
+				}
+			} else {
+				add(Item{Kind: kind, Text: Sanitize(text, MaxItemText)})
 			}
 		}
 	case acp.UpdateUserMessageChunk:

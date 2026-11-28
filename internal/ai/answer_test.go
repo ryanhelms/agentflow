@@ -151,9 +151,15 @@ func TestDraftAnswers(t *testing.T) {
 		if !slices.Contains(codes(c.Issues), ai.IssueSecretInDraft) || string(c.Input) != "null" || c.Fields[0].Value != "" || c.CLI != nil {
 			t.Errorf("the secret's candidate was not emptied: %+v", c)
 		}
-		b, _ := json.Marshal(d)
-		if strings.Contains(string(b), secret) && !strings.Contains(d.Answer, secret) {
-			t.Error("the secret is in the candidates")
+		if b, _ := json.Marshal(d); strings.Contains(string(b), secret) {
+			t.Errorf("the secret is in the draft: %s", b)
+		}
+		// Not in the answer of an unparsable or invalid draft either.
+		for _, a := range []string{"no json, but " + secret, `{"message":"Added ` + secret + `"}`} {
+			d := finish(t, tf, "end_turn", a)
+			if b, _ := json.Marshal(d); strings.Contains(string(b), secret) || d.Answer != "" {
+				t.Errorf("%q: the secret is in the draft: %s", a, b)
+			}
 		}
 	})
 	t.Run("mentions and links", func(t *testing.T) {
